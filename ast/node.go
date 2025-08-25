@@ -1123,6 +1123,903 @@ func (gs *GlobalStatement) String() string {
 	return "global " + strings.Join(vars, ", ") + ";"
 }
 
+// DoWhileStatement do-while 循环语句
+type DoWhileStatement struct {
+	BaseNode
+	Body      Statement  `json:"body"`
+	Condition Expression `json:"condition"`
+}
+
+func NewDoWhileStatement(pos lexer.Position, body Statement, condition Expression) *DoWhileStatement {
+	return &DoWhileStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTDoWhile,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Body:      body,
+		Condition: condition,
+	}
+}
+
+func (dw *DoWhileStatement) GetChildren() []Node {
+	children := make([]Node, 0, 2)
+	if dw.Body != nil {
+		children = append(children, dw.Body)
+	}
+	if dw.Condition != nil {
+		children = append(children, dw.Condition)
+	}
+	return children
+}
+
+func (dw *DoWhileStatement) Accept(visitor Visitor) {
+	if visitor.Visit(dw) {
+		if dw.Body != nil {
+			dw.Body.Accept(visitor)
+		}
+		if dw.Condition != nil {
+			dw.Condition.Accept(visitor)
+		}
+	}
+}
+
+func (dw *DoWhileStatement) statementNode() {}
+
+func (dw *DoWhileStatement) String() string {
+	body := ""
+	if dw.Body != nil {
+		body = dw.Body.String()
+	}
+	condition := ""
+	if dw.Condition != nil {
+		condition = dw.Condition.String()
+	}
+	return "do " + body + " while (" + condition + ");"
+}
+
+// ForeachStatement foreach 循环语句
+type ForeachStatement struct {
+	BaseNode
+	Iterable Expression `json:"iterable"`
+	Key      Expression `json:"key,omitempty"`
+	Value    Expression `json:"value"`
+	Body     Statement  `json:"body"`
+}
+
+func NewForeachStatement(pos lexer.Position, iterable, key, value Expression, body Statement) *ForeachStatement {
+	return &ForeachStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTForeach,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Iterable: iterable,
+		Key:      key,
+		Value:    value,
+		Body:     body,
+	}
+}
+
+func (f *ForeachStatement) GetChildren() []Node {
+	children := make([]Node, 0, 4)
+	if f.Iterable != nil {
+		children = append(children, f.Iterable)
+	}
+	if f.Key != nil {
+		children = append(children, f.Key)
+	}
+	if f.Value != nil {
+		children = append(children, f.Value)
+	}
+	if f.Body != nil {
+		children = append(children, f.Body)
+	}
+	return children
+}
+
+func (f *ForeachStatement) Accept(visitor Visitor) {
+	if visitor.Visit(f) {
+		if f.Iterable != nil {
+			f.Iterable.Accept(visitor)
+		}
+		if f.Key != nil {
+			f.Key.Accept(visitor)
+		}
+		if f.Value != nil {
+			f.Value.Accept(visitor)
+		}
+		if f.Body != nil {
+			f.Body.Accept(visitor)
+		}
+	}
+}
+
+func (f *ForeachStatement) statementNode() {}
+
+func (f *ForeachStatement) String() string {
+	var result strings.Builder
+	result.WriteString("foreach (")
+	if f.Iterable != nil {
+		result.WriteString(f.Iterable.String())
+	}
+	result.WriteString(" as ")
+	if f.Key != nil {
+		result.WriteString(f.Key.String())
+		result.WriteString(" => ")
+	}
+	if f.Value != nil {
+		result.WriteString(f.Value.String())
+	}
+	result.WriteString(") ")
+	if f.Body != nil {
+		result.WriteString(f.Body.String())
+	}
+	return result.String()
+}
+
+// SwitchStatement switch 语句
+type SwitchStatement struct {
+	BaseNode
+	Discriminant Expression      `json:"discriminant"`
+	Cases        []*SwitchCase   `json:"cases"`
+}
+
+type SwitchCase struct {
+	BaseNode
+	Test       Expression  `json:"test,omitempty"` // null for default case
+	Body       []Statement `json:"body"`
+}
+
+func NewSwitchStatement(pos lexer.Position, discriminant Expression) *SwitchStatement {
+	return &SwitchStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTSwitch,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Discriminant: discriminant,
+		Cases:        make([]*SwitchCase, 0),
+	}
+}
+
+func NewSwitchCase(pos lexer.Position, test Expression) *SwitchCase {
+	return &SwitchCase{
+		BaseNode: BaseNode{
+			Kind:     ASTSwitchCase,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Test: test,
+		Body: make([]Statement, 0),
+	}
+}
+
+func (s *SwitchStatement) GetChildren() []Node {
+	children := make([]Node, 0, len(s.Cases)+1)
+	if s.Discriminant != nil {
+		children = append(children, s.Discriminant)
+	}
+	for _, c := range s.Cases {
+		children = append(children, c)
+	}
+	return children
+}
+
+func (s *SwitchStatement) Accept(visitor Visitor) {
+	if visitor.Visit(s) {
+		if s.Discriminant != nil {
+			s.Discriminant.Accept(visitor)
+		}
+		for _, c := range s.Cases {
+			c.Accept(visitor)
+		}
+	}
+}
+
+func (s *SwitchStatement) statementNode() {}
+
+func (s *SwitchStatement) String() string {
+	var result strings.Builder
+	result.WriteString("switch (")
+	if s.Discriminant != nil {
+		result.WriteString(s.Discriminant.String())
+	}
+	result.WriteString(") {\n")
+	for _, c := range s.Cases {
+		if c != nil {
+			result.WriteString(c.String())
+		}
+	}
+	result.WriteString("}")
+	return result.String()
+}
+
+func (sc *SwitchCase) GetChildren() []Node {
+	children := make([]Node, 0, len(sc.Body)+1)
+	if sc.Test != nil {
+		children = append(children, sc.Test)
+	}
+	for _, stmt := range sc.Body {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+func (sc *SwitchCase) Accept(visitor Visitor) {
+	if visitor.Visit(sc) {
+		if sc.Test != nil {
+			sc.Test.Accept(visitor)
+		}
+		for _, stmt := range sc.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (sc *SwitchCase) String() string {
+	var result strings.Builder
+	if sc.Test != nil {
+		result.WriteString("  case ")
+		result.WriteString(sc.Test.String())
+		result.WriteString(":\n")
+	} else {
+		result.WriteString("  default:\n")
+	}
+	for _, stmt := range sc.Body {
+		if stmt != nil {
+			result.WriteString("    ")
+			result.WriteString(stmt.String())
+			result.WriteString("\n")
+		}
+	}
+	return result.String()
+}
+
+// TryStatement try-catch-finally 语句
+type TryStatement struct {
+	BaseNode
+	Body         []Statement   `json:"body"`
+	CatchClauses []*CatchClause `json:"catchClauses,omitempty"`
+	FinallyBlock []Statement   `json:"finallyBlock,omitempty"`
+}
+
+type CatchClause struct {
+	BaseNode
+	Types     []Expression `json:"types"`     // Exception types
+	Parameter Expression   `json:"parameter"` // Exception variable
+	Body      []Statement  `json:"body"`
+}
+
+func NewTryStatement(pos lexer.Position) *TryStatement {
+	return &TryStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTTry,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Body:         make([]Statement, 0),
+		CatchClauses: make([]*CatchClause, 0),
+	}
+}
+
+func NewCatchClause(pos lexer.Position, parameter Expression) *CatchClause {
+	return &CatchClause{
+		BaseNode: BaseNode{
+			Kind:     ASTCatch,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Types:     make([]Expression, 0),
+		Parameter: parameter,
+		Body:      make([]Statement, 0),
+	}
+}
+
+func (t *TryStatement) GetChildren() []Node {
+	children := make([]Node, 0)
+	for _, stmt := range t.Body {
+		children = append(children, stmt)
+	}
+	for _, catch := range t.CatchClauses {
+		children = append(children, catch)
+	}
+	for _, stmt := range t.FinallyBlock {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+func (t *TryStatement) Accept(visitor Visitor) {
+	if visitor.Visit(t) {
+		for _, stmt := range t.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+		for _, catch := range t.CatchClauses {
+			if catch != nil {
+				catch.Accept(visitor)
+			}
+		}
+		for _, stmt := range t.FinallyBlock {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (t *TryStatement) statementNode() {}
+
+func (t *TryStatement) String() string {
+	var result strings.Builder
+	result.WriteString("try {\n")
+	for _, stmt := range t.Body {
+		if stmt != nil {
+			result.WriteString("  ")
+			result.WriteString(stmt.String())
+			result.WriteString("\n")
+		}
+	}
+	result.WriteString("}")
+	
+	for _, catch := range t.CatchClauses {
+		if catch != nil {
+			result.WriteString(" ")
+			result.WriteString(catch.String())
+		}
+	}
+	
+	if len(t.FinallyBlock) > 0 {
+		result.WriteString(" finally {\n")
+		for _, stmt := range t.FinallyBlock {
+			if stmt != nil {
+				result.WriteString("  ")
+				result.WriteString(stmt.String())
+				result.WriteString("\n")
+			}
+		}
+		result.WriteString("}")
+	}
+	return result.String()
+}
+
+func (c *CatchClause) GetChildren() []Node {
+	children := make([]Node, 0)
+	for _, t := range c.Types {
+		children = append(children, t)
+	}
+	if c.Parameter != nil {
+		children = append(children, c.Parameter)
+	}
+	for _, stmt := range c.Body {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+func (c *CatchClause) Accept(visitor Visitor) {
+	if visitor.Visit(c) {
+		for _, t := range c.Types {
+			if t != nil {
+				t.Accept(visitor)
+			}
+		}
+		if c.Parameter != nil {
+			c.Parameter.Accept(visitor)
+		}
+		for _, stmt := range c.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (c *CatchClause) String() string {
+	var result strings.Builder
+	result.WriteString("catch (")
+	
+	// Types
+	var typeStrs []string
+	for _, t := range c.Types {
+		if t != nil {
+			typeStrs = append(typeStrs, t.String())
+		}
+	}
+	result.WriteString(strings.Join(typeStrs, "|"))
+	
+	if c.Parameter != nil {
+		result.WriteString(" ")
+		result.WriteString(c.Parameter.String())
+	}
+	result.WriteString(") {\n")
+	
+	for _, stmt := range c.Body {
+		if stmt != nil {
+			result.WriteString("  ")
+			result.WriteString(stmt.String())
+			result.WriteString("\n")
+		}
+	}
+	result.WriteString("}")
+	return result.String()
+}
+
+// ThrowStatement throw 语句
+type ThrowStatement struct {
+	BaseNode
+	Argument Expression `json:"argument"`
+}
+
+func NewThrowStatement(pos lexer.Position, argument Expression) *ThrowStatement {
+	return &ThrowStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTThrow,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Argument: argument,
+	}
+}
+
+func (t *ThrowStatement) GetChildren() []Node {
+	if t.Argument != nil {
+		return []Node{t.Argument}
+	}
+	return nil
+}
+
+func (t *ThrowStatement) Accept(visitor Visitor) {
+	if visitor.Visit(t) && t.Argument != nil {
+		t.Argument.Accept(visitor)
+	}
+}
+
+func (t *ThrowStatement) statementNode() {}
+
+func (t *ThrowStatement) String() string {
+	arg := ""
+	if t.Argument != nil {
+		arg = t.Argument.String()
+	}
+	return "throw " + arg + ";"
+}
+
+// StaticStatement static 变量声明语句
+type StaticStatement struct {
+	BaseNode
+	Variables []*StaticVariable `json:"variables"`
+}
+
+type StaticVariable struct {
+	BaseNode
+	Variable     Expression `json:"variable"`
+	DefaultValue Expression `json:"defaultValue,omitempty"`
+}
+
+func NewStaticStatement(pos lexer.Position) *StaticStatement {
+	return &StaticStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTStatic,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Variables: make([]*StaticVariable, 0),
+	}
+}
+
+func NewStaticVariable(pos lexer.Position, variable, defaultValue Expression) *StaticVariable {
+	return &StaticVariable{
+		BaseNode: BaseNode{
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Variable:     variable,
+		DefaultValue: defaultValue,
+	}
+}
+
+func (s *StaticStatement) GetChildren() []Node {
+	children := make([]Node, len(s.Variables))
+	for i, v := range s.Variables {
+		children[i] = v
+	}
+	return children
+}
+
+func (s *StaticStatement) Accept(visitor Visitor) {
+	if visitor.Visit(s) {
+		for _, v := range s.Variables {
+			if v != nil {
+				v.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (s *StaticStatement) statementNode() {}
+
+func (s *StaticStatement) String() string {
+	var vars []string
+	for _, v := range s.Variables {
+		if v != nil {
+			varStr := v.Variable.String()
+			if v.DefaultValue != nil {
+				varStr += " = " + v.DefaultValue.String()
+			}
+			vars = append(vars, varStr)
+		}
+	}
+	return "static " + strings.Join(vars, ", ") + ";"
+}
+
+func (sv *StaticVariable) GetChildren() []Node {
+	children := make([]Node, 0, 2)
+	if sv.Variable != nil {
+		children = append(children, sv.Variable)
+	}
+	if sv.DefaultValue != nil {
+		children = append(children, sv.DefaultValue)
+	}
+	return children
+}
+
+func (sv *StaticVariable) Accept(visitor Visitor) {
+	if visitor.Visit(sv) {
+		if sv.Variable != nil {
+			sv.Variable.Accept(visitor)
+		}
+		if sv.DefaultValue != nil {
+			sv.DefaultValue.Accept(visitor)
+		}
+	}
+}
+
+// UnsetStatement unset 语句
+type UnsetStatement struct {
+	BaseNode
+	Variables []Expression `json:"variables"`
+}
+
+func NewUnsetStatement(pos lexer.Position) *UnsetStatement {
+	return &UnsetStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTUnset,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Variables: make([]Expression, 0),
+	}
+}
+
+func (u *UnsetStatement) GetChildren() []Node {
+	children := make([]Node, len(u.Variables))
+	for i, v := range u.Variables {
+		children[i] = v
+	}
+	return children
+}
+
+func (u *UnsetStatement) Accept(visitor Visitor) {
+	if visitor.Visit(u) {
+		for _, v := range u.Variables {
+			if v != nil {
+				v.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (u *UnsetStatement) statementNode() {}
+
+func (u *UnsetStatement) String() string {
+	var vars []string
+	for _, v := range u.Variables {
+		if v != nil {
+			vars = append(vars, v.String())
+		}
+	}
+	return "unset(" + strings.Join(vars, ", ") + ");"
+}
+
+// GotoStatement goto 语句
+type GotoStatement struct {
+	BaseNode
+	Label Expression `json:"label"`
+}
+
+func NewGotoStatement(pos lexer.Position, label Expression) *GotoStatement {
+	return &GotoStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTGoto,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Label: label,
+	}
+}
+
+func (g *GotoStatement) GetChildren() []Node {
+	if g.Label != nil {
+		return []Node{g.Label}
+	}
+	return nil
+}
+
+func (g *GotoStatement) Accept(visitor Visitor) {
+	if visitor.Visit(g) && g.Label != nil {
+		g.Label.Accept(visitor)
+	}
+}
+
+func (g *GotoStatement) statementNode() {}
+
+func (g *GotoStatement) String() string {
+	label := ""
+	if g.Label != nil {
+		label = g.Label.String()
+	}
+	return "goto " + label + ";"
+}
+
+// LabelStatement 标签语句
+type LabelStatement struct {
+	BaseNode
+	Name Expression `json:"name"`
+}
+
+func NewLabelStatement(pos lexer.Position, name Expression) *LabelStatement {
+	return &LabelStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTLabel,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name: name,
+	}
+}
+
+func (l *LabelStatement) GetChildren() []Node {
+	if l.Name != nil {
+		return []Node{l.Name}
+	}
+	return nil
+}
+
+func (l *LabelStatement) Accept(visitor Visitor) {
+	if visitor.Visit(l) && l.Name != nil {
+		l.Name.Accept(visitor)
+	}
+}
+
+func (l *LabelStatement) statementNode() {}
+
+func (l *LabelStatement) String() string {
+	name := ""
+	if l.Name != nil {
+		name = l.Name.String()
+	}
+	return name + ":"
+}
+
+// NewExpression new 表达式
+type NewExpression struct {
+	BaseNode
+	Class     Expression   `json:"class"`
+	Arguments []Expression `json:"arguments"`
+}
+
+func NewNewExpression(pos lexer.Position, class Expression) *NewExpression {
+	return &NewExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTNew,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Class:     class,
+		Arguments: make([]Expression, 0),
+	}
+}
+
+func (n *NewExpression) GetChildren() []Node {
+	children := make([]Node, 0, len(n.Arguments)+1)
+	if n.Class != nil {
+		children = append(children, n.Class)
+	}
+	for _, arg := range n.Arguments {
+		children = append(children, arg)
+	}
+	return children
+}
+
+func (n *NewExpression) Accept(visitor Visitor) {
+	if visitor.Visit(n) {
+		if n.Class != nil {
+			n.Class.Accept(visitor)
+		}
+		for _, arg := range n.Arguments {
+			if arg != nil {
+				arg.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (n *NewExpression) expressionNode() {}
+
+func (n *NewExpression) String() string {
+	class := ""
+	if n.Class != nil {
+		class = n.Class.String()
+	}
+	
+	var args []string
+	for _, arg := range n.Arguments {
+		if arg != nil {
+			args = append(args, arg.String())
+		}
+	}
+	
+	if len(args) > 0 {
+		return "new " + class + "(" + strings.Join(args, ", ") + ")"
+	}
+	return "new " + class
+}
+
+// CloneExpression clone 表达式
+type CloneExpression struct {
+	BaseNode
+	Object Expression `json:"object"`
+}
+
+func NewCloneExpression(pos lexer.Position, object Expression) *CloneExpression {
+	return &CloneExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTClone,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Object: object,
+	}
+}
+
+func (c *CloneExpression) GetChildren() []Node {
+	if c.Object != nil {
+		return []Node{c.Object}
+	}
+	return nil
+}
+
+func (c *CloneExpression) Accept(visitor Visitor) {
+	if visitor.Visit(c) && c.Object != nil {
+		c.Object.Accept(visitor)
+	}
+}
+
+func (c *CloneExpression) expressionNode() {}
+
+func (c *CloneExpression) String() string {
+	obj := ""
+	if c.Object != nil {
+		obj = c.Object.String()
+	}
+	return "clone " + obj
+}
+
+// InstanceofExpression instanceof 表达式
+type InstanceofExpression struct {
+	BaseNode
+	Left  Expression `json:"left"`
+	Right Expression `json:"right"`
+}
+
+func NewInstanceofExpression(pos lexer.Position, left, right Expression) *InstanceofExpression {
+	return &InstanceofExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTInstanceof,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Left:  left,
+		Right: right,
+	}
+}
+
+func (i *InstanceofExpression) GetChildren() []Node {
+	children := make([]Node, 0, 2)
+	if i.Left != nil {
+		children = append(children, i.Left)
+	}
+	if i.Right != nil {
+		children = append(children, i.Right)
+	}
+	return children
+}
+
+func (i *InstanceofExpression) Accept(visitor Visitor) {
+	if visitor.Visit(i) {
+		if i.Left != nil {
+			i.Left.Accept(visitor)
+		}
+		if i.Right != nil {
+			i.Right.Accept(visitor)
+		}
+	}
+}
+
+func (i *InstanceofExpression) expressionNode() {}
+
+func (i *InstanceofExpression) String() string {
+	left := ""
+	if i.Left != nil {
+		left = i.Left.String()
+	}
+	right := ""
+	if i.Right != nil {
+		right = i.Right.String()
+	}
+	return left + " instanceof " + right
+}
+
+// PropertyAccessExpression 属性访问表达式
+type PropertyAccessExpression struct {
+	BaseNode
+	Object   Expression `json:"object"`
+	Property Expression `json:"property"`
+}
+
+func NewPropertyAccessExpression(pos lexer.Position, object, property Expression) *PropertyAccessExpression {
+	return &PropertyAccessExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTProp,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Object:   object,
+		Property: property,
+	}
+}
+
+func (p *PropertyAccessExpression) GetChildren() []Node {
+	children := make([]Node, 0, 2)
+	if p.Object != nil {
+		children = append(children, p.Object)
+	}
+	if p.Property != nil {
+		children = append(children, p.Property)
+	}
+	return children
+}
+
+func (p *PropertyAccessExpression) Accept(visitor Visitor) {
+	if visitor.Visit(p) {
+		if p.Object != nil {
+			p.Object.Accept(visitor)
+		}
+		if p.Property != nil {
+			p.Property.Accept(visitor)
+		}
+	}
+}
+
+func (p *PropertyAccessExpression) expressionNode() {}
+
+func (p *PropertyAccessExpression) String() string {
+	obj := ""
+	if p.Object != nil {
+		obj = p.Object.String()
+	}
+	prop := ""
+	if p.Property != nil {
+		prop = p.Property.String()
+	}
+	return obj + "->" + prop
+}
+
 // CallExpression 函数调用表达式
 type CallExpression struct {
 	BaseNode

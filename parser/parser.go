@@ -41,8 +41,11 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.TOKEN_GT:              LESSGREATER,
 	lexer.T_IS_SMALLER_OR_EQUAL: LESSGREATER,
 	lexer.T_IS_GREATER_OR_EQUAL: LESSGREATER,
+	lexer.T_INSTANCEOF:          LESSGREATER,
 	lexer.TOKEN_PLUS:            SUM,
 	lexer.TOKEN_MINUS:           SUM,
+	lexer.TOKEN_DOT:             SUM,
+	lexer.T_OBJECT_OPERATOR:     CALL,
 	lexer.TOKEN_DIVIDE:          PRODUCT,
 	lexer.TOKEN_MULTIPLY:        PRODUCT,
 	lexer.TOKEN_MODULO:          PRODUCT,
@@ -103,6 +106,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.T_ENCAPSED_AND_WHITESPACE, p.parseStringLiteral)
 	p.registerPrefix(lexer.T_END_HEREDOC, p.parseEndHeredoc)
 	p.registerPrefix(lexer.TOKEN_COMMA, p.parseComma)
+	p.registerPrefix(lexer.T_NEW, p.parseNewExpression)
+	p.registerPrefix(lexer.T_CLONE, p.parseCloneExpression)
 
 	// 注册中缀解析函数
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
@@ -119,6 +124,9 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.TOKEN_GT, p.parseInfixExpression)
 	p.registerInfix(lexer.T_IS_SMALLER_OR_EQUAL, p.parseInfixExpression)
 	p.registerInfix(lexer.T_IS_GREATER_OR_EQUAL, p.parseInfixExpression)
+	p.registerInfix(lexer.T_INSTANCEOF, p.parseInstanceofExpression)
+	p.registerInfix(lexer.TOKEN_DOT, p.parseInfixExpression)
+	p.registerInfix(lexer.T_OBJECT_OPERATOR, p.parsePropertyAccess)
 	p.registerInfix(lexer.TOKEN_EQUAL, p.parseAssignmentExpression)
 	p.registerInfix(lexer.T_PLUS_EQUAL, p.parseAssignmentExpression)
 	p.registerInfix(lexer.T_MINUS_EQUAL, p.parseAssignmentExpression)
@@ -198,12 +206,37 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseReturnStatement()
 	case lexer.T_GLOBAL:
 		return p.parseGlobalStatement()
+	case lexer.T_STATIC:
+		return p.parseStaticStatement()
+	case lexer.T_UNSET:
+		return p.parseUnsetStatement()
+	case lexer.T_DO:
+		return p.parseDoWhileStatement()
+	case lexer.T_FOREACH:
+		return p.parseForeachStatement()
+	case lexer.T_SWITCH:
+		return p.parseSwitchStatement()
+	case lexer.T_TRY:
+		return p.parseTryStatement()
+	case lexer.T_THROW:
+		return p.parseThrowStatement()
+	case lexer.T_GOTO:
+		return p.parseGotoStatement()
 	case lexer.T_BREAK:
 		return p.parseBreakStatement()
 	case lexer.T_CONTINUE:
 		return p.parseContinueStatement()
 	case lexer.TOKEN_LBRACE:
 		return p.parseBlockStatement()
+	case lexer.T_STRING:
+		// 检查是否是标签（T_STRING followed by :)
+		if p.peekToken.Type == lexer.TOKEN_COLON {
+			pos := p.currentToken.Position
+			name := p.parseIdentifier()
+			p.nextToken() // 跳过 :
+			return ast.NewLabelStatement(pos, name)
+		}
+		return p.parseExpressionStatement()
 	default:
 		return p.parseExpressionStatement()
 	}
@@ -839,4 +872,426 @@ func (p *Parser) parseGlobalStatement() ast.Statement {
 func (p *Parser) parseComma() ast.Expression {
 	// 逗号通常不应该作为表达式单独解析，但为了避免解析错误，返回一个简单的字符串字面量
 	return ast.NewStringLiteral(p.currentToken.Position, ",", ",")
+}
+
+// parseStaticStatement 解析静态变量声明
+func (p *Parser) parseStaticStatement() ast.Statement {
+	pos := p.currentToken.Position
+	staticStmt := ast.NewStaticStatement(pos)
+	
+	// 跳过 'static' 关键字
+	p.nextToken()
+	
+	// 解析变量列表
+	for {
+		if p.currentToken.Type == lexer.T_VARIABLE {
+			variable := p.parseVariable()
+			
+			var defaultValue ast.Expression = nil
+			p.nextToken()
+			
+			// 检查是否有默认值
+			if p.currentToken.Type == lexer.TOKEN_EQUAL {
+				p.nextToken() // 跳过 =
+				defaultValue = p.parseExpression(LOWEST)
+				p.nextToken()
+			}
+			
+			staticVar := ast.NewStaticVariable(pos, variable, defaultValue)
+			staticStmt.Variables = append(staticStmt.Variables, staticVar)
+			
+			// 检查是否有更多变量（以逗号分隔）
+			if p.currentToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 跳过逗号
+				continue
+			}
+			break
+		} else {
+			p.errors = append(p.errors, "expected variable in static statement")
+			break
+		}
+	}
+	
+	return staticStmt
+}
+
+// parseUnsetStatement 解析unset语句
+func (p *Parser) parseUnsetStatement() ast.Statement {
+	pos := p.currentToken.Position
+	unsetStmt := ast.NewUnsetStatement(pos)
+	
+	// 跳过 'unset' 关键字
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	p.nextToken() // 进入括号内部
+	
+	// 解析变量列表
+	for p.currentToken.Type != lexer.TOKEN_RPAREN && p.currentToken.Type != lexer.T_EOF {
+		variable := p.parseExpression(LOWEST)
+		unsetStmt.Variables = append(unsetStmt.Variables, variable)
+		
+		p.nextToken()
+		if p.currentToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 跳过逗号
+		}
+	}
+	
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+	
+	return unsetStmt
+}
+
+// parseDoWhileStatement 解析do-while语句
+func (p *Parser) parseDoWhileStatement() ast.Statement {
+	pos := p.currentToken.Position
+	
+	// 跳过 'do'
+	p.nextToken()
+	
+	// 解析循环体
+	body := p.parseStatement()
+	
+	// 期望 'while'
+	if !p.expectPeek(lexer.T_WHILE) {
+		return nil
+	}
+	
+	// 期望 '('
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	p.nextToken()
+	condition := p.parseExpression(LOWEST)
+	
+	// 期望 ')'
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	// 期望 ';'
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+	
+	return ast.NewDoWhileStatement(pos, body, condition)
+}
+
+// parseForeachStatement 解析foreach语句
+func (p *Parser) parseForeachStatement() ast.Statement {
+	pos := p.currentToken.Position
+	
+	// 跳过 'foreach'
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	p.nextToken()
+	iterable := p.parseExpression(LOWEST)
+	
+	// 期望 'as'
+	if !p.expectPeek(lexer.T_AS) {
+		return nil
+	}
+	
+	p.nextToken()
+	var key, value ast.Expression
+	
+	// 解析第一个变量
+	firstVar := p.parseExpression(LOWEST)
+	
+	p.nextToken()
+	// 检查是否有 '=>'（表示有key）
+	if p.currentToken.Type == lexer.T_DOUBLE_ARROW {
+		key = firstVar
+		p.nextToken()
+		value = p.parseExpression(LOWEST)
+		p.nextToken()
+	} else {
+		value = firstVar
+	}
+	
+	// 期望 ')'
+	if p.currentToken.Type != lexer.TOKEN_RPAREN {
+		p.errors = append(p.errors, "expected ')' in foreach statement")
+		return nil
+	}
+	
+	p.nextToken()
+	body := p.parseStatement()
+	
+	return ast.NewForeachStatement(pos, iterable, key, value, body)
+}
+
+// parseSwitchStatement 解析switch语句
+func (p *Parser) parseSwitchStatement() ast.Statement {
+	pos := p.currentToken.Position
+	
+	// 跳过 'switch'
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	p.nextToken()
+	discriminant := p.parseExpression(LOWEST)
+	
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+	
+	switchStmt := ast.NewSwitchStatement(pos, discriminant)
+	
+	p.nextToken()
+	// 解析case语句
+	for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
+		if p.currentToken.Type == lexer.T_CASE {
+			casePos := p.currentToken.Position
+			p.nextToken()
+			test := p.parseExpression(LOWEST)
+			
+			if !p.expectPeek(lexer.TOKEN_COLON) {
+				continue
+			}
+			
+			switchCase := ast.NewSwitchCase(casePos, test)
+			
+			p.nextToken()
+			// 解析case体内的语句
+			for p.currentToken.Type != lexer.T_CASE && p.currentToken.Type != lexer.T_DEFAULT && 
+				p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
+				stmt := p.parseStatement()
+				if stmt != nil {
+					switchCase.Body = append(switchCase.Body, stmt)
+				}
+				p.nextToken()
+			}
+			
+			switchStmt.Cases = append(switchStmt.Cases, switchCase)
+		} else if p.currentToken.Type == lexer.T_DEFAULT {
+			casePos := p.currentToken.Position
+			
+			if !p.expectPeek(lexer.TOKEN_COLON) {
+				continue
+			}
+			
+			defaultCase := ast.NewSwitchCase(casePos, nil) // nil表示default
+			
+			p.nextToken()
+			// 解析default体内的语句
+			for p.currentToken.Type != lexer.T_CASE && p.currentToken.Type != lexer.T_DEFAULT && 
+				p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
+				stmt := p.parseStatement()
+				if stmt != nil {
+					defaultCase.Body = append(defaultCase.Body, stmt)
+				}
+				p.nextToken()
+			}
+			
+			switchStmt.Cases = append(switchStmt.Cases, defaultCase)
+		} else {
+			p.nextToken()
+		}
+	}
+	
+	return switchStmt
+}
+
+// parseTryStatement 解析try-catch语句
+func (p *Parser) parseTryStatement() ast.Statement {
+	pos := p.currentToken.Position
+	tryStmt := ast.NewTryStatement(pos)
+	
+	// 跳过 'try'
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+	
+	p.nextToken()
+	// 解析try块
+	for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
+		stmt := p.parseStatement()
+		if stmt != nil {
+			tryStmt.Body = append(tryStmt.Body, stmt)
+		}
+		p.nextToken()
+	}
+	
+	p.nextToken()
+	
+	// 解析catch子句
+	for p.currentToken.Type == lexer.T_CATCH {
+		catchPos := p.currentToken.Position
+		
+		if !p.expectPeek(lexer.TOKEN_LPAREN) {
+			continue
+		}
+		
+		p.nextToken()
+		// 解析异常类型
+		var parameter ast.Expression
+		types := make([]ast.Expression, 0)
+		
+		// 解析类型（可能有多个，用|分隔）
+		for {
+			exceptionType := p.parseExpression(LOWEST)
+			types = append(types, exceptionType)
+			
+			p.nextToken()
+			if p.currentToken.Type == lexer.TOKEN_PIPE { // |
+				p.nextToken() // 跳过 |
+				continue
+			}
+			break
+		}
+		
+		// 解析参数变量
+		if p.currentToken.Type == lexer.T_VARIABLE {
+			parameter = p.parseVariable()
+			p.nextToken()
+		}
+		
+		if p.currentToken.Type != lexer.TOKEN_RPAREN {
+			p.errors = append(p.errors, "expected ')' in catch clause")
+			continue
+		}
+		
+		if !p.expectPeek(lexer.TOKEN_LBRACE) {
+			continue
+		}
+		
+		catchClause := ast.NewCatchClause(catchPos, parameter)
+		catchClause.Types = types
+		
+		p.nextToken()
+		// 解析catch块
+		for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				catchClause.Body = append(catchClause.Body, stmt)
+			}
+			p.nextToken()
+		}
+		
+		tryStmt.CatchClauses = append(tryStmt.CatchClauses, catchClause)
+		p.nextToken()
+	}
+	
+	// 解析finally块
+	if p.currentToken.Type == lexer.T_FINALLY {
+		if !p.expectPeek(lexer.TOKEN_LBRACE) {
+			return tryStmt
+		}
+		
+		p.nextToken()
+		// 解析finally块
+		for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
+			stmt := p.parseStatement()
+			if stmt != nil {
+				tryStmt.FinallyBlock = append(tryStmt.FinallyBlock, stmt)
+			}
+			p.nextToken()
+		}
+	}
+	
+	return tryStmt
+}
+
+// parseThrowStatement 解析throw语句
+func (p *Parser) parseThrowStatement() ast.Statement {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	argument := p.parseExpression(LOWEST)
+	
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+	
+	return ast.NewThrowStatement(pos, argument)
+}
+
+// parseGotoStatement 解析goto语句
+func (p *Parser) parseGotoStatement() ast.Statement {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	if p.currentToken.Type != lexer.T_STRING {
+		p.errors = append(p.errors, "expected label name in goto statement")
+		return nil
+	}
+	
+	label := p.parseIdentifier()
+	
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+	
+	return ast.NewGotoStatement(pos, label)
+}
+
+// parseNewExpression 解析new表达式
+func (p *Parser) parseNewExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	class := p.parseExpression(PREFIX)
+	
+	newExpr := ast.NewNewExpression(pos, class)
+	
+	// 检查是否有构造函数参数
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		p.nextToken() // 移动到 (
+		p.nextToken() // 进入括号内部
+		
+		// 解析参数列表
+		for p.currentToken.Type != lexer.TOKEN_RPAREN && p.currentToken.Type != lexer.T_EOF {
+			arg := p.parseExpression(LOWEST)
+			newExpr.Arguments = append(newExpr.Arguments, arg)
+			
+			p.nextToken()
+			if p.currentToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 跳过逗号
+			}
+		}
+	}
+	
+	return newExpr
+}
+
+// parseCloneExpression 解析clone表达式
+func (p *Parser) parseCloneExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	object := p.parseExpression(PREFIX)
+	
+	return ast.NewCloneExpression(pos, object)
+}
+
+// parseInstanceofExpression 解析instanceof表达式
+func (p *Parser) parseInstanceofExpression(left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	right := p.parseExpression(LESSGREATER)
+	
+	return ast.NewInstanceofExpression(pos, left, right)
+}
+
+// parsePropertyAccess 解析属性访问表达式
+func (p *Parser) parsePropertyAccess(left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	property := p.parseExpression(CALL)
+	
+	return ast.NewPropertyAccessExpression(pos, left, property)
 }
