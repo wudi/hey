@@ -100,6 +100,8 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.T_COMMENT, p.parseComment)
 	p.registerPrefix(lexer.T_DOC_COMMENT, p.parseDocBlockComment)
 	p.registerPrefix(lexer.T_START_HEREDOC, p.parseHeredoc)
+	p.registerPrefix(lexer.T_ENCAPSED_AND_WHITESPACE, p.parseStringLiteral)
+	p.registerPrefix(lexer.T_END_HEREDOC, p.parseEndHeredoc)
 
 	// 注册中缀解析函数
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
@@ -760,7 +762,37 @@ func (p *Parser) parseComment() ast.Expression {
 
 // parseHeredoc 解析Heredoc
 func (p *Parser) parseHeredoc() ast.Expression {
-	// 简单处理Heredoc为字符串字面量
+	startPos := p.currentToken.Position
+	startValue := p.currentToken.Value
+	
+	// 构建完整的heredoc内容
+	var content strings.Builder
+	content.WriteString(startValue)
+	
+	// 期望下一个token是T_ENCAPSED_AND_WHITESPACE或T_END_HEREDOC
+	p.nextToken()
+	
+	// 收集heredoc内容
+	for p.currentToken.Type == lexer.T_ENCAPSED_AND_WHITESPACE {
+		content.WriteString(p.currentToken.Value)
+		p.nextToken()
+	}
+	
+	// 期望T_END_HEREDOC
+	if p.currentToken.Type == lexer.T_END_HEREDOC {
+		content.WriteString(p.currentToken.Value)
+	} else {
+		p.errors = append(p.errors, "expected T_END_HEREDOC in heredoc")
+	}
+	
+	// 返回完整的heredoc作为字符串字面量
+	return ast.NewStringLiteral(startPos, content.String(), content.String())
+}
+
+// parseEndHeredoc 解析Heredoc结束标记 
+func (p *Parser) parseEndHeredoc() ast.Expression {
+	// 这通常不应该被单独调用，因为T_END_HEREDOC应该在parseHeredoc中处理
+	// 但为了避免"no prefix parse function"错误，提供一个基本实现
 	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 }
 

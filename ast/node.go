@@ -135,7 +135,9 @@ func (p *Program) Accept(visitor Visitor) {
 func (p *Program) String() string {
 	var out strings.Builder
 	for _, stmt := range p.Body {
-		out.WriteString(stmt.String())
+		if stmt != nil {
+			out.WriteString(stmt.String())
+		}
 	}
 	return out.String()
 }
@@ -180,7 +182,9 @@ func (e *EchoStatement) statementNode() {}
 func (e *EchoStatement) String() string {
 	var args []string
 	for _, arg := range e.Arguments {
-		args = append(args, arg.String())
+		if arg != nil {
+			args = append(args, arg.String())
+		}
 	}
 	return "echo " + strings.Join(args, ", ") + ";"
 }
@@ -875,7 +879,9 @@ func (fd *FunctionDeclaration) String() string {
 
 	out.WriteString(") {\n")
 	for _, stmt := range fd.Body {
-		out.WriteString("  " + stmt.String() + "\n")
+		if stmt != nil {
+			out.WriteString("  " + stmt.String() + "\n")
+		}
 	}
 	out.WriteString("}")
 
