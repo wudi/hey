@@ -73,7 +73,7 @@ func TestVariable_String(t *testing.T) {
 	variable := NewVariable(pos, "$name")
 
 	assert.Equal(t, "$name", variable.String())
-	assert.Equal(t, "Variable", variable.GetType())
+	assert.Equal(t, ASTVar, variable.GetKind())
 }
 
 func TestStringLiteral_String(t *testing.T) {
@@ -81,7 +81,7 @@ func TestStringLiteral_String(t *testing.T) {
 	str := NewStringLiteral(pos, "Hello, World!", `"Hello, World!"`)
 
 	assert.Equal(t, `"Hello, World!"`, str.String())
-	assert.Equal(t, "StringLiteral", str.GetType())
+	assert.Equal(t, ASTZval, str.GetKind())
 }
 
 func TestNumberLiteral_String(t *testing.T) {
@@ -90,7 +90,7 @@ func TestNumberLiteral_String(t *testing.T) {
 	// 整数
 	intNum := NewNumberLiteral(pos, "123", "integer")
 	assert.Equal(t, "123", intNum.String())
-	assert.Equal(t, "NumberLiteral", intNum.GetType())
+	assert.Equal(t, ASTZval, intNum.GetKind())
 
 	// 浮点数
 	floatNum := NewNumberLiteral(pos, "3.14", "float")
@@ -112,7 +112,7 @@ func TestNullLiteral_String(t *testing.T) {
 	nullLit := NewNullLiteral(pos)
 
 	assert.Equal(t, "null", nullLit.String())
-	assert.Equal(t, "NullLiteral", nullLit.GetType())
+	assert.Equal(t, ASTZval, nullLit.GetKind())
 }
 
 func TestArrayExpression_String(t *testing.T) {
@@ -224,6 +224,6 @@ func TestNodeJSON(t *testing.T) {
 
 	json, err := variable.ToJSON()
 	assert.NoError(t, err)
-	assert.Contains(t, string(json), `"type": "Variable"`)
+	assert.Contains(t, string(json), `"kind": 256`)  // ASTVar = 256
 	assert.Contains(t, string(json), `"name": "$name"`)
 }

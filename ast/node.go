@@ -9,14 +9,22 @@ import (
 
 // Node 表示抽象语法树中的节点接口
 type Node interface {
-	// GetType 返回节点类型
-	GetType() string
+	// GetKind 返回节点的AST Kind类型
+	GetKind() ASTKind
 	// GetPosition 返回节点在源代码中的位置
 	GetPosition() lexer.Position
+	// GetAttributes 返回节点的属性
+	GetAttributes() map[string]interface{}
+	// GetLineNo 返回行号
+	GetLineNo() uint32
+	// GetChildren 返回子节点
+	GetChildren() []Node
 	// String 返回节点的字符串表示
 	String() string
 	// ToJSON 转换为 JSON 表示
 	ToJSON() ([]byte, error)
+	// Accept 接受访问者
+	Accept(visitor Visitor)
 }
 
 // Statement 表示语句节点
@@ -39,13 +47,15 @@ type Identifier interface {
 
 // BaseNode 基础节点，提供公共字段和方法
 type BaseNode struct {
-	Type     string         `json:"type"`
-	Position lexer.Position `json:"position"`
+	Kind       ASTKind                    `json:"kind"`
+	Position   lexer.Position             `json:"position"`
+	Attributes map[string]interface{}     `json:"attributes,omitempty"`
+	LineNo     uint32                     `json:"lineno"`
 }
 
-// GetType 返回节点类型
-func (b *BaseNode) GetType() string {
-	return b.Type
+// GetKind 返回节点的AST Kind类型
+func (b *BaseNode) GetKind() ASTKind {
+	return b.Kind
 }
 
 // GetPosition 返回节点位置
@@ -53,9 +63,37 @@ func (b *BaseNode) GetPosition() lexer.Position {
 	return b.Position
 }
 
+// GetAttributes 返回节点属性
+func (b *BaseNode) GetAttributes() map[string]interface{} {
+	if b.Attributes == nil {
+		b.Attributes = make(map[string]interface{})
+	}
+	return b.Attributes
+}
+
+// GetLineNo 返回行号
+func (b *BaseNode) GetLineNo() uint32 {
+	return b.LineNo
+}
+
+// GetChildren 返回子节点 - 默认实现，具体类型需要重写
+func (b *BaseNode) GetChildren() []Node {
+	return nil
+}
+
 // ToJSON 转换为 JSON - 这个方法在每个具体类型中应该被重写
 func (b *BaseNode) ToJSON() ([]byte, error) {
 	return json.MarshalIndent(b, "", "  ")
+}
+
+// String 返回节点的字符串表示 - 默认实现，具体类型需要重写
+func (b *BaseNode) String() string {
+	return b.Kind.String()
+}
+
+// Accept 接受访问者 - 默认实现，具体类型需要重写
+func (b *BaseNode) Accept(visitor Visitor) {
+	visitor.Visit(b)
 }
 
 // Program 表示整个 PHP 程序
@@ -67,8 +105,30 @@ type Program struct {
 // NewProgram 创建新的程序节点
 func NewProgram(pos lexer.Position) *Program {
 	return &Program{
-		BaseNode: BaseNode{Type: "Program", Position: pos},
-		Body:     make([]Statement, 0),
+		BaseNode: BaseNode{
+			Kind:     ASTStmtList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Body: make([]Statement, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (p *Program) GetChildren() []Node {
+	children := make([]Node, len(p.Body))
+	for i, stmt := range p.Body {
+		children[i] = stmt
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (p *Program) Accept(visitor Visitor) {
+	if visitor.Visit(p) {
+		for _, stmt := range p.Body {
+			stmt.Accept(visitor)
+		}
 	}
 }
 
@@ -88,8 +148,30 @@ type EchoStatement struct {
 
 func NewEchoStatement(pos lexer.Position) *EchoStatement {
 	return &EchoStatement{
-		BaseNode:  BaseNode{Type: "EchoStatement", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTEcho,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Arguments: make([]Expression, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (e *EchoStatement) GetChildren() []Node {
+	children := make([]Node, len(e.Arguments))
+	for i, arg := range e.Arguments {
+		children[i] = arg
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (e *EchoStatement) Accept(visitor Visitor) {
+	if visitor.Visit(e) {
+		for _, arg := range e.Arguments {
+			arg.Accept(visitor)
+		}
 	}
 }
 
@@ -111,8 +193,27 @@ type ExpressionStatement struct {
 
 func NewExpressionStatement(pos lexer.Position, expr Expression) *ExpressionStatement {
 	return &ExpressionStatement{
-		BaseNode:   BaseNode{Type: "ExpressionStatement", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTExprList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Expression: expr,
+	}
+}
+
+// GetChildren 返回子节点
+func (es *ExpressionStatement) GetChildren() []Node {
+	if es.Expression != nil {
+		return []Node{es.Expression}
+	}
+	return nil
+}
+
+// Accept 接受访问者
+func (es *ExpressionStatement) Accept(visitor Visitor) {
+	if visitor.Visit(es) && es.Expression != nil {
+		es.Expression.Accept(visitor)
 	}
 }
 
@@ -135,10 +236,27 @@ type AssignmentExpression struct {
 
 func NewAssignmentExpression(pos lexer.Position, left Expression, operator string, right Expression) *AssignmentExpression {
 	return &AssignmentExpression{
-		BaseNode: BaseNode{Type: "AssignmentExpression", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTAssign,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Left:     left,
 		Right:    right,
 		Operator: operator,
+	}
+}
+
+// GetChildren 返回子节点
+func (ae *AssignmentExpression) GetChildren() []Node {
+	return []Node{ae.Left, ae.Right}
+}
+
+// Accept 接受访问者
+func (ae *AssignmentExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ae) {
+		ae.Left.Accept(visitor)
+		ae.Right.Accept(visitor)
 	}
 }
 
@@ -158,10 +276,27 @@ type BinaryExpression struct {
 
 func NewBinaryExpression(pos lexer.Position, left Expression, operator string, right Expression) *BinaryExpression {
 	return &BinaryExpression{
-		BaseNode: BaseNode{Type: "BinaryExpression", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTBinaryOp,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Left:     left,
 		Right:    right,
 		Operator: operator,
+	}
+}
+
+// GetChildren 返回子节点
+func (be *BinaryExpression) GetChildren() []Node {
+	return []Node{be.Left, be.Right}
+}
+
+// Accept 接受访问者
+func (be *BinaryExpression) Accept(visitor Visitor) {
+	if visitor.Visit(be) {
+		be.Left.Accept(visitor)
+		be.Right.Accept(visitor)
 	}
 }
 
@@ -180,11 +315,42 @@ type UnaryExpression struct {
 }
 
 func NewUnaryExpression(pos lexer.Position, operator string, operand Expression, prefix bool) *UnaryExpression {
+	kind := ASTUnaryOp
+	if operator == "++" {
+		if prefix {
+			kind = ASTPreInc
+		} else {
+			kind = ASTPostInc
+		}
+	} else if operator == "--" {
+		if prefix {
+			kind = ASTPreDec
+		} else {
+			kind = ASTPostDec
+		}
+	}
+
 	return &UnaryExpression{
-		BaseNode: BaseNode{Type: "UnaryExpression", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     kind,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Operator: operator,
 		Operand:  operand,
 		Prefix:   prefix,
+	}
+}
+
+// GetChildren 返回子节点
+func (ue *UnaryExpression) GetChildren() []Node {
+	return []Node{ue.Operand}
+}
+
+// Accept 接受访问者
+func (ue *UnaryExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ue) {
+		ue.Operand.Accept(visitor)
 	}
 }
 
@@ -205,9 +371,23 @@ type Variable struct {
 
 func NewVariable(pos lexer.Position, name string) *Variable {
 	return &Variable{
-		BaseNode: BaseNode{Type: "Variable", Position: pos},
-		Name:     name,
+		BaseNode: BaseNode{
+			Kind:     ASTVar,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name: name,
 	}
+}
+
+// GetChildren 返回子节点
+func (v *Variable) GetChildren() []Node {
+	return nil // 变量是叶子节点
+}
+
+// Accept 接受访问者
+func (v *Variable) Accept(visitor Visitor) {
+	visitor.Visit(v)
 }
 
 func (v *Variable) expressionNode() {}
@@ -230,10 +410,24 @@ type StringLiteral struct {
 
 func NewStringLiteral(pos lexer.Position, value, raw string) *StringLiteral {
 	return &StringLiteral{
-		BaseNode: BaseNode{Type: "StringLiteral", Position: pos},
-		Value:    value,
-		Raw:      raw,
+		BaseNode: BaseNode{
+			Kind:     ASTZval,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Value: value,
+		Raw:   raw,
 	}
+}
+
+// GetChildren 返回子节点
+func (sl *StringLiteral) GetChildren() []Node {
+	return nil // 字符串字面量是叶子节点
+}
+
+// Accept 接受访问者
+func (sl *StringLiteral) Accept(visitor Visitor) {
+	visitor.Visit(sl)
 }
 
 func (sl *StringLiteral) expressionNode() {}
@@ -251,10 +445,24 @@ type NumberLiteral struct {
 
 func NewNumberLiteral(pos lexer.Position, value, kind string) *NumberLiteral {
 	return &NumberLiteral{
-		BaseNode: BaseNode{Type: "NumberLiteral", Position: pos},
-		Value:    value,
-		Kind:     kind,
+		BaseNode: BaseNode{
+			Kind:     ASTZval,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Value: value,
+		Kind:  kind,
 	}
+}
+
+// GetChildren 返回子节点
+func (nl *NumberLiteral) GetChildren() []Node {
+	return nil // 数字字面量是叶子节点
+}
+
+// Accept 接受访问者
+func (nl *NumberLiteral) Accept(visitor Visitor) {
+	visitor.Visit(nl)
 }
 
 func (nl *NumberLiteral) expressionNode() {}
@@ -271,9 +479,23 @@ type BooleanLiteral struct {
 
 func NewBooleanLiteral(pos lexer.Position, value bool) *BooleanLiteral {
 	return &BooleanLiteral{
-		BaseNode: BaseNode{Type: "BooleanLiteral", Position: pos},
-		Value:    value,
+		BaseNode: BaseNode{
+			Kind:     ASTZval,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Value: value,
 	}
+}
+
+// GetChildren 返回子节点
+func (bl *BooleanLiteral) GetChildren() []Node {
+	return nil // 布尔字面量是叶子节点
+}
+
+// Accept 接受访问者
+func (bl *BooleanLiteral) Accept(visitor Visitor) {
+	visitor.Visit(bl)
 }
 
 func (bl *BooleanLiteral) expressionNode() {}
@@ -292,8 +514,22 @@ type NullLiteral struct {
 
 func NewNullLiteral(pos lexer.Position) *NullLiteral {
 	return &NullLiteral{
-		BaseNode: BaseNode{Type: "NullLiteral", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTZval,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 	}
+}
+
+// GetChildren 返回子节点
+func (nl *NullLiteral) GetChildren() []Node {
+	return nil // null字面量是叶子节点
+}
+
+// Accept 接受访问者
+func (nl *NullLiteral) Accept(visitor Visitor) {
+	visitor.Visit(nl)
 }
 
 func (nl *NullLiteral) expressionNode() {}
@@ -310,8 +546,32 @@ type ArrayExpression struct {
 
 func NewArrayExpression(pos lexer.Position) *ArrayExpression {
 	return &ArrayExpression{
-		BaseNode: BaseNode{Type: "ArrayExpression", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTArray,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Elements: make([]Expression, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (ae *ArrayExpression) GetChildren() []Node {
+	children := make([]Node, len(ae.Elements))
+	for i, elem := range ae.Elements {
+		children[i] = elem
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (ae *ArrayExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ae) {
+		for _, elem := range ae.Elements {
+			if elem != nil {
+				elem.Accept(visitor)
+			}
+		}
 	}
 }
 
@@ -337,10 +597,39 @@ type IfStatement struct {
 
 func NewIfStatement(pos lexer.Position, test Expression) *IfStatement {
 	return &IfStatement{
-		BaseNode:   BaseNode{Type: "IfStatement", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTIf,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Test:       test,
 		Consequent: make([]Statement, 0),
 		Alternate:  make([]Statement, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (is *IfStatement) GetChildren() []Node {
+	children := []Node{is.Test}
+	for _, stmt := range is.Consequent {
+		children = append(children, stmt)
+	}
+	for _, stmt := range is.Alternate {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (is *IfStatement) Accept(visitor Visitor) {
+	if visitor.Visit(is) {
+		is.Test.Accept(visitor)
+		for _, stmt := range is.Consequent {
+			stmt.Accept(visitor)
+		}
+		for _, stmt := range is.Alternate {
+			stmt.Accept(visitor)
+		}
 	}
 }
 
@@ -377,9 +666,32 @@ type WhileStatement struct {
 
 func NewWhileStatement(pos lexer.Position, test Expression) *WhileStatement {
 	return &WhileStatement{
-		BaseNode: BaseNode{Type: "WhileStatement", Position: pos},
-		Test:     test,
-		Body:     make([]Statement, 0),
+		BaseNode: BaseNode{
+			Kind:     ASTWhile,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Test: test,
+		Body: make([]Statement, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (ws *WhileStatement) GetChildren() []Node {
+	children := []Node{ws.Test}
+	for _, stmt := range ws.Body {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (ws *WhileStatement) Accept(visitor Visitor) {
+	if visitor.Visit(ws) {
+		ws.Test.Accept(visitor)
+		for _, stmt := range ws.Body {
+			stmt.Accept(visitor)
+		}
 	}
 }
 
@@ -410,8 +722,48 @@ type ForStatement struct {
 
 func NewForStatement(pos lexer.Position) *ForStatement {
 	return &ForStatement{
-		BaseNode: BaseNode{Type: "ForStatement", Position: pos},
-		Body:     make([]Statement, 0),
+		BaseNode: BaseNode{
+			Kind:     ASTFor,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Body: make([]Statement, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (fs *ForStatement) GetChildren() []Node {
+	children := make([]Node, 0)
+	if fs.Init != nil {
+		children = append(children, fs.Init)
+	}
+	if fs.Test != nil {
+		children = append(children, fs.Test)
+	}
+	if fs.Update != nil {
+		children = append(children, fs.Update)
+	}
+	for _, stmt := range fs.Body {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (fs *ForStatement) Accept(visitor Visitor) {
+	if visitor.Visit(fs) {
+		if fs.Init != nil {
+			fs.Init.Accept(visitor)
+		}
+		if fs.Test != nil {
+			fs.Test.Accept(visitor)
+		}
+		if fs.Update != nil {
+			fs.Update.Accept(visitor)
+		}
+		for _, stmt := range fs.Body {
+			stmt.Accept(visitor)
+		}
 	}
 }
 
@@ -461,10 +813,43 @@ type Parameter struct {
 
 func NewFunctionDeclaration(pos lexer.Position, name Identifier) *FunctionDeclaration {
 	return &FunctionDeclaration{
-		BaseNode:   BaseNode{Type: "FunctionDeclaration", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTFuncDecl,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Name:       name,
 		Parameters: make([]Parameter, 0),
 		Body:       make([]Statement, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (fd *FunctionDeclaration) GetChildren() []Node {
+	children := []Node{fd.Name}
+	for _, param := range fd.Parameters {
+		if param.DefaultValue != nil {
+			children = append(children, param.DefaultValue)
+		}
+	}
+	for _, stmt := range fd.Body {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (fd *FunctionDeclaration) Accept(visitor Visitor) {
+	if visitor.Visit(fd) {
+		fd.Name.Accept(visitor)
+		for _, param := range fd.Parameters {
+			if param.DefaultValue != nil {
+				param.DefaultValue.Accept(visitor)
+			}
+		}
+		for _, stmt := range fd.Body {
+			stmt.Accept(visitor)
+		}
 	}
 }
 
@@ -505,9 +890,23 @@ type IdentifierNode struct {
 
 func NewIdentifierNode(pos lexer.Position, name string) *IdentifierNode {
 	return &IdentifierNode{
-		BaseNode: BaseNode{Type: "Identifier", Position: pos},
-		Name:     name,
+		BaseNode: BaseNode{
+			Kind:     ASTConst, // 标识符通常用作常量
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name: name,
 	}
+}
+
+// GetChildren 返回子节点
+func (i *IdentifierNode) GetChildren() []Node {
+	return nil // 标识符是叶子节点
+}
+
+// Accept 接受访问者
+func (i *IdentifierNode) Accept(visitor Visitor) {
+	visitor.Visit(i)
 }
 
 func (i *IdentifierNode) expressionNode() {}
@@ -525,8 +924,27 @@ type ReturnStatement struct {
 
 func NewReturnStatement(pos lexer.Position, arg Expression) *ReturnStatement {
 	return &ReturnStatement{
-		BaseNode: BaseNode{Type: "ReturnStatement", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTReturn,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Argument: arg,
+	}
+}
+
+// GetChildren 返回子节点
+func (rs *ReturnStatement) GetChildren() []Node {
+	if rs.Argument != nil {
+		return []Node{rs.Argument}
+	}
+	return nil
+}
+
+// Accept 接受访问者
+func (rs *ReturnStatement) Accept(visitor Visitor) {
+	if visitor.Visit(rs) && rs.Argument != nil {
+		rs.Argument.Accept(visitor)
 	}
 }
 
@@ -546,8 +964,22 @@ type BreakStatement struct {
 
 func NewBreakStatement(pos lexer.Position) *BreakStatement {
 	return &BreakStatement{
-		BaseNode: BaseNode{Type: "BreakStatement", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTBreak,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 	}
+}
+
+// GetChildren 返回子节点
+func (bs *BreakStatement) GetChildren() []Node {
+	return nil // break语句是叶子节点
+}
+
+// Accept 接受访问者
+func (bs *BreakStatement) Accept(visitor Visitor) {
+	visitor.Visit(bs)
 }
 
 func (bs *BreakStatement) statementNode() {}
@@ -563,8 +995,22 @@ type ContinueStatement struct {
 
 func NewContinueStatement(pos lexer.Position) *ContinueStatement {
 	return &ContinueStatement{
-		BaseNode: BaseNode{Type: "ContinueStatement", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTContinue,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 	}
+}
+
+// GetChildren 返回子节点
+func (cs *ContinueStatement) GetChildren() []Node {
+	return nil // continue语句是叶子节点
+}
+
+// Accept 接受访问者
+func (cs *ContinueStatement) Accept(visitor Visitor) {
+	visitor.Visit(cs)
 }
 
 func (cs *ContinueStatement) statementNode() {}
@@ -581,8 +1027,30 @@ type BlockStatement struct {
 
 func NewBlockStatement(pos lexer.Position) *BlockStatement {
 	return &BlockStatement{
-		BaseNode: BaseNode{Type: "BlockStatement", Position: pos},
-		Body:     make([]Statement, 0),
+		BaseNode: BaseNode{
+			Kind:     ASTStmtList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Body: make([]Statement, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (bs *BlockStatement) GetChildren() []Node {
+	children := make([]Node, len(bs.Body))
+	for i, stmt := range bs.Body {
+		children[i] = stmt
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (bs *BlockStatement) Accept(visitor Visitor) {
+	if visitor.Visit(bs) {
+		for _, stmt := range bs.Body {
+			stmt.Accept(visitor)
+		}
 	}
 }
 
@@ -607,9 +1075,34 @@ type CallExpression struct {
 
 func NewCallExpression(pos lexer.Position, callee Expression) *CallExpression {
 	return &CallExpression{
-		BaseNode:  BaseNode{Type: "CallExpression", Position: pos},
+		BaseNode: BaseNode{
+			Kind:     ASTCall,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
 		Callee:    callee,
 		Arguments: make([]Expression, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (ce *CallExpression) GetChildren() []Node {
+	children := []Node{ce.Callee}
+	for _, arg := range ce.Arguments {
+		children = append(children, arg)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (ce *CallExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ce) {
+		ce.Callee.Accept(visitor)
+		for _, arg := range ce.Arguments {
+			if arg != nil {
+				arg.Accept(visitor)
+			}
+		}
 	}
 }
 
@@ -634,10 +1127,24 @@ type DocBlockComment struct {
 
 func NewDocBlockComment(pos lexer.Position, content, raw string) *DocBlockComment {
 	return &DocBlockComment{
-		BaseNode: BaseNode{Type: "DocBlockComment", Position: pos},
-		Content:  content,
-		Raw:      raw,
+		BaseNode: BaseNode{
+			Kind:     ASTZval, // 文档注释作为特殊值处理
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Content: content,
+		Raw:     raw,
 	}
+}
+
+// GetChildren 返回子节点
+func (dbc *DocBlockComment) GetChildren() []Node {
+	return nil // 文档注释是叶子节点
+}
+
+// Accept 接受访问者
+func (dbc *DocBlockComment) Accept(visitor Visitor) {
+	visitor.Visit(dbc)
 }
 
 func (dbc *DocBlockComment) expressionNode() {}
