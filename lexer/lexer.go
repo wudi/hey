@@ -44,22 +44,27 @@ func New(input string) *Lexer {
 
 // readChar 读取下一个字符并前进指针
 func (l *Lexer) readChar() {
-	if l.readPosition >= len(l.input) {
-		l.ch = 0 // EOF
-	} else {
-		l.ch = l.input[l.readPosition]
-	}
-	
-	// 更新位置信息
+	// 先更新位置信息，基于我们即将离开的字符
 	if l.position < len(l.input) && l.input[l.position] == '\n' {
 		l.line++
-		l.column = 0
-	} else {
+		l.column = 1  // 下一行的第一个字符是第1列
+	} else if l.position < len(l.input) {
 		l.column++
+	} else {
+		// 初始化时，第一个字符在第1列
+		l.column = 1
 	}
 	
+	// 更新位置
 	l.position = l.readPosition
 	l.readPosition++
+	
+	// 读取新字符
+	if l.position >= len(l.input) {
+		l.ch = 0 // EOF
+	} else {
+		l.ch = l.input[l.position]
+	}
 }
 
 // peekChar 查看下一个字符但不移动指针
@@ -423,10 +428,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 			return Token{Type: T_COMMENT, Value: comment, Position: pos}
 		} else if l.peekChar() == '*' {
 			// 块注释 - 先检查是否为文档注释
-			isDocComment := l.peekCharN(1) == '*' // 检查是否为 /**
+			isDocComment := l.peekChar() == '*' && l.peekCharN(1) == '*' // 检查是否为 /**
 			l.readChar() // 跳过 /
 			comment := l.readBlockComment()
-			fullComment := "/*" + comment
+			fullComment := "/" + comment
 			
 			if isDocComment {
 				return Token{Type: T_DOC_COMMENT, Value: fullComment, Position: pos}
@@ -714,14 +719,17 @@ func (l *Lexer) handleHeredocStart(pos Position) Token {
 		return Token{Type: T_UNKNOWN, Value: "<<<", Position: pos}
 	}
 	
-	// 跳过到行尾
+	// 跳过到行尾，并记录换行符用于token值
+	var lineEnding string
 	for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
 		l.readChar()
 	}
 	if l.ch == '\r' {
+		lineEnding += string(l.ch)
 		l.readChar()
 	}
 	if l.ch == '\n' {
+		lineEnding += string(l.ch)
 		l.readChar()
 	}
 	
@@ -729,10 +737,10 @@ func (l *Lexer) handleHeredocStart(pos Position) Token {
 	l.heredocLabel = label
 	if isNowdoc {
 		l.state = ST_NOWDOC
-		return Token{Type: T_NOWDOC, Value: "<<<'" + label + "'", Position: pos}
+		return Token{Type: T_NOWDOC, Value: "<<<'" + label + "'" + lineEnding, Position: pos}
 	} else {
 		l.state = ST_HEREDOC
-		return Token{Type: T_START_HEREDOC, Value: "<<<" + label, Position: pos}
+		return Token{Type: T_START_HEREDOC, Value: "<<<" + label + lineEnding, Position: pos}
 	}
 }
 
@@ -759,18 +767,7 @@ func (l *Lexer) nextTokenInHeredoc() Token {
 	
 	// 检查是否到达结束标签
 	if l.isAtHeredocEnd() {
-		// 跳过到行首标签位置
-		for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
-			l.readChar()
-		}
-		if l.ch == '\r' {
-			l.readChar()
-		}
-		if l.ch == '\n' {
-			l.readChar()
-		}
-		
-		// 读取标签
+		// 读取结束标签
 		endLabel := l.heredocLabel
 		for i := 0; i < len(l.heredocLabel); i++ {
 			l.readChar()
@@ -811,18 +808,7 @@ func (l *Lexer) nextTokenInNowdoc() Token {
 	
 	// 检查是否到达结束标签
 	if l.isAtHeredocEnd() {
-		// 跳过到行首标签位置
-		for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
-			l.readChar()
-		}
-		if l.ch == '\r' {
-			l.readChar()
-		}
-		if l.ch == '\n' {
-			l.readChar()
-		}
-		
-		// 读取标签
+		// 读取结束标签
 		endLabel := l.heredocLabel
 		for i := 0; i < len(l.heredocLabel); i++ {
 			l.readChar()

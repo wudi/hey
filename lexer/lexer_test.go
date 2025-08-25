@@ -323,7 +323,7 @@ EOT;
 	// Heredoc 开始
 	tok = lexer.NextToken()
 	assert.Equal(t, T_START_HEREDOC, tok.Type)
-	assert.Equal(t, "<<<EOT", tok.Value)
+	assert.Equal(t, "<<<EOT\n", tok.Value)
 
 	// Heredoc 内容和变量 - 验证基本功能
 	tok = lexer.NextToken()
@@ -369,7 +369,7 @@ EOT;
 	// Nowdoc 开始
 	tok = lexer.NextToken()
 	assert.Equal(t, T_NOWDOC, tok.Type)
-	assert.Equal(t, "<<<'EOT'", tok.Value)
+	assert.Equal(t, "<<<'EOT'\n", tok.Value)
 
 	// Nowdoc 内容 - 验证基本功能（不应有变量插值）
 	tok = lexer.NextToken()
