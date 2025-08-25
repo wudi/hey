@@ -483,3 +483,39 @@ function main(): void
 	}
 
 }
+
+func TestLexer_IndentedNowdocWithNestedPhp(t *testing.T) {
+	// Test a complex case with indented nowdoc containing nested PHP tags
+	input := `<?php
+
+    save_text($info_file, <<<'PHP'
+        <?php
+
+        ?>
+    PHP);`
+
+	lexer := New(input)
+	
+	// Test the token sequence
+	tests := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		{T_OPEN_TAG, "<?php\n"},
+		{T_STRING, "save_text"},
+		{TOKEN_LPAREN, "("},
+		{T_VARIABLE, "$info_file"},
+		{TOKEN_COMMA, ","},
+		{T_NOWDOC, "<<<'PHP'\n"},
+		{T_ENCAPSED_AND_WHITESPACE, "        <?php\n\n        ?>\n    "},
+		{T_END_HEREDOC, "    PHP"},
+		{TOKEN_RPAREN, ")"},
+		{TOKEN_SEMICOLON, ";"},
+	}
+
+	for i, tt := range tests {
+		tok := lexer.NextToken()
+		assert.Equal(t, tt.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[tt.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
+	}
+}

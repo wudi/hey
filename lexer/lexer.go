@@ -767,15 +767,23 @@ func (l *Lexer) nextTokenInHeredoc() Token {
 	
 	// 检查是否到达结束标签
 	if l.isAtHeredocEnd() {
-		// 读取结束标签
-		endLabel := l.heredocLabel
+		// 计算缩进长度
+		indentStart := l.position
+		for indentStart > 0 && l.input[indentStart-1] != '\n' && l.input[indentStart-1] != '\r' {
+			indentStart--
+		}
+		
+		// 读取结束标签（包含缩进）
+		endTokenValue := l.input[indentStart:l.position+len(l.heredocLabel)]
+		
+		// 移动到标签结束位置
 		for i := 0; i < len(l.heredocLabel); i++ {
 			l.readChar()
 		}
 		
 		l.heredocLabel = ""
 		l.state = ST_IN_SCRIPTING
-		return Token{Type: T_END_HEREDOC, Value: endLabel, Position: pos}
+		return Token{Type: T_END_HEREDOC, Value: endTokenValue, Position: pos}
 	}
 	
 	// 读取 Heredoc 内容
@@ -808,15 +816,23 @@ func (l *Lexer) nextTokenInNowdoc() Token {
 	
 	// 检查是否到达结束标签
 	if l.isAtHeredocEnd() {
-		// 读取结束标签
-		endLabel := l.heredocLabel
+		// 计算缩进长度
+		indentStart := l.position
+		for indentStart > 0 && l.input[indentStart-1] != '\n' && l.input[indentStart-1] != '\r' {
+			indentStart--
+		}
+		
+		// 读取结束标签（包含缩进）
+		endTokenValue := l.input[indentStart:l.position+len(l.heredocLabel)]
+		
+		// 移动到标签结束位置
 		for i := 0; i < len(l.heredocLabel); i++ {
 			l.readChar()
 		}
 		
 		l.heredocLabel = ""
 		l.state = ST_IN_SCRIPTING
-		return Token{Type: T_END_HEREDOC, Value: endLabel, Position: pos}
+		return Token{Type: T_END_HEREDOC, Value: endTokenValue, Position: pos}
 	}
 	
 	// 读取 Nowdoc 内容（无变量插值）
@@ -839,9 +855,18 @@ func (l *Lexer) isAtHeredocEnd() bool {
 		return false
 	}
 	
-	// 检查当前位置是否在行首且匹配结束标签
+	// 检查当前位置是否在行首（允许缩进）
 	if l.column != 1 {
-		return false
+		// 如果不在第1列，检查是否在行首的缩进位置
+		// 向前查找直到行首，确保只有空格或制表符
+		pos := l.position - 1
+		for pos >= 0 && l.input[pos] != '\n' && l.input[pos] != '\r' {
+			if l.input[pos] != ' ' && l.input[pos] != '\t' {
+				return false // 不是纯缩进
+			}
+			pos--
+		}
+		// 如果到达这里，说明从行首到当前位置都是缩进字符
 	}
 	
 	labelLen := len(l.heredocLabel)
@@ -855,14 +880,20 @@ func (l *Lexer) isAtHeredocEnd() bool {
 		return false
 	}
 	
-	// 检查标签后面是否为行尾或分号
+	// 检查标签后面的字符是否不是标签的延续（参考PHP的IS_LABEL_SUCCESSOR逻辑）
 	nextPos := l.position + labelLen
 	if nextPos >= len(l.input) {
 		return true // 文件结尾
 	}
 	
 	nextChar := l.input[nextPos]
-	return nextChar == '\n' || nextChar == '\r' || nextChar == ';' || nextChar == ' ' || nextChar == '\t' || nextChar == 0
+	// 如果下一个字符不是字母、数字、下划线，则是有效的结束标记
+	// 这与 PHP 的 !IS_LABEL_SUCCESSOR() 检查一致
+	isLabelSuccessor := (nextChar >= 'a' && nextChar <= 'z') || 
+	                   (nextChar >= 'A' && nextChar <= 'Z') || 
+	                   (nextChar >= '0' && nextChar <= '9') || 
+	                   nextChar == '_'
+	return !isLabelSuccessor
 }
 
 // addError 添加错误信息
