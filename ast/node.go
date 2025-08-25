@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/yourname/php-parser/lexer"
+	"github.com/wudi/php-parser/lexer"
 )
 
 // Node 表示抽象语法树中的节点接口
@@ -25,7 +25,7 @@ type Statement interface {
 	statementNode()
 }
 
-// Expression 表示表达式节点  
+// Expression 表示表达式节点
 type Expression interface {
 	Node
 	expressionNode()
@@ -39,8 +39,8 @@ type Identifier interface {
 
 // BaseNode 基础节点，提供公共字段和方法
 type BaseNode struct {
-	Type     string          `json:"type"`
-	Position lexer.Position  `json:"position"`
+	Type     string         `json:"type"`
+	Position lexer.Position `json:"position"`
 }
 
 // GetType 返回节点类型
@@ -330,9 +330,9 @@ func (ae *ArrayExpression) String() string {
 // IfStatement if语句
 type IfStatement struct {
 	BaseNode
-	Test       Expression   `json:"test"`
-	Consequent []Statement  `json:"consequent"`
-	Alternate  []Statement  `json:"alternate,omitempty"`
+	Test       Expression  `json:"test"`
+	Consequent []Statement `json:"consequent"`
+	Alternate  []Statement `json:"alternate,omitempty"`
 }
 
 func NewIfStatement(pos lexer.Position, test Expression) *IfStatement {
@@ -351,12 +351,12 @@ func (is *IfStatement) String() string {
 	out.WriteString("if (")
 	out.WriteString(is.Test.String())
 	out.WriteString(") {\n")
-	
+
 	for _, stmt := range is.Consequent {
 		out.WriteString("  " + stmt.String() + "\n")
 	}
 	out.WriteString("}")
-	
+
 	if len(is.Alternate) > 0 {
 		out.WriteString(" else {\n")
 		for _, stmt := range is.Alternate {
@@ -364,15 +364,15 @@ func (is *IfStatement) String() string {
 		}
 		out.WriteString("}")
 	}
-	
+
 	return out.String()
 }
 
 // WhileStatement while语句
 type WhileStatement struct {
 	BaseNode
-	Test Expression   `json:"test"`
-	Body []Statement  `json:"body"`
+	Test Expression  `json:"test"`
+	Body []Statement `json:"body"`
 }
 
 func NewWhileStatement(pos lexer.Position, test Expression) *WhileStatement {
@@ -390,22 +390,22 @@ func (ws *WhileStatement) String() string {
 	out.WriteString("while (")
 	out.WriteString(ws.Test.String())
 	out.WriteString(") {\n")
-	
+
 	for _, stmt := range ws.Body {
 		out.WriteString("  " + stmt.String() + "\n")
 	}
 	out.WriteString("}")
-	
+
 	return out.String()
 }
 
 // ForStatement for语句
 type ForStatement struct {
 	BaseNode
-	Init   Expression   `json:"init,omitempty"`
-	Test   Expression   `json:"test,omitempty"`
-	Update Expression   `json:"update,omitempty"`
-	Body   []Statement  `json:"body"`
+	Init   Expression  `json:"init,omitempty"`
+	Test   Expression  `json:"test,omitempty"`
+	Update Expression  `json:"update,omitempty"`
+	Body   []Statement `json:"body"`
 }
 
 func NewForStatement(pos lexer.Position) *ForStatement {
@@ -420,43 +420,43 @@ func (fs *ForStatement) statementNode() {}
 func (fs *ForStatement) String() string {
 	var out strings.Builder
 	out.WriteString("for (")
-	
+
 	if fs.Init != nil {
 		out.WriteString(fs.Init.String())
 	}
 	out.WriteString("; ")
-	
+
 	if fs.Test != nil {
 		out.WriteString(fs.Test.String())
 	}
 	out.WriteString("; ")
-	
+
 	if fs.Update != nil {
 		out.WriteString(fs.Update.String())
 	}
-	
+
 	out.WriteString(") {\n")
 	for _, stmt := range fs.Body {
 		out.WriteString("  " + stmt.String() + "\n")
 	}
 	out.WriteString("}")
-	
+
 	return out.String()
 }
 
 // FunctionDeclaration 函数声明
 type FunctionDeclaration struct {
 	BaseNode
-	Name       Identifier   `json:"name"`
-	Parameters []Parameter  `json:"parameters"`
-	ReturnType string       `json:"returnType,omitempty"`
-	Body       []Statement  `json:"body"`
+	Name       Identifier  `json:"name"`
+	Parameters []Parameter `json:"parameters"`
+	ReturnType string      `json:"returnType,omitempty"`
+	Body       []Statement `json:"body"`
 }
 
 type Parameter struct {
-	Name         string `json:"name"`
+	Name         string     `json:"name"`
 	DefaultValue Expression `json:"defaultValue,omitempty"`
-	Type         string `json:"type,omitempty"`
+	Type         string     `json:"type,omitempty"`
 }
 
 func NewFunctionDeclaration(pos lexer.Position, name Identifier) *FunctionDeclaration {
@@ -477,7 +477,7 @@ func (fd *FunctionDeclaration) String() string {
 		out.WriteString(fd.Name.String())
 	}
 	out.WriteString("(")
-	
+
 	var params []string
 	for _, param := range fd.Parameters {
 		paramStr := param.Name
@@ -487,13 +487,13 @@ func (fd *FunctionDeclaration) String() string {
 		params = append(params, paramStr)
 	}
 	out.WriteString(strings.Join(params, ", "))
-	
+
 	out.WriteString(") {\n")
 	for _, stmt := range fd.Body {
 		out.WriteString("  " + stmt.String() + "\n")
 	}
 	out.WriteString("}")
-	
+
 	return out.String()
 }
 
@@ -510,7 +510,7 @@ func NewIdentifierNode(pos lexer.Position, name string) *IdentifierNode {
 	}
 }
 
-func (i *IdentifierNode) expressionNode()  {}
+func (i *IdentifierNode) expressionNode() {}
 func (i *IdentifierNode) identifierNode() {}
 
 func (i *IdentifierNode) String() string {

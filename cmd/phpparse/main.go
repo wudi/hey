@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/yourname/php-parser/lexer"
-	"github.com/yourname/php-parser/parser"
+	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/php-parser/parser"
 )
 
 const (
@@ -149,7 +149,7 @@ func parseAndOutput(input string, config Config) {
 		if !hasErrors {
 			fmt.Println("No errors found.")
 		}
-		
+
 		os.Exit(ExitSuccess)
 		return
 	}
@@ -157,7 +157,7 @@ func parseAndOutput(input string, config Config) {
 	// 显示错误（如果有的话）
 	if len(lexerErrors) > 0 || len(parserErrors) > 0 {
 		fmt.Fprintf(os.Stderr, "=== ERRORS ===\n")
-		
+
 		if len(lexerErrors) > 0 {
 			fmt.Fprintf(os.Stderr, "Lexical Errors:\n")
 			for i, err := range lexerErrors {
@@ -171,7 +171,7 @@ func parseAndOutput(input string, config Config) {
 				fmt.Fprintf(os.Stderr, "  %d: %s\n", i+1, err)
 			}
 		}
-		
+
 		fmt.Fprintf(os.Stderr, "\n")
 	}
 
@@ -234,9 +234,9 @@ func outputAST(program interface{}) {
 
 func outputTokens(tokens []lexer.Token) {
 	for i, token := range tokens {
-		fmt.Printf("%3d: %-25s %q at %d:%d\n", 
-			i+1, 
-			lexer.TokenNames[token.Type], 
+		fmt.Printf("%3d: %-25s %q at %d:%d\n",
+			i+1,
+			lexer.TokenNames[token.Type],
 			token.Value,
 			token.Position.Line,
 			token.Position.Column)

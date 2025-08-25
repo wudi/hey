@@ -1,4 +1,4 @@
-module github.com/yourname/php-parser
+module github.com/wudi/php-parser
 
 go 1.21
 

@@ -5,8 +5,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/yourname/php-parser/lexer"
-	"github.com/yourname/php-parser/parser"
+	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/php-parser/parser"
 )
 
 func main() {
@@ -29,13 +29,13 @@ func main() {
 		// 使用我们的 parser
 		fmt.Println("我们的解析结果:")
 		testWithOurParser(testCase)
-		
+
 		fmt.Println()
-		
+
 		// 使用 PHP 官方实现
 		fmt.Println("PHP 官方 token_get_all() 结果:")
 		testWithPHPOfficial(testCase)
-		
+
 		fmt.Println()
 		fmt.Println(strings.Repeat("=", 80))
 		fmt.Println()
@@ -45,7 +45,7 @@ func main() {
 func testWithOurParser(code string) {
 	lex := lexer.New(code)
 	p := parser.New(lex)
-	
+
 	// 收集 tokens
 	lex2 := lexer.New(code)
 	fmt.Println("Tokens:")
@@ -58,13 +58,13 @@ func testWithOurParser(code string) {
 		tokenCount++
 		fmt.Printf("  %d: %-25s %q\n", tokenCount, lexer.TokenNames[token.Type], token.Value)
 	}
-	
+
 	// 解析 AST
 	program := p.ParseProgram()
 	errors := p.Errors()
-	
+
 	fmt.Printf("语句数量: %d\n", len(program.Body))
-	
+
 	if len(errors) > 0 {
 		fmt.Printf("解析错误: %d\n", len(errors))
 		for i, err := range errors {
@@ -94,12 +94,12 @@ printf("Token 总数: %%d\n", $count);
 	// 执行 PHP 代码
 	cmd := exec.Command("/bin/php", "-r", phpCode)
 	output, err := cmd.Output()
-	
+
 	if err != nil {
 		fmt.Printf("执行 PHP 失败: %v\n", err)
 		return
 	}
-	
+
 	fmt.Print(string(output))
 }
 

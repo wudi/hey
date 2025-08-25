@@ -4,18 +4,18 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/yourname/php-parser/lexer"
+	"github.com/wudi/php-parser/lexer"
 )
 
 func TestProgram_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 	program := NewProgram(pos)
-	
+
 	// 添加一个 echo 语句
 	echo := NewEchoStatement(pos)
 	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "Hello, World!", `"Hello, World!"`))
 	program.Body = append(program.Body, echo)
-	
+
 	expected := `echo "Hello, World!";`
 	assert.Equal(t, expected, program.String())
 }
@@ -23,11 +23,11 @@ func TestProgram_String(t *testing.T) {
 func TestEchoStatement_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 	echo := NewEchoStatement(pos)
-	
+
 	// 测试单个参数
 	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "Hello", `"Hello"`))
 	assert.Equal(t, `echo "Hello";`, echo.String())
-	
+
 	// 测试多个参数
 	echo.Arguments = append(echo.Arguments, NewVariable(pos, "$name"))
 	assert.Equal(t, `echo "Hello", $name;`, echo.String())
@@ -35,34 +35,34 @@ func TestEchoStatement_String(t *testing.T) {
 
 func TestAssignmentExpression_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	variable := NewVariable(pos, "$name")
 	value := NewStringLiteral(pos, "John", `"John"`)
 	assignment := NewAssignmentExpression(pos, variable, "=", value)
-	
+
 	expected := `$name = "John"`
 	assert.Equal(t, expected, assignment.String())
 }
 
 func TestBinaryExpression_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	left := NewNumberLiteral(pos, "5", "integer")
 	right := NewNumberLiteral(pos, "3", "integer")
 	expr := NewBinaryExpression(pos, left, "+", right)
-	
+
 	expected := "(5 + 3)"
 	assert.Equal(t, expected, expr.String())
 }
 
 func TestUnaryExpression_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	// 前缀递增
 	variable := NewVariable(pos, "$i")
 	prefixExpr := NewUnaryExpression(pos, "++", variable, true)
 	assert.Equal(t, "++$i", prefixExpr.String())
-	
+
 	// 后缀递增
 	postfixExpr := NewUnaryExpression(pos, "++", variable, false)
 	assert.Equal(t, "$i++", postfixExpr.String())
@@ -71,7 +71,7 @@ func TestUnaryExpression_String(t *testing.T) {
 func TestVariable_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 	variable := NewVariable(pos, "$name")
-	
+
 	assert.Equal(t, "$name", variable.String())
 	assert.Equal(t, "Variable", variable.GetType())
 }
@@ -79,19 +79,19 @@ func TestVariable_String(t *testing.T) {
 func TestStringLiteral_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 	str := NewStringLiteral(pos, "Hello, World!", `"Hello, World!"`)
-	
+
 	assert.Equal(t, `"Hello, World!"`, str.String())
 	assert.Equal(t, "StringLiteral", str.GetType())
 }
 
 func TestNumberLiteral_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	// 整数
 	intNum := NewNumberLiteral(pos, "123", "integer")
 	assert.Equal(t, "123", intNum.String())
 	assert.Equal(t, "NumberLiteral", intNum.GetType())
-	
+
 	// 浮点数
 	floatNum := NewNumberLiteral(pos, "3.14", "float")
 	assert.Equal(t, "3.14", floatNum.String())
@@ -99,10 +99,10 @@ func TestNumberLiteral_String(t *testing.T) {
 
 func TestBooleanLiteral_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	trueLiteral := NewBooleanLiteral(pos, true)
 	assert.Equal(t, "true", trueLiteral.String())
-	
+
 	falseLiteral := NewBooleanLiteral(pos, false)
 	assert.Equal(t, "false", falseLiteral.String())
 }
@@ -110,7 +110,7 @@ func TestBooleanLiteral_String(t *testing.T) {
 func TestNullLiteral_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 	nullLit := NewNullLiteral(pos)
-	
+
 	assert.Equal(t, "null", nullLit.String())
 	assert.Equal(t, "NullLiteral", nullLit.GetType())
 }
@@ -118,33 +118,33 @@ func TestNullLiteral_String(t *testing.T) {
 func TestArrayExpression_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 	arr := NewArrayExpression(pos)
-	
+
 	// 空数组
 	assert.Equal(t, "[]", arr.String())
-	
+
 	// 有元素的数组
 	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "1", "integer"))
 	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "2", "integer"))
 	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "3", "integer"))
-	
+
 	assert.Equal(t, "[1, 2, 3]", arr.String())
 }
 
 func TestIfStatement_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	// 创建条件表达式
 	variable := NewVariable(pos, "$x")
 	value := NewNumberLiteral(pos, "5", "integer")
 	condition := NewBinaryExpression(pos, variable, ">", value)
-	
+
 	ifStmt := NewIfStatement(pos, condition)
-	
+
 	// 添加 consequent 语句
 	echo := NewEchoStatement(pos)
 	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "x is greater than 5", `"x is greater than 5"`))
 	ifStmt.Consequent = append(ifStmt.Consequent, echo)
-	
+
 	expected := `if (($x > 5)) {
   echo "x is greater than 5";
 }`
@@ -153,19 +153,19 @@ func TestIfStatement_String(t *testing.T) {
 
 func TestWhileStatement_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	// 创建条件表达式
 	variable := NewVariable(pos, "$i")
 	value := NewNumberLiteral(pos, "10", "integer")
 	condition := NewBinaryExpression(pos, variable, "<", value)
-	
+
 	whileStmt := NewWhileStatement(pos, condition)
-	
+
 	// 添加循环体
 	increment := NewUnaryExpression(pos, "++", variable, false)
 	exprStmt := NewExpressionStatement(pos, increment)
 	whileStmt.Body = append(whileStmt.Body, exprStmt)
-	
+
 	expected := `while (($i < 10)) {
   $i++;
 }`
@@ -174,21 +174,21 @@ func TestWhileStatement_String(t *testing.T) {
 
 func TestFunctionDeclaration_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	funcName := NewIdentifierNode(pos, "greet")
 	funcDecl := NewFunctionDeclaration(pos, funcName)
-	
+
 	// 添加参数
 	funcDecl.Parameters = append(funcDecl.Parameters, Parameter{
 		Name: "$name",
 	})
-	
+
 	// 添加函数体
 	echo := NewEchoStatement(pos)
 	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "Hello, ", `"Hello, "`))
 	echo.Arguments = append(echo.Arguments, NewVariable(pos, "$name"))
 	funcDecl.Body = append(funcDecl.Body, echo)
-	
+
 	expected := `function greet($name) {
   echo "Hello, ", $name;
 }`
@@ -197,12 +197,12 @@ func TestFunctionDeclaration_String(t *testing.T) {
 
 func TestReturnStatement_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	// 有返回值的 return
 	value := NewNumberLiteral(pos, "42", "integer")
 	returnStmt := NewReturnStatement(pos, value)
 	assert.Equal(t, "return 42;", returnStmt.String())
-	
+
 	// 无返回值的 return
 	emptyReturn := NewReturnStatement(pos, nil)
 	assert.Equal(t, "return;", emptyReturn.String())
@@ -210,10 +210,10 @@ func TestReturnStatement_String(t *testing.T) {
 
 func TestBreakContinueStatement_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
-	
+
 	breakStmt := NewBreakStatement(pos)
 	assert.Equal(t, "break;", breakStmt.String())
-	
+
 	continueStmt := NewContinueStatement(pos)
 	assert.Equal(t, "continue;", continueStmt.String())
 }
@@ -221,7 +221,7 @@ func TestBreakContinueStatement_String(t *testing.T) {
 func TestNodeJSON(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 	variable := NewVariable(pos, "$name")
-	
+
 	json, err := variable.ToJSON()
 	assert.NoError(t, err)
 	assert.Contains(t, string(json), `"type": "Variable"`)

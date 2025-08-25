@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/yourname/php-parser/ast"
-	"github.com/yourname/php-parser/lexer"
+	"github.com/wudi/php-parser/ast"
+	"github.com/wudi/php-parser/lexer"
 )
 
 func TestParsing_VariableDeclaration(t *testing.T) {
@@ -57,7 +57,7 @@ func TestParsing_EchoStatement(t *testing.T) {
 	assert.True(t, ok, "Statement should be EchoStatement")
 
 	assert.Len(t, echoStmt.Arguments, 1)
-	
+
 	stringLit, ok := echoStmt.Arguments[0].(*ast.StringLiteral)
 	assert.True(t, ok, "Argument should be StringLiteral")
 	assert.Equal(t, "Hello, World!", stringLit.Value)
@@ -236,7 +236,7 @@ func TestParsing_IfStatement(t *testing.T) {
 	assert.True(t, ok, "Condition should be BinaryExpression")
 	assert.Equal(t, ">", binaryExpr.Operator)
 
-	// 检查 consequent 
+	// 检查 consequent
 	assert.Len(t, ifStmt.Consequent, 1)
 	echoStmt, ok := ifStmt.Consequent[0].(*ast.EchoStatement)
 	assert.True(t, ok, "Consequent should contain EchoStatement")
@@ -264,7 +264,7 @@ func TestParsing_IfElseStatement(t *testing.T) {
 
 	// 检查 consequent
 	assert.Len(t, ifStmt.Consequent, 1)
-	
+
 	// 检查 alternate
 	assert.Len(t, ifStmt.Alternate, 1)
 	echoStmt, ok := ifStmt.Alternate[0].(*ast.EchoStatement)
@@ -325,7 +325,7 @@ func TestParsing_ForStatement(t *testing.T) {
 	assert.NotNil(t, forStmt.Init)
 	initAssign, ok := forStmt.Init.(*ast.AssignmentExpression)
 	assert.True(t, ok, "Init should be AssignmentExpression")
-	
+
 	variable, ok := initAssign.Left.(*ast.Variable)
 	assert.True(t, ok, "Init left should be Variable")
 	assert.Equal(t, "$i", variable.Name)

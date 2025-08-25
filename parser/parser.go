@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yourname/php-parser/ast"
-	"github.com/yourname/php-parser/lexer"
+	"github.com/wudi/php-parser/ast"
+	"github.com/wudi/php-parser/lexer"
 )
 
 // Precedence 操作符优先级
@@ -27,29 +27,29 @@ const (
 
 // 操作符优先级映射
 var precedences = map[lexer.TokenType]Precedence{
-	lexer.TOKEN_EQUAL:             ASSIGN,
-	lexer.T_PLUS_EQUAL:            ASSIGN,
-	lexer.T_MINUS_EQUAL:           ASSIGN,
-	lexer.T_MUL_EQUAL:             ASSIGN,
-	lexer.T_DIV_EQUAL:             ASSIGN,
-	lexer.T_CONCAT_EQUAL:          ASSIGN,
-	lexer.T_IS_EQUAL:              EQUALS,
-	lexer.T_IS_NOT_EQUAL:          EQUALS,
-	lexer.T_IS_IDENTICAL:          EQUALS,
-	lexer.T_IS_NOT_IDENTICAL:      EQUALS,
-	lexer.TOKEN_LT:                LESSGREATER,
-	lexer.TOKEN_GT:                LESSGREATER,
-	lexer.T_IS_SMALLER_OR_EQUAL:   LESSGREATER,
-	lexer.T_IS_GREATER_OR_EQUAL:   LESSGREATER,
-	lexer.TOKEN_PLUS:              SUM,
-	lexer.TOKEN_MINUS:             SUM,
-	lexer.TOKEN_DIVIDE:            PRODUCT,
-	lexer.TOKEN_MULTIPLY:          PRODUCT,
-	lexer.TOKEN_MODULO:            PRODUCT,
-	lexer.T_INC:                   POSTFIX,
-	lexer.T_DEC:                   POSTFIX,
-	lexer.TOKEN_LPAREN:            CALL,
-	lexer.TOKEN_LBRACKET:          INDEX,
+	lexer.TOKEN_EQUAL:           ASSIGN,
+	lexer.T_PLUS_EQUAL:          ASSIGN,
+	lexer.T_MINUS_EQUAL:         ASSIGN,
+	lexer.T_MUL_EQUAL:           ASSIGN,
+	lexer.T_DIV_EQUAL:           ASSIGN,
+	lexer.T_CONCAT_EQUAL:        ASSIGN,
+	lexer.T_IS_EQUAL:            EQUALS,
+	lexer.T_IS_NOT_EQUAL:        EQUALS,
+	lexer.T_IS_IDENTICAL:        EQUALS,
+	lexer.T_IS_NOT_IDENTICAL:    EQUALS,
+	lexer.TOKEN_LT:              LESSGREATER,
+	lexer.TOKEN_GT:              LESSGREATER,
+	lexer.T_IS_SMALLER_OR_EQUAL: LESSGREATER,
+	lexer.T_IS_GREATER_OR_EQUAL: LESSGREATER,
+	lexer.TOKEN_PLUS:            SUM,
+	lexer.TOKEN_MINUS:           SUM,
+	lexer.TOKEN_DIVIDE:          PRODUCT,
+	lexer.TOKEN_MULTIPLY:        PRODUCT,
+	lexer.TOKEN_MODULO:          PRODUCT,
+	lexer.T_INC:                 POSTFIX,
+	lexer.T_DEC:                 POSTFIX,
+	lexer.TOKEN_LPAREN:          CALL,
+	lexer.TOKEN_LBRACKET:        INDEX,
 }
 
 // 前缀解析函数类型
@@ -383,11 +383,11 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 	// 检查是否有返回类型声明 ": type"
 	if p.peekToken.Type == lexer.TOKEN_COLON {
 		p.nextToken() // 移动到 ':'
-		
+
 		if !p.expectPeek(lexer.T_STRING) { // 期望类型名
 			return nil
 		}
-		
+
 		// 解析返回类型 (这里简单处理为字符串，可以扩展为更复杂的类型系统)
 		funcDecl.ReturnType = p.currentToken.Value
 	}
@@ -708,7 +708,7 @@ func (p *Parser) parseInlineHTML() ast.Expression {
 	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 }
 
-// parseOpenTag 解析PHP开放标签  
+// parseOpenTag 解析PHP开放标签
 func (p *Parser) parseOpenTag() ast.Expression {
 	// PHP开放标签通常不作为表达式使用，但为了完整性，创建一个特殊节点
 	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)

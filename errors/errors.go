@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yourname/php-parser/lexer"
+	"github.com/wudi/php-parser/lexer"
 )
 
 // ErrorType 错误类型
@@ -18,10 +18,10 @@ const (
 
 // Error 表示解析错误
 type Error struct {
-	Type     ErrorType       `json:"type"`
-	Message  string          `json:"message"`
-	Position lexer.Position  `json:"position"`
-	Source   string          `json:"source,omitempty"`
+	Type     ErrorType      `json:"type"`
+	Message  string         `json:"message"`
+	Position lexer.Position `json:"position"`
+	Source   string         `json:"source,omitempty"`
 }
 
 // NewSyntaxError 创建语法错误
@@ -62,7 +62,7 @@ func (e *Error) String() string {
 	case SemanticError:
 		typeStr = "Semantic Error"
 	}
-	
+
 	return fmt.Sprintf("%s at line %d, column %d: %s",
 		typeStr, e.Position.Line, e.Position.Column, e.Message)
 }
@@ -216,26 +216,26 @@ func (e *Error) PrintFormatted() string {
 	if e.Source == "" {
 		return e.String()
 	}
-	
+
 	lines := strings.Split(e.Source, "\n")
 	if e.Position.Line <= 0 || e.Position.Line > len(lines) {
 		return e.String()
 	}
-	
+
 	var builder strings.Builder
 	builder.WriteString(e.String())
 	builder.WriteString("\n")
-	
+
 	// 显示错误行
 	errorLine := lines[e.Position.Line-1]
 	builder.WriteString(fmt.Sprintf("  %d | %s\n", e.Position.Line, errorLine))
-	
+
 	// 显示错误位置指示器
 	builder.WriteString("      | ")
 	for i := 0; i < e.Position.Column; i++ {
 		builder.WriteString(" ")
 	}
 	builder.WriteString("^\n")
-	
+
 	return builder.String()
 }
