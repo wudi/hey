@@ -1,0 +1,6 @@
+.idea
+.vscode
+php-parser
+vendor
+node_modules
+.DS_Store
