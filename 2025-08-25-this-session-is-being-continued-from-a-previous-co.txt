@@ -1,0 +1,23 @@
+╭───────────────────────────────────────────────────╮
+│ ✻ Welcome to Claude Code!                         │
+│                                                   │
+│   /help for help, /status for your current setup  │
+│                                                   │
+│   cwd: /home/ubuntu/php-parser                    │
+╰───────────────────────────────────────────────────╯
+
+ Tips for getting started:
+
+  Run /init to create a CLAUDE.md file with instructions for Claude
+  Use Claude to help with file analysis, editing, bash commands and git
+  Be as specific as you would with another engineer for the best results
+● Compact summary (ctrl+r to expand)
+  ⎿  Read final_test.go (112 lines)
+  ⎿  Read tests/compare_with_php.go (114 lines)
+  ⎿  Read cmd/phpparse/main.go (244 lines)
+  ⎿  Read examples/basic_example.go (180 lines)
+  ⎿  Read errors/errors.go (241 lines)
+  ⎿  Todo list read (10 items)
+  ⎿  5-hour limit reached ∙ resets 7am
+     /upgrade to increase your usage limit.
+
