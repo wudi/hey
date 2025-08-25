@@ -94,6 +94,12 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.TOKEN_LPAREN, p.parseGroupedExpression)
 	p.registerPrefix(lexer.T_ARRAY, p.parseArrayExpression)
 
+	// PHP 特定的前缀解析函数
+	p.registerPrefix(lexer.T_INLINE_HTML, p.parseInlineHTML)
+	p.registerPrefix(lexer.T_OPEN_TAG, p.parseOpenTag)
+	p.registerPrefix(lexer.T_COMMENT, p.parseComment)
+	p.registerPrefix(lexer.T_START_HEREDOC, p.parseHeredoc)
+
 	// 注册中缀解析函数
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
 	p.registerInfix(lexer.TOKEN_PLUS, p.parseInfixExpression)
@@ -372,6 +378,18 @@ func (p *Parser) parseFunctionDeclaration() *ast.FunctionDeclaration {
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		return nil
+	}
+
+	// 检查是否有返回类型声明 ": type"
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 ':'
+		
+		if !p.expectPeek(lexer.T_STRING) { // 期望类型名
+			return nil
+		}
+		
+		// 解析返回类型 (这里简单处理为字符串，可以扩展为更复杂的类型系统)
+		funcDecl.ReturnType = p.currentToken.Value
 	}
 
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
@@ -680,4 +698,30 @@ func (p *Parser) Current() lexer.Token {
 // Peek 获取下一个 token (调试用)
 func (p *Parser) Peek() lexer.Token {
 	return p.peekToken
+}
+
+// PHP 特定的解析函数
+
+// parseInlineHTML 解析内联HTML
+func (p *Parser) parseInlineHTML() ast.Expression {
+	// 对于内联HTML，创建一个特殊的字面量表达式
+	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+}
+
+// parseOpenTag 解析PHP开放标签  
+func (p *Parser) parseOpenTag() ast.Expression {
+	// PHP开放标签通常不作为表达式使用，但为了完整性，创建一个特殊节点
+	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+}
+
+// parseComment 解析注释
+func (p *Parser) parseComment() ast.Expression {
+	// 注释也创建为特殊的字面量
+	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+}
+
+// parseHeredoc 解析Heredoc
+func (p *Parser) parseHeredoc() ast.Expression {
+	// 简单处理Heredoc为字符串字面量
+	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 }

@@ -449,6 +449,7 @@ type FunctionDeclaration struct {
 	BaseNode
 	Name       Identifier   `json:"name"`
 	Parameters []Parameter  `json:"parameters"`
+	ReturnType string       `json:"returnType,omitempty"`
 	Body       []Statement  `json:"body"`
 }
 

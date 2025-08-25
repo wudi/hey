@@ -113,23 +113,24 @@ const (
 	T_PRIVATE                   TokenType = 324
 	T_PROTECTED                 TokenType = 325
 	T_PUBLIC                    TokenType = 326
-	T_READONLY                  TokenType = 327
-	T_VAR                       TokenType = 328
+	// 新的可见性修饰符 (PHP 8.4)
+	T_PRIVATE_SET               TokenType = 327 // private(set)
+	T_PROTECTED_SET             TokenType = 328 // protected(set)
+	T_PUBLIC_SET                TokenType = 329 // public(set)
+	T_READONLY                  TokenType = 330
+	T_VAR                       TokenType = 331
 
 	// 类相关
-	T_UNSET                     TokenType = 329
-	T_ISSET                     TokenType = 330
-	T_EMPTY                     TokenType = 331
-	T_HALT_COMPILER             TokenType = 332
-	T_CLASS                     TokenType = 333
-	T_TRAIT                     TokenType = 334
-	T_INTERFACE                 TokenType = 335
-	T_ENUM                      TokenType = 336
-	T_EXTENDS                   TokenType = 337
-	T_IMPLEMENTS                TokenType = 338
-	T_OBJECT_OPERATOR           TokenType = 339 // ->
-	T_NULLSAFE_OBJECT_OPERATOR  TokenType = 340 // ?->
-	T_DOUBLE_ARROW              TokenType = 341 // =>
+	T_UNSET                     TokenType = 332
+	T_ISSET                     TokenType = 333
+	T_EMPTY                     TokenType = 334
+	T_HALT_COMPILER             TokenType = 335
+	T_CLASS                     TokenType = 336
+	T_TRAIT                     TokenType = 337
+	T_INTERFACE                 TokenType = 338
+	T_ENUM                      TokenType = 339
+	T_EXTENDS                   TokenType = 340
+	T_IMPLEMENTS                TokenType = 341
 	T_LIST                      TokenType = 342
 	T_ARRAY                     TokenType = 343
 
@@ -143,94 +144,105 @@ const (
 	T_METHOD_C                  TokenType = 350 // __METHOD__
 	T_FUNC_C                    TokenType = 351 // __FUNCTION__
 	T_NS_C                      TokenType = 352 // __NAMESPACE__
+	T_PROPERTY_C                TokenType = 353 // __PROPERTY__ (PHP 8.4)
 
 	// 注释
-	T_COMMENT                   TokenType = 353
-	T_DOC_COMMENT               TokenType = 354
+	T_COMMENT                   TokenType = 354
+	T_DOC_COMMENT               TokenType = 355
 
 	// 开放和关闭标签
-	T_OPEN_TAG                  TokenType = 355 // <?php
-	T_OPEN_TAG_WITH_ECHO        TokenType = 356 // <?= 
-	T_CLOSE_TAG                 TokenType = 357 // ?>
+	T_OPEN_TAG                  TokenType = 356 // <?php
+	T_OPEN_TAG_WITH_ECHO        TokenType = 357 // <?= 
+	T_CLOSE_TAG                 TokenType = 358 // ?>
 
 	// 空白字符
-	T_WHITESPACE                TokenType = 358
-	T_START_HEREDOC             TokenType = 359
-	T_END_HEREDOC               TokenType = 360
-	T_DOLLAR_OPEN_CURLY_BRACES  TokenType = 361 // ${
-	T_CURLY_OPEN                TokenType = 362 // {$
+	T_WHITESPACE                TokenType = 359
+	T_START_HEREDOC             TokenType = 360
+	T_END_HEREDOC               TokenType = 361
+	T_DOLLAR_OPEN_CURLY_BRACES  TokenType = 362 // ${
+	T_CURLY_OPEN                TokenType = 363 // {$
 
 	// 字符串插值
-	T_PAAMAYIM_NEKUDOTAYIM      TokenType = 363 // ::
-	T_NAMESPACE                 TokenType = 364
-	T_NS_SEPARATOR              TokenType = 365 // \
+	T_PAAMAYIM_NEKUDOTAYIM      TokenType = 364 // ::
+	T_NAMESPACE                 TokenType = 365
+	T_NS_SEPARATOR              TokenType = 366 // \
 
 	// 数组访问
-	T_ELLIPSIS                  TokenType = 366 // ...
+	T_ELLIPSIS                  TokenType = 367 // ...
 
 	// 比较操作符
-	T_IS_EQUAL                  TokenType = 367 // ==
-	T_IS_NOT_EQUAL              TokenType = 368 // !=
-	T_IS_IDENTICAL              TokenType = 369 // ===
-	T_IS_NOT_IDENTICAL          TokenType = 370 // !==
-	T_IS_SMALLER_OR_EQUAL       TokenType = 371 // <=
-	T_IS_GREATER_OR_EQUAL       TokenType = 372 // >=
-	T_SPACESHIP                 TokenType = 373 // <=>
+	T_IS_EQUAL                  TokenType = 368 // ==
+	T_IS_NOT_EQUAL              TokenType = 369 // !=
+	T_IS_IDENTICAL              TokenType = 370 // ===
+	T_IS_NOT_IDENTICAL          TokenType = 371 // !==
+	T_IS_SMALLER_OR_EQUAL       TokenType = 372 // <=
+	T_IS_GREATER_OR_EQUAL       TokenType = 373 // >=
+	T_SPACESHIP                 TokenType = 374 // <=>
 
 	// 赋值操作符
-	T_PLUS_EQUAL                TokenType = 374 // +=
-	T_MINUS_EQUAL               TokenType = 375 // -=
-	T_MUL_EQUAL                 TokenType = 376 // *=
-	T_DIV_EQUAL                 TokenType = 377 // /=
-	T_CONCAT_EQUAL              TokenType = 378 // .=
-	T_MOD_EQUAL                 TokenType = 379 // %=
-	T_AND_EQUAL                 TokenType = 380 // &=
-	T_OR_EQUAL                  TokenType = 381 // |=
-	T_XOR_EQUAL                 TokenType = 382 // ^=
-	T_SL_EQUAL                  TokenType = 383 // <<=
-	T_SR_EQUAL                  TokenType = 384 // >>=
-	T_COALESCE_EQUAL            TokenType = 385 // ??=
+	T_PLUS_EQUAL                TokenType = 375 // +=
+	T_MINUS_EQUAL               TokenType = 376 // -=
+	T_MUL_EQUAL                 TokenType = 377 // *=
+	T_DIV_EQUAL                 TokenType = 378 // /=
+	T_CONCAT_EQUAL              TokenType = 379 // .=
+	T_MOD_EQUAL                 TokenType = 380 // %=
+	T_AND_EQUAL                 TokenType = 381 // &=
+	T_OR_EQUAL                  TokenType = 382 // |=
+	T_XOR_EQUAL                 TokenType = 383 // ^=
+	T_SL_EQUAL                  TokenType = 384 // <<=
+	T_SR_EQUAL                  TokenType = 385 // >>=
+	T_COALESCE_EQUAL            TokenType = 386 // ??=
 
 	// 增减操作符
-	T_INC                       TokenType = 386 // ++
-	T_DEC                       TokenType = 387 // --
+	T_INC                       TokenType = 387 // ++
+	T_DEC                       TokenType = 388 // --
 
-	// 位移操作符
-	T_SL                        TokenType = 388 // <<
-	T_SR                        TokenType = 389 // >>
+	// 对象操作符 (正确位置)
+	T_OBJECT_OPERATOR           TokenType = 389 // ->
+	T_NULLSAFE_OBJECT_OPERATOR  TokenType = 390 // ?->
+	T_DOUBLE_ARROW              TokenType = 391 // =>
 
 	// 逻辑操作符
-	T_BOOLEAN_OR                TokenType = 390 // ||
-	T_BOOLEAN_AND               TokenType = 391 // &&
+	T_BOOLEAN_OR                TokenType = 392 // ||
+	T_BOOLEAN_AND               TokenType = 393 // &&
 
 	// NULL 合并
-	T_COALESCE                  TokenType = 392 // ??
+	T_COALESCE                  TokenType = 394 // ??
 
-	// PHP 开始标签
-	T_OPEN_TAG_WITH_ECHO_ALT    TokenType = 393 // <?php (替代形式)
+	// 位移操作符 (正确位置)
+	T_SL                        TokenType = 395 // <<
+	T_SR                        TokenType = 396 // >>
 
 	// 属性
-	T_ATTRIBUTE                 TokenType = 394 // #[
-
-	// 其他
-	T_BAD_CHARACTER             TokenType = 395
-	T_CLOSE_TAG_ALT             TokenType = 396 // 替代关闭标签
+	T_ATTRIBUTE                 TokenType = 397 // #[
 
 	// 类型声明
-	T_INT_CAST                  TokenType = 397 // (int)
-	T_DOUBLE_CAST               TokenType = 398 // (double)
-	T_STRING_CAST               TokenType = 399 // (string)
-	T_ARRAY_CAST                TokenType = 400 // (array)
-	T_OBJECT_CAST               TokenType = 401 // (object)
-	T_BOOL_CAST                 TokenType = 402 // (bool)
-	T_UNSET_CAST                TokenType = 403 // (unset)
+	T_INT_CAST                  TokenType = 398 // (int)
+	T_DOUBLE_CAST               TokenType = 399 // (double)
+	T_STRING_CAST               TokenType = 400 // (string)
+	T_ARRAY_CAST                TokenType = 401 // (array)
+	T_OBJECT_CAST               TokenType = 402 // (object)
+	T_BOOL_CAST                 TokenType = 403 // (bool)
+	T_UNSET_CAST                TokenType = 404 // (unset)
+	T_VOID_CAST                 TokenType = 405 // (void) - PHP 8.4
 
 	// 更多操作符
-	T_POW                       TokenType = 404 // **
-	T_POW_EQUAL                 TokenType = 405 // **=
+	T_POW                       TokenType = 406 // **
+	T_POW_EQUAL                 TokenType = 407 // **=
+
+	// 上下文敏感的 & 操作符
+	T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG     TokenType = 408
+	T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG TokenType = 409
 
 	// Nowdoc 支持
-	T_NOWDOC                    TokenType = 406 // <<<'IDENTIFIER'
+	T_NOWDOC                    TokenType = 410 // <<<'IDENTIFIER'
+
+	// 管道操作符 (PHP 8.4)
+	T_PIPE                      TokenType = 411 // |>
+
+	// 其他
+	T_BAD_CHARACTER             TokenType = 412
+	T_CLOSE_TAG_ALT             TokenType = 413 // 替代关闭标签
 
 	// 单个字符 token（为了完整性）
 	TOKEN_SEMICOLON     TokenType = 1000 + ';'  // ;
@@ -333,6 +345,9 @@ var TokenNames = map[TokenType]string{
 	T_PRIVATE:                   "T_PRIVATE",
 	T_PROTECTED:                 "T_PROTECTED",
 	T_PUBLIC:                    "T_PUBLIC",
+	T_PRIVATE_SET:               "T_PRIVATE_SET",
+	T_PROTECTED_SET:             "T_PROTECTED_SET",
+	T_PUBLIC_SET:                "T_PUBLIC_SET",
 	T_READONLY:                  "T_READONLY",
 	T_VAR:                       "T_VAR",
 	T_UNSET:                     "T_UNSET",
@@ -359,6 +374,7 @@ var TokenNames = map[TokenType]string{
 	T_METHOD_C:                  "T_METHOD_C",
 	T_FUNC_C:                    "T_FUNC_C",
 	T_NS_C:                      "T_NS_C",
+	T_PROPERTY_C:                "T_PROPERTY_C",
 	T_COMMENT:                   "T_COMMENT",
 	T_DOC_COMMENT:               "T_DOC_COMMENT",
 	T_OPEN_TAG:                  "T_OPEN_TAG",
@@ -394,15 +410,12 @@ var TokenNames = map[TokenType]string{
 	T_COALESCE_EQUAL:            "T_COALESCE_EQUAL",
 	T_INC:                       "T_INC",
 	T_DEC:                       "T_DEC",
-	T_SL:                        "T_SL",
-	T_SR:                        "T_SR",
 	T_BOOLEAN_OR:                "T_BOOLEAN_OR",
 	T_BOOLEAN_AND:               "T_BOOLEAN_AND",
 	T_COALESCE:                  "T_COALESCE",
-	T_OPEN_TAG_WITH_ECHO_ALT:    "T_OPEN_TAG_WITH_ECHO_ALT",
+	T_SL:                        "T_SL",
+	T_SR:                        "T_SR",
 	T_ATTRIBUTE:                 "T_ATTRIBUTE",
-	T_BAD_CHARACTER:             "T_BAD_CHARACTER",
-	T_CLOSE_TAG_ALT:             "T_CLOSE_TAG_ALT",
 	T_INT_CAST:                  "T_INT_CAST",
 	T_DOUBLE_CAST:               "T_DOUBLE_CAST",
 	T_STRING_CAST:               "T_STRING_CAST",
@@ -410,9 +423,15 @@ var TokenNames = map[TokenType]string{
 	T_OBJECT_CAST:               "T_OBJECT_CAST",
 	T_BOOL_CAST:                 "T_BOOL_CAST",
 	T_UNSET_CAST:                "T_UNSET_CAST",
+	T_VOID_CAST:                 "T_VOID_CAST",
 	T_POW:                       "T_POW",
 	T_POW_EQUAL:                 "T_POW_EQUAL",
+	T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG:     "T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG",
+	T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG: "T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG",
 	T_NOWDOC:                    "T_NOWDOC",
+	T_PIPE:                      "T_PIPE",
+	T_BAD_CHARACTER:             "T_BAD_CHARACTER",
+	T_CLOSE_TAG_ALT:             "T_CLOSE_TAG_ALT",
 
 	// 单字符 token
 	TOKEN_SEMICOLON:   ";",
