@@ -38,8 +38,44 @@ func New(input string) *Lexer {
 		errors:        make([]string, 0),
 	}
 	
+	// 跳过 shebang 行（如 #!/usr/bin/php）
+	l.skipShebang()
+	
 	l.readChar() // 读取第一个字符
 	return l
+}
+
+// skipShebang 跳过文件开头的 shebang 行
+func (l *Lexer) skipShebang() {
+	// 检查是否以 #! 开头
+	if len(l.input) >= 2 && l.input[0] == '#' && l.input[1] == '!' {
+		// 找到第一个换行符，跳过整行
+		i := 0
+		for i < len(l.input) && l.input[i] != '\n' && l.input[i] != '\r' {
+			i++
+		}
+		
+		// 处理不同的行尾格式
+		if i < len(l.input) {
+			if l.input[i] == '\r' {
+				i++ // 跳过 \r
+				// 检查是否有 \n 跟在 \r 后面 (CRLF)
+				if i < len(l.input) && l.input[i] == '\n' {
+					i++ // 跳过 \n
+				}
+			} else if l.input[i] == '\n' {
+				i++ // 跳过 \n (LF)
+			}
+		}
+		
+		// 更新输入，从 shebang 行之后开始
+		if i > 0 && i < len(l.input) {
+			l.input = l.input[i:]
+		} else if i >= len(l.input) {
+			// 整个文件都是 shebang 行
+			l.input = ""
+		}
+	}
 }
 
 // readChar 读取下一个字符并前进指针
