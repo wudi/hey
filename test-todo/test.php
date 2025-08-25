@@ -98,3 +98,14 @@ Options:
     --bless     Bless failed tests using scripts/dev/bless_tests.php.
 
 HELP;
+
+/**
+ * One function to rule them all, one function to find them, one function to
+ * bring them all and in the darkness bind them.
+ * This is the entry point and exit point überfunction. It contains all the
+ * code that was previously found at the top level. It could and should be
+ * refactored to be smaller and more manageable.
+ */
+function main(): void
+{
+}
