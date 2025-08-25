@@ -1,7 +1,9 @@
 package main
 
 import (
+	"encoding/base64"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -78,9 +80,12 @@ func testWithOurParser(code string) {
 func testWithPHPOfficial(code string) {
 	// 构建 PHP 代码来调用 token_get_all
 	phpCode := fmt.Sprintf(`<?php
-$tokens = token_get_all(%s);
+$tokens = token_get_all(base64_decode("%s"));
 $count = 0;
 foreach ($tokens as $token) {
+	if(is_array($token) && $token[0] == T_WHITESPACE) { // 跳过空白符
+		continue;
+	} 
     $count++;
     if (is_array($token)) {
         printf("  %%d: %%s \"%%s\"\n", $count, token_name($token[0]), addcslashes($token[1], "\r\n\t\"\\"));
@@ -89,7 +94,15 @@ foreach ($tokens as $token) {
     }
 }
 printf("Token 总数: %%d\n", $count);
-?>`, phpStringLiteral(code))
+?>`, base64.StdEncoding.EncodeToString([]byte(code)))
+
+	tmpFile := "/tmp/php_token_test.php"
+	// 将 PHP 代码写入临时文件
+	err := os.WriteFile(tmpFile, []byte(phpCode), 0644)
+	if err != nil {
+		fmt.Printf("写入临时文件失败: %v\n", err)
+		return
+	}
 
 	// 执行 PHP 代码
 	cmd := exec.Command("/bin/php", "-r", phpCode)
@@ -101,14 +114,4 @@ printf("Token 总数: %%d\n", $count);
 	}
 
 	fmt.Print(string(output))
-}
-
-// phpStringLiteral 将字符串转换为 PHP 字符串字面量
-func phpStringLiteral(s string) string {
-	s = strings.ReplaceAll(s, "\\", "\\\\")
-	s = strings.ReplaceAll(s, "\"", "\\\"")
-	s = strings.ReplaceAll(s, "\n", "\\n")
-	s = strings.ReplaceAll(s, "\r", "\\r")
-	s = strings.ReplaceAll(s, "\t", "\\t")
-	return "\"" + s + "\""
 }
