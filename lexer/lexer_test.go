@@ -519,3 +519,38 @@ func TestLexer_IndentedNowdocWithNestedPhp(t *testing.T) {
 		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
 	}
 }
+
+func TestLexer_HeredocVariableInterpolation(t *testing.T) {
+	// Test heredoc with {$variable} interpolation and shell script content
+	input := `<?php
+
+<<<SH
+#!/bin/sh
+{$abc}
+esac
+SH;`
+
+	lexer := New(input)
+	
+	// Test the token sequence
+	tests := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		{T_OPEN_TAG, "<?php\n"},
+		{T_START_HEREDOC, "<<<SH\n"},
+		{T_ENCAPSED_AND_WHITESPACE, "#!/bin/sh\n"},
+		{T_CURLY_OPEN, "{"},
+		{T_VARIABLE, "$abc"},
+		{TOKEN_RBRACE, "}"},
+		{T_ENCAPSED_AND_WHITESPACE, "\nesac\n"},
+		{T_END_HEREDOC, "SH"},
+		{TOKEN_SEMICOLON, ";"},
+	}
+
+	for i, tt := range tests {
+		tok := lexer.NextToken()
+		assert.Equal(t, tt.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[tt.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
+	}
+}

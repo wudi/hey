@@ -353,6 +353,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 		return Token{Type: TOKEN_LBRACE, Value: "{", Position: pos}
 	case '}':
 		l.readChar()
+		// 检查是否需要返回到之前的状态（如从 {$var} 插值返回到 Heredoc）
+		if !l.stateStack.IsEmpty() {
+			l.state = l.stateStack.Pop()
+		}
 		return Token{Type: TOKEN_RBRACE, Value: "}", Position: pos}
 	case '(':
 		l.readChar()
@@ -789,8 +793,17 @@ func (l *Lexer) nextTokenInHeredoc() Token {
 	// 读取 Heredoc 内容
 	var content strings.Builder
 	for !l.isAtHeredocEnd() && l.ch != 0 {
-		if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
-			// 变量插值 - 在 Heredoc 中需要特殊处理
+		if l.ch == '{' && l.peekChar() == '$' {
+			// {$variable} 模式 - 返回 T_CURLY_OPEN，切换到脚本状态处理变量
+			if content.Len() > 0 {
+				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+			}
+			l.stateStack.Push(l.state) // 保存当前 Heredoc 状态
+			l.state = ST_IN_SCRIPTING  // 切换到脚本状态
+			l.readChar()               // 跳过 {
+			return Token{Type: T_CURLY_OPEN, Value: "{", Position: pos}
+		} else if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
+			// 直接的变量插值 $variable
 			if content.Len() > 0 {
 				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
 			}
