@@ -1066,10 +1066,61 @@ func (bs *BlockStatement) String() string {
 	var out strings.Builder
 	out.WriteString("{\n")
 	for _, stmt := range bs.Body {
-		out.WriteString("  " + stmt.String() + "\n")
+		if stmt != nil {
+			out.WriteString("  " + stmt.String() + "\n")
+		}
 	}
 	out.WriteString("}")
 	return out.String()
+}
+
+// GlobalStatement global 语句
+type GlobalStatement struct {
+	BaseNode
+	Variables []Expression `json:"variables"`
+}
+
+func NewGlobalStatement(pos lexer.Position) *GlobalStatement {
+	return &GlobalStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTGlobal,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Variables: make([]Expression, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (gs *GlobalStatement) GetChildren() []Node {
+	children := make([]Node, len(gs.Variables))
+	for i, variable := range gs.Variables {
+		children[i] = variable
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (gs *GlobalStatement) Accept(visitor Visitor) {
+	if visitor.Visit(gs) {
+		for _, variable := range gs.Variables {
+			if variable != nil {
+				variable.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (gs *GlobalStatement) statementNode() {}
+
+func (gs *GlobalStatement) String() string {
+	var vars []string
+	for _, variable := range gs.Variables {
+		if variable != nil {
+			vars = append(vars, variable.String())
+		}
+	}
+	return "global " + strings.Join(vars, ", ") + ";"
 }
 
 // CallExpression 函数调用表达式

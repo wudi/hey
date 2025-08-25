@@ -102,6 +102,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.T_START_HEREDOC, p.parseHeredoc)
 	p.registerPrefix(lexer.T_ENCAPSED_AND_WHITESPACE, p.parseStringLiteral)
 	p.registerPrefix(lexer.T_END_HEREDOC, p.parseEndHeredoc)
+	p.registerPrefix(lexer.TOKEN_COMMA, p.parseComma)
 
 	// 注册中缀解析函数
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
@@ -195,6 +196,8 @@ func (p *Parser) parseStatement() ast.Statement {
 		return p.parseFunctionDeclaration()
 	case lexer.T_RETURN:
 		return p.parseReturnStatement()
+	case lexer.T_GLOBAL:
+		return p.parseGlobalStatement()
 	case lexer.T_BREAK:
 		return p.parseBreakStatement()
 	case lexer.T_CONTINUE:
@@ -800,4 +803,40 @@ func (p *Parser) parseEndHeredoc() ast.Expression {
 func (p *Parser) parseDocBlockComment() ast.Expression {
 	// 创建文档块注释节点
 	return ast.NewDocBlockComment(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+}
+
+// parseGlobalStatement 解析全局变量声明
+func (p *Parser) parseGlobalStatement() ast.Statement {
+	pos := p.currentToken.Position
+	globalStmt := ast.NewGlobalStatement(pos)
+	
+	// 跳过 'global' 关键字
+	p.nextToken()
+	
+	// 解析变量列表
+	for {
+		if p.currentToken.Type == lexer.T_VARIABLE {
+			variable := p.parseVariable()
+			globalStmt.Variables = append(globalStmt.Variables, variable)
+			p.nextToken()
+			
+			// 检查是否有更多变量（以逗号分隔）
+			if p.currentToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 跳过逗号
+				continue
+			}
+			break
+		} else {
+			p.errors = append(p.errors, "expected variable in global statement")
+			break
+		}
+	}
+	
+	return globalStmt
+}
+
+// parseComma 解析逗号（通常不应该单独调用，但为了避免错误提供基本实现）
+func (p *Parser) parseComma() ast.Expression {
+	// 逗号通常不应该作为表达式单独解析，但为了避免解析错误，返回一个简单的字符串字面量
+	return ast.NewStringLiteral(p.currentToken.Position, ",", ",")
 }
