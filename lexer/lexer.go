@@ -489,6 +489,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 			}
 			return Token{Type: T_IS_SMALLER_OR_EQUAL, Value: "<=", Position: pos}
 		} else if l.peekChar() == '<' {
+			if l.peekCharN(1) == '<' {
+				// Heredoc/Nowdoc 检测 <<<
+				return l.handleHeredocStart(pos)
+			}
 			l.readChar()
 			l.readChar()
 			if l.ch == '=' {
@@ -671,16 +675,208 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 	return l.nextTokenInScripting()
 }
 
+// handleHeredocStart 处理 Heredoc/Nowdoc 开始标记
+func (l *Lexer) handleHeredocStart(pos Position) Token {
+	l.readChar() // 跳过第一个 <
+	l.readChar() // 跳过第二个 <
+	l.readChar() // 跳过第三个 <
+	
+	// 跳过空白
+	for l.ch == ' ' || l.ch == '\t' {
+		l.readChar()
+	}
+	
+	isNowdoc := false
+	var label string
+	
+	// 检查是否为 Nowdoc (<<<'LABEL')
+	if l.ch == '\'' {
+		isNowdoc = true
+		l.readChar() // 跳过 '
+		label = l.readHeredocLabel()
+		if l.ch == '\'' {
+			l.readChar() // 跳过结束的 '
+		}
+	} else if l.ch == '"' {
+		// 支持 <<<"LABEL" 格式 (等同于 <<<LABEL)
+		l.readChar() // 跳过 "
+		label = l.readHeredocLabel()
+		if l.ch == '"' {
+			l.readChar() // 跳过结束的 "
+		}
+	} else {
+		// 普通 Heredoc <<<LABEL
+		label = l.readHeredocLabel()
+	}
+	
+	if label == "" {
+		l.addError("invalid heredoc/nowdoc label")
+		return Token{Type: T_UNKNOWN, Value: "<<<", Position: pos}
+	}
+	
+	// 跳过到行尾
+	for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
+		l.readChar()
+	}
+	if l.ch == '\r' {
+		l.readChar()
+	}
+	if l.ch == '\n' {
+		l.readChar()
+	}
+	
+	// 保存标签并切换状态
+	l.heredocLabel = label
+	if isNowdoc {
+		l.state = ST_NOWDOC
+		return Token{Type: T_NOWDOC, Value: "<<<'" + label + "'", Position: pos}
+	} else {
+		l.state = ST_HEREDOC
+		return Token{Type: T_START_HEREDOC, Value: "<<<" + label, Position: pos}
+	}
+}
+
+// readHeredocLabel 读取 Heredoc/Nowdoc 标签
+func (l *Lexer) readHeredocLabel() string {
+	var label strings.Builder
+	
+	// 第一个字符必须是字母或下划线
+	if !isLetter(l.ch) {
+		return ""
+	}
+	
+	for isLetter(l.ch) || isDigit(l.ch) {
+		label.WriteByte(l.ch)
+		l.readChar()
+	}
+	
+	return label.String()
+}
+
 // nextTokenInHeredoc 在Heredoc中获取token
 func (l *Lexer) nextTokenInHeredoc() Token {
-	// 这里简化实现，实际需要处理Heredoc语法
-	return l.nextTokenInScripting()
+	pos := l.getCurrentPosition()
+	
+	// 检查是否到达结束标签
+	if l.isAtHeredocEnd() {
+		// 跳过到行首标签位置
+		for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
+			l.readChar()
+		}
+		if l.ch == '\r' {
+			l.readChar()
+		}
+		if l.ch == '\n' {
+			l.readChar()
+		}
+		
+		// 读取标签
+		endLabel := l.heredocLabel
+		for i := 0; i < len(l.heredocLabel); i++ {
+			l.readChar()
+		}
+		
+		l.heredocLabel = ""
+		l.state = ST_IN_SCRIPTING
+		return Token{Type: T_END_HEREDOC, Value: endLabel, Position: pos}
+	}
+	
+	// 读取 Heredoc 内容
+	var content strings.Builder
+	for !l.isAtHeredocEnd() && l.ch != 0 {
+		if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
+			// 变量插值 - 在 Heredoc 中需要特殊处理
+			if content.Len() > 0 {
+				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+			}
+			// 读取变量
+			l.readChar() // 跳过 $
+			identifier := l.readIdentifier()
+			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
+		}
+		content.WriteByte(l.ch)
+		l.readChar()
+	}
+	
+	if content.Len() > 0 {
+		return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+	}
+	
+	return Token{Type: T_EOF, Value: "", Position: pos}
 }
 
 // nextTokenInNowdoc 在Nowdoc中获取token
 func (l *Lexer) nextTokenInNowdoc() Token {
-	// 这里简化实现，实际需要处理Nowdoc语法
-	return l.nextTokenInScripting()
+	pos := l.getCurrentPosition()
+	
+	// 检查是否到达结束标签
+	if l.isAtHeredocEnd() {
+		// 跳过到行首标签位置
+		for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
+			l.readChar()
+		}
+		if l.ch == '\r' {
+			l.readChar()
+		}
+		if l.ch == '\n' {
+			l.readChar()
+		}
+		
+		// 读取标签
+		endLabel := l.heredocLabel
+		for i := 0; i < len(l.heredocLabel); i++ {
+			l.readChar()
+		}
+		
+		l.heredocLabel = ""
+		l.state = ST_IN_SCRIPTING
+		return Token{Type: T_END_HEREDOC, Value: endLabel, Position: pos}
+	}
+	
+	// 读取 Nowdoc 内容（无变量插值）
+	var content strings.Builder
+	for !l.isAtHeredocEnd() && l.ch != 0 {
+		content.WriteByte(l.ch)
+		l.readChar()
+	}
+	
+	if content.Len() > 0 {
+		return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+	}
+	
+	return Token{Type: T_EOF, Value: "", Position: pos}
+}
+
+// isAtHeredocEnd 检查当前位置是否到达 Heredoc/Nowdoc 结束标签
+func (l *Lexer) isAtHeredocEnd() bool {
+	if l.heredocLabel == "" {
+		return false
+	}
+	
+	// 检查当前位置是否在行首且匹配结束标签
+	if l.column != 1 {
+		return false
+	}
+	
+	labelLen := len(l.heredocLabel)
+	if l.position+labelLen > len(l.input) {
+		return false
+	}
+	
+	// 检查是否匹配标签
+	candidateLabel := l.input[l.position:l.position+labelLen]
+	if candidateLabel != l.heredocLabel {
+		return false
+	}
+	
+	// 检查标签后面是否为行尾或分号
+	nextPos := l.position + labelLen
+	if nextPos >= len(l.input) {
+		return true // 文件结尾
+	}
+	
+	nextChar := l.input[nextPos]
+	return nextChar == '\n' || nextChar == '\r' || nextChar == ';' || nextChar == ' ' || nextChar == '\t' || nextChar == 0
 }
 
 // addError 添加错误信息

@@ -229,6 +229,9 @@ const (
 	T_POW                       TokenType = 404 // **
 	T_POW_EQUAL                 TokenType = 405 // **=
 
+	// Nowdoc 支持
+	T_NOWDOC                    TokenType = 406 // <<<'IDENTIFIER'
+
 	// 单个字符 token（为了完整性）
 	TOKEN_SEMICOLON     TokenType = 1000 + ';'  // ;
 	TOKEN_COMMA         TokenType = 1000 + ','  // ,
@@ -409,6 +412,7 @@ var TokenNames = map[TokenType]string{
 	T_UNSET_CAST:                "T_UNSET_CAST",
 	T_POW:                       "T_POW",
 	T_POW_EQUAL:                 "T_POW_EQUAL",
+	T_NOWDOC:                    "T_NOWDOC",
 
 	// 单字符 token
 	TOKEN_SEMICOLON:   ";",
