@@ -597,3 +597,24 @@ func (bs *BlockStatement) String() string {
 	out.WriteString("}")
 	return out.String()
 }
+
+// DocBlockComment 文档块注释
+type DocBlockComment struct {
+	BaseNode
+	Content string `json:"content"`
+	Raw     string `json:"raw"`
+}
+
+func NewDocBlockComment(pos lexer.Position, content, raw string) *DocBlockComment {
+	return &DocBlockComment{
+		BaseNode: BaseNode{Type: "DocBlockComment", Position: pos},
+		Content:  content,
+		Raw:      raw,
+	}
+}
+
+func (dbc *DocBlockComment) expressionNode() {}
+
+func (dbc *DocBlockComment) String() string {
+	return dbc.Raw
+}

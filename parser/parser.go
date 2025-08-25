@@ -98,6 +98,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.T_INLINE_HTML, p.parseInlineHTML)
 	p.registerPrefix(lexer.T_OPEN_TAG, p.parseOpenTag)
 	p.registerPrefix(lexer.T_COMMENT, p.parseComment)
+	p.registerPrefix(lexer.T_DOC_COMMENT, p.parseDocBlockComment)
 	p.registerPrefix(lexer.T_START_HEREDOC, p.parseHeredoc)
 
 	// 注册中缀解析函数
@@ -724,4 +725,10 @@ func (p *Parser) parseComment() ast.Expression {
 func (p *Parser) parseHeredoc() ast.Expression {
 	// 简单处理Heredoc为字符串字面量
 	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+}
+
+// parseDocBlockComment 解析文档块注释
+func (p *Parser) parseDocBlockComment() ast.Expression {
+	// 创建文档块注释节点
+	return ast.NewDocBlockComment(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 }
