@@ -124,6 +124,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.T_CONCAT_EQUAL, p.parseAssignmentExpression)
 	p.registerInfix(lexer.T_INC, p.parsePostfixExpression)
 	p.registerInfix(lexer.T_DEC, p.parsePostfixExpression)
+	p.registerInfix(lexer.TOKEN_LPAREN, p.parseCallExpression)
 
 	// 读取两个 token，初始化 currentToken 和 peekToken
 	p.nextToken()
@@ -630,6 +631,42 @@ func (p *Parser) parsePostfixExpression(left ast.Expression) ast.Expression {
 	operator := p.currentToken.Value
 
 	return ast.NewUnaryExpression(pos, operator, left, false)
+}
+
+// parseCallExpression 解析函数调用表达式
+func (p *Parser) parseCallExpression(fn ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	call := ast.NewCallExpression(pos, fn)
+
+	// 解析参数列表
+	call.Arguments = p.parseExpressionList(lexer.TOKEN_RPAREN)
+
+	return call
+}
+
+// parseExpressionList 解析表达式列表（用于函数调用参数等）
+func (p *Parser) parseExpressionList(end lexer.TokenType) []ast.Expression {
+	args := []ast.Expression{}
+
+	if p.peekToken.Type == end {
+		p.nextToken()
+		return args
+	}
+
+	p.nextToken()
+	args = append(args, p.parseExpression(LOWEST))
+
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken()
+		p.nextToken()
+		args = append(args, p.parseExpression(LOWEST))
+	}
+
+	if !p.expectPeek(end) {
+		return nil
+	}
+
+	return args
 }
 
 // 辅助方法

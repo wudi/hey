@@ -598,6 +598,33 @@ func (bs *BlockStatement) String() string {
 	return out.String()
 }
 
+// CallExpression 函数调用表达式
+type CallExpression struct {
+	BaseNode
+	Callee    Expression   `json:"callee"`
+	Arguments []Expression `json:"arguments"`
+}
+
+func NewCallExpression(pos lexer.Position, callee Expression) *CallExpression {
+	return &CallExpression{
+		BaseNode:  BaseNode{Type: "CallExpression", Position: pos},
+		Callee:    callee,
+		Arguments: make([]Expression, 0),
+	}
+}
+
+func (ce *CallExpression) expressionNode() {}
+
+func (ce *CallExpression) String() string {
+	var args []string
+	for _, arg := range ce.Arguments {
+		if arg != nil {
+			args = append(args, arg.String())
+		}
+	}
+	return ce.Callee.String() + "(" + strings.Join(args, ", ") + ")"
+}
+
 // DocBlockComment 文档块注释
 type DocBlockComment struct {
 	BaseNode
