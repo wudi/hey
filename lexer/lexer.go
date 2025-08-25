@@ -631,13 +631,21 @@ func (l *Lexer) nextTokenInScripting() Token {
 		return Token{Type: T_NS_SEPARATOR, Value: "\\", Position: pos}
 		
 	case '"':
-		// 双引号字符串
-		str, err := l.readString('"')
-		if err != nil {
-			l.addError(err.Error())
-			return Token{Type: T_UNKNOWN, Value: "", Position: pos}
+		// 双引号字符串 - 检查是否包含变量插值
+		if l.containsInterpolation('"') {
+			// 包含变量插值，切换到 ST_DOUBLE_QUOTES 状态
+			l.readChar() // 跳过开头的引号
+			l.state = ST_DOUBLE_QUOTES
+			return Token{Type: '"', Value: "\"", Position: pos}
+		} else {
+			// 简单字符串，无插值
+			str, err := l.readString('"')
+			if err != nil {
+				l.addError(err.Error())
+				return Token{Type: T_UNKNOWN, Value: "", Position: pos}
+			}
+			return Token{Type: T_CONSTANT_ENCAPSED_STRING, Value: `"` + str + `"`, Position: pos}
 		}
-		return Token{Type: T_CONSTANT_ENCAPSED_STRING, Value: `"` + str + `"`, Position: pos}
 		
 	case '\'':
 		// 单引号字符串
@@ -680,8 +688,78 @@ func (l *Lexer) nextTokenInScripting() Token {
 
 // nextTokenInDoubleQuotes 在双引号字符串中获取token
 func (l *Lexer) nextTokenInDoubleQuotes() Token {
-	// 这里简化实现，实际需要处理变量插值等
-	return l.nextTokenInScripting()
+	pos := l.getCurrentPosition()
+	
+	// 检查是否到达字符串结尾
+	if l.ch == '"' {
+		l.readChar() // 跳过结束引号
+		l.state = ST_IN_SCRIPTING
+		return Token{Type: '"', Value: "\"", Position: pos}
+	}
+	
+	if l.ch == 0 {
+		l.addError("unterminated string")
+		return Token{Type: T_EOF, Value: "", Position: pos}
+	}
+	
+	var content strings.Builder
+	
+	for l.ch != '"' && l.ch != 0 {
+		// 检查 {$variable} 语法
+		if l.ch == '{' && l.peekChar() == '$' {
+			// 如果已经有内容，先返回内容
+			if content.Len() > 0 {
+				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+			}
+			// 推入当前状态到栈
+			l.stateStack.Push(l.state)
+			l.state = ST_IN_SCRIPTING
+			l.readChar() // 跳过 {
+			return Token{Type: T_CURLY_OPEN, Value: "{", Position: pos}
+		} else if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
+			// 直接变量插值 $variable
+			if content.Len() > 0 {
+				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+			}
+			// 读取变量
+			l.readChar() // 跳过 $
+			identifier := l.readIdentifier()
+			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
+		}
+		
+		// 处理转义字符
+		if l.ch == '\\' {
+			l.readChar() // 跳过反斜杠
+			if l.ch != 0 {
+				switch l.ch {
+				case 'n':
+					content.WriteByte('\n')
+				case 'r':
+					content.WriteByte('\r')
+				case 't':
+					content.WriteByte('\t')
+				case '\\':
+					content.WriteByte('\\')
+				case '"':
+					content.WriteByte('"')
+				case '$':
+					content.WriteByte('$')
+				default:
+					content.WriteByte(l.ch)
+				}
+				l.readChar()
+			}
+		} else {
+			content.WriteByte(l.ch)
+			l.readChar()
+		}
+	}
+		
+	if content.Len() > 0 {
+		return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+	}
+	
+	return Token{Type: T_EOF, Value: "", Position: pos}
 }
 
 // handleHeredocStart 处理 Heredoc/Nowdoc 开始标记
@@ -944,4 +1022,34 @@ func isOctalDigit(ch byte) bool {
 
 func isBinaryDigit(ch byte) bool {
 	return ch == '0' || ch == '1'
+}
+
+// containsInterpolation 检查字符串是否包含变量插值
+func (l *Lexer) containsInterpolation(delimiter byte) bool {
+	pos := l.position + 1 // 跳过开头的引号
+	
+	for pos < len(l.input) && l.input[pos] != delimiter {
+		if l.input[pos] == '\\' {
+			// 跳过转义字符
+			pos += 2
+			continue
+		}
+		
+		// 检查变量插值
+		if l.input[pos] == '$' && pos+1 < len(l.input) {
+			nextChar := l.input[pos+1]
+			if isLetter(nextChar) || nextChar == '{' {
+				return true
+			}
+		}
+		
+		// 检查花括号插值 {$var}
+		if l.input[pos] == '{' && pos+1 < len(l.input) && l.input[pos+1] == '$' {
+			return true
+		}
+		
+		pos++
+	}
+	
+	return false
 }
