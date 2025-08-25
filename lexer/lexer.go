@@ -44,26 +44,32 @@ func New(input string) *Lexer {
 
 // readChar 读取下一个字符并前进指针
 func (l *Lexer) readChar() {
-	// 先更新位置信息，基于我们即将离开的字符
-	if l.position < len(l.input) && l.input[l.position] == '\n' {
-		l.line++
-		l.column = 1  // 下一行的第一个字符是第1列
-	} else if l.position < len(l.input) {
-		l.column++
-	} else {
-		// 初始化时，第一个字符在第1列
-		l.column = 1
-	}
-	
-	// 更新位置
+	// 先更新位置指针
 	l.position = l.readPosition
 	l.readPosition++
 	
-	// 读取新字符
+	// 根据当前读取的字符更新行列信息
 	if l.position >= len(l.input) {
 		l.ch = 0 // EOF
+		return
+	}
+	
+	l.ch = l.input[l.position]
+	
+	// 更新行列信息：基于当前字符位置
+	if l.position == 0 {
+		// 第一个字符
+		l.line = 1
+		l.column = 0
 	} else {
-		l.ch = l.input[l.position]
+		// 检查前一个字符是否是换行符
+		prevChar := l.input[l.position-1]
+		if prevChar == '\n' {
+			l.line++
+			l.column = 0
+		} else {
+			l.column++
+		}
 	}
 }
 
@@ -86,20 +92,10 @@ func (l *Lexer) peekCharN(n int) byte {
 
 // getCurrentPosition 获取当前位置（token开始位置）
 func (l *Lexer) getCurrentPosition() Position {
-	// 需要计算当前字符的位置
-	line, column := 1, 0
-	for i := 0; i < l.position && i < len(l.input); i++ {
-		if l.input[i] == '\n' {
-			line++
-			column = 0
-		} else {
-			column++
-		}
-	}
-	
+	// 直接使用已维护的行列信息，避免重复遍历
 	return Position{
-		Line:   line,
-		Column: column,
+		Line:   l.line,
+		Column: l.column,
 		Offset: l.position,
 	}
 }
@@ -947,8 +943,8 @@ func (l *Lexer) isAtHeredocEnd() bool {
 	}
 	
 	// 检查当前位置是否在行首（允许缩进）
-	if l.column != 1 {
-		// 如果不在第1列，检查是否在行首的缩进位置
+	if l.column != 0 {
+		// 如果不在第0列，检查是否在行首的缩进位置
 		// 向前查找直到行首，确保只有空格或制表符
 		pos := l.position - 1
 		for pos >= 0 && l.input[pos] != '\n' && l.input[pos] != '\r' {
