@@ -917,6 +917,86 @@ func TestParsing_ArraySyntax(t *testing.T) {
 	}
 }
 
+func TestParsing_ArrayWithComments(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name: "Array with inline comment after element",
+			input: `<?php $consts = [
+    'E_USER_NOTICE',
+    'E_STRICT', // TODO test
+    'E_RECOVERABLE_ERROR'
+]; ?>`,
+			expected: []string{"E_USER_NOTICE", "E_STRICT", "E_RECOVERABLE_ERROR"},
+		},
+		{
+			name: "Array with multiple inline comments",
+			input: `<?php $consts = [
+    'FIRST',    // First constant
+    'SECOND',   // Second constant  
+    'THIRD'     // Third constant
+]; ?>`,
+			expected: []string{"FIRST", "SECOND", "THIRD"},
+		},
+		{
+			name: "Array with comments between elements",
+			input: `<?php $values = [
+    1,
+    // This is a comment
+    2,
+    // Another comment
+    3
+]; ?>`,
+			expected: []string{"1", "2", "3"},
+		},
+		{
+			name: "Array with trailing comment",
+			input: `<?php $data = [
+    'item1',
+    'item2',
+    'item3', // Trailing comment
+]; ?>`,
+			expected: []string{"item1", "item2", "item3"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
+			assert.True(t, ok, "Right side should be ArrayExpression")
+			assert.Len(t, arrayExpr.Elements, len(tt.expected))
+
+			for i, element := range arrayExpr.Elements {
+				if numberLit, ok := element.(*ast.NumberLiteral); ok {
+					assert.Equal(t, tt.expected[i], numberLit.Value)
+				} else if stringLit, ok := element.(*ast.StringLiteral); ok {
+					assert.Equal(t, tt.expected[i], stringLit.Value)
+				} else {
+					t.Errorf("Unexpected element type: %T", element)
+				}
+			}
+		})
+	}
+}
+
 func TestParsing_FunctionCalls(t *testing.T) {
 	tests := []struct {
 		name     string

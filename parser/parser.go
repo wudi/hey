@@ -1510,11 +1510,21 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 
 	// 解析数组元素列表 (non_empty_array_pair_list)
 	for p.currentToken.Type != lexer.TOKEN_RBRACKET && p.currentToken.Type != lexer.T_EOF {
+		// Skip comments before processing array elements
+		for p.currentToken.Type == lexer.T_COMMENT {
+			p.nextToken()
+		}
+
 		// possible_array_pair: 可以为空（trailing comma情况）
 		if p.currentToken.Type == lexer.TOKEN_COMMA {
 			// 跳过空元素（连续的逗号或开头的逗号）
 			p.nextToken()
 			continue
+		}
+
+		// Check if we've reached the end after skipping comments
+		if p.currentToken.Type == lexer.TOKEN_RBRACKET {
+			break
 		}
 
 		// 解析数组元素表达式
@@ -1525,6 +1535,11 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 
 		p.nextToken()
 
+		// Skip comments after parsing element
+		for p.currentToken.Type == lexer.T_COMMENT {
+			p.nextToken()
+		}
+
 		// 检查是否到达数组结尾
 		if p.currentToken.Type == lexer.TOKEN_RBRACKET {
 			break
@@ -1533,6 +1548,10 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 		// 期望逗号分隔符，但允许省略（在结尾）
 		if p.currentToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken()
+			// Skip comments after comma
+			for p.currentToken.Type == lexer.T_COMMENT {
+				p.nextToken()
+			}
 			// 允许 trailing comma: [1, 2, 3,]
 			if p.currentToken.Type == lexer.TOKEN_RBRACKET {
 				break
