@@ -64,21 +64,30 @@ go test ./...              # Run all tests
 go test ./lexer -v         # Run lexer tests with verbose output
 go test ./parser -v        # Run parser tests with verbose output
 go test ./ast -v           # Run AST tests with verbose output
+go run benchmark_test.go   # Run performance benchmarks
 ```
 
 **Build CLI Tool:**
 ```bash
-go build -o phpparse ./cmd/phpparse  # Build command-line tool
-./phpparse -i example.php            # Parse a PHP file
-./phpparse -tokens -ast              # Show tokens and AST structure
+go build -o phpparse ./cmd/php-parser  # Build command-line tool
+./phpparse -i example.php              # Parse a PHP file
+./phpparse -tokens -ast                # Show tokens and AST structure
+./phpparse -format json example.php    # Output AST as JSON
+./phpparse -errors example.php         # Show only parsing errors
 echo '<?php echo "Hello"; ?>' | ./phpparse  # Parse from stdin
+```
+
+**PHP Compatibility Testing:**
+```bash
+php -r "var_export(token_get_all('<?php \$x = 1; ?>'));"  # Compare with PHP tokens
+/bin/php test_shebang.php                                # Test shebang handling
+go run test_shebang_demo.go                             # Test lexer with shebang files
 ```
 
 **Cleanup:**
 ```bash
 go clean                         # Clean build artifacts
-rm -f phpparse                   # Remove built binary
-rm -f debug*.go                  # Remove debug files (if needed)
+rm -f phpparse main              # Remove built binaries
 ```
 
 ## Architecture Overview
@@ -88,39 +97,81 @@ This is a PHP parser implementation in Go with the following structure:
 ### Core Modules
 - **`lexer/`**: PHP lexical analyzer with state machine
   - `token.go`: PHP token definitions (150+ tokens matching PHP 8.4)
-  - `states.go`: Lexer state management (11 states)
-  - `lexer.go`: Main lexer implementation with PHP tag recognition
+  - `states.go`: Lexer state management (11 states including ST_IN_SCRIPTING, ST_DOUBLE_QUOTES)
+  - `lexer.go`: Main lexer implementation with shebang support and PHP tag recognition
 
-- **`parser/`**: Recursive descent parser
-  - `parser.go`: Main parser with operator precedence (Pratt parsing)
-  - Handles expressions, statements, control structures
+- **`parser/`**: Recursive descent parser with Pratt parsing
+  - `parser.go`: 1730+ lines implementing 40+ parse expression functions
+  - Comprehensive PHP syntax support (variables, functions, classes, control flow)
+  - Operator precedence handling (LOWEST to HIGHEST including TERNARY)
+  - Expression parsing: binary ops, unary ops, method calls, array access, etc.
 
 - **`ast/`**: Abstract Syntax Tree nodes
-  - `node.go`: Interface-based AST node system
-  - Supports JSON serialization and string representation
+  - `node.go`: Interface-based AST node system with visitor pattern
+  - `kind.go`: AST node type constants (150+ kinds matching PHP's zend_ast.h)
+  - `builder.go`: AST construction utilities
+  - Full JSON serialization and string representation support
 
-- **`errors/`**: Error handling with position tracking
+- **`errors/`**: Error handling with precise position tracking
 
-### Command Line Interface
-- **`cmd/phpparse/`**: CLI tool for parsing PHP code
-  - Supports multiple output formats (JSON, AST, tokens)
-  - File and stdin input support
-  - Error reporting with position information
+### Command Line Interface  
+- **`cmd/php-parser/`**: Feature-rich CLI tool (245 lines)
+  - Multiple output formats: JSON, AST structure, raw tokens
+  - File and stdin input with comprehensive error handling
+  - Debugging flags: -tokens, -ast, -errors, -v (verbose)
+  - Position-aware error reporting with line:column information
 
 ### Key Design Features
 - **PHP Compatibility**: Token IDs match PHP 8.4 official implementation
-- **State Machine**: Lexer handles multiple states (scripting, strings, heredoc, etc.)
-- **Error Recovery**: Detailed error reporting with line/column positions
-- **Modular Design**: Clean separation between lexer, parser, and AST
+- **Pratt Parser**: Elegant operator precedence handling with prefix/infix functions
+- **State Machine**: Lexer supports 11 states including shebang recognition
+- **Interface-Based AST**: Visitor pattern support with 150+ node types
+- **Position Tracking**: Precise error location with line/column information
+- **Performance**: Benchmarking support for parser optimization
+
+### Critical Implementation Details
+
+**Parser Architecture:**
+- Prefix parse functions: handle tokens that start expressions (variables, literals, unary ops)
+- Infix parse functions: handle binary operators, method calls, array access
+- Precedence levels: LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, EXPONENT, PREFIX, CALL, INDEX, TERNARY, HIGHEST
+- Error recovery: continues parsing after errors to find multiple issues
+
+**Lexer States:**
+- ST_IN_SCRIPTING: Main PHP code parsing
+- ST_DOUBLE_QUOTES: String interpolation with variable recognition  
+- ST_HEREDOC/ST_NOWDOC: Multi-line string handling
+- ST_LOOKING_FOR_PROPERTY: Object member access
+
+**AST Node System:**
+- All nodes implement Node interface with GetChildren(), Accept(), String() methods
+- AST kinds match PHP's official zend_ast.h constants (ASTVar = 256, ASTCall = 516, etc.)
+- JSON serialization preserves full AST structure for external tools
 
 ### Testing Strategy
-- Unit tests for each module (`*_test.go` files)
-- Integration tests for complete parsing workflow
-- Compatibility tests comparing with PHP's `token_get_all()`
-- Operator precedence and edge case testing
+- Unit tests for each module with testify framework
+- Shebang handling tests for executable PHP files
+- PHP compatibility validation using `/bin/php` and `token_get_all()`
+- Performance benchmarking and parsing validation
+- Edge case testing for error conditions and malformed syntax
 
-### Common Development Tasks
-- Adding new PHP syntax support (extend parser and AST)
-- Improving error messages and recovery
-- Enhancing performance of lexer/parser
-- Adding static analysis capabilities
+## Important Reminders
+
+**When Adding New PHP Syntax Support:**
+1. Add new token types to `lexer/token.go` if needed (maintain PHP compatibility)
+2. Implement prefix or infix parse functions in `parser/parser.go`
+3. Create corresponding AST node types in `ast/node.go` with full interface implementation
+4. Add AST kind constants to `ast/kind.go` (follow PHP's zend_ast.h numbering)
+5. Update the String() method in `ast/kind.go` for new node types
+6. Add constructor functions (NewXXXExpression) following existing patterns
+
+**Parser Error Debugging:**
+- "no prefix parse function found" → add prefix parse function to parser initialization
+- "no infix parse function found" → add infix parse function with correct precedence
+- Missing AST constructors → add NewXXXExpression functions in `ast/node.go`
+
+**PHP Compatibility Requirements:**
+- Token IDs must match PHP 8.4 official implementation exactly
+- AST node kinds should align with zend_ast.h when possible
+- Test against `/bin/php` using `token_get_all()` for validation
+- Reference `/home/ubuntu/php-src` for implementation details
