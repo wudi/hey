@@ -58,6 +58,7 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.TOKEN_MINUS:           SUM,
 	lexer.TOKEN_DOT:             SUM,
 	lexer.T_OBJECT_OPERATOR:     CALL,
+	lexer.T_PAAMAYIM_NEKUDOTAYIM: CALL,
 	lexer.TOKEN_LBRACKET:        INDEX,
 	lexer.TOKEN_DIVIDE:          PRODUCT,
 	lexer.TOKEN_MULTIPLY:        PRODUCT,
@@ -161,6 +162,7 @@ func init() {
 		lexer.T_INSTANCEOF:          parseInstanceofExpression,
 		lexer.TOKEN_DOT:             parseInfixExpression,
 		lexer.T_OBJECT_OPERATOR:     parsePropertyAccess,
+		lexer.T_PAAMAYIM_NEKUDOTAYIM: parseStaticAccessExpression,
 		lexer.TOKEN_EQUAL:           parseAssignmentExpression,
 		lexer.T_PLUS_EQUAL:          parseAssignmentExpression,
 		lexer.T_MINUS_EQUAL:         parseAssignmentExpression,
@@ -418,6 +420,8 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseForStatement(p)
 	case lexer.T_FUNCTION:
 		return parseFunctionDeclaration(p)
+	case lexer.T_CLASS:
+		return parseClassDeclaration(p)
 	case lexer.T_RETURN:
 		return parseReturnStatement(p)
 	case lexer.T_GLOBAL:
@@ -2022,7 +2026,69 @@ func parseCaseExpression(p *Parser) ast.Expression {
 	return ast.NewCaseExpression(pos, test)
 }
 
-// parseClassExpression 解析类表达式或类声明
+// parseClassDeclaration 解析类声明语句
+func parseClassDeclaration(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+
+	// 跳过 'class' 关键字
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	// 解析类名
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	class := ast.NewClassExpression(pos, name, nil, nil)
+
+	// 检查是否有 extends 子句
+	if p.peekToken.Type == lexer.T_EXTENDS {
+		p.nextToken() // 跳过当前token移动到extends
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		extends := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		class.Extends = extends
+	}
+
+	// 检查是否有 implements 子句
+	if p.peekToken.Type == lexer.T_IMPLEMENTS {
+		p.nextToken() // 跳过当前token移动到implements
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		// 可以实现多个接口
+		implements := []ast.Expression{}
+		implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+		
+		// 处理多个接口，用逗号分隔
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 跳过逗号
+			if !p.expectPeek(lexer.T_STRING) {
+				break
+			}
+			implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+		}
+		class.Implements = implements
+	}
+
+	// 期望类体开始
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	// 解析类体
+	p.nextToken() // 进入类体
+	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		stmt := parseClassStatement(p)
+		if stmt != nil {
+			class.Body = append(class.Body, stmt)
+		}
+		p.nextToken()
+	}
+
+	return ast.NewExpressionStatement(pos, class)
+}
+
+// parseClassExpression 解析类表达式（保持向后兼容）
 func parseClassExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
@@ -2035,6 +2101,67 @@ func parseClassExpression(p *Parser) ast.Expression {
 	}
 
 	return ast.NewClassExpression(pos, name, nil, nil) // name, extends, implements
+}
+
+// parseClassStatement 解析类体内的语句（属性和方法）
+func parseClassStatement(p *Parser) ast.Statement {
+	switch p.currentToken.Type {
+	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
+		return parsePropertyDeclaration(p)
+	case lexer.T_FUNCTION:
+		return parseFunctionDeclaration(p)
+	case lexer.T_CONST:
+		// TODO: 实现类常量解析
+		return parseExpressionStatement(p)
+	default:
+		// 跳过未识别的token
+		return nil
+	}
+}
+
+// parsePropertyDeclaration 解析属性声明
+func parsePropertyDeclaration(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+	
+	// 解析可见性修饰符
+	visibility := p.currentToken.Value // private, protected, public
+	
+	// 检查下一个token是否为类型提示
+	var typeHint *ast.TypeHint
+	if p.peekToken.Type != lexer.T_VARIABLE {
+		p.nextToken()
+		// 这是一个类型提示
+		if isTypeToken(p.currentToken.Type) {
+			typeHint = parseTypeHint(p)
+		}
+	}
+	
+	// 移动到变量名
+	if !p.expectPeek(lexer.T_VARIABLE) {
+		return nil
+	}
+	
+	// 解析属性名（去掉$）
+	propertyName := p.currentToken.Value
+	if strings.HasPrefix(propertyName, "$") {
+		propertyName = propertyName[1:]
+	}
+	
+	var defaultValue ast.Expression
+	
+	// 检查是否有默认值
+	if p.peekToken.Type == lexer.TOKEN_EQUAL {
+		p.nextToken() // 跳到 =
+		p.nextToken() // 移动到值
+		defaultValue = parseExpression(p, LOWEST)
+	}
+	
+	// 期望分号
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+	}
+	
+	return ast.NewPropertyDeclaration(pos, visibility, propertyName, typeHint, defaultValue)
 }
 
 // parseConstExpression 解析常量声明表达式
@@ -2082,7 +2209,7 @@ func parseEvalExpression(p *Parser) ast.Expression {
 	return ast.NewEvalExpression(pos, argument)
 }
 
-// parseStaticAccess 解析静态访问表达式 Class::method 或 Class::$property
+// parseStaticAccess 解析静态访问表达式 Class::method 或 Class::$property （前缀版本）
 func parseStaticAccess(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
@@ -2096,6 +2223,22 @@ func parseStaticAccess(p *Parser) ast.Expression {
 
 	// 创建一个静态访问表达式，左边为 nil 表示省略了类名
 	return ast.NewStaticAccessExpression(pos, nil, property)
+}
+
+// parseStaticAccessExpression 解析静态访问表达式 Class::method 或 Class::$property （中缀版本）
+func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+
+	// 跳过 ::
+	p.nextToken()
+
+	var property ast.Expression
+	if p.currentToken.Type != lexer.T_EOF {
+		property = parseExpression(p, CALL)
+	}
+
+	// 创建一个静态访问表达式
+	return ast.NewStaticAccessExpression(pos, left, property)
 }
 
 // parseInterpolatedString 解析包含变量插值的双引号字符串

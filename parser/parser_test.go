@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1536,6 +1537,171 @@ $complex = function ($param) use ($var1, &$ref1, $var2, &$ref2) {
 
 			assert.ElementsMatch(t, tt.expectedReferenceVars, foundReferenceVars, "Reference variables should match")
 			assert.ElementsMatch(t, tt.expectedNormalVars, foundNormalVars, "Normal variables should match")
+		})
+	}
+}
+
+func TestParsing_ClassDeclarations(t *testing.T) {
+	tests := []struct {
+		name               string
+		input              string
+		expectedClassName  string
+		expectedProperties int
+	}{
+		{
+			name: "Simple class with typed properties",
+			input: `<?php
+class JUnit {
+    private bool $enabled = true;
+    private $fp = null;
+    private array $suites = [];
+}`,
+			expectedClassName:  "JUnit",
+			expectedProperties: 3,
+		},
+		{
+			name: "Class with complex property default value",
+			input: `<?php
+class TestClass {
+    private array $rootSuite = self::EMPTY_SUITE + ["name" => "php"];
+}`,
+			expectedClassName:  "TestClass",
+			expectedProperties: 1,
+		},
+		{
+			name: "Class with all visibility modifiers",
+			input: `<?php
+class VisibilityTest {
+    public string $publicProp = "public";
+    protected int $protectedProp = 42;
+    private bool $privateProp = false;
+}`,
+			expectedClassName:  "VisibilityTest",
+			expectedProperties: 3,
+		},
+		{
+			name: "Class with mixed typed and untyped properties",
+			input: `<?php
+class MixedProps {
+    private bool $typed = true;
+    private $untyped = null;
+    public array $arrayProp = [];
+    protected $mixed = "test";
+}`,
+			expectedClassName:  "MixedProps",
+			expectedProperties: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+			assert.True(t, ok, "Expression should be ClassExpression")
+
+			// Check class name
+			nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+			assert.True(t, ok, "Class name should be IdentifierNode")
+			assert.Equal(t, tt.expectedClassName, nameIdent.Name)
+
+			// Check properties count
+			assert.Len(t, classExpr.Body, tt.expectedProperties)
+
+			// Verify all body items are PropertyDeclaration
+			for i, bodyStmt := range classExpr.Body {
+				propDecl, ok := bodyStmt.(*ast.PropertyDeclaration)
+				assert.True(t, ok, "Class body item %d should be PropertyDeclaration", i)
+				
+				// Check that visibility is set
+				assert.Contains(t, []string{"public", "protected", "private"}, propDecl.Visibility, 
+					"Property %d should have valid visibility", i)
+				
+				// Check that property name is set and doesn't start with $
+				assert.NotEmpty(t, propDecl.Name)
+				assert.False(t, strings.HasPrefix(propDecl.Name, "$"), 
+					"Property name should not start with $")
+			}
+		})
+	}
+}
+
+func TestParsing_StaticAccessExpressions(t *testing.T) {
+	tests := []struct {
+		name              string
+		input             string
+		expectedClass     string
+		expectedProperty  string
+	}{
+		{
+			name:             "Simple static access",
+			input:            `<?php $x = self::CONSTANT;`,
+			expectedClass:    "self",
+			expectedProperty: "CONSTANT",
+		},
+		{
+			name:             "Class name static access", 
+			input:            `<?php $x = MyClass::STATIC_VAR;`,
+			expectedClass:    "MyClass",
+			expectedProperty: "STATIC_VAR",
+		},
+		{
+			name:             "Static access in complex expression",
+			input:            `<?php $result = Parent::VALUE + 10;`,
+			expectedClass:    "Parent",
+			expectedProperty: "VALUE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			var staticAccess *ast.StaticAccessExpression
+			
+			// Handle both direct static access and static access in binary expressions
+			if sa, ok := assignExpr.Right.(*ast.StaticAccessExpression); ok {
+				staticAccess = sa
+			} else if binExpr, ok := assignExpr.Right.(*ast.BinaryExpression); ok {
+				sa, ok := binExpr.Left.(*ast.StaticAccessExpression)
+				assert.True(t, ok, "Left side of binary expression should be StaticAccessExpression")
+				staticAccess = sa
+			}
+
+			assert.NotNil(t, staticAccess, "Should find StaticAccessExpression")
+
+			// Check class name
+			classIdent, ok := staticAccess.Class.(*ast.IdentifierNode)
+			assert.True(t, ok, "Class should be IdentifierNode")
+			assert.Equal(t, tt.expectedClass, classIdent.Name)
+
+			// Check property name
+			propIdent, ok := staticAccess.Property.(*ast.IdentifierNode)
+			assert.True(t, ok, "Property should be IdentifierNode")
+			assert.Equal(t, tt.expectedProperty, propIdent.Name)
 		})
 	}
 }

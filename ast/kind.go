@@ -17,6 +17,7 @@ const (
 	ASTClass        ASTKind = 71
 	ASTArrowFunc    ASTKind = 72
 	ASTPropertyHook ASTKind = 73
+	ASTPropertyDecl ASTKind = 74
 
 	// 列表节点 - list nodes (bit 7 set)
 	ASTArgList          ASTKind = 128 // 1 << 7
@@ -179,6 +180,8 @@ func (k ASTKind) String() string {
 		return "ARROW_FUNC"
 	case ASTPropertyHook:
 		return "PROPERTY_HOOK"
+	case ASTPropertyDecl:
+		return "PROPERTY_DECL"
 
 	// 列表节点
 	case ASTArgList:

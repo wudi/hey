@@ -1115,6 +1115,65 @@ func (i *IdentifierNode) String() string {
 	return i.Name
 }
 
+// PropertyDeclaration 属性声明语句
+type PropertyDeclaration struct {
+	BaseNode
+	Visibility   string      `json:"visibility"`   // private, protected, public
+	Type         *TypeHint   `json:"type,omitempty"`
+	Name         string      `json:"name"`         // Property name without $
+	DefaultValue Expression  `json:"defaultValue,omitempty"`
+}
+
+func NewPropertyDeclaration(pos lexer.Position, visibility, name string, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
+	return &PropertyDeclaration{
+		BaseNode: BaseNode{
+			Kind:     ASTPropertyDecl,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Visibility:   visibility,
+		Type:         typeHint,
+		Name:         name,
+		DefaultValue: defaultValue,
+	}
+}
+
+func (pd *PropertyDeclaration) GetChildren() []Node {
+	var children []Node
+	if pd.Type != nil {
+		children = append(children, pd.Type)
+	}
+	if pd.DefaultValue != nil {
+		children = append(children, pd.DefaultValue)
+	}
+	return children
+}
+
+func (pd *PropertyDeclaration) Accept(visitor Visitor) {
+	if visitor.Visit(pd) {
+		if pd.Type != nil {
+			pd.Type.Accept(visitor)
+		}
+		if pd.DefaultValue != nil {
+			pd.DefaultValue.Accept(visitor)
+		}
+	}
+}
+
+func (pd *PropertyDeclaration) statementNode() {}
+
+func (pd *PropertyDeclaration) String() string {
+	result := pd.Visibility
+	if pd.Type != nil {
+		result += " " + pd.Type.String()
+	}
+	result += " $" + pd.Name
+	if pd.DefaultValue != nil {
+		result += " = " + pd.DefaultValue.String()
+	}
+	return result
+}
+
 // ReturnStatement return语句
 type ReturnStatement struct {
 	BaseNode
@@ -2859,6 +2918,7 @@ type ClassExpression struct {
 	Name       Expression   `json:"name"`
 	Extends    Expression   `json:"extends"`
 	Implements []Expression `json:"implements"`
+	Body       []Statement  `json:"body"`
 }
 
 func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression) *ClassExpression {
@@ -2871,6 +2931,7 @@ func NewClassExpression(pos lexer.Position, name, extends Expression, implements
 		Name:       name,
 		Extends:    extends,
 		Implements: implements,
+		Body:       make([]Statement, 0),
 	}
 }
 
@@ -2887,6 +2948,11 @@ func (ce *ClassExpression) GetChildren() []Node {
 			children = append(children, impl)
 		}
 	}
+	for _, stmt := range ce.Body {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
 	return children
 }
 
@@ -2901,6 +2967,11 @@ func (ce *ClassExpression) Accept(visitor Visitor) {
 		for _, impl := range ce.Implements {
 			if impl != nil {
 				impl.Accept(visitor)
+			}
+		}
+		for _, stmt := range ce.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
 			}
 		}
 	}
