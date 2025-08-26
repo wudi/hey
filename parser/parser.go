@@ -1462,7 +1462,7 @@ func (p *Parser) parseEmptyExpression() ast.Expression {
 	return ast.NewEmptyExpression(pos, expr)
 }
 
-// parseArrayLiteral 解析数组字面量 []
+// parseArrayLiteral 解析数组字面量 [] - 根据 PHP 官方语法
 func (p *Parser) parseArrayLiteral() ast.Expression {
 	pos := p.currentToken.Position
 	
@@ -1476,23 +1476,45 @@ func (p *Parser) parseArrayLiteral() ast.Expression {
 	
 	p.nextToken()
 	
+	// 解析数组元素列表 (non_empty_array_pair_list)
 	for p.currentToken.Type != lexer.TOKEN_RBRACKET && p.currentToken.Type != lexer.T_EOF {
+		// possible_array_pair: 可以为空（trailing comma情况）
+		if p.currentToken.Type == lexer.TOKEN_COMMA {
+			// 跳过空元素（连续的逗号或开头的逗号）
+			p.nextToken()
+			continue
+		}
+		
+		// 解析数组元素表达式
 		element := p.parseExpression(LOWEST)
 		if element != nil {
 			array.Elements = append(array.Elements, element)
 		}
 		
-		if p.peekToken.Type == lexer.TOKEN_RBRACKET {
+		p.nextToken()
+		
+		// 检查是否到达数组结尾
+		if p.currentToken.Type == lexer.TOKEN_RBRACKET {
 			break
 		}
 		
-		if !p.expectToken(lexer.TOKEN_COMMA) {
+		// 期望逗号分隔符，但允许省略（在结尾）
+		if p.currentToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken()
+			// 允许 trailing comma: [1, 2, 3,]
+			if p.currentToken.Type == lexer.TOKEN_RBRACKET {
+				break
+			}
+		} else if p.currentToken.Type != lexer.TOKEN_RBRACKET {
+			// 如果不是逗号也不是结尾括号，则报错
+			p.errors = append(p.errors, "expected ',' or ']' in array")
 			return nil
 		}
-		p.nextToken()
 	}
 	
-	if !p.expectToken(lexer.TOKEN_RBRACKET) {
+	// 确保我们在正确的位置（应该是 ']'）
+	if p.currentToken.Type != lexer.TOKEN_RBRACKET {
+		p.errors = append(p.errors, "expected ']' to close array")
 		return nil
 	}
 	
