@@ -2237,6 +2237,311 @@ class Mixed {
 	}
 }
 
+func TestParsing_TypedReferenceParameters(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Single typed reference parameter",
+			input: `<?php
+function test(array &$x) {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				if len(program.Body) != 1 {
+					t.Errorf("Expected 1 statement, got %d", len(program.Body))
+					return
+				}
+
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", program.Body[0])
+					return
+				}
+
+				if len(funcDecl.Parameters) != 1 {
+					t.Errorf("Expected 1 parameter, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				param := funcDecl.Parameters[0]
+				if param.Name != "$x" {
+					t.Errorf("Expected parameter name '$x', got '%s'", param.Name)
+				}
+				if param.Type == nil || param.Type.Name != "array" {
+					t.Errorf("Expected parameter type 'array', got %v", param.Type)
+				}
+				if !param.ByReference {
+					t.Error("Expected parameter to be by reference")
+				}
+			},
+		},
+		{
+			name: "Multiple typed reference parameters",
+			input: `<?php
+function mergeSuites(array &$dest, array $source): void {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", program.Body[0])
+					return
+				}
+
+				if len(funcDecl.Parameters) != 2 {
+					t.Errorf("Expected 2 parameters, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				// Check first parameter (reference)
+				param1 := funcDecl.Parameters[0]
+				if param1.Name != "$dest" {
+					t.Errorf("Expected first parameter name '$dest', got '%s'", param1.Name)
+				}
+				if param1.Type == nil || param1.Type.Name != "array" {
+					t.Errorf("Expected first parameter type 'array', got %v", param1.Type)
+				}
+				if !param1.ByReference {
+					t.Error("Expected first parameter to be by reference")
+				}
+
+				// Check second parameter (non-reference)
+				param2 := funcDecl.Parameters[1]
+				if param2.Name != "$source" {
+					t.Errorf("Expected second parameter name '$source', got '%s'", param2.Name)
+				}
+				if param2.Type == nil || param2.Type.Name != "array" {
+					t.Errorf("Expected second parameter type 'array', got %v", param2.Type)
+				}
+				if param2.ByReference {
+					t.Error("Expected second parameter to not be by reference")
+				}
+
+				// Check return type
+				if funcDecl.ReturnType == nil || funcDecl.ReturnType.Name != "void" {
+					t.Errorf("Expected return type 'void', got %v", funcDecl.ReturnType)
+				}
+			},
+		},
+		{
+			name: "Mixed reference and non-reference parameters",
+			input: `<?php
+function test(&$a, array &$b, string $c, callable &$d): bool {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", program.Body[0])
+					return
+				}
+
+				if len(funcDecl.Parameters) != 4 {
+					t.Errorf("Expected 4 parameters, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				expectedParams := []struct {
+					name        string
+					typeName    string
+					hasType     bool
+					byReference bool
+				}{
+					{"$a", "", false, true},           // &$a (no type)
+					{"$b", "array", true, true},       // array &$b
+					{"$c", "string", true, false},     // string $c
+					{"$d", "callable", true, true},    // callable &$d
+				}
+
+				for i, expected := range expectedParams {
+					param := funcDecl.Parameters[i]
+					if param.Name != expected.name {
+						t.Errorf("Parameter %d: expected name '%s', got '%s'", i, expected.name, param.Name)
+					}
+
+					hasType := param.Type != nil
+					if hasType != expected.hasType {
+						t.Errorf("Parameter %d: expected hasType=%t, got=%t", i, expected.hasType, hasType)
+					}
+
+					if hasType && param.Type.Name != expected.typeName {
+						t.Errorf("Parameter %d: expected type '%s', got '%s'", i, expected.typeName, param.Type.Name)
+					}
+
+					if param.ByReference != expected.byReference {
+						t.Errorf("Parameter %d: expected byReference=%t, got=%t", i, expected.byReference, param.ByReference)
+					}
+				}
+			},
+		},
+		{
+			name: "Nullable typed reference parameters",
+			input: `<?php
+function test(?array &$a, ?string &$b): void {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", program.Body[0])
+					return
+				}
+
+				if len(funcDecl.Parameters) != 2 {
+					t.Errorf("Expected 2 parameters, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				// Check first parameter: ?array &$a
+				param1 := funcDecl.Parameters[0]
+				if param1.Name != "$a" {
+					t.Errorf("Expected first parameter name '$a', got '%s'", param1.Name)
+				}
+				if param1.Type == nil {
+					t.Error("Expected first parameter to have type")
+				} else {
+					if param1.Type.Name != "array" {
+						t.Errorf("Expected first parameter type 'array', got '%s'", param1.Type.Name)
+					}
+					if !param1.Type.Nullable {
+						t.Error("Expected first parameter type to be nullable")
+					}
+				}
+				if !param1.ByReference {
+					t.Error("Expected first parameter to be by reference")
+				}
+
+				// Check second parameter: ?string &$b
+				param2 := funcDecl.Parameters[1]
+				if param2.Name != "$b" {
+					t.Errorf("Expected second parameter name '$b', got '%s'", param2.Name)
+				}
+				if param2.Type == nil {
+					t.Error("Expected second parameter to have type")
+				} else {
+					if param2.Type.Name != "string" {
+						t.Errorf("Expected second parameter type 'string', got '%s'", param2.Type.Name)
+					}
+					if !param2.Type.Nullable {
+						t.Error("Expected second parameter type to be nullable")
+					}
+				}
+				if !param2.ByReference {
+					t.Error("Expected second parameter to be by reference")
+				}
+			},
+		},
+		{
+			name: "Union type reference parameters",
+			input: `<?php
+function test(array|string &$x): void {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", program.Body[0])
+					return
+				}
+
+				if len(funcDecl.Parameters) != 1 {
+					t.Errorf("Expected 1 parameter, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				param := funcDecl.Parameters[0]
+				if param.Name != "$x" {
+					t.Errorf("Expected parameter name '$x', got '%s'", param.Name)
+				}
+
+				if param.Type == nil {
+					t.Error("Expected parameter to have type")
+					return
+				}
+
+				// Check if it's a union type
+				if param.Type.UnionTypes == nil || len(param.Type.UnionTypes) != 2 {
+					t.Errorf("Expected union type with 2 types, got %v", param.Type)
+					return
+				}
+
+				// Check union type components
+				if param.Type.UnionTypes[0].Name != "array" {
+					t.Errorf("Expected first union type 'array', got '%s'", param.Type.UnionTypes[0].Name)
+				}
+				if param.Type.UnionTypes[1].Name != "string" {
+					t.Errorf("Expected second union type 'string', got '%s'", param.Type.UnionTypes[1].Name)
+				}
+
+				if !param.ByReference {
+					t.Error("Expected parameter to be by reference")
+				}
+			},
+		},
+		{
+			name: "Class method with typed reference parameters",
+			input: `<?php
+class TestClass {
+    private function mergeSuites(array &$dest, array $source): void {
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				if !ok {
+					t.Errorf("Expected ExpressionStatement, got %T", program.Body[0])
+					return
+				}
+
+				class, ok := stmt.Expression.(*ast.ClassExpression)
+				if !ok {
+					t.Errorf("Expected ClassExpression, got %T", stmt.Expression)
+					return
+				}
+
+				if len(class.Body) != 1 {
+					t.Errorf("Expected 1 method, got %d", len(class.Body))
+					return
+				}
+
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				if funcDecl.Visibility != "private" {
+					t.Errorf("Expected method visibility 'private', got '%s'", funcDecl.Visibility)
+				}
+
+				if len(funcDecl.Parameters) != 2 {
+					t.Errorf("Expected 2 parameters, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				// Verify the original failing case: array &$dest, array $source
+				param1 := funcDecl.Parameters[0]
+				if param1.Name != "$dest" || param1.Type.Name != "array" || !param1.ByReference {
+					t.Errorf("First parameter incorrect: name=%s, type=%v, byRef=%t", param1.Name, param1.Type, param1.ByReference)
+				}
+
+				param2 := funcDecl.Parameters[1]
+				if param2.Name != "$source" || param2.Type.Name != "array" || param2.ByReference {
+					t.Errorf("Second parameter incorrect: name=%s, type=%v, byRef=%t", param2.Name, param2.Type, param2.ByReference)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			tt.validate(t, program)
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {

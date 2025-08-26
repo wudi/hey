@@ -306,6 +306,36 @@ func parseTypeHint(p *Parser) *ast.TypeHint {
 	return baseType
 }
 
+// parseParameterTypeHint 解析参数类型提示，支持nullable和union类型，但不支持intersection类型
+// 因为在参数上下文中，& 表示引用而不是intersection
+func parseParameterTypeHint(p *Parser) *ast.TypeHint {
+	// 检查nullable类型 ?Type
+	nullable := false
+	if p.currentToken.Type == lexer.TOKEN_QUESTION {
+		nullable = true
+		p.nextToken() // 移动到类型token
+	}
+	
+	// 解析基本类型
+	if !isTypeToken(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected type name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	// 创建基本类型提示
+	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
+	
+	// 检查是否为union类型 Type1|Type2
+	if p.peekToken.Type == lexer.TOKEN_PIPE {
+		return parseUnionType(p, baseType)
+	}
+	
+	// 注意：在参数上下文中，我们不检查intersection类型（&）
+	// 因为 & 在参数中表示引用参数，而不是intersection类型
+	
+	return baseType
+}
+
 // parseUnionType 解析联合类型 Type1|Type2|Type3
 func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 	pos := firstType.Position
@@ -698,7 +728,7 @@ func parseParameter(p *Parser) *ast.Parameter {
 	
 	// 检查是否有类型提示
 	if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION {
-		typeHint := parseTypeHint(p)
+		typeHint := parseParameterTypeHint(p)
 		if typeHint == nil {
 			return nil
 		}
