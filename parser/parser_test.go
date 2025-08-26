@@ -471,6 +471,84 @@ function func_name(
 	assert.Len(t, funcDecl.Body, 0)
 }
 
+func TestParsing_BitwiseOperations(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		operator string
+	}{
+		{
+			name:     "Bitwise right shift",
+			input:    `<?php $result = $value >> 2; ?>`,
+			operator: ">>",
+		},
+		{
+			name:     "Bitwise left shift", 
+			input:    `<?php $result = $value << 3; ?>`,
+			operator: "<<",
+		},
+		{
+			name:     "Bitwise AND",
+			input:    `<?php $result = $value & 0xFF; ?>`,
+			operator: "&",
+		},
+		{
+			name:     "Bitwise OR",
+			input:    `<?php $result = $value | 0b1010; ?>`,
+			operator: "|",
+		},
+		{
+			name:     "Complex bitwise expression",
+			input:    `<?php (($stat["exitcode"] >> 28) & 0b1111) === 0b1100; ?>`,
+			operator: "===",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			// For complex bitwise expression, check the top-level operator
+			if tt.name == "Complex bitwise expression" {
+				binaryExpr, ok := exprStmt.Expression.(*ast.BinaryExpression)
+				assert.True(t, ok, "Expression should be BinaryExpression")
+				assert.Equal(t, tt.operator, binaryExpr.Operator)
+				
+				// Check left side is a bitwise AND operation
+				leftExpr, ok := binaryExpr.Left.(*ast.BinaryExpression)
+				assert.True(t, ok, "Left side should be BinaryExpression")
+				assert.Equal(t, "&", leftExpr.Operator)
+				
+				// Check the left side of bitwise AND is a right shift operation
+				leftLeftExpr, ok := leftExpr.Left.(*ast.BinaryExpression)
+				assert.True(t, ok, "Left left should be BinaryExpression")
+				assert.Equal(t, ">>", leftLeftExpr.Operator)
+			} else {
+				// For simple expressions, check assignment or standalone expression
+				if assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression); ok {
+					binaryExpr, ok := assignment.Right.(*ast.BinaryExpression)
+					assert.True(t, ok, "Right side should be BinaryExpression")
+					assert.Equal(t, tt.operator, binaryExpr.Operator)
+				} else {
+					binaryExpr, ok := exprStmt.Expression.(*ast.BinaryExpression)
+					assert.True(t, ok, "Expression should be BinaryExpression")
+					assert.Equal(t, tt.operator, binaryExpr.Operator)
+				}
+			}
+		})
+	}
+}
+
 func TestParsing_ArrayExpression(t *testing.T) {
 	input := `<?php $arr = array(1, 2, 3); ?>`
 

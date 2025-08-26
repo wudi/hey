@@ -18,10 +18,13 @@ const (
 	LOGICAL_OR  // ||
 	LOGICAL_AND // &&
 	COALESCE    // ??
+	BITWISE_OR  // |
 	ASSIGN      // =
+	BITWISE_AND // &
 	EQUALS      // ==
 	LESSGREATER // > or <
 	SUM         // +
+	BITWISE_SHIFT // << >>
 	PRODUCT     // *
 	PREFIX      // -X or !X
 	POSTFIX     // X++ or X--
@@ -62,6 +65,10 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.T_INC:                 POSTFIX,
 	lexer.T_DEC:                 POSTFIX,
 	lexer.TOKEN_LPAREN:          CALL,
+	lexer.T_SR:                  BITWISE_SHIFT,
+	lexer.T_SL:                  BITWISE_SHIFT,
+	lexer.TOKEN_AMPERSAND:       BITWISE_AND,
+	lexer.TOKEN_PIPE:            BITWISE_OR,
 }
 
 var (
@@ -126,7 +133,6 @@ func init() {
 		lexer.T_EXTENDS:                  parseFallback,
 		lexer.T_LOGICAL_OR:               parseFallback,
 		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccess,
-		lexer.T_SR:                       parseFallback,
 		lexer.T_PRIVATE:                  parseVisibilityModifier,
 		lexer.T_PROTECTED:                parseVisibilityModifier,
 		lexer.T_PUBLIC:                   parseVisibilityModifier,
@@ -167,6 +173,10 @@ func init() {
 		lexer.T_COALESCE:            parseCoalesceExpression,
 		lexer.T_BOOLEAN_AND:         parseBooleanExpression,
 		lexer.T_BOOLEAN_OR:          parseBooleanExpression,
+		lexer.T_SR:                  parseInfixExpression, // >> (right shift)
+		lexer.T_SL:                  parseInfixExpression, // << (left shift)
+		lexer.TOKEN_AMPERSAND:       parseInfixExpression, // & (bitwise AND)
+		lexer.TOKEN_PIPE:            parseInfixExpression, // | (bitwise OR)
 		lexer.TOKEN_LBRACKET:        parseArrayAccess,
 		lexer.TOKEN_QUESTION:        parseTernaryExpression,
 		lexer.T_DOUBLE_ARROW:        parseDoubleArrowExpression,
