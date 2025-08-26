@@ -2107,16 +2107,82 @@ func parseClassExpression(p *Parser) ast.Expression {
 func parseClassStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
 	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
+		// Check if this is a class constant or property declaration
+		if p.peekToken.Type == lexer.T_CONST {
+			return parseClassConstantDeclaration(p)
+		}
 		return parsePropertyDeclaration(p)
 	case lexer.T_FUNCTION:
 		return parseFunctionDeclaration(p)
 	case lexer.T_CONST:
-		// TODO: 实现类常量解析
-		return parseExpressionStatement(p)
+		// const without visibility modifier (defaults to public)
+		return parseClassConstantDeclaration(p)
 	default:
 		// 跳过未识别的token
 		return nil
 	}
+}
+
+// parseClassConstantDeclaration 解析类常量声明
+func parseClassConstantDeclaration(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+	
+	// Parse visibility modifier (if present)
+	visibility := "public" // Default visibility
+	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
+		visibility = p.currentToken.Value
+		p.nextToken() // Move to 'const'
+	}
+	
+	// Expect 'const' keyword
+	if p.currentToken.Type != lexer.T_CONST {
+		p.errors = append(p.errors, fmt.Sprintf("expected 'const', got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	p.nextToken() // Move to first constant name
+	
+	// Parse constant list (can have multiple constants in one declaration)
+	var constants []ast.ConstantDeclarator
+	
+	for {
+		// Parse constant name
+		if p.currentToken.Type != lexer.T_STRING {
+			p.errors = append(p.errors, fmt.Sprintf("expected constant name (T_STRING), got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+			return nil
+		}
+		
+		constPos := p.currentToken.Position
+		name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		
+		// Expect '='
+		if !p.expectPeek(lexer.TOKEN_EQUAL) {
+			return nil
+		}
+		
+		p.nextToken() // Move to value
+		value := parseExpression(p, LOWEST)
+		
+		// Create constant declarator
+		constants = append(constants, *ast.NewConstantDeclarator(constPos, name, value))
+		
+		p.nextToken()
+		// Check for comma (multiple constants)
+		if p.currentToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // Skip comma and continue
+			continue
+		}
+		
+		// Should end with semicolon
+		if p.currentToken.Type == lexer.TOKEN_SEMICOLON {
+			break
+		}
+		
+		// If not comma or semicolon, we're done
+		break
+	}
+	
+	return ast.NewClassConstantDeclaration(pos, visibility, constants)
 }
 
 // parsePropertyDeclaration 解析属性声明

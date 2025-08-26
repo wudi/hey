@@ -1746,6 +1746,234 @@ func TestParsing_ErrorCases(t *testing.T) {
 	}
 }
 
+func TestParsing_ClassConstants(t *testing.T) {
+	tests := []struct {
+		name                 string
+		input                string
+		expectedClassName    string
+		expectedConstGroups  int
+		expectedTotalConsts  int
+		validateConstants    func(t *testing.T, classExpr *ast.ClassExpression)
+	}{
+		{
+			name: "Private class constant with array value",
+			input: `<?php
+class JUnit {
+    private const EMPTY_SUITE = [
+        'test_total' => 0,
+        'test_pass' => 0,
+        'files' => [],
+    ];
+}`,
+			expectedClassName:   "JUnit",
+			expectedConstGroups: 1,
+			expectedTotalConsts: 1,
+			validateConstants: func(t *testing.T, classExpr *ast.ClassExpression) {
+				constGroup, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
+				assert.Equal(t, "private", constGroup.Visibility)
+				assert.Len(t, constGroup.Constants, 1)
+				
+				constant := constGroup.Constants[0]
+				nameIdent, ok := constant.Name.(*ast.IdentifierNode)
+				assert.True(t, ok, "Constant name should be IdentifierNode")
+				assert.Equal(t, "EMPTY_SUITE", nameIdent.Name)
+				
+				arrayExpr, ok := constant.Value.(*ast.ArrayExpression)
+				assert.True(t, ok, "Constant value should be ArrayExpression")
+				assert.Len(t, arrayExpr.Elements, 3)
+			},
+		},
+		{
+			name: "Multiple constants in single declaration",
+			input: `<?php
+class TestConsts {
+    const A = 1, B = 2, C = "hello";
+}`,
+			expectedClassName:   "TestConsts",
+			expectedConstGroups: 1,
+			expectedTotalConsts: 3,
+			validateConstants: func(t *testing.T, classExpr *ast.ClassExpression) {
+				constGroup, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
+				assert.Equal(t, "public", constGroup.Visibility) // Default visibility
+				assert.Len(t, constGroup.Constants, 3)
+				
+				// Check first constant: A = 1
+				nameA, ok := constGroup.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok, "Constant A name should be IdentifierNode")
+				assert.Equal(t, "A", nameA.Name)
+				
+				// Check second constant: B = 2
+				nameB, ok := constGroup.Constants[1].Name.(*ast.IdentifierNode)
+				assert.True(t, ok, "Constant B name should be IdentifierNode")
+				assert.Equal(t, "B", nameB.Name)
+				
+				// Check third constant: C = "hello"
+				nameC, ok := constGroup.Constants[2].Name.(*ast.IdentifierNode)
+				assert.True(t, ok, "Constant C name should be IdentifierNode")
+				assert.Equal(t, "C", nameC.Name)
+			},
+		},
+		{
+			name: "Different visibility modifiers",
+			input: `<?php
+class VisibilityConsts {
+    public const PUB = "public";
+    protected const PROT = true;
+    private const PRIV = null;
+}`,
+			expectedClassName:   "VisibilityConsts",
+			expectedConstGroups: 3,
+			expectedTotalConsts: 3,
+			validateConstants: func(t *testing.T, classExpr *ast.ClassExpression) {
+				// Check public constant
+				pubGroup, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
+				assert.Equal(t, "public", pubGroup.Visibility)
+				assert.Len(t, pubGroup.Constants, 1)
+				pubName, ok := pubGroup.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok)
+				assert.Equal(t, "PUB", pubName.Name)
+				
+				// Check protected constant
+				protGroup, ok := classExpr.Body[1].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok, "Second body item should be ClassConstantDeclaration")
+				assert.Equal(t, "protected", protGroup.Visibility)
+				assert.Len(t, protGroup.Constants, 1)
+				protName, ok := protGroup.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok)
+				assert.Equal(t, "PROT", protName.Name)
+				
+				// Check private constant
+				privGroup, ok := classExpr.Body[2].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok, "Third body item should be ClassConstantDeclaration")
+				assert.Equal(t, "private", privGroup.Visibility)
+				assert.Len(t, privGroup.Constants, 1)
+				privName, ok := privGroup.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok)
+				assert.Equal(t, "PRIV", privName.Name)
+			},
+		},
+		{
+			name: "Mixed constants and properties",
+			input: `<?php
+class Mixed {
+    const VERSION = "1.0";
+    private $property = "value";
+    protected const DEBUG = true;
+}`,
+			expectedClassName:   "Mixed",
+			expectedConstGroups: 2, // VERSION and DEBUG constant groups
+			expectedTotalConsts: 2,
+			validateConstants: func(t *testing.T, classExpr *ast.ClassExpression) {
+				assert.Len(t, classExpr.Body, 3) // 2 const groups + 1 property
+				
+				// Check first constant
+				constGroup1, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
+				assert.Equal(t, "public", constGroup1.Visibility)
+				versionName, ok := constGroup1.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok)
+				assert.Equal(t, "VERSION", versionName.Name)
+				
+				// Check property
+				propDecl, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "Second body item should be PropertyDeclaration")
+				assert.Equal(t, "private", propDecl.Visibility)
+				assert.Equal(t, "property", propDecl.Name)
+				
+				// Check second constant
+				constGroup2, ok := classExpr.Body[2].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok, "Third body item should be ClassConstantDeclaration")
+				assert.Equal(t, "protected", constGroup2.Visibility)
+				debugName, ok := constGroup2.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok)
+				assert.Equal(t, "DEBUG", debugName.Name)
+			},
+		},
+		{
+			name: "Complex constant values",
+			input: `<?php
+class ComplexConsts {
+    const ARRAY_CONST = [1, "two", true, null];
+    private const NESTED_ARRAY = [
+        'key1' => ['nested' => true],
+        'key2' => 42,
+    ];
+}`,
+			expectedClassName:   "ComplexConsts",
+			expectedConstGroups: 2,
+			expectedTotalConsts: 2,
+			validateConstants: func(t *testing.T, classExpr *ast.ClassExpression) {
+				// Check first constant with simple array
+				constGroup1, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok)
+				assert.Equal(t, "public", constGroup1.Visibility)
+				arrayName, ok := constGroup1.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok)
+				assert.Equal(t, "ARRAY_CONST", arrayName.Name)
+				arrayValue, ok := constGroup1.Constants[0].Value.(*ast.ArrayExpression)
+				assert.True(t, ok)
+				assert.Len(t, arrayValue.Elements, 4)
+				
+				// Check second constant with nested array
+				constGroup2, ok := classExpr.Body[1].(*ast.ClassConstantDeclaration)
+				assert.True(t, ok)
+				assert.Equal(t, "private", constGroup2.Visibility)
+				nestedName, ok := constGroup2.Constants[0].Name.(*ast.IdentifierNode)
+				assert.True(t, ok)
+				assert.Equal(t, "NESTED_ARRAY", nestedName.Name)
+				nestedValue, ok := constGroup2.Constants[0].Value.(*ast.ArrayExpression)
+				assert.True(t, ok)
+				assert.Len(t, nestedValue.Elements, 2)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+			assert.True(t, ok, "Expression should be ClassExpression")
+
+			// Check class name
+			nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+			assert.True(t, ok, "Class name should be IdentifierNode")
+			assert.Equal(t, tt.expectedClassName, nameIdent.Name)
+
+			// Count constant groups and total constants
+			constGroups := 0
+			totalConsts := 0
+			for _, bodyStmt := range classExpr.Body {
+				if constGroup, ok := bodyStmt.(*ast.ClassConstantDeclaration); ok {
+					constGroups++
+					totalConsts += len(constGroup.Constants)
+				}
+			}
+			
+			assert.Equal(t, tt.expectedConstGroups, constGroups, "Expected %d constant groups", tt.expectedConstGroups)
+			assert.Equal(t, tt.expectedTotalConsts, totalConsts, "Expected %d total constants", tt.expectedTotalConsts)
+
+			// Run custom validation
+			if tt.validateConstants != nil {
+				tt.validateConstants(t, classExpr)
+			}
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {

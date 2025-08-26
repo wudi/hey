@@ -3044,6 +3044,106 @@ func (ce *ConstExpression) String() string {
 	return result
 }
 
+// ClassConstantDeclaration 类常量声明语句
+type ClassConstantDeclaration struct {
+	BaseNode
+	Visibility string              `json:"visibility"`   // private, protected, public
+	Constants  []ConstantDeclarator `json:"constants"`    // 支持一行声明多个常量
+}
+
+// ConstantDeclarator 单个常量声明
+type ConstantDeclarator struct {
+	BaseNode
+	Name  Expression `json:"name"`
+	Value Expression `json:"value"`
+}
+
+func NewConstantDeclarator(pos lexer.Position, name, value Expression) *ConstantDeclarator {
+	return &ConstantDeclarator{
+		BaseNode: BaseNode{
+			Kind:     ASTConstElem,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:  name,
+		Value: value,
+	}
+}
+
+func (cd *ConstantDeclarator) GetChildren() []Node {
+	var children []Node
+	if cd.Name != nil {
+		children = append(children, cd.Name)
+	}
+	if cd.Value != nil {
+		children = append(children, cd.Value)
+	}
+	return children
+}
+
+func (cd *ConstantDeclarator) Accept(visitor Visitor) {
+	if visitor.Visit(cd) {
+		if cd.Name != nil {
+			cd.Name.Accept(visitor)
+		}
+		if cd.Value != nil {
+			cd.Value.Accept(visitor)
+		}
+	}
+}
+
+func (cd *ConstantDeclarator) String() string {
+	result := ""
+	if cd.Name != nil {
+		result += cd.Name.String()
+	}
+	if cd.Value != nil {
+		result += " = " + cd.Value.String()
+	}
+	return result
+}
+
+func NewClassConstantDeclaration(pos lexer.Position, visibility string, constants []ConstantDeclarator) *ClassConstantDeclaration {
+	return &ClassConstantDeclaration{
+		BaseNode: BaseNode{
+			Kind:     ASTClassConstGroup,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Visibility: visibility,
+		Constants:  constants,
+	}
+}
+
+func (ccd *ClassConstantDeclaration) GetChildren() []Node {
+	var children []Node
+	for i := range ccd.Constants {
+		children = append(children, &ccd.Constants[i])
+	}
+	return children
+}
+
+func (ccd *ClassConstantDeclaration) Accept(visitor Visitor) {
+	if visitor.Visit(ccd) {
+		for i := range ccd.Constants {
+			ccd.Constants[i].Accept(visitor)
+		}
+	}
+}
+
+func (ccd *ClassConstantDeclaration) statementNode() {}
+
+func (ccd *ClassConstantDeclaration) String() string {
+	result := ccd.Visibility + " const "
+	for i, constant := range ccd.Constants {
+		if i > 0 {
+			result += ", "
+		}
+		result += constant.String()
+	}
+	return result
+}
+
 // EvalExpression 表示 eval() 表达式
 type EvalExpression struct {
 	BaseNode
