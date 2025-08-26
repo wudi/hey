@@ -550,5 +550,5 @@ func (t TokenType) String() string {
 	if name, ok := TokenNames[t]; ok {
 		return name
 	}
-	return fmt.Sprintf("TokenType(%d)", t)
+	return fmt.Sprintf("UNKNOWN(%d)", t)
 }

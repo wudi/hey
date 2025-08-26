@@ -874,7 +874,7 @@ func (p *Parser) peekError(t lexer.TokenType) {
 
 // noPrefixParseFnError 添加前缀解析函数缺失错误
 func (p *Parser) noPrefixParseFnError(t lexer.TokenType) {
-	msg := fmt.Sprintf("no prefix parse function for %s found", lexer.TokenNames[t])
+	msg := fmt.Sprintf("no prefix parse function for `%s` %s found", lexer.TokenNames[t], t)
 	p.errors = append(p.errors, msg)
 }
 
@@ -1908,10 +1908,10 @@ func (p *Parser) parseStaticAccess() ast.Expression {
 func (p *Parser) parseInterpolatedString() ast.Expression {
 	pos := p.currentToken.Position
 	parts := []ast.Expression{}
-	
+
 	// 跳过开始的引号
 	p.nextToken()
-	
+
 	// 解析字符串内容，直到遇到结束的引号
 	for p.currentToken.Type != lexer.TOKEN_QUOTE && !p.isAtEnd() {
 		switch p.currentToken.Type {
@@ -1934,14 +1934,14 @@ func (p *Parser) parseInterpolatedString() ast.Expression {
 		}
 		p.nextToken()
 	}
-	
+
 	// 如果只有一个部分且是简单字符串，返回字符串字面量
 	if len(parts) == 1 {
 		if stringLit, ok := parts[0].(*ast.StringLiteral); ok {
 			return stringLit
 		}
 	}
-	
+
 	// 返回字符串插值表达式
 	return ast.NewInterpolatedStringExpression(pos, parts)
 }
