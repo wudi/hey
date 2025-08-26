@@ -882,16 +882,30 @@ func (fs *ForStatement) String() string {
 // FunctionDeclaration 函数声明
 type FunctionDeclaration struct {
 	BaseNode
-	Name       Identifier  `json:"name"`
-	Parameters []Parameter `json:"parameters"`
-	ReturnType string      `json:"returnType,omitempty"`
-	Body       []Statement `json:"body"`
+	Name         Identifier  `json:"name"`
+	Parameters   []Parameter `json:"parameters"`
+	ReturnType   *TypeHint   `json:"returnType,omitempty"`
+	Body         []Statement `json:"body"`
+	ByReference  bool        `json:"byReference,omitempty"`   // function &foo()
 }
 
 type Parameter struct {
 	Name         string     `json:"name"`
 	DefaultValue Expression `json:"defaultValue,omitempty"`
-	Type         string     `json:"type,omitempty"`
+	Type         *TypeHint  `json:"type,omitempty"`
+	ByReference  bool       `json:"byReference,omitempty"`   // &$param
+	Variadic     bool       `json:"variadic,omitempty"`      // ...$params
+	Visibility   string     `json:"visibility,omitempty"`   // public, private, protected
+	ReadOnly     bool       `json:"readOnly,omitempty"`     // readonly
+}
+
+// TypeHint represents a PHP type hint
+type TypeHint struct {
+	BaseNode
+	Name         string      `json:"name"`                  // Simple type name
+	Nullable     bool        `json:"nullable,omitempty"`    // ?Type
+	UnionTypes   []*TypeHint `json:"unionTypes,omitempty"`  // Type1|Type2
+	IntersectionTypes []*TypeHint `json:"intersectionTypes,omitempty"` // Type1&Type2
 }
 
 func NewFunctionDeclaration(pos lexer.Position, name Identifier) *FunctionDeclaration {
@@ -907,10 +921,110 @@ func NewFunctionDeclaration(pos lexer.Position, name Identifier) *FunctionDeclar
 	}
 }
 
+// NewTypeHint creates a new type hint
+func NewTypeHint(pos lexer.Position, name string) *TypeHint {
+	return &TypeHint{
+		BaseNode: BaseNode{
+			Kind:     ASTType,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name: name,
+	}
+}
+
+// NewSimpleTypeHint creates a simple type hint (possibly nullable)
+func NewSimpleTypeHint(pos lexer.Position, name string, nullable bool) *TypeHint {
+	return &TypeHint{
+		BaseNode: BaseNode{
+			Kind:     ASTType,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:     name,
+		Nullable: nullable,
+	}
+}
+
+// NewUnionTypeHint creates a union type hint (Type1|Type2)
+func NewUnionTypeHint(pos lexer.Position, types []*TypeHint) *TypeHint {
+	return &TypeHint{
+		BaseNode: BaseNode{
+			Kind:     ASTTypeUnion,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		UnionTypes: types,
+	}
+}
+
+// NewIntersectionTypeHint creates an intersection type hint (Type1&Type2)
+func NewIntersectionTypeHint(pos lexer.Position, types []*TypeHint) *TypeHint {
+	return &TypeHint{
+		BaseNode: BaseNode{
+			Kind:     ASTTypeIntersection,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		IntersectionTypes: types,
+	}
+}
+
+// TypeHint AST interface implementations
+func (th *TypeHint) GetChildren() []Node {
+	var children []Node
+	for _, t := range th.UnionTypes {
+		children = append(children, t)
+	}
+	for _, t := range th.IntersectionTypes {
+		children = append(children, t)
+	}
+	return children
+}
+
+func (th *TypeHint) Accept(visitor Visitor) {
+	visitor.Visit(th)
+	for _, child := range th.GetChildren() {
+		child.Accept(visitor)
+	}
+}
+
+func (th *TypeHint) String() string {
+	if len(th.UnionTypes) > 0 {
+		var types []string
+		for _, t := range th.UnionTypes {
+			types = append(types, t.String())
+		}
+		result := strings.Join(types, "|")
+		if th.Nullable {
+			result = "?" + result
+		}
+		return result
+	}
+	if len(th.IntersectionTypes) > 0 {
+		var types []string
+		for _, t := range th.IntersectionTypes {
+			types = append(types, t.String())
+		}
+		return strings.Join(types, "&")
+	}
+	result := th.Name
+	if th.Nullable {
+		result = "?" + result
+	}
+	return result
+}
+
 // GetChildren 返回子节点
 func (fd *FunctionDeclaration) GetChildren() []Node {
 	children := []Node{fd.Name}
+	if fd.ReturnType != nil {
+		children = append(children, fd.ReturnType)
+	}
 	for _, param := range fd.Parameters {
+		if param.Type != nil {
+			children = append(children, param.Type)
+		}
 		if param.DefaultValue != nil {
 			children = append(children, param.DefaultValue)
 		}

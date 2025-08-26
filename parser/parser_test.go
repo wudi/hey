@@ -440,31 +440,36 @@ function func_name(
 	// 第一个参数: string $commandline
 	param1 := funcDecl.Parameters[0]
 	assert.Equal(t, "$commandline", param1.Name)
-	assert.Equal(t, "string", param1.Type)
+	assert.NotNil(t, param1.Type)
+	assert.Equal(t, "string", param1.Type.String())
 	assert.Nil(t, param1.DefaultValue)
 
 	// 第二个参数: ?array $env = null
 	param2 := funcDecl.Parameters[1]
 	assert.Equal(t, "$env", param2.Name)
-	assert.Equal(t, "?array", param2.Type)
+	assert.NotNil(t, param2.Type)
+	assert.Equal(t, "?array", param2.Type.String())
 	assert.NotNil(t, param2.DefaultValue)
 
 	// 第三个参数: ?string $stdin = null
 	param3 := funcDecl.Parameters[2]
 	assert.Equal(t, "$stdin", param3.Name)
-	assert.Equal(t, "?string", param3.Type)
+	assert.NotNil(t, param3.Type)
+	assert.Equal(t, "?string", param3.Type.String())
 	assert.NotNil(t, param3.DefaultValue)
 
 	// 第四个参数: bool $captureStdIn = true
 	param4 := funcDecl.Parameters[3]
 	assert.Equal(t, "$captureStdIn", param4.Name)
-	assert.Equal(t, "bool", param4.Type)
+	assert.NotNil(t, param4.Type)
+	assert.Equal(t, "bool", param4.Type.String())
 	assert.NotNil(t, param4.DefaultValue)
 
 	// 第五个参数: bool $captureStdErr = true
 	param5 := funcDecl.Parameters[4]
 	assert.Equal(t, "$captureStdErr", param5.Name)
-	assert.Equal(t, "bool", param5.Type)
+	assert.NotNil(t, param5.Type)
+	assert.Equal(t, "bool", param5.Type.String())
 	assert.NotNil(t, param5.DefaultValue)
 
 	// 检查函数体为空
@@ -567,11 +572,21 @@ func TestParsing_FunctionReturnTypes(t *testing.T) {
 			assert.Len(t, funcDecl.Parameters, len(tt.expectedParams))
 			for i, expected := range tt.expectedParams {
 				assert.Equal(t, expected.name, funcDecl.Parameters[i].Name, "Parameter %d name mismatch", i)
-				assert.Equal(t, expected.typ, funcDecl.Parameters[i].Type, "Parameter %d type mismatch", i)
+				if expected.typ != "" {
+					assert.NotNil(t, funcDecl.Parameters[i].Type, "Parameter %d should have a type", i)
+					assert.Equal(t, expected.typ, funcDecl.Parameters[i].Type.String(), "Parameter %d type mismatch", i)
+				} else {
+					assert.Nil(t, funcDecl.Parameters[i].Type, "Parameter %d should not have a type", i)
+				}
 			}
 
 			// Check return type
-			assert.Equal(t, tt.expectedReturnType, funcDecl.ReturnType, "Return type mismatch")
+			if tt.expectedReturnType != "" {
+				assert.NotNil(t, funcDecl.ReturnType, "Function should have a return type")
+				assert.Equal(t, tt.expectedReturnType, funcDecl.ReturnType.String(), "Return type mismatch")
+			} else {
+				assert.Nil(t, funcDecl.ReturnType, "Function should not have a return type")
+			}
 		})
 	}
 }
@@ -1393,7 +1408,12 @@ func TestParsing_AnonymousFunctions(t *testing.T) {
 			assert.Len(t, anonFunc.Parameters, len(tt.expectedParams))
 			for i, expectedParam := range tt.expectedParams {
 				assert.Equal(t, expectedParam.name, anonFunc.Parameters[i].Name)
-				assert.Equal(t, expectedParam.typ, anonFunc.Parameters[i].Type)
+				if expectedParam.typ != "" {
+					assert.NotNil(t, anonFunc.Parameters[i].Type, "Parameter %d should have a type", i)
+					assert.Equal(t, expectedParam.typ, anonFunc.Parameters[i].Type.String())
+				} else {
+					assert.Nil(t, anonFunc.Parameters[i].Type, "Parameter %d should not have a type", i)
+				}
 			}
 
 			// Verify use clause

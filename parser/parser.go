@@ -273,6 +273,85 @@ func isTypeToken(tokenType lexer.TokenType) bool {
 	}
 }
 
+// parseTypeHint 解析类型提示，支持nullable, union和intersection类型
+func parseTypeHint(p *Parser) *ast.TypeHint {
+	// 检查nullable类型 ?Type
+	nullable := false
+	if p.currentToken.Type == lexer.TOKEN_QUESTION {
+		nullable = true
+		p.nextToken() // 移动到类型token
+	}
+	
+	// 解析基本类型
+	if !isTypeToken(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected type name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	// 创建基本类型提示
+	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
+	
+	// 检查是否为union类型 Type1|Type2
+	if p.peekToken.Type == lexer.TOKEN_PIPE {
+		return parseUnionType(p, baseType)
+	}
+	
+	// 检查是否为intersection类型 Type1&Type2
+	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		return parseIntersectionType(p, baseType)
+	}
+	
+	return baseType
+}
+
+// parseUnionType 解析联合类型 Type1|Type2|Type3
+func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
+	pos := firstType.Position
+	types := []*ast.TypeHint{firstType}
+	
+	for p.peekToken.Type == lexer.TOKEN_PIPE {
+		p.nextToken() // 移动到 |
+		p.nextToken() // 移动到类型token
+		
+		nullable := false
+		if p.currentToken.Type == lexer.TOKEN_QUESTION {
+			nullable = true
+			p.nextToken() // 移动到实际类型token
+		}
+		
+		if !isTypeToken(p.currentToken.Type) {
+			p.errors = append(p.errors, fmt.Sprintf("expected type name in union type, got `%s` instead", p.currentToken.Value))
+			return nil
+		}
+		
+		typeHint := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
+		types = append(types, typeHint)
+	}
+	
+	return ast.NewUnionTypeHint(pos, types)
+}
+
+// parseIntersectionType 解析交集类型 Type1&Type2&Type3
+func parseIntersectionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
+	pos := firstType.Position
+	types := []*ast.TypeHint{firstType}
+	
+	for p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		p.nextToken() // 移动到 &
+		p.nextToken() // 移动到类型token
+		
+		if !isTypeToken(p.currentToken.Type) {
+			p.errors = append(p.errors, fmt.Sprintf("expected type name in intersection type, got `%s` instead", p.currentToken.Value))
+			return nil
+		}
+		
+		typeHint := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, false) // intersection types can't be nullable
+		types = append(types, typeHint)
+	}
+	
+	return ast.NewIntersectionTypeHint(pos, types)
+}
+
 // ParseProgram 解析整个程序
 func (p *Parser) ParseProgram() *ast.Program {
 	program := ast.NewProgram(p.currentToken.Position)
@@ -521,12 +600,20 @@ func parseForStatement(p *Parser) *ast.ForStatement {
 func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	pos := p.currentToken.Position
 
+	// 检查是否为引用返回函数 function &foo()
+	byReference := false
+	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		byReference = true
+		p.nextToken() // 移动到 &
+	}
+
 	if !p.expectPeek(lexer.T_STRING) {
 		return nil
 	}
 
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	funcDecl := ast.NewFunctionDeclaration(pos, name)
+	funcDecl.ByReference = byReference
 
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
@@ -557,28 +644,15 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 		return nil
 	}
 
-	// 检查是否有返回类型声明 ": type" 或 ": ?type"
+	// 检查是否有返回类型声明 ": type"
 	if p.peekToken.Type == lexer.TOKEN_COLON {
 		p.nextToken() // 移动到 ':'
+		p.nextToken() // 移动到类型开始位置
 
-		// 检查是否为可空类型
-		nullable := false
-		if p.peekToken.Type == lexer.TOKEN_QUESTION {
-			nullable = true
-			p.nextToken() // 移动到 '?'
-		}
-
-		// 接受各种类型token (T_STRING, T_ARRAY, T_CALLABLE等)
-		if !isTypeToken(p.peekToken.Type) {
-			p.errors = append(p.errors, fmt.Sprintf("expected type name, got `%s` instead at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
+		// 解析返回类型（支持复杂类型）
+		returnType := parseTypeHint(p)
+		if returnType == nil {
 			return nil
-		}
-		p.nextToken() // 移动到类型token
-
-		// 解析返回类型
-		returnType := p.currentToken.Value
-		if nullable {
-			returnType = "?" + returnType
 		}
 		funcDecl.ReturnType = returnType
 	}
@@ -592,33 +666,49 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	return funcDecl
 }
 
-// parseParameter 解析函数参数（支持类型提示、可空类型和默认值）
+// parseParameter 解析函数参数（支持类型提示、引用、可变参数、可见性修饰符等）
 func parseParameter(p *Parser) *ast.Parameter {
 	var param ast.Parameter
 	
-	// 检查是否有可空类型提示
-	nullable := false
-	if p.currentToken.Type == lexer.TOKEN_QUESTION {
-		nullable = true
+	// 检查可见性修饰符 (public, private, protected, readonly)
+	// 这些通常只在构造函数参数中使用
+	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
+		param.Visibility = p.currentToken.Value
+		p.nextToken()
+	}
+	
+	if p.currentToken.Type == lexer.T_READONLY {
+		param.ReadOnly = true
 		p.nextToken()
 	}
 	
 	// 检查是否有类型提示
-	if isTypeToken(p.currentToken.Type) {
-		typeName := p.currentToken.Value
-		if nullable {
-			typeName = "?" + typeName
-		}
-		param.Type = typeName
-		if !p.expectPeek(lexer.T_VARIABLE) {
+	if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION {
+		typeHint := parseTypeHint(p)
+		if typeHint == nil {
 			return nil
 		}
+		param.Type = typeHint
+		p.nextToken() // 移动到下一个token
+	}
+	
+	// 检查引用参数 &$param
+	if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+		param.ByReference = true
+		p.nextToken()
+	}
+	
+	// 检查可变参数 ...$params
+	if p.currentToken.Type == lexer.T_ELLIPSIS {
+		param.Variadic = true
+		p.nextToken()
 	}
 	
 	// 解析参数名
 	if p.currentToken.Type == lexer.T_VARIABLE {
 		param.Name = p.currentToken.Value
 	} else {
+		p.errors = append(p.errors, fmt.Sprintf("expected variable name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
 	

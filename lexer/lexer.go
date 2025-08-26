@@ -606,10 +606,11 @@ func (l *Lexer) nextTokenInScripting() Token {
 			l.readChar()
 			l.readChar()
 			return Token{Type: T_CONCAT_EQUAL, Value: ".=", Position: pos}
-		} else if l.peekChar() == '.' && l.peekCharN(3) == '.' {
-			l.readChar()
-			l.readChar()
-			l.readChar()
+		} else if l.peekChar() == '.' && l.peekCharN(1) == '.' {
+			// Ellipsis (...) - first dot already consumed by switch
+			l.readChar() // move to second dot  
+			l.readChar() // move to third dot
+			l.readChar() // move past third dot
 			return Token{Type: T_ELLIPSIS, Value: "...", Position: pos}
 		} else if isDigit(l.peekChar()) {
 			// 浮点数
