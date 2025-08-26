@@ -2542,6 +2542,228 @@ class TestClass {
 	}
 }
 
+// TestParsing_TryCatchWithStatements tests parsing try-catch blocks followed by statements
+func TestParsing_TryCatchWithStatements(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "try-catch with assignment after",
+			input: `<?php
+try {
+} catch (Exception $ex) {
+}
+$tested = $test->getName();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 2)
+
+				// Check try-catch statement
+				tryStmt, ok := program.Body[0].(*ast.TryStatement)
+				assert.True(t, ok, "First statement should be TryStatement")
+				assert.Len(t, tryStmt.Body, 0, "Try block should be empty")
+				assert.Len(t, tryStmt.CatchClauses, 1, "Should have one catch clause")
+
+				catch := tryStmt.CatchClauses[0]
+				assert.Len(t, catch.Types, 1, "Catch should have one exception type")
+				assert.Equal(t, "Exception", catch.Types[0].(*ast.IdentifierNode).Name)
+				assert.Equal(t, "$ex", catch.Parameter.(*ast.Variable).Name)
+				assert.Len(t, catch.Body, 0, "Catch block should be empty")
+
+				// Check assignment statement
+				exprStmt, ok := program.Body[1].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Second statement should be ExpressionStatement")
+
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expression should be AssignmentExpression")
+				assert.Equal(t, "=", assignment.Operator)
+
+				// Check left side ($tested)
+				leftVar, ok := assignment.Left.(*ast.Variable)
+				assert.True(t, ok, "Left side should be Variable")
+				assert.Equal(t, "$tested", leftVar.Name)
+
+				// Check right side ($test->getName())
+				callExpr, ok := assignment.Right.(*ast.CallExpression)
+				assert.True(t, ok, "Right side should be CallExpression")
+
+				propAccess, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
+				assert.True(t, ok, "Callee should be PropertyAccessExpression")
+
+				objVar, ok := propAccess.Object.(*ast.Variable)
+				assert.True(t, ok, "Object should be Variable")
+				assert.Equal(t, "$test", objVar.Name)
+
+				propName, ok := propAccess.Property.(*ast.IdentifierNode)
+				assert.True(t, ok, "Property should be IdentifierNode")
+				assert.Equal(t, "getName", propName.Name)
+			},
+		},
+		{
+			name: "try-catch with statements in blocks and after",
+			input: `<?php
+try {
+    $x = 1;
+} catch (Exception $e) {
+    echo "Error";
+}
+$result = $obj->process();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 2)
+
+				// Check try-catch statement
+				tryStmt, ok := program.Body[0].(*ast.TryStatement)
+				assert.True(t, ok, "First statement should be TryStatement")
+				assert.Len(t, tryStmt.Body, 1, "Try block should have one statement")
+				assert.Len(t, tryStmt.CatchClauses, 1, "Should have one catch clause")
+
+				// Check try block content
+				_, ok = tryStmt.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Try statement should be assignment")
+
+				// Check catch block content  
+				catch := tryStmt.CatchClauses[0]
+				assert.Len(t, catch.Body, 1, "Catch block should have one statement")
+				echoStmt, ok := catch.Body[0].(*ast.EchoStatement)
+				assert.True(t, ok, "Catch statement should be echo")
+				assert.Len(t, echoStmt.Arguments, 1)
+
+				// Check statement after try-catch
+				exprStmt, ok := program.Body[1].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Second statement should be ExpressionStatement")
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Should be assignment after try-catch")
+				assert.Equal(t, "$result", assignment.Left.(*ast.Variable).Name)
+			},
+		},
+		{
+			name: "try with multiple catch clauses and statements after",
+			input: `<?php
+try {
+    throw new Exception();
+} catch (InvalidArgumentException $e) {
+    return false;
+} catch (Exception $e) {
+    log($e);
+}
+$success = true;
+return $success;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 3)
+
+				// Check try-catch statement
+				tryStmt, ok := program.Body[0].(*ast.TryStatement)
+				assert.True(t, ok, "First statement should be TryStatement")
+				assert.Len(t, tryStmt.CatchClauses, 2, "Should have two catch clauses")
+
+				// Check first catch clause
+				catch1 := tryStmt.CatchClauses[0]
+				assert.Equal(t, "InvalidArgumentException", catch1.Types[0].(*ast.IdentifierNode).Name)
+				assert.Equal(t, "$e", catch1.Parameter.(*ast.Variable).Name)
+
+				// Check second catch clause
+				catch2 := tryStmt.CatchClauses[1]
+				assert.Equal(t, "Exception", catch2.Types[0].(*ast.IdentifierNode).Name)
+				assert.Equal(t, "$e", catch2.Parameter.(*ast.Variable).Name)
+
+				// Check statements after try-catch
+				exprStmt1, ok := program.Body[1].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Second statement should be assignment")
+				assignment := exprStmt1.Expression.(*ast.AssignmentExpression)
+				assert.Equal(t, "$success", assignment.Left.(*ast.Variable).Name)
+
+				returnStmt, ok := program.Body[2].(*ast.ReturnStatement)
+				assert.True(t, ok, "Third statement should be return")
+				returnVar, ok := returnStmt.Argument.(*ast.Variable)
+				assert.True(t, ok, "Return value should be variable")
+				assert.Equal(t, "$success", returnVar.Name)
+			},
+		},
+		{
+			name: "nested try-catch with statements",
+			input: `<?php
+try {
+    try {
+        $inner = doSomething();
+    } catch (InnerException $e) {
+        handle($e);
+    }
+} catch (OuterException $e) {
+    cleanup();
+}
+$final = complete();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 2)
+
+				// Check outer try-catch
+				outerTry, ok := program.Body[0].(*ast.TryStatement)
+				assert.True(t, ok, "First statement should be TryStatement")
+				assert.Len(t, outerTry.Body, 1, "Outer try should have one statement")
+				assert.Len(t, outerTry.CatchClauses, 1, "Outer try should have one catch")
+
+				// Check inner try-catch exists within outer try
+				innerTry, ok := outerTry.Body[0].(*ast.TryStatement)
+				assert.True(t, ok, "Inner statement should be TryStatement")
+				assert.Len(t, innerTry.CatchClauses, 1, "Inner try should have one catch")
+
+				// Check final statement after nested try-catch
+				finalStmt, ok := program.Body[1].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Final statement should be assignment")
+				assignment := finalStmt.Expression.(*ast.AssignmentExpression)
+				assert.Equal(t, "$final", assignment.Left.(*ast.Variable).Name)
+			},
+		},
+		{
+			name: "empty try-catch followed by multiple statements", 
+			input: `<?php
+try {
+} catch (Exception $ex) {
+}
+$a = 1;
+$b = 2;
+echo $a + $b;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 4)
+
+				// Check try-catch
+				_, ok := program.Body[0].(*ast.TryStatement)
+				assert.True(t, ok, "First statement should be TryStatement")
+
+				// Check all following statements parse correctly
+				for i := 1; i < 4; i++ {
+					stmt := program.Body[i]
+					assert.NotNil(t, stmt, "Statement %d should not be nil", i)
+					
+					if i < 3 {
+						// First two should be assignments
+						exprStmt, ok := stmt.(*ast.ExpressionStatement)
+						assert.True(t, ok, "Statement %d should be ExpressionStatement", i)
+						_, ok = exprStmt.Expression.(*ast.AssignmentExpression)
+						assert.True(t, ok, "Statement %d should be assignment", i)
+					} else {
+						// Last should be echo
+						_, ok := stmt.(*ast.EchoStatement)
+						assert.True(t, ok, "Statement %d should be EchoStatement", i)
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {

@@ -1490,9 +1490,24 @@ func parseTryStatement(p *Parser) ast.Statement {
 		}
 
 		tryStmt.CatchClauses = append(tryStmt.CatchClauses, catchClause)
-		p.nextToken()
+		
+		// Check what's next after the catch clause
+		// We're currently on the closing brace of the catch block
+		if p.peekToken.Type == lexer.T_CATCH {
+			p.nextToken() // Move past the closing brace  
+			// Now currentToken should be the next T_CATCH
+		} else {
+			// No more catch clauses, we'll exit the loop
+			// currentToken is on the closing brace of the last catch
+			break
+		}
 	}
 
+	// Check if there's a finally block (advance to check)
+	if p.currentToken.Type != lexer.T_FINALLY && p.peekToken.Type == lexer.T_FINALLY {
+		p.nextToken() // Advance to the finally token
+	}
+	
 	// 解析finally块
 	if p.currentToken.Type == lexer.T_FINALLY {
 		if !p.expectPeek(lexer.TOKEN_LBRACE) {
@@ -1508,6 +1523,7 @@ func parseTryStatement(p *Parser) ast.Statement {
 			}
 			p.nextToken()
 		}
+		// After finally block, we're on the closing brace
 	}
 
 	return tryStmt
