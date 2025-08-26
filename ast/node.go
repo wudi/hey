@@ -2305,3 +2305,315 @@ func (ee *EmptyExpression) String() string {
 	}
 	return "empty(" + ee.Expression.String() + ")"
 }
+
+// ============== 新增的AST节点类型 ==============
+
+// ExitExpression 表示 exit/die 表达式
+type ExitExpression struct {
+	BaseNode
+	Argument Expression `json:"argument,omitempty"`
+}
+
+func NewExitExpression(pos lexer.Position, argument Expression) *ExitExpression {
+	return &ExitExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTExit,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Argument: argument,
+	}
+}
+
+func (ee *ExitExpression) GetChildren() []Node {
+	if ee.Argument == nil {
+		return nil
+	}
+	return []Node{ee.Argument}
+}
+
+func (ee *ExitExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ee) {
+		if ee.Argument != nil {
+			ee.Argument.Accept(visitor)
+		}
+	}
+}
+
+func (ee *ExitExpression) expressionNode() {}
+
+func (ee *ExitExpression) String() string {
+	if ee.Argument == nil {
+		return "exit"
+	}
+	return "exit(" + ee.Argument.String() + ")"
+}
+
+// IssetExpression 表示 isset() 表达式
+type IssetExpression struct {
+	BaseNode
+	Arguments []Expression `json:"arguments"`
+}
+
+func NewIssetExpression(pos lexer.Position, arguments []Expression) *IssetExpression {
+	return &IssetExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTIsset,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Arguments: arguments,
+	}
+}
+
+func (ie *IssetExpression) GetChildren() []Node {
+	children := make([]Node, len(ie.Arguments))
+	for i, arg := range ie.Arguments {
+		children[i] = arg
+	}
+	return children
+}
+
+func (ie *IssetExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ie) {
+		for _, arg := range ie.Arguments {
+			if arg != nil {
+				arg.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (ie *IssetExpression) expressionNode() {}
+
+func (ie *IssetExpression) String() string {
+	args := make([]string, len(ie.Arguments))
+	for i, arg := range ie.Arguments {
+		if arg != nil {
+			args[i] = arg.String()
+		}
+	}
+	return "isset(" + strings.Join(args, ", ") + ")"
+}
+
+// ListExpression 表示 list() 表达式
+type ListExpression struct {
+	BaseNode
+	Elements []Expression `json:"elements"`
+}
+
+func NewListExpression(pos lexer.Position, elements []Expression) *ListExpression {
+	return &ListExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Elements: elements,
+	}
+}
+
+func (le *ListExpression) GetChildren() []Node {
+	children := make([]Node, 0, len(le.Elements))
+	for _, elem := range le.Elements {
+		if elem != nil {
+			children = append(children, elem)
+		}
+	}
+	return children
+}
+
+func (le *ListExpression) Accept(visitor Visitor) {
+	if visitor.Visit(le) {
+		for _, elem := range le.Elements {
+			if elem != nil {
+				elem.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (le *ListExpression) expressionNode() {}
+
+func (le *ListExpression) String() string {
+	args := make([]string, len(le.Elements))
+	for i, elem := range le.Elements {
+		if elem != nil {
+			args[i] = elem.String()
+		} else {
+			args[i] = ""
+		}
+	}
+	return "list(" + strings.Join(args, ", ") + ")"
+}
+
+// AnonymousFunctionExpression 表示匿名函数表达式
+type AnonymousFunctionExpression struct {
+	BaseNode
+	Parameters []Parameter  `json:"parameters"`
+	Body       []Statement  `json:"body"`
+	UseClause  []Expression `json:"useClause,omitempty"`
+}
+
+func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression) *AnonymousFunctionExpression {
+	return &AnonymousFunctionExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTAnonymousFunction,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Parameters: parameters,
+		Body:       body,
+		UseClause:  useClause,
+	}
+}
+
+func (afe *AnonymousFunctionExpression) GetChildren() []Node {
+	children := make([]Node, 0, len(afe.Body)+len(afe.UseClause))
+	
+	for _, stmt := range afe.Body {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	
+	for _, use := range afe.UseClause {
+		if use != nil {
+			children = append(children, use)
+		}
+	}
+	
+	return children
+}
+
+func (afe *AnonymousFunctionExpression) Accept(visitor Visitor) {
+	if visitor.Visit(afe) {
+		for _, stmt := range afe.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+		for _, use := range afe.UseClause {
+			if use != nil {
+				use.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (afe *AnonymousFunctionExpression) expressionNode() {}
+
+func (afe *AnonymousFunctionExpression) String() string {
+	return "function"
+}
+
+// TernaryExpression 表示三元运算符表达式
+type TernaryExpression struct {
+	BaseNode
+	Test       Expression `json:"test"`
+	Consequent Expression `json:"consequent,omitempty"` // 短三元运算符时为 nil
+	Alternate  Expression `json:"alternate"`
+}
+
+func NewTernaryExpression(pos lexer.Position, test, consequent, alternate Expression) *TernaryExpression {
+	return &TernaryExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTConditional,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Test:       test,
+		Consequent: consequent,
+		Alternate:  alternate,
+	}
+}
+
+func (te *TernaryExpression) GetChildren() []Node {
+	children := make([]Node, 0, 3)
+	
+	if te.Test != nil {
+		children = append(children, te.Test)
+	}
+	if te.Consequent != nil {
+		children = append(children, te.Consequent)
+	}
+	if te.Alternate != nil {
+		children = append(children, te.Alternate)
+	}
+	
+	return children
+}
+
+func (te *TernaryExpression) Accept(visitor Visitor) {
+	if visitor.Visit(te) {
+		if te.Test != nil {
+			te.Test.Accept(visitor)
+		}
+		if te.Consequent != nil {
+			te.Consequent.Accept(visitor)
+		}
+		if te.Alternate != nil {
+			te.Alternate.Accept(visitor)
+		}
+	}
+}
+
+func (te *TernaryExpression) expressionNode() {}
+
+func (te *TernaryExpression) String() string {
+	if te.Consequent == nil {
+		// 短三元运算符 ?:
+		return te.Test.String() + " ?: " + te.Alternate.String()
+	}
+	return te.Test.String() + " ? " + te.Consequent.String() + " : " + te.Alternate.String()
+}
+
+// ArrayElementExpression 表示数组元素表达式 (key => value)
+type ArrayElementExpression struct {
+	BaseNode
+	Key   Expression `json:"key"`
+	Value Expression `json:"value"`
+}
+
+func NewArrayElementExpression(pos lexer.Position, key, value Expression) *ArrayElementExpression {
+	return &ArrayElementExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTArrayElem,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Key:   key,
+		Value: value,
+	}
+}
+
+func (aee *ArrayElementExpression) GetChildren() []Node {
+	children := make([]Node, 0, 2)
+	if aee.Key != nil {
+		children = append(children, aee.Key)
+	}
+	if aee.Value != nil {
+		children = append(children, aee.Value)
+	}
+	return children
+}
+
+func (aee *ArrayElementExpression) Accept(visitor Visitor) {
+	if visitor.Visit(aee) {
+		if aee.Key != nil {
+			aee.Key.Accept(visitor)
+		}
+		if aee.Value != nil {
+			aee.Value.Accept(visitor)
+		}
+	}
+}
+
+func (aee *ArrayElementExpression) expressionNode() {}
+
+func (aee *ArrayElementExpression) String() string {
+	if aee.Key == nil {
+		return aee.Value.String()
+	}
+	return aee.Key.String() + " => " + aee.Value.String()
+}

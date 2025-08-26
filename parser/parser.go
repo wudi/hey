@@ -14,6 +14,7 @@ type Precedence int
 const (
 	_ Precedence = iota
 	LOWEST
+	TERNARY     // ? :
 	LOGICAL_OR  // ||
 	LOGICAL_AND // &&
 	COALESCE    // ??
@@ -30,6 +31,8 @@ const (
 
 // 操作符优先级映射
 var precedences = map[lexer.TokenType]Precedence{
+	lexer.TOKEN_QUESTION:        TERNARY,
+	lexer.T_DOUBLE_ARROW:        TERNARY,
 	lexer.T_BOOLEAN_OR:          LOGICAL_OR,
 	lexer.T_BOOLEAN_AND:         LOGICAL_AND,
 	lexer.T_COALESCE:            COALESCE,
@@ -120,6 +123,28 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.T_EMPTY, p.parseEmptyExpression)
 	p.registerPrefix(lexer.TOKEN_LBRACKET, p.parseArrayLiteral)
 	
+	// Missing tokens - PHP built-in functions and constructs
+	p.registerPrefix(lexer.T_EXIT, p.parseExitExpression)
+	p.registerPrefix(lexer.T_ISSET, p.parseIssetExpression)
+	p.registerPrefix(lexer.T_LIST, p.parseListExpression)
+	p.registerPrefix(lexer.T_FUNCTION, p.parseAnonymousFunctionExpression)
+	p.registerPrefix(lexer.T_USE, p.parseUseExpression)
+	
+	// String interpolation and nowdoc
+	p.registerPrefix(lexer.T_NOWDOC, p.parseNowdocExpression)
+	p.registerPrefix(lexer.T_CURLY_OPEN, p.parseCurlyOpenExpression)
+	
+	// Control flow tokens that might appear as expressions in some contexts
+	p.registerPrefix(lexer.T_ELSEIF, p.parseFallback)
+	p.registerPrefix(lexer.T_ELSE, p.parseFallback)
+	
+	// Ternary operator components
+	p.registerPrefix(lexer.TOKEN_QUESTION, p.parseFallback) // ? should be infix
+	p.registerPrefix(lexer.TOKEN_COLON, p.parseFallback)    // : should be infix
+	
+	// Double arrow (for arrays) - should be infix but register to avoid errors
+	p.registerPrefix(lexer.T_DOUBLE_ARROW, p.parseFallback)
+	
 	// Fallback handlers for punctuation
 	p.registerPrefix(lexer.TOKEN_SEMICOLON, p.parseFallback)
 	p.registerPrefix(lexer.TOKEN_RPAREN, p.parseFallback)
@@ -160,6 +185,10 @@ func New(l *lexer.Lexer) *Parser {
 	
 	// Array access
 	p.registerInfix(lexer.TOKEN_LBRACKET, p.parseArrayAccess)
+	
+	// Ternary operator and double arrow
+	p.registerInfix(lexer.TOKEN_QUESTION, p.parseTernaryExpression)
+	p.registerInfix(lexer.T_DOUBLE_ARROW, p.parseDoubleArrowExpression)
 
 	// 读取两个 token，初始化 currentToken 和 peekToken
 	p.nextToken()
@@ -1454,4 +1483,248 @@ func (p *Parser) parseFallback() ast.Expression {
 	
 	// 创建一个简单的标识符作为占位符
 	return ast.NewIdentifierNode(pos, value)
+}
+
+// ============== 新增的解析函数实现 ==============
+
+// parseExitExpression 解析 exit/die 表达式
+func (p *Parser) parseExitExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	var argument ast.Expression
+	
+	// exit 可能带有括号和参数，也可能不带
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		p.nextToken() // 移动到 (
+		if p.peekToken.Type != lexer.TOKEN_RPAREN {
+			p.nextToken() // 进入括号
+			argument = p.parseExpression(LOWEST)
+		}
+		if p.peekToken.Type == lexer.TOKEN_RPAREN {
+			p.nextToken() // 跳过 )
+		}
+	} else if p.peekToken.Type != lexer.TOKEN_SEMICOLON && 
+		p.peekToken.Type != lexer.T_EOF {
+		// exit 后直接跟表达式，不带括号
+		p.nextToken()
+		argument = p.parseExpression(LOWEST)
+	}
+	
+	return ast.NewExitExpression(pos, argument)
+}
+
+// parseIssetExpression 解析 isset() 表达式
+func (p *Parser) parseIssetExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	if !p.expectToken(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	var arguments []ast.Expression
+	
+	// 解析参数列表
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+		arguments = append(arguments, p.parseExpression(LOWEST))
+		
+		// 处理多个参数
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 跳过逗号
+			p.nextToken() // 移动到下一个参数
+			arguments = append(arguments, p.parseExpression(LOWEST))
+		}
+	}
+	
+	if !p.expectToken(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	return ast.NewIssetExpression(pos, arguments)
+}
+
+// parseListExpression 解析 list() 表达式
+func (p *Parser) parseListExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	if !p.expectToken(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	var elements []ast.Expression
+	
+	// 解析 list 元素
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+		
+		for {
+			if p.currentToken.Type == lexer.TOKEN_COMMA {
+				// 空元素（如 list(, $b) ）
+				elements = append(elements, nil)
+			} else {
+				elements = append(elements, p.parseExpression(LOWEST))
+			}
+			
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+			
+			if p.peekToken.Type != lexer.TOKEN_COMMA {
+				break
+			}
+			
+			p.nextToken() // 跳过逗号
+			p.nextToken() // 移动到下一个元素
+		}
+	}
+	
+	if !p.expectToken(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	return ast.NewListExpression(pos, elements)
+}
+
+// parseAnonymousFunctionExpression 解析匿名函数表达式
+func (p *Parser) parseAnonymousFunctionExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 解析参数列表
+	if !p.expectToken(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	var parameters []ast.Parameter
+	
+	// 解析参数
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+		
+		for {
+			if p.currentToken.Type == lexer.T_VARIABLE {
+				param := ast.Parameter{Name: p.currentToken.Value}
+				parameters = append(parameters, param)
+			}
+			
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+			
+			if p.peekToken.Type != lexer.TOKEN_COMMA {
+				break
+			}
+			
+			p.nextToken() // 跳过逗号
+			p.nextToken() // 移动到下一个参数
+		}
+	}
+	
+	if !p.expectToken(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	// 检查 use 子句
+	var useClause []ast.Expression
+	if p.peekToken.Type == lexer.T_USE {
+		p.nextToken() // 跳过 use
+		if !p.expectToken(lexer.TOKEN_LPAREN) {
+			return nil
+		}
+		
+		if p.peekToken.Type != lexer.TOKEN_RPAREN {
+			p.nextToken()
+			
+			for {
+				if p.currentToken.Type == lexer.T_VARIABLE {
+					useClause = append(useClause, p.parseVariable())
+				}
+				
+				if p.peekToken.Type == lexer.TOKEN_RPAREN {
+					break
+				}
+				
+				if p.peekToken.Type != lexer.TOKEN_COMMA {
+					break
+				}
+				
+				p.nextToken() // 跳过逗号
+				p.nextToken() // 移动到下一个变量
+			}
+		}
+		
+		if !p.expectToken(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+	}
+	
+	// 解析函数体
+	if !p.expectToken(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+	
+	body := p.parseBlockStatements()
+	
+	return ast.NewAnonymousFunctionExpression(pos, parameters, body, useClause)
+}
+
+// parseUseExpression 解析 use 表达式（在表达式上下文中）
+func (p *Parser) parseUseExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 这里简单处理为标识符，实际的 use 语句应该在语句级别处理
+	return ast.NewIdentifierNode(pos, "use")
+}
+
+// parseNowdocExpression 解析 nowdoc 表达式
+func (p *Parser) parseNowdocExpression() ast.Expression {
+	pos := p.currentToken.Position
+	content := p.currentToken.Value
+	
+	// Nowdoc 是单一token，直接返回字符串字面量
+	return ast.NewStringLiteral(pos, content, content)
+}
+
+// parseCurlyOpenExpression 解析字符串插值开始标记
+func (p *Parser) parseCurlyOpenExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 这通常在字符串插值中出现，这里简单处理
+	return ast.NewStringLiteral(pos, p.currentToken.Value, p.currentToken.Value)
+}
+
+// parseTernaryExpression 解析三元运算符表达式
+func (p *Parser) parseTernaryExpression(condition ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	
+	var consequent ast.Expression
+	
+	// 检查是否是短三元运算符 ?: 
+	if p.currentToken.Type == lexer.TOKEN_COLON {
+		// 短三元运算符，consequent 为 nil
+		consequent = nil
+	} else {
+		consequent = p.parseExpression(LOWEST)
+		
+		// 期望冒号
+		if !p.expectToken(lexer.TOKEN_COLON) {
+			return nil
+		}
+	}
+	
+	p.nextToken()
+	alternate := p.parseExpression(TERNARY)
+	
+	return ast.NewTernaryExpression(pos, condition, consequent, alternate)
+}
+
+// parseDoubleArrowExpression 解析 => 表达式（数组元素）
+func (p *Parser) parseDoubleArrowExpression(key ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	value := p.parseExpression(TERNARY)
+	
+	return ast.NewArrayElementExpression(pos, key, value)
 }

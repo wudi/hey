@@ -82,6 +82,9 @@ const (
 	ASTContinue              ASTKind = 286
 	ASTPropertyHookShortBody ASTKind = 287
 	ASTClone                 ASTKind = 288
+	ASTExit                  ASTKind = 289
+	ASTList                  ASTKind = 290
+	ASTAnonymousFunction     ASTKind = 291
 
 	// 2子节点 - 2 child nodes (bits 8-15 = 2)
 	ASTDim                       ASTKind = 512 // 2 << 8
@@ -297,6 +300,12 @@ func (k ASTKind) String() string {
 		return "PROPERTY_HOOK_SHORT_BODY"
 	case ASTClone:
 		return "CLONE"
+	case ASTExit:
+		return "EXIT"
+	case ASTList:
+		return "LIST"
+	case ASTAnonymousFunction:
+		return "ANONYMOUS_FUNCTION"
 
 	// 2子节点
 	case ASTDim:
