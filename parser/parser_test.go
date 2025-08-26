@@ -642,23 +642,29 @@ func TestParsing_OperatorPrecedence(t *testing.T) {
 
 func TestParsing_HeredocStrings(t *testing.T) {
 	tests := []struct {
-		name     string
-		input    string
-		expected string
+		name             string
+		input            string
+		expectedContent  string
+		expectInterpolation bool
+		expectedParts    int
 	}{
 		{
-			name:     "Simple Heredoc",
-			input:    `<?php $str = <<<EOD
+			name:             "Simple Heredoc",
+			input:            `<?php $str = <<<EOD
 Hello World
 EOD; ?>`,
-			expected: "<<<EOD\nHello World\nEOD",
+			expectedContent:  "Hello World\n",
+			expectInterpolation: false,
+			expectedParts:    1,
 		},
 		{
-			name:     "Heredoc with variable",
-			input:    `<?php $str = <<<EOD
+			name:             "Heredoc with variable",
+			input:            `<?php $str = <<<EOD
 Hello $name
 EOD; ?>`,
-			expected: "<<<EOD\nHello $name\nEOD",
+			expectedContent:  "Hello ", // First part content
+			expectInterpolation: true,
+			expectedParts:    3, // "Hello " + $name + "\n"
 		},
 	}
 
@@ -679,9 +685,120 @@ EOD; ?>`,
 			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 			assert.True(t, ok, "Expression should be AssignmentExpression")
 
-			stringLit, ok := assignment.Right.(*ast.StringLiteral)
-			assert.True(t, ok, "Right side should be StringLiteral")
-			assert.Equal(t, tt.expected, stringLit.Raw)
+			if tt.expectInterpolation {
+				// Should be InterpolatedStringExpression for variable interpolation
+				interpolatedStr, ok := assignment.Right.(*ast.InterpolatedStringExpression)
+				assert.True(t, ok, "Right side should be InterpolatedStringExpression for heredoc with variables")
+				assert.Len(t, interpolatedStr.Parts, tt.expectedParts)
+				
+				// Check first part is string literal with expected content
+				if len(interpolatedStr.Parts) > 0 {
+					firstPart, ok := interpolatedStr.Parts[0].(*ast.StringLiteral)
+					assert.True(t, ok, "First part should be StringLiteral")
+					assert.Equal(t, tt.expectedContent, firstPart.Value)
+				}
+			} else {
+				// Should be StringLiteral for simple heredoc
+				stringLit, ok := assignment.Right.(*ast.StringLiteral)
+				assert.True(t, ok, "Right side should be StringLiteral for simple heredoc")
+				assert.Equal(t, tt.expectedContent, stringLit.Value)
+			}
+		})
+	}
+}
+
+func TestParsing_HeredocWithComplexInterpolation(t *testing.T) {
+	tests := []struct {
+		name             string
+		input            string
+		expectedParts    int
+		expectedVarNames []string
+	}{
+		{
+			name: "Heredoc with curly brace interpolation",
+			input: `<?php $sh_script = <<<SH
+#!/bin/sh
+{$exported_environment}
+case "$1" in
+"gdb")
+    gdb --args {$orig_cmd}
+    ;;
+*)
+    {$orig_cmd}
+    ;;
+esac
+SH; ?>`,
+			expectedParts:    7, // Text, var, text, var, text, var, text
+			expectedVarNames: []string{"$exported_environment", "$orig_cmd", "$orig_cmd"},
+		},
+		{
+			name: "Heredoc with mixed interpolation styles",
+			input: `<?php $template = <<<HTML
+<div class="user">
+    <h1>Hello $username</h1>
+    <p>Your ID is: {$user_id}</p>
+    <p>Email: {$email}</p>
+</div>
+HTML; ?>`,
+			expectedParts:    7, // text, var, text, var, text, var, text
+			expectedVarNames: []string{"$username", "$user_id", "$email"},
+		},
+		{
+			name: "Heredoc with only curly brace interpolation",
+			input: `<?php $cmd = <<<CMD
+{$binary} --option {$value}
+CMD; ?>`,
+			expectedParts:    4, // var, text, var, newline
+			expectedVarNames: []string{"$binary", "$value"},
+		},
+		{
+			name: "Heredoc with no interpolation",
+			input: `<?php $static = <<<TEXT
+This is plain text with no variables
+TEXT; ?>`,
+			expectedParts:    1,
+			expectedVarNames: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			if len(tt.expectedVarNames) > 0 {
+				// Should be InterpolatedStringExpression for heredoc with variables
+				interpolatedStr, ok := assignment.Right.(*ast.InterpolatedStringExpression)
+				assert.True(t, ok, "Right side should be InterpolatedStringExpression for heredoc with variables")
+				assert.Len(t, interpolatedStr.Parts, tt.expectedParts)
+
+				// Count and verify variables
+				varCount := 0
+				for _, part := range interpolatedStr.Parts {
+					if variable, ok := part.(*ast.Variable); ok {
+						assert.Contains(t, tt.expectedVarNames, variable.Name, "Variable name should be in expected list")
+						varCount++
+					}
+				}
+				assert.Equal(t, len(tt.expectedVarNames), varCount, "Should find all expected variables")
+			} else {
+				// Should be StringLiteral for heredoc without variables
+				stringLit, ok := assignment.Right.(*ast.StringLiteral)
+				assert.True(t, ok, "Right side should be StringLiteral for heredoc without variables")
+				assert.NotEmpty(t, stringLit.Value)
+			}
 		})
 	}
 }

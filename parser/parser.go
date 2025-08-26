@@ -924,33 +924,67 @@ func parseComment(p *Parser) ast.Expression {
 	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 }
 
-// parseHeredoc 解析Heredoc
+// parseHeredoc 解析Heredoc（支持变量插值）
 func parseHeredoc(p *Parser) ast.Expression {
 	startPos := p.currentToken.Position
-	startValue := p.currentToken.Value
+	var parts []ast.Expression
 
-	// 构建完整的heredoc内容
-	var content strings.Builder
-	content.WriteString(startValue)
-
-	// 期望下一个token是T_ENCAPSED_AND_WHITESPACE或T_END_HEREDOC
+	// 跳过 T_START_HEREDOC
 	p.nextToken()
 
-	// 收集heredoc内容（包括变量）
-	for p.currentToken.Type == lexer.T_ENCAPSED_AND_WHITESPACE || p.currentToken.Type == lexer.T_VARIABLE {
-		content.WriteString(p.currentToken.Value)
+	// 解析heredoc内容，直到遇到T_END_HEREDOC
+	for p.currentToken.Type != lexer.T_END_HEREDOC && !p.isAtEnd() {
+		switch p.currentToken.Type {
+		case lexer.T_ENCAPSED_AND_WHITESPACE:
+			// 字符串片段
+			if p.currentToken.Value != "" {
+				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				parts = append(parts, stringPart)
+			}
+		case lexer.T_VARIABLE:
+			// 直接变量插值 $var
+			variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
+			parts = append(parts, variable)
+		case lexer.T_CURLY_OPEN:
+			// 复杂变量插值 {$var}
+			p.nextToken() // 跳过 T_CURLY_OPEN
+			if p.currentToken.Type == lexer.T_VARIABLE {
+				variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
+				parts = append(parts, variable)
+				p.nextToken() // 移动到 }
+				if p.currentToken.Type != lexer.TOKEN_RBRACE {
+					p.errors = append(p.errors, "expected '}' after variable in heredoc interpolation")
+					return nil
+				}
+			} else {
+				p.errors = append(p.errors, "expected variable after '{' in heredoc interpolation")
+				return nil
+			}
+		default:
+			// 其他内容，当作字符串处理
+			if p.currentToken.Value != "" {
+				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				parts = append(parts, stringPart)
+			}
+		}
 		p.nextToken()
 	}
 
-	// 期望T_END_HEREDOC
-	if p.currentToken.Type == lexer.T_END_HEREDOC {
-		content.WriteString(p.currentToken.Value)
-	} else {
+	// 检查是否正确结束
+	if p.currentToken.Type != lexer.T_END_HEREDOC {
 		p.errors = append(p.errors, "expected T_END_HEREDOC in heredoc")
+		return nil
 	}
 
-	// 返回完整的heredoc作为字符串字面量
-	return ast.NewStringLiteral(startPos, content.String(), content.String())
+	// 如果只有一个部分且是简单字符串，返回字符串字面量
+	if len(parts) == 1 {
+		if stringLit, ok := parts[0].(*ast.StringLiteral); ok {
+			return stringLit
+		}
+	}
+
+	// 返回字符串插值表达式
+	return ast.NewInterpolatedStringExpression(startPos, parts)
 }
 
 // parseEndHeredoc 解析Heredoc结束标记
