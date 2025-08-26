@@ -14,6 +14,9 @@ type Precedence int
 const (
 	_ Precedence = iota
 	LOWEST
+	LOGICAL_OR  // ||
+	LOGICAL_AND // &&
+	COALESCE    // ??
 	ASSIGN      // =
 	EQUALS      // ==
 	LESSGREATER // > or <
@@ -27,6 +30,9 @@ const (
 
 // 操作符优先级映射
 var precedences = map[lexer.TokenType]Precedence{
+	lexer.T_BOOLEAN_OR:          LOGICAL_OR,
+	lexer.T_BOOLEAN_AND:         LOGICAL_AND,
+	lexer.T_COALESCE:            COALESCE,
 	lexer.TOKEN_EQUAL:           ASSIGN,
 	lexer.T_PLUS_EQUAL:          ASSIGN,
 	lexer.T_MINUS_EQUAL:         ASSIGN,
@@ -46,13 +52,13 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.TOKEN_MINUS:           SUM,
 	lexer.TOKEN_DOT:             SUM,
 	lexer.T_OBJECT_OPERATOR:     CALL,
+	lexer.TOKEN_LBRACKET:        INDEX,
 	lexer.TOKEN_DIVIDE:          PRODUCT,
 	lexer.TOKEN_MULTIPLY:        PRODUCT,
 	lexer.TOKEN_MODULO:          PRODUCT,
 	lexer.T_INC:                 POSTFIX,
 	lexer.T_DEC:                 POSTFIX,
 	lexer.TOKEN_LPAREN:          CALL,
-	lexer.TOKEN_LBRACKET:        INDEX,
 }
 
 // 前缀解析函数类型
@@ -108,6 +114,16 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.TOKEN_COMMA, p.parseComma)
 	p.registerPrefix(lexer.T_NEW, p.parseNewExpression)
 	p.registerPrefix(lexer.T_CLONE, p.parseCloneExpression)
+	
+	// Error suppression and special operators
+	p.registerPrefix(lexer.TOKEN_AT, p.parseErrorSuppression)
+	p.registerPrefix(lexer.T_EMPTY, p.parseEmptyExpression)
+	p.registerPrefix(lexer.TOKEN_LBRACKET, p.parseArrayLiteral)
+	
+	// Fallback handlers for punctuation
+	p.registerPrefix(lexer.TOKEN_SEMICOLON, p.parseFallback)
+	p.registerPrefix(lexer.TOKEN_RPAREN, p.parseFallback)
+	p.registerPrefix(lexer.TOKEN_RBRACKET, p.parseFallback)
 
 	// 注册中缀解析函数
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
@@ -136,6 +152,14 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerInfix(lexer.T_INC, p.parsePostfixExpression)
 	p.registerInfix(lexer.T_DEC, p.parsePostfixExpression)
 	p.registerInfix(lexer.TOKEN_LPAREN, p.parseCallExpression)
+	
+	// Coalesce and boolean operators
+	p.registerInfix(lexer.T_COALESCE, p.parseCoalesceExpression)
+	p.registerInfix(lexer.T_BOOLEAN_AND, p.parseBooleanExpression)
+	p.registerInfix(lexer.T_BOOLEAN_OR, p.parseBooleanExpression)
+	
+	// Array access
+	p.registerInfix(lexer.TOKEN_LBRACKET, p.parseArrayAccess)
 
 	// 读取两个 token，初始化 currentToken 和 peekToken
 	p.nextToken()
@@ -187,6 +211,24 @@ func (p *Parser) ParseProgram() *ast.Program {
 // isAtEnd 检查是否到达文件结尾
 func (p *Parser) isAtEnd() bool {
 	return p.currentToken.Type == lexer.T_EOF
+}
+
+// getCurrentPrecedence 获取当前token的优先级
+func (p *Parser) getCurrentPrecedence() Precedence {
+	if precedence, ok := precedences[p.currentToken.Type]; ok {
+		return precedence
+	}
+	return LOWEST
+}
+
+// expectToken 检查下一个token是否为期望类型，如果是则前进
+func (p *Parser) expectToken(tokenType lexer.TokenType) bool {
+	if p.peekToken.Type == tokenType {
+		p.nextToken()
+		return true
+	}
+	p.errors = append(p.errors, fmt.Sprintf("expected %d, got %d", tokenType, p.peekToken.Type))
+	return false
 }
 
 // parseStatement 解析语句
@@ -1294,4 +1336,122 @@ func (p *Parser) parsePropertyAccess(left ast.Expression) ast.Expression {
 	property := p.parseExpression(CALL)
 	
 	return ast.NewPropertyAccessExpression(pos, left, property)
+}
+
+// parseErrorSuppression 解析错误抑制操作符 @
+func (p *Parser) parseErrorSuppression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	expr := p.parseExpression(PREFIX)
+	
+	return ast.NewErrorSuppressionExpression(pos, expr)
+}
+
+// parseCoalesceExpression 解析 null 合并操作符 ??
+func (p *Parser) parseCoalesceExpression(left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	
+	precedence := p.getCurrentPrecedence()
+	p.nextToken()
+	right := p.parseExpression(precedence)
+	
+	return ast.NewCoalesceExpression(pos, left, right)
+}
+
+// parseBooleanExpression 解析布尔逻辑操作符 && ||
+func (p *Parser) parseBooleanExpression(left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	operator := p.currentToken.Value
+	
+	precedence := p.getCurrentPrecedence()
+	p.nextToken()
+	right := p.parseExpression(precedence)
+	
+	return ast.NewBinaryExpression(pos, left, operator, right)
+}
+
+// parseArrayAccess 解析数组访问表达式 []
+func (p *Parser) parseArrayAccess(left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	
+	var index *ast.Expression
+	if p.currentToken.Type != lexer.TOKEN_RBRACKET {
+		expr := p.parseExpression(LOWEST)
+		index = &expr
+	}
+	
+	if !p.expectToken(lexer.TOKEN_RBRACKET) {
+		return nil
+	}
+	
+	return ast.NewArrayAccessExpression(pos, left, index)
+}
+
+// parseEmptyExpression 解析 empty() 函数
+func (p *Parser) parseEmptyExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	if !p.expectToken(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	p.nextToken()
+	expr := p.parseExpression(LOWEST)
+	
+	if !p.expectToken(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	return ast.NewEmptyExpression(pos, expr)
+}
+
+// parseArrayLiteral 解析数组字面量 []
+func (p *Parser) parseArrayLiteral() ast.Expression {
+	pos := p.currentToken.Position
+	
+	array := ast.NewArrayExpression(pos)
+	
+	// 空数组 []
+	if p.peekToken.Type == lexer.TOKEN_RBRACKET {
+		p.nextToken()
+		return array
+	}
+	
+	p.nextToken()
+	
+	for p.currentToken.Type != lexer.TOKEN_RBRACKET && p.currentToken.Type != lexer.T_EOF {
+		element := p.parseExpression(LOWEST)
+		if element != nil {
+			array.Elements = append(array.Elements, element)
+		}
+		
+		if p.peekToken.Type == lexer.TOKEN_RBRACKET {
+			break
+		}
+		
+		if !p.expectToken(lexer.TOKEN_COMMA) {
+			return nil
+		}
+		p.nextToken()
+	}
+	
+	if !p.expectToken(lexer.TOKEN_RBRACKET) {
+		return nil
+	}
+	
+	return array
+}
+
+// parseFallback 解析回退处理（用于标点符号）
+func (p *Parser) parseFallback() ast.Expression {
+	// 对于标点符号，通常意味着表达式结束
+	// 返回 nil 让上级处理
+	pos := p.currentToken.Position
+	value := p.currentToken.Value
+	
+	// 创建一个简单的标识符作为占位符
+	return ast.NewIdentifierNode(pos, value)
 }

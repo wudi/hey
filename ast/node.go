@@ -2106,3 +2106,202 @@ func (dbc *DocBlockComment) expressionNode() {}
 func (dbc *DocBlockComment) String() string {
 	return dbc.Raw
 }
+
+// ErrorSuppressionExpression 表示错误抑制操作符 @
+type ErrorSuppressionExpression struct {
+	BaseNode
+	Expression Expression `json:"expression"`
+}
+
+func NewErrorSuppressionExpression(pos lexer.Position, expr Expression) *ErrorSuppressionExpression {
+	return &ErrorSuppressionExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTSilence,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Expression: expr,
+	}
+}
+
+// GetChildren 返回子节点
+func (ese *ErrorSuppressionExpression) GetChildren() []Node {
+	if ese.Expression == nil {
+		return nil
+	}
+	return []Node{ese.Expression}
+}
+
+// Accept 接受访问者
+func (ese *ErrorSuppressionExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ese) {
+		if ese.Expression != nil {
+			ese.Expression.Accept(visitor)
+		}
+	}
+}
+
+func (ese *ErrorSuppressionExpression) expressionNode() {}
+
+func (ese *ErrorSuppressionExpression) String() string {
+	if ese.Expression == nil {
+		return "@"
+	}
+	return "@" + ese.Expression.String()
+}
+
+// CoalesceExpression 表示 null 合并操作符 ??
+type CoalesceExpression struct {
+	BaseNode
+	Left  Expression `json:"left"`
+	Right Expression `json:"right"`
+}
+
+func NewCoalesceExpression(pos lexer.Position, left Expression, right Expression) *CoalesceExpression {
+	return &CoalesceExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTCoalesce,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Left:  left,
+		Right: right,
+	}
+}
+
+// GetChildren 返回子节点
+func (ce *CoalesceExpression) GetChildren() []Node {
+	var children []Node
+	if ce.Left != nil {
+		children = append(children, ce.Left)
+	}
+	if ce.Right != nil {
+		children = append(children, ce.Right)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (ce *CoalesceExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ce) {
+		if ce.Left != nil {
+			ce.Left.Accept(visitor)
+		}
+		if ce.Right != nil {
+			ce.Right.Accept(visitor)
+		}
+	}
+}
+
+func (ce *CoalesceExpression) expressionNode() {}
+
+func (ce *CoalesceExpression) String() string {
+	left := ""
+	if ce.Left != nil {
+		left = ce.Left.String()
+	}
+	right := ""
+	if ce.Right != nil {
+		right = ce.Right.String()
+	}
+	return left + " ?? " + right
+}
+
+// ArrayAccessExpression 表示数组访问表达式 []
+type ArrayAccessExpression struct {
+	BaseNode
+	Array Expression  `json:"array"`
+	Index *Expression `json:"index,omitempty"` // nil for empty []
+}
+
+func NewArrayAccessExpression(pos lexer.Position, array Expression, index *Expression) *ArrayAccessExpression {
+	return &ArrayAccessExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTDim,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Array: array,
+		Index: index,
+	}
+}
+
+// GetChildren 返回子节点
+func (aae *ArrayAccessExpression) GetChildren() []Node {
+	var children []Node
+	if aae.Array != nil {
+		children = append(children, aae.Array)
+	}
+	if aae.Index != nil && *aae.Index != nil {
+		children = append(children, *aae.Index)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (aae *ArrayAccessExpression) Accept(visitor Visitor) {
+	if visitor.Visit(aae) {
+		if aae.Array != nil {
+			aae.Array.Accept(visitor)
+		}
+		if aae.Index != nil && *aae.Index != nil {
+			(*aae.Index).Accept(visitor)
+		}
+	}
+}
+
+func (aae *ArrayAccessExpression) expressionNode() {}
+
+func (aae *ArrayAccessExpression) String() string {
+	array := ""
+	if aae.Array != nil {
+		array = aae.Array.String()
+	}
+	if aae.Index == nil || *aae.Index == nil {
+		return array + "[]"
+	}
+	return array + "[" + (*aae.Index).String() + "]"
+}
+
+// EmptyExpression 表示 empty() 函数调用
+type EmptyExpression struct {
+	BaseNode
+	Expression Expression `json:"expression"`
+}
+
+func NewEmptyExpression(pos lexer.Position, expr Expression) *EmptyExpression {
+	return &EmptyExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTEmpty,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Expression: expr,
+	}
+}
+
+// GetChildren 返回子节点
+func (ee *EmptyExpression) GetChildren() []Node {
+	if ee.Expression == nil {
+		return nil
+	}
+	return []Node{ee.Expression}
+}
+
+// Accept 接受访问者
+func (ee *EmptyExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ee) {
+		if ee.Expression != nil {
+			ee.Expression.Accept(visitor)
+		}
+	}
+}
+
+func (ee *EmptyExpression) expressionNode() {}
+
+func (ee *EmptyExpression) String() string {
+	if ee.Expression == nil {
+		return "empty()"
+	}
+	return "empty(" + ee.Expression.String() + ")"
+}
