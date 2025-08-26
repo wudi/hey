@@ -1065,6 +1065,133 @@ PHP); ?>`,
 	}
 }
 
+func TestParsing_AnonymousFunctions(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedParams []struct {
+			name string
+			typ  string
+		}
+		expectUseClause bool
+		useVarCount     int
+	}{
+		{
+			name: "Anonymous function with typed parameters and use clause",
+			input: `<?php foo(function (int $errno, string $errstr) use ($abc): bool {
+    return true;
+}); ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$errno", "int"},
+				{"$errstr", "string"},
+			},
+			expectUseClause: true,
+			useVarCount:     1,
+		},
+		{
+			name: "Anonymous function with simple parameters",
+			input: `<?php $callback = function ($x, $y) {
+    return $x + $y;
+}; ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$x", ""},
+				{"$y", ""},
+			},
+			expectUseClause: false,
+			useVarCount:     0,
+		},
+		{
+			name: "Anonymous function with mixed typed parameters",
+			input: `<?php $fn = function (string $name, $value, array $options) use ($config) {
+    return $config[$name] ?? $value;
+}; ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$name", "string"},
+				{"$value", ""},
+				{"$options", "array"},
+			},
+			expectUseClause: true,
+			useVarCount:     1,
+		},
+		{
+			name: "Anonymous function with no parameters",
+			input: `<?php $empty = function () {
+    echo "Hello";
+}; ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{},
+			expectUseClause: false,
+			useVarCount:     0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			var anonFunc *ast.AnonymousFunctionExpression
+			
+			// Check if it's a direct assignment or function call
+			if assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression); ok {
+				// Direct assignment: $var = function(...) {...}
+				anonFunc, ok = assignment.Right.(*ast.AnonymousFunctionExpression)
+				assert.True(t, ok, "Right side should be AnonymousFunctionExpression")
+			} else if callExpr, ok := exprStmt.Expression.(*ast.CallExpression); ok {
+				// Function call: foo(function(...) {...})
+				assert.NotNil(t, callExpr.Arguments)
+				assert.Len(t, callExpr.Arguments, 1)
+				anonFunc, ok = callExpr.Arguments[0].(*ast.AnonymousFunctionExpression)
+				assert.True(t, ok, "Argument should be AnonymousFunctionExpression")
+			} else {
+				t.Fatal("Expression should be either AssignmentExpression or CallExpression")
+			}
+
+			// Verify parameters
+			assert.Len(t, anonFunc.Parameters, len(tt.expectedParams))
+			for i, expectedParam := range tt.expectedParams {
+				assert.Equal(t, expectedParam.name, anonFunc.Parameters[i].Name)
+				assert.Equal(t, expectedParam.typ, anonFunc.Parameters[i].Type)
+			}
+
+			// Verify use clause
+			if tt.expectUseClause {
+				assert.NotNil(t, anonFunc.UseClause)
+				assert.Len(t, anonFunc.UseClause, tt.useVarCount)
+			} else {
+				// UseClause can be nil or empty
+				if anonFunc.UseClause != nil {
+					assert.Len(t, anonFunc.UseClause, 0)
+				}
+			}
+
+			// Verify function body exists
+			assert.NotNil(t, anonFunc.Body)
+			assert.Greater(t, len(anonFunc.Body), 0, "Function should have a body")
+		})
+	}
+}
+
 func TestParsing_ErrorCases(t *testing.T) {
 	tests := []struct {
 		name          string

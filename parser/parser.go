@@ -1694,26 +1694,24 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 
 	var parameters []ast.Parameter
 
-	// 解析参数
+	// 解析参数（支持类型提示）
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
 
-		for {
-			if p.currentToken.Type == lexer.T_VARIABLE {
-				param := ast.Parameter{Name: p.currentToken.Value}
-				parameters = append(parameters, param)
-			}
+		// 解析第一个参数
+		param := parseParameter(p)
+		if param != nil {
+			parameters = append(parameters, *param)
+		}
 
-			if p.peekToken.Type == lexer.TOKEN_RPAREN {
-				break
-			}
-
-			if p.peekToken.Type != lexer.TOKEN_COMMA {
-				break
-			}
-
-			p.nextToken() // 跳过逗号
+		// 处理更多参数
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
 			p.nextToken() // 移动到下一个参数
+			param := parseParameter(p)
+			if param != nil {
+				parameters = append(parameters, *param)
+			}
 		}
 	}
 
@@ -1753,6 +1751,15 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 		if !p.expectToken(lexer.TOKEN_RPAREN) {
 			return nil
 		}
+	}
+
+	// 检查并跳过返回类型声明（目前AST不存储返回类型信息）
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 跳过 ':'
+		if !p.expectToken(lexer.T_STRING) {
+			return nil
+		}
+		// 返回类型已解析但暂不存储（未来可扩展AST支持）
 	}
 
 	// 解析函数体
