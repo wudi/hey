@@ -516,19 +516,19 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
 
-		// 解析第一个参数
-		if p.currentToken.Type == lexer.T_VARIABLE {
-			param := ast.Parameter{Name: p.currentToken.Value}
-			funcDecl.Parameters = append(funcDecl.Parameters, param)
+		// 解析第一个参数（支持类型提示）
+		param := parseParameter(p)
+		if param != nil {
+			funcDecl.Parameters = append(funcDecl.Parameters, *param)
+		}
 
-			// 处理更多参数
-			for p.peekToken.Type == lexer.TOKEN_COMMA {
-				p.nextToken() // 移动到逗号
-				if !p.expectPeek(lexer.T_VARIABLE) {
-					return nil
-				}
-				param := ast.Parameter{Name: p.currentToken.Value}
-				funcDecl.Parameters = append(funcDecl.Parameters, param)
+		// 处理更多参数
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个参数
+			param := parseParameter(p)
+			if param != nil {
+				funcDecl.Parameters = append(funcDecl.Parameters, *param)
 			}
 		}
 	}
@@ -537,16 +537,27 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 		return nil
 	}
 
-	// 检查是否有返回类型声明 ": type"
+	// 检查是否有返回类型声明 ": type" 或 ": ?type"
 	if p.peekToken.Type == lexer.TOKEN_COLON {
 		p.nextToken() // 移动到 ':'
+
+		// 检查是否为可空类型
+		nullable := false
+		if p.peekToken.Type == lexer.TOKEN_QUESTION {
+			nullable = true
+			p.nextToken() // 移动到 '?'
+		}
 
 		if !p.expectPeek(lexer.T_STRING) { // 期望类型名
 			return nil
 		}
 
-		// 解析返回类型 (这里简单处理为字符串，可以扩展为更复杂的类型系统)
-		funcDecl.ReturnType = p.currentToken.Value
+		// 解析返回类型
+		returnType := p.currentToken.Value
+		if nullable {
+			returnType = "?" + returnType
+		}
+		funcDecl.ReturnType = returnType
 	}
 
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
@@ -556,6 +567,46 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	funcDecl.Body = parseBlockStatements(p)
 
 	return funcDecl
+}
+
+// parseParameter 解析函数参数（支持类型提示、可空类型和默认值）
+func parseParameter(p *Parser) *ast.Parameter {
+	var param ast.Parameter
+	
+	// 检查是否有可空类型提示
+	nullable := false
+	if p.currentToken.Type == lexer.TOKEN_QUESTION {
+		nullable = true
+		p.nextToken()
+	}
+	
+	// 检查是否有类型提示
+	if p.currentToken.Type == lexer.T_STRING {
+		typeName := p.currentToken.Value
+		if nullable {
+			typeName = "?" + typeName
+		}
+		param.Type = typeName
+		if !p.expectPeek(lexer.T_VARIABLE) {
+			return nil
+		}
+	}
+	
+	// 解析参数名
+	if p.currentToken.Type == lexer.T_VARIABLE {
+		param.Name = p.currentToken.Value
+	} else {
+		return nil
+	}
+	
+	// 检查是否有默认值
+	if p.peekToken.Type == lexer.TOKEN_EQUAL {
+		p.nextToken() // 移动到 '='
+		p.nextToken() // 移动到默认值
+		param.DefaultValue = parseExpression(p, LOWEST)
+	}
+	
+	return &param
 }
 
 // parseReturnStatement 解析 return 语句
@@ -820,11 +871,19 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	}
 
 	p.nextToken()
+	// Skip comments before parsing expression
+	for p.currentToken.Type == lexer.T_COMMENT {
+		p.nextToken()
+	}
 	args = append(args, parseExpression(p, LOWEST))
 
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken()
 		p.nextToken()
+		// Skip comments after comma
+		for p.currentToken.Type == lexer.T_COMMENT {
+			p.nextToken()
+		}
 		args = append(args, parseExpression(p, LOWEST))
 	}
 
