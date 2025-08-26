@@ -68,6 +68,8 @@ go test ./parser -bench=.        # Run performance benchmarks
 go test ./parser -bench=. -run=^$  # Run only benchmarks (no unit tests)
 go test ./parser -run=TestParsing_NowdocStrings  # Run specific test
 go test ./parser -run=TestParsing_ClassMethodsWithVisibility  # Run class methods test
+go test ./parser -run=TestParsing_TryCatchWithStatements  # Run try-catch parsing tests
+go test ./parser -run=TestParsing_TypedReferenceParameters  # Run typed reference parameter tests
 ```
 
 **Build CLI Tool:**
@@ -156,10 +158,12 @@ This is a PHP parser implementation in Go with the following structure:
 - JSON serialization preserves full AST structure for external tools
 
 ### Testing Strategy
-- **Unit Tests**: Comprehensive table-driven tests using testify framework
-  - 34+ parser tests covering variables, expressions, arrays, functions, classes, class constants
+- **Unit Tests**: Comprehensive table-driven tests using testify framework (180+ tests)
+  - 40+ parser tests covering variables, expressions, arrays, functions, classes, class constants
   - Class method visibility parsing tests (TestParsing_ClassMethodsWithVisibility)
   - Property declaration tests with type hints and visibility modifiers
+  - Try-catch statement parsing with subsequent statements (TestParsing_TryCatchWithStatements)
+  - Typed reference parameter parsing tests (TestParsing_TypedReferenceParameters)
   - Heredoc/Nowdoc string parsing tests
   - String interpolation and complex expression tests
   - Class constant parsing with all visibility modifiers
@@ -194,8 +198,9 @@ This is a PHP parser implementation in Go with the following structure:
 - "no prefix parse function found" → add prefix parse function to parser initialization in `parser.go:80-100`
 - "no infix parse function found" → add infix parse function with correct precedence in `parser.go:100-120`
 - "expected next token to be T_VARIABLE, got T_STRING instead" for class constants → check `parseClassStatement` logic at `parser.go:2117`
-- Class method visibility parsing issues → verify `parseFunctionDeclaration` handles visibility at `parser.go:604-614`
+- Class method visibility parsing issues → verify `parseFunctionDeclaration` handles visibility at `parser.go:608-614`
 - Property parsing with visibility modifiers → check `parsePropertyDeclaration` function
+- Try-catch parsing with statements after → verify token advancement in `parseTryStatement` at `parser.go:1492-1503`
 - Missing AST constructors → add NewXXXExpression functions in `ast/node.go`
 - Nowdoc/Heredoc parsing issues → check `parseNowdocExpression` and `parseHeredoc` functions
 - String interpolation problems → verify `InterpolatedStringExpression` handling
@@ -251,10 +256,61 @@ This is a PHP parser implementation in Go with the following structure:
 - Parameter visibility modifiers (public, private, protected, readonly)
 - Fixed T_ELLIPSIS (...) token generation for variadic parameters
 
+**Try-Catch Statement Parsing Fix (Latest):**
+- Fixed critical parsing issue where statements following try-catch blocks failed to parse
+- Root cause: Improper token advancement in catch clause loop causing "no prefix parse function for `=`" errors
+- Fixed token positioning logic in `parseTryStatement` at `parser.go:1492-1503`
+- Added comprehensive test suite `TestParsing_TryCatchWithStatements` with 5 scenarios:
+  - Basic try-catch with assignment after
+  - Try-catch with statements in blocks and after
+  - Multiple catch clauses with statements after
+  - Nested try-catch structures with complex expressions
+  - Empty try-catch followed by multiple statements
+- Enhanced finally block detection and parsing
+- Full support for complex expressions after try-catch: `$obj->method1()->method2()->method3()`
+
+**Typed Reference Parameters Support:**
+- Enhanced `FunctionDeclaration` to support typed reference parameters like `function foo(array &$data)`
+- Added comprehensive parsing for nullable, union, and intersection types with reference
+- Support for mixed reference and non-reference parameters in same function
+- Extensive test coverage with `TestParsing_TypedReferenceParameters`
+
 **Enhanced Test Suite:**
 - Added table-driven tests for string interpolation scenarios
 - Class method visibility test scenarios with comprehensive parameter validation
 - Property declaration tests with all visibility combinations
+- Try-catch parsing tests with edge cases and complex scenarios
 - Benchmark tests for different parsing complexity levels
 - Error case testing with proper validation
 - All tests follow Go testing best practices with testify framework
+
+## Statement Parsing Token Management
+
+When fixing statement parsing issues, particularly for control structures (try-catch, if-else, loops), pay careful attention to token advancement:
+
+1. **Token Position Consistency**: After parsing a statement, ensure `currentToken` is positioned correctly for the main parsing loop
+2. **Loop Token Advancement**: In loops that parse multiple similar constructs (like catch clauses), only advance tokens when certain there are more constructs to parse
+3. **Finally Block Detection**: Use `peekToken` to check for optional constructs like finally blocks without advancing prematurely
+4. **Break vs Continue**: Use proper loop control to avoid unnecessary token advancement that can skip subsequent statements
+
+**Common Pattern for Multi-Construct Parsing:**
+```go
+for p.currentToken.Type == EXPECTED_TOKEN {
+    // Parse construct
+    // ...
+    
+    // Only advance if there's another construct
+    if p.peekToken.Type == EXPECTED_TOKEN {
+        p.nextToken()
+    } else {
+        break
+    }
+}
+```
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+- to memorize
