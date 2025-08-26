@@ -405,6 +405,72 @@ func TestParsing_ReturnStatement(t *testing.T) {
 	assert.Equal(t, "+", binaryExpr.Operator)
 }
 
+func TestParsing_TypedParameters(t *testing.T) {
+	input := `<?php 
+function func_name(
+    string $commandline,
+    ?array $env = null,
+    ?string $stdin = null,
+    bool $captureStdIn = true,
+    bool $captureStdErr = true
+) {
+
+} ?>`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+
+	checkParserErrors(t, p)
+	assert.NotNil(t, program)
+	assert.Len(t, program.Body, 1)
+
+	stmt := program.Body[0]
+	funcDecl, ok := stmt.(*ast.FunctionDeclaration)
+	assert.True(t, ok, "Statement should be FunctionDeclaration")
+
+	// 检查函数名
+	identifier, ok := funcDecl.Name.(*ast.IdentifierNode)
+	assert.True(t, ok, "Function name should be IdentifierNode")
+	assert.Equal(t, "func_name", identifier.Name)
+
+	// 检查参数
+	assert.Len(t, funcDecl.Parameters, 5)
+
+	// 第一个参数: string $commandline
+	param1 := funcDecl.Parameters[0]
+	assert.Equal(t, "$commandline", param1.Name)
+	assert.Equal(t, "string", param1.Type)
+	assert.Nil(t, param1.DefaultValue)
+
+	// 第二个参数: ?array $env = null
+	param2 := funcDecl.Parameters[1]
+	assert.Equal(t, "$env", param2.Name)
+	assert.Equal(t, "?array", param2.Type)
+	assert.NotNil(t, param2.DefaultValue)
+
+	// 第三个参数: ?string $stdin = null
+	param3 := funcDecl.Parameters[2]
+	assert.Equal(t, "$stdin", param3.Name)
+	assert.Equal(t, "?string", param3.Type)
+	assert.NotNil(t, param3.DefaultValue)
+
+	// 第四个参数: bool $captureStdIn = true
+	param4 := funcDecl.Parameters[3]
+	assert.Equal(t, "$captureStdIn", param4.Name)
+	assert.Equal(t, "bool", param4.Type)
+	assert.NotNil(t, param4.DefaultValue)
+
+	// 第五个参数: bool $captureStdErr = true
+	param5 := funcDecl.Parameters[4]
+	assert.Equal(t, "$captureStdErr", param5.Name)
+	assert.Equal(t, "bool", param5.Type)
+	assert.NotNil(t, param5.DefaultValue)
+
+	// 检查函数体为空
+	assert.Len(t, funcDecl.Body, 0)
+}
+
 func TestParsing_ArrayExpression(t *testing.T) {
 	input := `<?php $arr = array(1, 2, 3); ?>`
 

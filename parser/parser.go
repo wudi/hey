@@ -581,7 +581,7 @@ func parseParameter(p *Parser) *ast.Parameter {
 	}
 	
 	// 检查是否有类型提示
-	if p.currentToken.Type == lexer.T_STRING {
+	if p.currentToken.Type == lexer.T_STRING || p.currentToken.Type == lexer.T_ARRAY {
 		typeName := p.currentToken.Value
 		if nullable {
 			typeName = "?" + typeName
