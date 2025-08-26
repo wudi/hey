@@ -2617,3 +2617,295 @@ func (aee *ArrayElementExpression) String() string {
 	}
 	return aee.Key.String() + " => " + aee.Value.String()
 }
+
+// CaseExpression 表示 switch 语句中的 case 表达式
+type CaseExpression struct {
+	BaseNode
+	Test Expression `json:"test"` // nil for default case
+}
+
+func NewCaseExpression(pos lexer.Position, test Expression) *CaseExpression {
+	return &CaseExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTCase,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Test: test,
+	}
+}
+
+func (ce *CaseExpression) GetChildren() []Node {
+	var children []Node
+	if ce.Test != nil {
+		children = append(children, ce.Test)
+	}
+	return children
+}
+
+func (ce *CaseExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ce) {
+		if ce.Test != nil {
+			ce.Test.Accept(visitor)
+		}
+	}
+}
+
+func (ce *CaseExpression) expressionNode() {}
+
+func (ce *CaseExpression) String() string {
+	if ce.Test == nil {
+		return "default"
+	}
+	return "case " + ce.Test.String()
+}
+
+// ClassExpression 表示类声明表达式
+type ClassExpression struct {
+	BaseNode
+	Name       Expression   `json:"name"`
+	Extends    Expression   `json:"extends"`
+	Implements []Expression `json:"implements"`
+}
+
+func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression) *ClassExpression {
+	return &ClassExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTClass,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:       name,
+		Extends:    extends,
+		Implements: implements,
+	}
+}
+
+func (ce *ClassExpression) GetChildren() []Node {
+	var children []Node
+	if ce.Name != nil {
+		children = append(children, ce.Name)
+	}
+	if ce.Extends != nil {
+		children = append(children, ce.Extends)
+	}
+	for _, impl := range ce.Implements {
+		if impl != nil {
+			children = append(children, impl)
+		}
+	}
+	return children
+}
+
+func (ce *ClassExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ce) {
+		if ce.Name != nil {
+			ce.Name.Accept(visitor)
+		}
+		if ce.Extends != nil {
+			ce.Extends.Accept(visitor)
+		}
+		for _, impl := range ce.Implements {
+			if impl != nil {
+				impl.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (ce *ClassExpression) expressionNode() {}
+
+func (ce *ClassExpression) String() string {
+	result := "class"
+	if ce.Name != nil {
+		result += " " + ce.Name.String()
+	}
+	if ce.Extends != nil {
+		result += " extends " + ce.Extends.String()
+	}
+	return result
+}
+
+// ConstExpression 表示常量声明表达式
+type ConstExpression struct {
+	BaseNode
+	Name  Expression `json:"name"`
+	Value Expression `json:"value"`
+}
+
+func NewConstExpression(pos lexer.Position, name, value Expression) *ConstExpression {
+	return &ConstExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTConst,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:  name,
+		Value: value,
+	}
+}
+
+func (ce *ConstExpression) GetChildren() []Node {
+	var children []Node
+	if ce.Name != nil {
+		children = append(children, ce.Name)
+	}
+	if ce.Value != nil {
+		children = append(children, ce.Value)
+	}
+	return children
+}
+
+func (ce *ConstExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ce) {
+		if ce.Name != nil {
+			ce.Name.Accept(visitor)
+		}
+		if ce.Value != nil {
+			ce.Value.Accept(visitor)
+		}
+	}
+}
+
+func (ce *ConstExpression) expressionNode() {}
+
+func (ce *ConstExpression) String() string {
+	result := "const"
+	if ce.Name != nil {
+		result += " " + ce.Name.String()
+	}
+	if ce.Value != nil {
+		result += " = " + ce.Value.String()
+	}
+	return result
+}
+
+// EvalExpression 表示 eval() 表达式
+type EvalExpression struct {
+	BaseNode
+	Argument Expression `json:"argument"`
+}
+
+func NewEvalExpression(pos lexer.Position, argument Expression) *EvalExpression {
+	return &EvalExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTEvalExpression,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Argument: argument,
+	}
+}
+
+func (ee *EvalExpression) GetChildren() []Node {
+	var children []Node
+	if ee.Argument != nil {
+		children = append(children, ee.Argument)
+	}
+	return children
+}
+
+func (ee *EvalExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ee) {
+		if ee.Argument != nil {
+			ee.Argument.Accept(visitor)
+		}
+	}
+}
+
+func (ee *EvalExpression) expressionNode() {}
+
+func (ee *EvalExpression) String() string {
+	if ee.Argument != nil {
+		return "eval(" + ee.Argument.String() + ")"
+	}
+	return "eval()"
+}
+
+// StaticAccessExpression 表示静态访问表达式 Class::method 或 Class::$property  
+type StaticAccessExpression struct {
+	BaseNode
+	Class    Expression `json:"class"`
+	Property Expression `json:"property"`
+}
+
+func NewStaticAccessExpression(pos lexer.Position, class, property Expression) *StaticAccessExpression {
+	return &StaticAccessExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTStaticCall,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Class:    class,
+		Property: property,
+	}
+}
+
+func (sae *StaticAccessExpression) GetChildren() []Node {
+	var children []Node
+	if sae.Class != nil {
+		children = append(children, sae.Class)
+	}
+	if sae.Property != nil {
+		children = append(children, sae.Property)
+	}
+	return children
+}
+
+func (sae *StaticAccessExpression) Accept(visitor Visitor) {
+	if visitor.Visit(sae) {
+		if sae.Class != nil {
+			sae.Class.Accept(visitor)
+		}
+		if sae.Property != nil {
+			sae.Property.Accept(visitor)
+		}
+	}
+}
+
+func (sae *StaticAccessExpression) expressionNode() {}
+
+func (sae *StaticAccessExpression) String() string {
+	var class string
+	if sae.Class != nil {
+		class = sae.Class.String()
+	}
+	
+	var property string
+	if sae.Property != nil {
+		property = sae.Property.String()
+	}
+	
+	return class + "::" + property
+}
+
+// VisibilityModifierExpression 表示可见性修饰符表达式
+type VisibilityModifierExpression struct {
+	BaseNode
+	Modifier string `json:"modifier"` // public, private, protected
+}
+
+func NewVisibilityModifierExpression(pos lexer.Position, modifier string) *VisibilityModifierExpression {
+	return &VisibilityModifierExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTVisibilityModifier,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Modifier: modifier,
+	}
+}
+
+func (vme *VisibilityModifierExpression) GetChildren() []Node {
+	return []Node{} // No children for simple modifier
+}
+
+func (vme *VisibilityModifierExpression) Accept(visitor Visitor) {
+	visitor.Visit(vme)
+}
+
+func (vme *VisibilityModifierExpression) expressionNode() {}
+
+func (vme *VisibilityModifierExpression) String() string {
+	return vme.Modifier
+}

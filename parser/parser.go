@@ -149,6 +149,31 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.TOKEN_SEMICOLON, p.parseFallback)
 	p.registerPrefix(lexer.TOKEN_RPAREN, p.parseFallback)
 	p.registerPrefix(lexer.TOKEN_RBRACKET, p.parseFallback)
+	
+	// Additional missing tokens
+	p.registerPrefix(lexer.T_EOF, p.parseFallback)                     // End of file
+	p.registerPrefix(lexer.TOKEN_DOT, p.parseStringConcatenation)      // String concatenation as prefix
+	p.registerPrefix(lexer.TOKEN_RBRACE, p.parseFallback)              // Closing brace
+	p.registerPrefix(lexer.TOKEN_AMPERSAND, p.parseReferenceExpression) // Reference operator &$var
+	
+	// Keywords that can start expressions or statements
+	p.registerPrefix(lexer.T_AS, p.parseFallback)                      // 'as' keyword - usually infix
+	p.registerPrefix(lexer.T_CASE, p.parseCaseExpression)              // case in switch
+	p.registerPrefix(lexer.T_CLASS, p.parseClassExpression)            // class declaration or class expression  
+	p.registerPrefix(lexer.T_CONST, p.parseConstExpression)            // const declaration
+	p.registerPrefix(lexer.T_DEFAULT, p.parseDefaultExpression)        // default in switch
+	p.registerPrefix(lexer.T_EVAL, p.parseEvalExpression)              // eval() construct
+	p.registerPrefix(lexer.T_EXTENDS, p.parseFallback)                 // extends keyword
+	
+	// Operators that could be prefix in some contexts
+	p.registerPrefix(lexer.T_LOGICAL_OR, p.parseFallback)              // 'or' logical operator
+	p.registerPrefix(lexer.T_PAAMAYIM_NEKUDOTAYIM, p.parseStaticAccess) // :: static access
+	p.registerPrefix(lexer.T_SR, p.parseFallback)                      // >> right shift - usually infix
+	
+	// Visibility modifiers  
+	p.registerPrefix(lexer.T_PRIVATE, p.parseVisibilityModifier)       // private visibility
+	p.registerPrefix(lexer.T_PROTECTED, p.parseVisibilityModifier)     // protected visibility  
+	p.registerPrefix(lexer.T_PUBLIC, p.parseVisibilityModifier)        // public visibility
 
 	// 注册中缀解析函数
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
@@ -1727,4 +1752,120 @@ func (p *Parser) parseDoubleArrowExpression(key ast.Expression) ast.Expression {
 	value := p.parseExpression(TERNARY)
 	
 	return ast.NewArrayElementExpression(pos, key, value)
+}
+
+// ============== 新增的缺失函数实现 ==============
+
+// parseStringConcatenation 解析字符串连接（当 . 作为前缀使用时）
+func (p *Parser) parseStringConcatenation() ast.Expression {
+	pos := p.currentToken.Position
+	
+	// . 作为前缀通常意味着错误的语法，返回占位符
+	return ast.NewIdentifierNode(pos, ".")
+}
+
+// parseReferenceExpression 解析引用表达式 &$var  
+func (p *Parser) parseReferenceExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	operand := p.parseExpression(PREFIX)
+	
+	return ast.NewUnaryExpression(pos, "&", operand, true)
+}
+
+// parseCaseExpression 解析 case 表达式（switch 语句中的 case）
+func (p *Parser) parseCaseExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	test := p.parseExpression(LOWEST)
+	
+	// 返回一个特殊的case表达式节点
+	return ast.NewCaseExpression(pos, test)
+}
+
+// parseClassExpression 解析类表达式或类声明
+func (p *Parser) parseClassExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 类声明通常需要名称和可能的扩展
+	p.nextToken()
+	
+	var name ast.Expression
+	if p.currentToken.Type == lexer.T_STRING {
+		name = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	}
+	
+	return ast.NewClassExpression(pos, name, nil, nil) // name, extends, implements
+}
+
+// parseConstExpression 解析常量声明表达式
+func (p *Parser) parseConstExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken()
+	
+	// 解析常量名
+	var name ast.Expression
+	if p.currentToken.Type == lexer.T_STRING {
+		name = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	}
+	
+	return ast.NewConstExpression(pos, name, nil) // name, value
+}
+
+// parseDefaultExpression 解析 default 表达式（switch 语句中的 default）
+func (p *Parser) parseDefaultExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	// default case 没有测试表达式
+	return ast.NewCaseExpression(pos, nil)
+}
+
+// parseEvalExpression 解析 eval() 表达式
+func (p *Parser) parseEvalExpression() ast.Expression {
+	pos := p.currentToken.Position
+	
+	var argument ast.Expression
+	
+	// eval 可能带有括号和参数
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		p.nextToken() // 移动到 (
+		if p.peekToken.Type != lexer.TOKEN_RPAREN {
+			p.nextToken() // 进入括号
+			argument = p.parseExpression(LOWEST)
+		}
+		
+		if p.peekToken.Type == lexer.TOKEN_RPAREN {
+			p.nextToken() // 跳过右括号
+		}
+	}
+	
+	return ast.NewEvalExpression(pos, argument)
+}
+
+// parseStaticAccess 解析静态访问表达式 Class::method 或 Class::$property
+func (p *Parser) parseStaticAccess() ast.Expression {
+	pos := p.currentToken.Position
+	
+	// :: 作为前缀通常意味着省略了左边的类名，如 ::method()
+	p.nextToken()
+	
+	var property ast.Expression
+	if p.currentToken.Type != lexer.T_EOF {
+		property = p.parseExpression(CALL)
+	}
+	
+	// 创建一个静态访问表达式，左边为 nil 表示省略了类名
+	return ast.NewStaticAccessExpression(pos, nil, property)
+}
+
+// parseVisibilityModifier 解析可见性修饰符 public/private/protected
+func (p *Parser) parseVisibilityModifier() ast.Expression {
+	pos := p.currentToken.Position
+	modifier := p.currentToken.Value
+	
+	// 可见性修饰符后面应该跟着属性或方法声明
+	return ast.NewVisibilityModifierExpression(pos, modifier)
 }

@@ -139,6 +139,9 @@ const (
 	ASTConstElem          ASTKind = 775
 	ASTClassConstGroup    ASTKind = 776
 	ASTConstEnumInit      ASTKind = 777
+	ASTCase               ASTKind = 778
+	ASTEvalExpression     ASTKind = 779 
+	ASTVisibilityModifier ASTKind = 780
 
 	// 4子节点 - 4 child nodes (bits 8-15 = 4)
 	ASTFor      ASTKind = 1024 // 4 << 8
@@ -410,6 +413,12 @@ func (k ASTKind) String() string {
 		return "CLASS_CONST_GROUP"
 	case ASTConstEnumInit:
 		return "CONST_ENUM_INIT"
+	case ASTCase:
+		return "CASE"
+	case ASTEvalExpression:
+		return "EVAL_EXPRESSION"
+	case ASTVisibilityModifier:
+		return "VISIBILITY_MODIFIER"
 
 	// 4子节点
 	case ASTFor:
