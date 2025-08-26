@@ -69,12 +69,12 @@ go run benchmark_test.go   # Run performance benchmarks
 
 **Build CLI Tool:**
 ```bash
-go build -o phpparse ./cmd/php-parser  # Build command-line tool
-./phpparse -i example.php              # Parse a PHP file
-./phpparse -tokens -ast                # Show tokens and AST structure
-./phpparse -format json example.php    # Output AST as JSON
-./phpparse -errors example.php         # Show only parsing errors
-echo '<?php echo "Hello"; ?>' | ./phpparse  # Parse from stdin
+go build -o php-parser ./cmd/php-parser  # Build command-line tool
+./php-parser -i example.php              # Parse a PHP file
+./php-parser -tokens -ast                # Show tokens and AST structure
+./php-parser -format json example.php    # Output AST as JSON
+./php-parser -errors example.php         # Show only parsing errors
+echo '<?php echo "Hello"; ?>' | ./php-parser  # Parse from stdin
 ```
 
 **PHP Compatibility Testing:**
@@ -87,7 +87,7 @@ go run test_shebang_demo.go                             # Test lexer with sheban
 **Cleanup:**
 ```bash
 go clean                         # Clean build artifacts
-rm -f phpparse main              # Remove built binaries
+rm -f php-parser main              # Remove built binaries
 ```
 
 ## Architecture Overview
