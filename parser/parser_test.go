@@ -1434,6 +1434,112 @@ func TestParsing_AnonymousFunctions(t *testing.T) {
 	}
 }
 
+func TestParsing_AnonymousFunctionReferenceUse(t *testing.T) {
+	tests := []struct {
+		name                  string
+		input                 string
+		expectedUseClauses    int
+		expectedReferenceVars []string
+		expectedNormalVars    []string
+	}{
+		{
+			name: "Anonymous function with reference variable in use clause",
+			input: `<?php
+$ini = preg_replace_callback("{ENV:(\S+)}", function ($m) use (&$skip) { }, $ini);`,
+			expectedUseClauses:    1,
+			expectedReferenceVars: []string{"$skip"},
+			expectedNormalVars:    []string{},
+		},
+		{
+			name: "Anonymous function with mixed use clause (normal and reference vars)",
+			input: `<?php
+$result = function ($x) use ($normal, &$reference) {
+    return $x + $normal + $reference;
+};`,
+			expectedUseClauses:    2,
+			expectedReferenceVars: []string{"$reference"},
+			expectedNormalVars:    []string{"$normal"},
+		},
+		{
+			name: "Anonymous function with multiple reference variables",
+			input: `<?php
+$callback = function () use (&$ref1, &$ref2, &$ref3) {
+    return $ref1 + $ref2 + $ref3;
+};`,
+			expectedUseClauses:    3,
+			expectedReferenceVars: []string{"$ref1", "$ref2", "$ref3"},
+			expectedNormalVars:    []string{},
+		},
+		{
+			name: "Anonymous function with complex mixed use clause",
+			input: `<?php
+$complex = function ($param) use ($var1, &$ref1, $var2, &$ref2) {
+    return $param;
+};`,
+			expectedUseClauses:    4,
+			expectedReferenceVars: []string{"$ref1", "$ref2"},
+			expectedNormalVars:    []string{"$var1", "$var2"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			var anonFunc *ast.AnonymousFunctionExpression
+
+			// Navigate to find the anonymous function
+			if assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression); ok {
+				// Direct assignment: $var = function(...) {...}
+				if callExpr, ok := assignment.Right.(*ast.CallExpression); ok {
+					// preg_replace_callback case
+					assert.Len(t, callExpr.Arguments, 3)
+					anonFunc, ok = callExpr.Arguments[1].(*ast.AnonymousFunctionExpression)
+					assert.True(t, ok, "Second argument should be AnonymousFunctionExpression")
+				} else {
+					anonFunc, ok = assignment.Right.(*ast.AnonymousFunctionExpression)
+					assert.True(t, ok, "Right side should be AnonymousFunctionExpression")
+				}
+			}
+
+			assert.NotNil(t, anonFunc)
+			assert.NotNil(t, anonFunc.UseClause)
+			assert.Len(t, anonFunc.UseClause, tt.expectedUseClauses)
+
+			// Count reference and normal variables
+			foundReferenceVars := []string{}
+			foundNormalVars := []string{}
+
+			for _, useVar := range anonFunc.UseClause {
+				if unaryExpr, ok := useVar.(*ast.UnaryExpression); ok {
+					// This is a reference variable (&$var)
+					assert.Equal(t, "&", unaryExpr.Operator)
+					assert.True(t, unaryExpr.Prefix)
+					if varExpr, ok := unaryExpr.Operand.(*ast.Variable); ok {
+						foundReferenceVars = append(foundReferenceVars, varExpr.Name)
+					}
+				} else if varExpr, ok := useVar.(*ast.Variable); ok {
+					// This is a normal variable ($var)
+					foundNormalVars = append(foundNormalVars, varExpr.Name)
+				}
+			}
+
+			assert.ElementsMatch(t, tt.expectedReferenceVars, foundReferenceVars, "Reference variables should match")
+			assert.ElementsMatch(t, tt.expectedNormalVars, foundNormalVars, "Normal variables should match")
+		})
+	}
+}
+
 func TestParsing_ErrorCases(t *testing.T) {
 	tests := []struct {
 		name          string

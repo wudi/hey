@@ -1870,6 +1870,10 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 			for {
 				if p.currentToken.Type == lexer.T_VARIABLE {
 					useClause = append(useClause, parseVariable(p))
+				} else if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+					// 处理引用变量 &$var
+					refExpr := parseReferenceExpression(p)
+					useClause = append(useClause, refExpr)
 				}
 
 				if p.peekToken.Type == lexer.TOKEN_RPAREN {
