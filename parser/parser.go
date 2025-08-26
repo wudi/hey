@@ -263,6 +263,16 @@ func (p *Parser) Errors() []string {
 	return p.errors
 }
 
+// isTypeToken 检查token是否为有效的类型token
+func isTypeToken(tokenType lexer.TokenType) bool {
+	switch tokenType {
+	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE:
+		return true
+	default:
+		return false
+	}
+}
+
 // ParseProgram 解析整个程序
 func (p *Parser) ParseProgram() *ast.Program {
 	program := ast.NewProgram(p.currentToken.Position)
@@ -558,9 +568,12 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 			p.nextToken() // 移动到 '?'
 		}
 
-		if !p.expectPeek(lexer.T_STRING) { // 期望类型名
+		// 接受各种类型token (T_STRING, T_ARRAY, T_CALLABLE等)
+		if !isTypeToken(p.peekToken.Type) {
+			p.errors = append(p.errors, fmt.Sprintf("expected type name, got `%s` instead at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
 			return nil
 		}
+		p.nextToken() // 移动到类型token
 
 		// 解析返回类型
 		returnType := p.currentToken.Value
@@ -591,7 +604,7 @@ func parseParameter(p *Parser) *ast.Parameter {
 	}
 	
 	// 检查是否有类型提示
-	if p.currentToken.Type == lexer.T_STRING || p.currentToken.Type == lexer.T_ARRAY {
+	if isTypeToken(p.currentToken.Type) {
 		typeName := p.currentToken.Value
 		if nullable {
 			typeName = "?" + typeName

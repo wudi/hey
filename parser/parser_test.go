@@ -471,6 +471,111 @@ function func_name(
 	assert.Len(t, funcDecl.Body, 0)
 }
 
+// TestParsing_FunctionReturnTypes tests various type tokens in function return types and parameters
+func TestParsing_FunctionReturnTypes(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedParams []struct {
+			name string
+			typ  string
+		}
+		expectedReturnType string
+	}{
+		{
+			name:  "Function with array parameters and array return type",
+			input: `<?php function foo(array $ar1, array $ar2, bool $is_reg, array $w): array { } ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$ar1", "array"},
+				{"$ar2", "array"},
+				{"$is_reg", "bool"},
+				{"$w", "array"},
+			},
+			expectedReturnType: "array",
+		},
+		{
+			name:  "Function with callable parameter and callable return type",
+			input: `<?php function test(callable $cb, int $x): callable { } ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$cb", "callable"},
+				{"$x", "int"},
+			},
+			expectedReturnType: "callable",
+		},
+		{
+			name:  "Function with mixed types and string return type",
+			input: `<?php function process(string $name, array $data, callable $callback): string { } ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$name", "string"},
+				{"$data", "array"},
+				{"$callback", "callable"},
+			},
+			expectedReturnType: "string",
+		},
+		{
+			name:  "Function with nullable types",
+			input: `<?php function nullable(?array $data, ?callable $cb): ?array { } ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$data", "?array"},
+				{"$cb", "?callable"},
+			},
+			expectedReturnType: "?array",
+		},
+		{
+			name:  "Function with all scalar types",
+			input: `<?php function allTypes(int $i, float $f, string $s, bool $b): void { } ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{
+				{"$i", "int"},
+				{"$f", "float"},
+				{"$s", "string"},
+				{"$b", "bool"},
+			},
+			expectedReturnType: "void",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			funcDecl, ok := stmt.(*ast.FunctionDeclaration)
+			assert.True(t, ok, "Statement should be FunctionDeclaration")
+
+			// Check parameters
+			assert.Len(t, funcDecl.Parameters, len(tt.expectedParams))
+			for i, expected := range tt.expectedParams {
+				assert.Equal(t, expected.name, funcDecl.Parameters[i].Name, "Parameter %d name mismatch", i)
+				assert.Equal(t, expected.typ, funcDecl.Parameters[i].Type, "Parameter %d type mismatch", i)
+			}
+
+			// Check return type
+			assert.Equal(t, tt.expectedReturnType, funcDecl.ReturnType, "Return type mismatch")
+		})
+	}
+}
+
 func TestParsing_BitwiseOperations(t *testing.T) {
 	tests := []struct {
 		name     string
