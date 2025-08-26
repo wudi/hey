@@ -67,6 +67,7 @@ go test ./ast -v                 # Run AST tests with verbose output
 go test ./parser -bench=.        # Run performance benchmarks
 go test ./parser -bench=. -run=^$  # Run only benchmarks (no unit tests)
 go test ./parser -run=TestParsing_NowdocStrings  # Run specific test
+go test ./parser -run=TestParsing_ClassMethodsWithVisibility  # Run class methods test
 ```
 
 **Build CLI Tool:**
@@ -103,8 +104,9 @@ This is a PHP parser implementation in Go with the following structure:
   - `lexer.go`: Main lexer implementation with shebang support and PHP tag recognition
 
 - **`parser/`**: Recursive descent parser with Pratt parsing
-  - `parser.go`: 1730+ lines implementing 40+ parse expression functions
+  - `parser.go`: 2370+ lines implementing 40+ parse expression functions
   - Comprehensive PHP syntax support (variables, functions, classes, control flow)
+  - Class method visibility parsing with public/private/protected modifiers
   - Operator precedence handling (LOWEST to HIGHEST including TERNARY)
   - Expression parsing: binary ops, unary ops, method calls, array access, etc.
 
@@ -117,7 +119,7 @@ This is a PHP parser implementation in Go with the following structure:
 - **`errors/`**: Error handling with precise position tracking
 
 ### Command Line Interface  
-- **`cmd/php-parser/`**: Feature-rich CLI tool (245 lines)
+- **`cmd/php-parser/`**: Feature-rich CLI tool (244 lines)
   - Multiple output formats: JSON, AST structure, raw tokens
   - File and stdin input with comprehensive error handling
   - Debugging flags: -tokens, -ast, -errors, -v (verbose)
@@ -148,13 +150,19 @@ This is a PHP parser implementation in Go with the following structure:
 **AST Node System:**
 - All nodes implement Node interface with GetChildren(), Accept(), String() methods
 - AST kinds match PHP's official zend_ast.h constants (ASTVar = 256, ASTCall = 516, etc.)
+- Class constants use ASTClassConstGroup (776) for declarations and ASTConstElem (775) for individual constants
+- FunctionDeclaration includes Visibility field for class method access modifiers
+- PropertyDeclaration supports typed properties with visibility modifiers
 - JSON serialization preserves full AST structure for external tools
 
 ### Testing Strategy
 - **Unit Tests**: Comprehensive table-driven tests using testify framework
-  - 26+ parser tests covering variables, expressions, arrays, functions, classes
-  - Heredoc/Nowdoc string parsing tests (recently added)
+  - 34+ parser tests covering variables, expressions, arrays, functions, classes, class constants
+  - Class method visibility parsing tests (TestParsing_ClassMethodsWithVisibility)
+  - Property declaration tests with type hints and visibility modifiers
+  - Heredoc/Nowdoc string parsing tests
   - String interpolation and complex expression tests
+  - Class constant parsing with all visibility modifiers
   - Error handling and syntax error recovery tests
 - **Benchmark Tests**: Performance testing for different complexity levels
   - Simple assignments (~1.6μs), complex expressions (~4μs)  
@@ -174,12 +182,24 @@ This is a PHP parser implementation in Go with the following structure:
 5. Update the String() method in `ast/kind.go` for new node types
 6. Add constructor functions (NewXXXExpression) following existing patterns
 
+**When Adding New Class Member Types:**
+1. Analyze PHP grammar rules in `/home/ubuntu/php-src/Zend/zend_language_parser.y`
+2. Check if visibility modifiers are supported for the new member type
+3. Update `parseClassStatement` logic at `parser.go:2117` to handle the new case
+4. Create dedicated parsing function (e.g., `parseClassConstantDeclaration`)
+5. Add comprehensive test cases covering all visibility modifiers and edge cases
+6. Ensure AST nodes implement full Node interface (GetChildren, Accept, String)
+
 **Parser Error Debugging:**
 - "no prefix parse function found" → add prefix parse function to parser initialization in `parser.go:80-100`
 - "no infix parse function found" → add infix parse function with correct precedence in `parser.go:100-120`
+- "expected next token to be T_VARIABLE, got T_STRING instead" for class constants → check `parseClassStatement` logic at `parser.go:2117`
+- Class method visibility parsing issues → verify `parseFunctionDeclaration` handles visibility at `parser.go:604-614`
+- Property parsing with visibility modifiers → check `parsePropertyDeclaration` function
 - Missing AST constructors → add NewXXXExpression functions in `ast/node.go`
 - Nowdoc/Heredoc parsing issues → check `parseNowdocExpression` and `parseHeredoc` functions
 - String interpolation problems → verify `InterpolatedStringExpression` handling
+- Class constant parsing errors → verify `parseClassConstantDeclaration` function at `parser.go:2139`
 
 **PHP Compatibility Requirements:**
 - Token IDs must match PHP 8.4 official implementation exactly
@@ -193,13 +213,48 @@ This is a PHP parser implementation in Go with the following structure:
 
 ## Recent Improvements
 
-**Nowdoc/Heredoc Parsing (Recently Fixed):**
+**Class Method Visibility Parsing (Latest):**
+- Enhanced `FunctionDeclaration` AST node with `Visibility` field at `ast/node.go:890`
+- Updated `parseFunctionDeclaration` to handle visibility modifiers at `parser.go:608-614`
+- Fixed `parseClassStatement` to properly route visibility + function combinations at `parser.go:2123-2124`
+- Support for all visibility modifiers: `private function`, `protected function`, `public function`
+- Methods without explicit visibility leave Visibility field empty (following PHP defaults)
+- Comprehensive test suite with 3 test scenarios (`TestParsing_ClassMethodsWithVisibility`)
+  - Public constructor with complex parameter type hints
+  - All three visibility modifiers with different parameter types
+  - Default methods without visibility modifier
+
+**Class Property Declaration Support:**
+- Added `PropertyDeclaration` AST node with visibility, type hints, and default values
+- Full class declaration parsing with extends/implements support 
+- Enhanced static access operator (::) as infix operator for complex expressions
+- Support for typed properties: `private bool $prop`, `private array $data = []`
+
+**Class Constants Parsing:**
+- Added `ClassConstantDeclaration` and `ConstantDeclarator` AST nodes at `ast/node.go:3047-3145`
+- Implemented `parseClassConstantDeclaration` function at `parser.go:2139-2186`
+- Fixed parsing logic in `parseClassStatement` to handle visibility modifiers followed by `const`
+- Support for all visibility modifiers: `private const`, `protected const`, `public const`
+- Support for multiple constants per declaration: `const A = 1, B = 2, C = "hello"`
+- Comprehensive test suite with 5 test cases covering all scenarios (`TestParsing_ClassConstants`)
+
+**Nowdoc/Heredoc Parsing:**
 - Fixed multi-token nowdoc parsing in `parseNowdocExpression()` at `parser.go:1747`
 - Added support for variables in heredoc content in `parseHeredoc()` at `parser.go:930`  
 - Comprehensive test coverage for both nowdoc and heredoc scenarios
 
+**Function Declaration Refactoring:**
+- Major refactoring based on PHP's official zend_language_parser.y grammar
+- Enhanced AST structure with structured TypeHint objects instead of simple strings
+- Support for nullable types (?Type), union types (Type1|Type2), intersection types (Type1&Type2)
+- Function by-reference support (function &foo()) and variadic parameters (...$params)
+- Parameter visibility modifiers (public, private, protected, readonly)
+- Fixed T_ELLIPSIS (...) token generation for variadic parameters
+
 **Enhanced Test Suite:**
 - Added table-driven tests for string interpolation scenarios
+- Class method visibility test scenarios with comprehensive parameter validation
+- Property declaration tests with all visibility combinations
 - Benchmark tests for different parsing complexity levels
 - Error case testing with proper validation
 - All tests follow Go testing best practices with testify framework

@@ -1974,6 +1974,269 @@ class ComplexConsts {
 	}
 }
 
+func TestParsing_ClassMethodsWithVisibility(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, class *ast.ClassExpression)
+	}{
+		{
+			name: "Public constructor with type hints",
+			input: `<?php
+class JUnit {
+    public function __construct(array $env, int $workerID) {
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				if len(class.Body) != 1 {
+					t.Errorf("Expected 1 method, got %d", len(class.Body))
+					return
+				}
+
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				if funcDecl.Name.(*ast.IdentifierNode).Name != "__construct" {
+					t.Errorf("Expected method name '__construct', got '%s'", funcDecl.Name.(*ast.IdentifierNode).Name)
+				}
+
+				if funcDecl.Visibility != "public" {
+					t.Errorf("Expected visibility 'public', got '%s'", funcDecl.Visibility)
+				}
+
+				if len(funcDecl.Parameters) != 2 {
+					t.Errorf("Expected 2 parameters, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				// Check first parameter: array $env
+				param1 := funcDecl.Parameters[0]
+				if param1.Name != "$env" {
+					t.Errorf("Expected first parameter name '$env', got '%s'", param1.Name)
+				}
+				if param1.Type == nil || param1.Type.Name != "array" {
+					t.Errorf("Expected first parameter type 'array', got %v", param1.Type)
+				}
+
+				// Check second parameter: int $workerID  
+				param2 := funcDecl.Parameters[1]
+				if param2.Name != "$workerID" {
+					t.Errorf("Expected second parameter name '$workerID', got '%s'", param2.Name)
+				}
+				if param2.Type == nil || param2.Type.Name != "int" {
+					t.Errorf("Expected second parameter type 'int', got %v", param2.Type)
+				}
+			},
+		},
+		{
+			name: "All visibility modifiers",
+			input: `<?php
+class Test {
+    private function privateMethod(string $x) {
+    }
+    
+    protected function protectedMethod(int $y) {
+    }
+    
+    public function publicMethod(array $z) {
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				if len(class.Body) != 3 {
+					t.Errorf("Expected 3 methods, got %d", len(class.Body))
+					return
+				}
+
+				expectedMethods := []struct {
+					name       string
+					visibility string
+					paramType  string
+					paramName  string
+				}{
+					{"privateMethod", "private", "string", "$x"},
+					{"protectedMethod", "protected", "int", "$y"},
+					{"publicMethod", "public", "array", "$z"},
+				}
+
+				for i, expected := range expectedMethods {
+					funcDecl, ok := class.Body[i].(*ast.FunctionDeclaration)
+					if !ok {
+						t.Errorf("Expected FunctionDeclaration at index %d, got %T", i, class.Body[i])
+						continue
+					}
+
+					if funcDecl.Name.(*ast.IdentifierNode).Name != expected.name {
+						t.Errorf("Method %d: expected name '%s', got '%s'", i, expected.name, funcDecl.Name.(*ast.IdentifierNode).Name)
+					}
+
+					if funcDecl.Visibility != expected.visibility {
+						t.Errorf("Method %d: expected visibility '%s', got '%s'", i, expected.visibility, funcDecl.Visibility)
+					}
+
+					if len(funcDecl.Parameters) != 1 {
+						t.Errorf("Method %d: expected 1 parameter, got %d", i, len(funcDecl.Parameters))
+						continue
+					}
+
+					param := funcDecl.Parameters[0]
+					if param.Name != expected.paramName {
+						t.Errorf("Method %d: expected parameter name '%s', got '%s'", i, expected.paramName, param.Name)
+					}
+					if param.Type == nil || param.Type.Name != expected.paramType {
+						t.Errorf("Method %d: expected parameter type '%s', got %v", i, expected.paramType, param.Type)
+					}
+				}
+			},
+		},
+		{
+			name: "Method without visibility (defaults)",
+			input: `<?php
+class Test {
+    function defaultMethod(bool $flag) {
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				if len(class.Body) != 1 {
+					t.Errorf("Expected 1 method, got %d", len(class.Body))
+					return
+				}
+
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				if funcDecl.Name.(*ast.IdentifierNode).Name != "defaultMethod" {
+					t.Errorf("Expected method name 'defaultMethod', got '%s'", funcDecl.Name.(*ast.IdentifierNode).Name)
+				}
+
+				// Method without explicit visibility should have empty visibility string
+				if funcDecl.Visibility != "" {
+					t.Errorf("Expected empty visibility for method without modifier, got '%s'", funcDecl.Visibility)
+				}
+			},
+		},
+		{
+			name: "Complex parameter types",
+			input: `<?php
+class Complex {
+    public function handle(array $config, callable $callback, string $message = "default") {
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				if len(class.Body) != 1 {
+					t.Errorf("Expected 1 method, got %d", len(class.Body))
+					return
+				}
+
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				if len(funcDecl.Parameters) != 3 {
+					t.Errorf("Expected 3 parameters, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				expectedParams := []struct {
+					name     string
+					typeName string
+					hasDefault bool
+				}{
+					{"$config", "array", false},
+					{"$callback", "callable", false},
+					{"$message", "string", true},
+				}
+
+				for i, expected := range expectedParams {
+					param := funcDecl.Parameters[i]
+					if param.Name != expected.name {
+						t.Errorf("Parameter %d: expected name '%s', got '%s'", i, expected.name, param.Name)
+					}
+					if param.Type == nil || param.Type.Name != expected.typeName {
+						t.Errorf("Parameter %d: expected type '%s', got %v", i, expected.typeName, param.Type)
+					}
+					hasDefault := param.DefaultValue != nil
+					if hasDefault != expected.hasDefault {
+						t.Errorf("Parameter %d: expected default value present=%t, got=%t", i, expected.hasDefault, hasDefault)
+					}
+				}
+			},
+		},
+		{
+			name: "Mixed class members (constants, properties, methods)",
+			input: `<?php
+class Mixed {
+    const STATUS = "active";
+    
+    private $property = "value";
+    
+    public function method(int $x) {
+        return $x * 2;
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				if len(class.Body) != 3 {
+					t.Errorf("Expected 3 class members, got %d", len(class.Body))
+					return
+				}
+
+				// Check that we have a method with visibility
+				var methodFound bool
+				for _, member := range class.Body {
+					if funcDecl, ok := member.(*ast.FunctionDeclaration); ok {
+						methodFound = true
+						if funcDecl.Visibility != "public" {
+							t.Errorf("Expected method visibility 'public', got '%s'", funcDecl.Visibility)
+						}
+						if funcDecl.Name.(*ast.IdentifierNode).Name != "method" {
+							t.Errorf("Expected method name 'method', got '%s'", funcDecl.Name.(*ast.IdentifierNode).Name)
+						}
+					}
+				}
+
+				if !methodFound {
+					t.Error("Expected to find a method declaration")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			if len(program.Body) != 1 {
+				t.Errorf("Expected 1 statement, got %d", len(program.Body))
+				return
+			}
+
+			stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+			if !ok {
+				t.Errorf("Expected ExpressionStatement, got %T", program.Body[0])
+				return
+			}
+
+			class, ok := stmt.Expression.(*ast.ClassExpression)
+			if !ok {
+				t.Errorf("Expected ClassDeclaration, got %T", stmt.Expression)
+				return
+			}
+
+			tt.validate(t, class)
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {

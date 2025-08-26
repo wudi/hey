@@ -604,6 +604,15 @@ func parseForStatement(p *Parser) *ast.ForStatement {
 func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	pos := p.currentToken.Position
 
+	// 检查是否有可见性修饰符 (public, private, protected)
+	var visibility string
+	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
+		visibility = p.currentToken.Value
+		if !p.expectPeek(lexer.T_FUNCTION) {
+			return nil
+		}
+	}
+
 	// 检查是否为引用返回函数 function &foo()
 	byReference := false
 	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
@@ -618,6 +627,7 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	funcDecl := ast.NewFunctionDeclaration(pos, name)
 	funcDecl.ByReference = byReference
+	funcDecl.Visibility = visibility
 
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
@@ -2107,9 +2117,11 @@ func parseClassExpression(p *Parser) ast.Expression {
 func parseClassStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
 	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
-		// Check if this is a class constant or property declaration
+		// Check if this is a class constant, method, or property declaration
 		if p.peekToken.Type == lexer.T_CONST {
 			return parseClassConstantDeclaration(p)
+		} else if p.peekToken.Type == lexer.T_FUNCTION {
+			return parseFunctionDeclaration(p)
 		}
 		return parsePropertyDeclaration(p)
 	case lexer.T_FUNCTION:

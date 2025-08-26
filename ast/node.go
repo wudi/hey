@@ -887,6 +887,7 @@ type FunctionDeclaration struct {
 	ReturnType   *TypeHint   `json:"returnType,omitempty"`
 	Body         []Statement `json:"body"`
 	ByReference  bool        `json:"byReference,omitempty"`   // function &foo()
+	Visibility   string      `json:"visibility,omitempty"`   // public, private, protected (for class methods)
 }
 
 type Parameter struct {
