@@ -175,6 +175,15 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(lexer.T_PROTECTED, p.parseVisibilityModifier) // protected visibility
 	p.registerPrefix(lexer.T_PUBLIC, p.parseVisibilityModifier)    // public visibility
 
+	// Type cast operators
+	p.registerPrefix(lexer.T_INT_CAST, p.parseTypeCast)    // (int) cast
+	p.registerPrefix(lexer.T_BOOL_CAST, p.parseTypeCast)   // (bool) cast
+	p.registerPrefix(lexer.T_DOUBLE_CAST, p.parseTypeCast) // (float) cast
+	p.registerPrefix(lexer.T_STRING_CAST, p.parseTypeCast) // (string) cast
+	p.registerPrefix(lexer.T_ARRAY_CAST, p.parseTypeCast)  // (array) cast
+	p.registerPrefix(lexer.T_OBJECT_CAST, p.parseTypeCast) // (object) cast
+	p.registerPrefix(lexer.T_UNSET_CAST, p.parseTypeCast)  // (unset) cast
+
 	// 注册中缀解析函数
 	p.infixParseFns = make(map[lexer.TokenType]infixParseFn)
 	p.registerInfix(lexer.TOKEN_PLUS, p.parseInfixExpression)
@@ -689,6 +698,17 @@ func (p *Parser) parsePrefixExpression() ast.Expression {
 	operand := p.parseExpression(PREFIX)
 
 	return ast.NewUnaryExpression(pos, operator, operand, true)
+}
+
+// parseTypeCast 解析类型转换表达式
+func (p *Parser) parseTypeCast() ast.Expression {
+	pos := p.currentToken.Position
+	castType := p.currentToken.Value
+
+	p.nextToken()
+	operand := p.parseExpression(PREFIX)
+
+	return ast.NewCastExpression(pos, castType, operand)
 }
 
 // parseGroupedExpression 解析括号表达式

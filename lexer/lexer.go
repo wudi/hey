@@ -391,6 +391,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		return Token{Type: TOKEN_RBRACE, Value: "}", Position: pos}
 	case '(':
+		// 检查是否是类型转换
+		if tokenType, tokenValue, isCast := l.checkTypeCast(); isCast {
+			return Token{Type: tokenType, Value: tokenValue, Position: pos}
+		}
 		l.readChar()
 		return Token{Type: TOKEN_LPAREN, Value: "(", Position: pos}
 	case ')':
@@ -1035,6 +1039,94 @@ func (l *Lexer) State() LexerState {
 }
 
 // 辅助函数
+
+// checkTypeCast 检查是否是类型转换 (如 (int), (bool), (string) 等)
+func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
+	// 保存当前位置
+	oldPosition := l.position
+	oldReadPosition := l.readPosition
+	oldCh := l.ch
+	oldLine := l.line
+	oldColumn := l.column
+	
+	// 读取左括号后面的内容
+	l.readChar() // 跳过 '('
+	
+	// 跳过空白字符
+	for l.ch == ' ' || l.ch == '\t' {
+		l.readChar()
+	}
+	
+	// 读取类型名称
+	start := l.position
+	if isLetter(l.ch) {
+		for isLetter(l.ch) || isDigit(l.ch) {
+			l.readChar()
+		}
+	}
+	
+	typeName := l.input[start:l.position]
+	
+	// 跳过空白字符
+	for l.ch == ' ' || l.ch == '\t' {
+		l.readChar()
+	}
+	
+	// 检查是否以 ')' 结尾
+	if l.ch != ')' {
+		// 恢复位置
+		l.position = oldPosition
+		l.readPosition = oldReadPosition
+		l.ch = oldCh
+		l.line = oldLine
+		l.column = oldColumn
+		return 0, "", false
+	}
+	
+	// 检查是否是有效的类型
+	var tokenType TokenType
+	var tokenValue string
+	
+	switch typeName {
+	case "int", "integer":
+		tokenType = T_INT_CAST
+		tokenValue = "(int)"
+	case "bool", "boolean":
+		tokenType = T_BOOL_CAST
+		tokenValue = "(bool)"
+	case "float", "double", "real":
+		tokenType = T_DOUBLE_CAST
+		tokenValue = "(double)"
+	case "string":
+		tokenType = T_STRING_CAST
+		tokenValue = "(string)"
+	case "array":
+		tokenType = T_ARRAY_CAST
+		tokenValue = "(array)"
+	case "object":
+		tokenType = T_OBJECT_CAST
+		tokenValue = "(object)"
+	case "unset":
+		tokenType = T_UNSET_CAST
+		tokenValue = "(unset)"
+	case "binary":
+		tokenType = T_STRING_CAST // binary cast is treated as string cast in PHP
+		tokenValue = "(binary)"
+	default:
+		// 恢复位置
+		l.position = oldPosition
+		l.readPosition = oldReadPosition
+		l.ch = oldCh
+		l.line = oldLine
+		l.column = oldColumn
+		return 0, "", false
+	}
+	
+	// 跳过 ')'
+	l.readChar()
+	
+	return tokenType, tokenValue, true
+}
 
 func isLetter(ch byte) bool {
 	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_'

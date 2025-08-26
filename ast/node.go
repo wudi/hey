@@ -318,6 +318,13 @@ type UnaryExpression struct {
 	Prefix   bool       `json:"prefix"` // true for ++$a, false for $a++
 }
 
+// CastExpression 类型转换表达式节点
+type CastExpression struct {
+	BaseNode
+	CastType string     `json:"castType"`
+	Operand  Expression `json:"operand"`
+}
+
 func NewUnaryExpression(pos lexer.Position, operator string, operand Expression, prefix bool) *UnaryExpression {
 	kind := ASTUnaryOp
 	if operator == "++" {
@@ -346,6 +353,19 @@ func NewUnaryExpression(pos lexer.Position, operator string, operand Expression,
 	}
 }
 
+// NewCastExpression 创建类型转换表达式
+func NewCastExpression(pos lexer.Position, castType string, operand Expression) *CastExpression {
+	return &CastExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTCast,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		CastType: castType,
+		Operand:  operand,
+	}
+}
+
 // GetChildren 返回子节点
 func (ue *UnaryExpression) GetChildren() []Node {
 	return []Node{ue.Operand}
@@ -365,6 +385,24 @@ func (ue *UnaryExpression) String() string {
 		return ue.Operator + ue.Operand.String()
 	}
 	return ue.Operand.String() + ue.Operator
+}
+
+// GetChildren 返回子节点
+func (ce *CastExpression) GetChildren() []Node {
+	return []Node{ce.Operand}
+}
+
+// Accept 接受访问者
+func (ce *CastExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ce) {
+		ce.Operand.Accept(visitor)
+	}
+}
+
+func (ce *CastExpression) expressionNode() {}
+
+func (ce *CastExpression) String() string {
+	return ce.CastType + " " + ce.Operand.String()
 }
 
 // Variable 变量
