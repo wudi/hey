@@ -1456,10 +1456,10 @@ func (p *Parser) parseArrayAccess(left ast.Expression) ast.Expression {
 	if p.currentToken.Type != lexer.TOKEN_RBRACKET {
 		expr := p.parseExpression(LOWEST)
 		index = &expr
-	}
-
-	if !p.expectToken(lexer.TOKEN_RBRACKET) {
-		return nil
+		
+		if !p.expectPeek(lexer.TOKEN_RBRACKET) {
+			return nil
+		}
 	}
 
 	return ast.NewArrayAccessExpression(pos, left, index)
