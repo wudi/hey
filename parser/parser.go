@@ -926,8 +926,8 @@ func parseHeredoc(p *Parser) ast.Expression {
 	// 期望下一个token是T_ENCAPSED_AND_WHITESPACE或T_END_HEREDOC
 	p.nextToken()
 
-	// 收集heredoc内容
-	for p.currentToken.Type == lexer.T_ENCAPSED_AND_WHITESPACE {
+	// 收集heredoc内容（包括变量）
+	for p.currentToken.Type == lexer.T_ENCAPSED_AND_WHITESPACE || p.currentToken.Type == lexer.T_VARIABLE {
 		content.WriteString(p.currentToken.Value)
 		p.nextToken()
 	}
@@ -1747,9 +1747,25 @@ func parseUseExpression(p *Parser) ast.Expression {
 // parseNowdocExpression 解析 nowdoc 表达式
 func parseNowdocExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	content := p.currentToken.Value
-
-	// Nowdoc 是单一token，直接返回字符串字面量
+	var contentBuilder strings.Builder
+	
+	// 跳过 T_NOWDOC 开始标记，收集内容
+	p.nextToken()
+	
+	// 收集 T_ENCAPSED_AND_WHITESPACE 内容
+	for p.currentToken.Type == lexer.T_ENCAPSED_AND_WHITESPACE {
+		contentBuilder.WriteString(p.currentToken.Value)
+		p.nextToken()
+	}
+	
+	// 期望 T_END_HEREDOC 结束标记
+	if p.currentToken.Type == lexer.T_END_HEREDOC {
+		// 不需要添加结束标记到内容中，只是验证它存在
+	} else {
+		p.errors = append(p.errors, fmt.Sprintf("expected T_END_HEREDOC, got %s instead", p.currentToken.Type))
+	}
+	
+	content := contentBuilder.String()
 	return ast.NewStringLiteral(pos, content, content)
 }
 

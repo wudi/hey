@@ -496,6 +496,391 @@ func TestParsing_OperatorPrecedence(t *testing.T) {
 	}
 }
 
+func TestParsing_HeredocStrings(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple Heredoc",
+			input:    `<?php $str = <<<EOD
+Hello World
+EOD; ?>`,
+			expected: "<<<EOD\nHello World\nEOD",
+		},
+		{
+			name:     "Heredoc with variable",
+			input:    `<?php $str = <<<EOD
+Hello $name
+EOD; ?>`,
+			expected: "<<<EOD\nHello $name\nEOD",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			stringLit, ok := assignment.Right.(*ast.StringLiteral)
+			assert.True(t, ok, "Right side should be StringLiteral")
+			assert.Equal(t, tt.expected, stringLit.Raw)
+		})
+	}
+}
+
+func TestParsing_NowdocStrings(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple Nowdoc",
+			input:    `<?php $str = <<<'EOD'
+Hello World
+EOD; ?>`,
+			expected: "Hello World\n",
+		},
+		{
+			name:     "Nowdoc with $variable (no interpolation)",
+			input:    `<?php $str = <<<'EOD'
+Hello $name
+EOD; ?>`,
+			expected: "Hello $name\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			stringLit, ok := assignment.Right.(*ast.StringLiteral)
+			assert.True(t, ok, "Right side should be StringLiteral")
+			assert.Equal(t, tt.expected, stringLit.Value)
+		})
+	}
+}
+
+func TestParsing_StringInterpolation(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		partCount   int
+		firstPart   string
+		secondPart  string
+	}{
+		{
+			name:        "Simple variable interpolation",
+			input:       `<?php $str = "Hello $name"; ?>`,
+			partCount:   2,
+			firstPart:   "Hello ",
+			secondPart:  "$name",
+		},
+		{
+			name:        "String with multiple variables",
+			input:       `<?php $str = "Hello $first and $second"; ?>`,
+			partCount:   4,  // "Hello ", "$first", " and ", "$second"
+			firstPart:   "Hello ",
+			secondPart:  "$first",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			// 检查是否是插值字符串
+			if interpolatedStr, ok := assignment.Right.(*ast.InterpolatedStringExpression); ok {
+				assert.Len(t, interpolatedStr.Parts, tt.partCount)
+				
+				// 检查第一部分
+				if len(interpolatedStr.Parts) > 0 {
+					if stringPart, ok := interpolatedStr.Parts[0].(*ast.StringLiteral); ok {
+						assert.Equal(t, tt.firstPart, stringPart.Value)
+					}
+				}
+				
+				// 检查第二部分
+				if len(interpolatedStr.Parts) > 1 {
+					if len(tt.secondPart) > 0 {
+						if tt.secondPart == "$name" {
+							if varPart, ok := interpolatedStr.Parts[1].(*ast.Variable); ok {
+								assert.Equal(t, tt.secondPart, varPart.Name)
+							}
+						} else {
+							if stringPart, ok := interpolatedStr.Parts[1].(*ast.StringLiteral); ok {
+								assert.Equal(t, tt.secondPart, stringPart.Value)
+							}
+						}
+					}
+				}
+			} else {
+				// 如果不是插值字符串，应该是普通字符串
+				stringLit, ok := assignment.Right.(*ast.StringLiteral)
+				assert.True(t, ok, "Right side should be StringLiteral or InterpolatedString")
+				_ = stringLit
+			}
+		})
+	}
+}
+
+func TestParsing_ComplexExpressions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		operator string
+	}{
+		{
+			name:     "Identical comparison",
+			input:    `<?php $result = $a === $b; ?>`,
+			operator: "===",
+		},
+		{
+			name:     "Not identical comparison",
+			input:    `<?php $result = $a !== $b; ?>`,
+			operator: "!==",
+		},
+		{
+			name:     "Less than or equal",
+			input:    `<?php $result = $a <= $b; ?>`,
+			operator: "<=",
+		},
+		{
+			name:     "Greater than or equal",
+			input:    `<?php $result = $a >= $b; ?>`,
+			operator: ">=",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			binaryExpr, ok := assignment.Right.(*ast.BinaryExpression)
+			assert.True(t, ok, "Right side should be BinaryExpression")
+			assert.Equal(t, tt.operator, binaryExpr.Operator)
+		})
+	}
+}
+
+func TestParsing_ArraySyntax(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		isShort  bool
+		expected int
+	}{
+		{
+			name:     "Array function syntax",
+			input:    `<?php $arr = array(1, 2, 3); ?>`,
+			isShort:  false,
+			expected: 3,
+		},
+		{
+			name:     "Short array syntax",
+			input:    `<?php $arr = [1, 2, 3]; ?>`,
+			isShort:  true,
+			expected: 3,
+		},
+		{
+			name:     "Associative array",
+			input:    `<?php $arr = ["name" => "John", "age" => 30]; ?>`,
+			isShort:  true,
+			expected: 2,
+		},
+		{
+			name:     "Empty array",
+			input:    `<?php $arr = []; ?>`,
+			isShort:  true,
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+			assert.True(t, ok, "Expression should be AssignmentExpression")
+
+			arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
+			assert.True(t, ok, "Right side should be ArrayExpression")
+			assert.Len(t, arrayExpr.Elements, tt.expected)
+		})
+	}
+}
+
+func TestParsing_FunctionCalls(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		funcName string
+		argCount int
+	}{
+		{
+			name:     "Function call no args",
+			input:    `<?php time(); ?>`,
+			funcName: "time",
+			argCount: 0,
+		},
+		{
+			name:     "Function call with args",
+			input:    `<?php strlen("hello"); ?>`,
+			funcName: "strlen",
+			argCount: 1,
+		},
+		{
+			name:     "Function call multiple args",
+			input:    `<?php substr("hello", 1, 3); ?>`,
+			funcName: "substr",
+			argCount: 3,
+		},
+		{
+			name:     "Function call in expression context",
+			input:    `<?php save_text($file, <<<'PHP'
+test
+PHP); ?>`,
+			funcName: "save_text",
+			argCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			assert.True(t, ok, "Statement should be ExpressionStatement")
+
+			callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
+			assert.True(t, ok, "Expression should be CallExpression")
+
+			// 检查函数名
+			if identifier, ok := callExpr.Callee.(*ast.IdentifierNode); ok {
+				assert.Equal(t, tt.funcName, identifier.Name)
+			}
+
+			// 检查参数数量
+			if tt.argCount == 0 {
+				assert.Nil(t, callExpr.Arguments)
+			} else {
+				assert.NotNil(t, callExpr.Arguments)
+				assert.Len(t, callExpr.Arguments, tt.argCount)
+			}
+		})
+	}
+}
+
+func TestParsing_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedError bool
+	}{
+		{
+			name:          "Unclosed string",
+			input:         `<?php $var = "unclosed string ?>`,
+			expectedError: true,
+		},
+		{
+			name:          "Unclosed array",
+			input:         `<?php $arr = [1, 2, 3 ?>`,
+			expectedError: true,
+		},
+		{
+			name:          "Valid syntax",
+			input:         `<?php $var = "test"; ?>`,
+			expectedError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			errors := p.Errors()
+			if tt.expectedError {
+				assert.NotEmpty(t, errors, "Expected parser errors but got none")
+			} else {
+				assert.Empty(t, errors, "Expected no parser errors but got: %v", errors)
+				assert.NotNil(t, program)
+			}
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {

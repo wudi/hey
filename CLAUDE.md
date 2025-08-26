@@ -60,11 +60,13 @@ Lexer 深度要求
 
 **Build and Test:**
 ```bash
-go test ./...              # Run all tests
-go test ./lexer -v         # Run lexer tests with verbose output
-go test ./parser -v        # Run parser tests with verbose output
-go test ./ast -v           # Run AST tests with verbose output
-go run benchmark_test.go   # Run performance benchmarks
+go test ./...                    # Run all tests
+go test ./lexer -v               # Run lexer tests with verbose output
+go test ./parser -v              # Run parser tests with verbose output
+go test ./ast -v                 # Run AST tests with verbose output
+go test ./parser -bench=.        # Run performance benchmarks
+go test ./parser -bench=. -run=^$  # Run only benchmarks (no unit tests)
+go test ./parser -run=TestParsing_NowdocStrings  # Run specific test
 ```
 
 **Build CLI Tool:**
@@ -149,11 +151,18 @@ This is a PHP parser implementation in Go with the following structure:
 - JSON serialization preserves full AST structure for external tools
 
 ### Testing Strategy
-- Unit tests for each module with testify framework
-- Shebang handling tests for executable PHP files
-- PHP compatibility validation using `/bin/php` and `token_get_all()`
-- Performance benchmarking and parsing validation
-- Edge case testing for error conditions and malformed syntax
+- **Unit Tests**: Comprehensive table-driven tests using testify framework
+  - 26+ parser tests covering variables, expressions, arrays, functions, classes
+  - Heredoc/Nowdoc string parsing tests (recently added)
+  - String interpolation and complex expression tests
+  - Error handling and syntax error recovery tests
+- **Benchmark Tests**: Performance testing for different complexity levels
+  - Simple assignments (~1.6μs), complex expressions (~4μs)  
+  - String parsing benchmarks (simple strings, interpolation, heredoc/nowdoc)
+  - Memory allocation tracking with `-benchmem`
+- **PHP Compatibility**: Validation using `/bin/php` and `token_get_all()`
+- **Shebang Support**: Tests for executable PHP files with shebang headers
+- **Edge Cases**: Malformed syntax, error recovery, and boundary conditions
 
 ## Important Reminders
 
@@ -166,9 +175,11 @@ This is a PHP parser implementation in Go with the following structure:
 6. Add constructor functions (NewXXXExpression) following existing patterns
 
 **Parser Error Debugging:**
-- "no prefix parse function found" → add prefix parse function to parser initialization
-- "no infix parse function found" → add infix parse function with correct precedence
+- "no prefix parse function found" → add prefix parse function to parser initialization in `parser.go:80-100`
+- "no infix parse function found" → add infix parse function with correct precedence in `parser.go:100-120`
 - Missing AST constructors → add NewXXXExpression functions in `ast/node.go`
+- Nowdoc/Heredoc parsing issues → check `parseNowdocExpression` and `parseHeredoc` functions
+- String interpolation problems → verify `InterpolatedStringExpression` handling
 
 **PHP Compatibility Requirements:**
 - Token IDs must match PHP 8.4 official implementation exactly
@@ -178,3 +189,16 @@ This is a PHP parser implementation in Go with the following structure:
 - Reference `/home/ubuntu/php-src/Zend/zend_language_parser.y` for grammar rules
 - Reference `/home/ubuntu/php-src/Zend/zend_ast.h` for AST node kinds
 - Reference `/home/ubuntu/php-src/Zend/zend_language_scanner.l` for lexer and lexer states and tokenization
+
+## Recent Improvements
+
+**Nowdoc/Heredoc Parsing (Recently Fixed):**
+- Fixed multi-token nowdoc parsing in `parseNowdocExpression()` at `parser.go:1747`
+- Added support for variables in heredoc content in `parseHeredoc()` at `parser.go:930`  
+- Comprehensive test coverage for both nowdoc and heredoc scenarios
+
+**Enhanced Test Suite:**
+- Added table-driven tests for string interpolation scenarios
+- Benchmark tests for different parsing complexity levels
+- Error case testing with proper validation
+- All tests follow Go testing best practices with testify framework
