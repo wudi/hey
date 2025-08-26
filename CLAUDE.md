@@ -189,6 +189,7 @@ This is a PHP parser implementation in Go with the following structure:
 - Reference `/home/ubuntu/php-src/Zend/zend_language_parser.y` for grammar rules
 - Reference `/home/ubuntu/php-src/Zend/zend_ast.h` for AST node kinds
 - Reference `/home/ubuntu/php-src/Zend/zend_language_scanner.l` for lexer and lexer states and tokenization
+- Before performing any fixes or refactoring, analyze the original PHP code's lexical and syntactic structure first.
 
 ## Recent Improvements
 
