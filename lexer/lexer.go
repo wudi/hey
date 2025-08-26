@@ -672,7 +672,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 			// 包含变量插值，切换到 ST_DOUBLE_QUOTES 状态
 			l.readChar() // 跳过开头的引号
 			l.state = ST_DOUBLE_QUOTES
-			return Token{Type: '"', Value: "\"", Position: pos}
+			return Token{Type: TOKEN_QUOTE, Value: "\"", Position: pos}
 		} else {
 			// 简单字符串，无插值
 			str, err := l.readString('"')
@@ -730,7 +730,7 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 	if l.ch == '"' {
 		l.readChar() // 跳过结束引号
 		l.state = ST_IN_SCRIPTING
-		return Token{Type: '"', Value: "\"", Position: pos}
+		return Token{Type: TOKEN_QUOTE, Value: "\"", Position: pos}
 	}
 	
 	if l.ch == 0 {

@@ -133,6 +133,7 @@ func New(l *lexer.Lexer) *Parser {
 	// String interpolation and nowdoc
 	p.registerPrefix(lexer.T_NOWDOC, p.parseNowdocExpression)
 	p.registerPrefix(lexer.T_CURLY_OPEN, p.parseCurlyOpenExpression)
+	p.registerPrefix(lexer.TOKEN_QUOTE, p.parseInterpolatedString)
 
 	// Control flow tokens that might appear as expressions in some contexts
 	p.registerPrefix(lexer.T_ELSEIF, p.parseFallback)
@@ -1901,6 +1902,48 @@ func (p *Parser) parseStaticAccess() ast.Expression {
 
 	// 创建一个静态访问表达式，左边为 nil 表示省略了类名
 	return ast.NewStaticAccessExpression(pos, nil, property)
+}
+
+// parseInterpolatedString 解析包含变量插值的双引号字符串
+func (p *Parser) parseInterpolatedString() ast.Expression {
+	pos := p.currentToken.Position
+	parts := []ast.Expression{}
+	
+	// 跳过开始的引号
+	p.nextToken()
+	
+	// 解析字符串内容，直到遇到结束的引号
+	for p.currentToken.Type != lexer.TOKEN_QUOTE && !p.isAtEnd() {
+		switch p.currentToken.Type {
+		case lexer.T_VARIABLE:
+			// 变量插值
+			variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
+			parts = append(parts, variable)
+		case lexer.T_ENCAPSED_AND_WHITESPACE:
+			// 字符串片段
+			if p.currentToken.Value != "" {
+				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				parts = append(parts, stringPart)
+			}
+		default:
+			// 其他内容，当作字符串处理
+			if p.currentToken.Value != "" {
+				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				parts = append(parts, stringPart)
+			}
+		}
+		p.nextToken()
+	}
+	
+	// 如果只有一个部分且是简单字符串，返回字符串字面量
+	if len(parts) == 1 {
+		if stringLit, ok := parts[0].(*ast.StringLiteral); ok {
+			return stringLit
+		}
+	}
+	
+	// 返回字符串插值表达式
+	return ast.NewInterpolatedStringExpression(pos, parts)
 }
 
 // parseVisibilityModifier 解析可见性修饰符 public/private/protected

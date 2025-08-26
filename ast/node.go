@@ -478,6 +478,47 @@ func (sl *StringLiteral) String() string {
 	return sl.Raw
 }
 
+// InterpolatedStringExpression 字符串插值表达式
+type InterpolatedStringExpression struct {
+	BaseNode
+	Parts []Expression `json:"parts"` // 字符串的各个部分
+}
+
+func NewInterpolatedStringExpression(pos lexer.Position, parts []Expression) *InterpolatedStringExpression {
+	return &InterpolatedStringExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTEncapsList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Parts: parts,
+	}
+}
+
+// GetChildren 返回子节点
+func (ise *InterpolatedStringExpression) GetChildren() []Node {
+	nodes := make([]Node, len(ise.Parts))
+	for i, part := range ise.Parts {
+		nodes[i] = part
+	}
+	return nodes
+}
+
+// Accept 接受访问者
+func (ise *InterpolatedStringExpression) Accept(visitor Visitor) {
+	visitor.Visit(ise)
+}
+
+func (ise *InterpolatedStringExpression) expressionNode() {}
+
+func (ise *InterpolatedStringExpression) String() string {
+	var parts []string
+	for _, part := range ise.Parts {
+		parts = append(parts, part.String())
+	}
+	return `"` + strings.Join(parts, "") + `"`
+}
+
 // NumberLiteral 数字字面量
 type NumberLiteral struct {
 	BaseNode

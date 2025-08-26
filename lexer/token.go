@@ -272,6 +272,7 @@ const (
 	TOKEN_AT          TokenType = 1000 + '@'  // @
 	TOKEN_DOLLAR      TokenType = 1000 + '$'  // $
 	TOKEN_BACKSLASH   TokenType = 1000 + '\\' // \
+	TOKEN_QUOTE       TokenType = 1000 + '"'  // "
 )
 
 // TokenNames 提供 Token 类型到名称的映射
@@ -461,6 +462,7 @@ var TokenNames = map[TokenType]string{
 	TOKEN_AT:          "@",
 	TOKEN_DOLLAR:      "$",
 	TOKEN_BACKSLASH:   "\\",
+	TOKEN_QUOTE:       "\"",
 }
 
 // Keywords 定义 PHP 关键字到 Token 类型的映射
