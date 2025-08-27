@@ -2555,11 +2555,22 @@ func parseGotoStatement(p *Parser) ast.Statement {
 }
 
 // parseNewExpression 解析new表达式
+// isAnonymousClassPattern 检查是否是匿名类模式
+func isAnonymousClassPattern(p *Parser) bool {
+	// 简单检查：如果 peekToken 是 class、修饰符或属性，就认为是匿名类
+	return p.peekToken.Type == lexer.T_CLASS || 
+		   p.peekToken.Type == lexer.T_FINAL || 
+		   p.peekToken.Type == lexer.T_ABSTRACT || 
+		   p.peekToken.Type == lexer.T_READONLY ||
+		   p.peekToken.Type == lexer.T_ATTRIBUTE  // 支持属性 #[
+}
+
 func parseNewExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
-	// 检查是否是匿名类 "new class"
-	if p.peekToken.Type == lexer.T_CLASS {
+	// 检查是否是匿名类 "new [modifiers] class"
+	// 需要向前看多个token来检测匿名类模式
+	if isAnonymousClassPattern(p) {
 		return parseAnonymousClass(p, pos)
 	}
 
@@ -2696,7 +2707,7 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 	pos := p.currentToken.Position
 	var attributes []*ast.Attribute
 
-	// 解析第一个属性
+	// 当前token应该是 T_ATTRIBUTE (#[)，需要移动到第一个属性名
 	if !p.expectPeek(lexer.T_STRING) {
 		return nil
 	}
@@ -3916,8 +3927,30 @@ func parseStaticOrArrowFunctionExpression(p *Parser) ast.Expression {
 
 // parseAnonymousClass 解析匿名类表达式 new class(args) extends Parent implements Interface { ... }
 func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
-	// 跳过 'new' 移动到 'class'
+	// 跳过 'new' 关键字
 	p.nextToken()
+	
+	// 解析属性 (如果存在)
+	var attributes []*ast.AttributeGroup
+	for p.currentToken.Type == lexer.T_ATTRIBUTE {
+		attrGroup := parseAttributeGroup(p)
+		if attrGroup != nil {
+			attributes = append(attributes, attrGroup)
+		}
+		p.nextToken() // 移动到下一个token
+	}
+	
+	// 解析类修饰符
+	var modifiers []string
+	for p.currentToken.Type == lexer.T_FINAL || p.currentToken.Type == lexer.T_ABSTRACT || p.currentToken.Type == lexer.T_READONLY {
+		modifiers = append(modifiers, p.currentToken.Value)
+		p.nextToken()
+	}
+	
+	// 期望 'class' 关键字
+	if p.currentToken.Type != lexer.T_CLASS {
+		return nil
+	}
 	
 	var arguments []ast.Expression
 	
@@ -3973,7 +4006,7 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 	// 解析类体
 	body := parseClassBody(p)
 	
-	return ast.NewAnonymousClass(pos, arguments, extends, implements, body)
+	return ast.NewAnonymousClass(pos, attributes, modifiers, arguments, extends, implements, body)
 }
 
 // parseClassBody 解析类体

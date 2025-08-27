@@ -4819,19 +4819,23 @@ func (fcc *FirstClassCallable) String() string {
 // AnonymousClass 表示匿名类表达式
 type AnonymousClass struct {
 	BaseNode
-	Arguments  []Expression `json:"arguments,omitempty"`  // 构造函数参数
-	Extends    Expression   `json:"extends,omitempty"`    // 继承的类
-	Implements []Expression `json:"implements,omitempty"` // 实现的接口
-	Body       []Statement  `json:"body"`                 // 类体
+	Attributes []*AttributeGroup `json:"attributes,omitempty"` // 类属性 #[Attr]
+	Modifiers  []string          `json:"modifiers,omitempty"`  // 类修饰符 (final, abstract, readonly)
+	Arguments  []Expression      `json:"arguments,omitempty"`  // 构造函数参数
+	Extends    Expression        `json:"extends,omitempty"`    // 继承的类
+	Implements []Expression      `json:"implements,omitempty"` // 实现的接口
+	Body       []Statement       `json:"body"`                 // 类体
 }
 
-func NewAnonymousClass(pos lexer.Position, args []Expression, extends Expression, implements []Expression, body []Statement) *AnonymousClass {
+func NewAnonymousClass(pos lexer.Position, attributes []*AttributeGroup, modifiers []string, args []Expression, extends Expression, implements []Expression, body []Statement) *AnonymousClass {
 	return &AnonymousClass{
 		BaseNode: BaseNode{
 			Kind:     ASTAnonymousClass,
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
+		Attributes: attributes,
+		Modifiers:  modifiers,
 		Arguments:  args,
 		Extends:    extends,
 		Implements: implements,
