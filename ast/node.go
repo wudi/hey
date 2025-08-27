@@ -2876,6 +2876,112 @@ func (ma *MatchArm) String() string {
 	return result
 }
 
+// NamedArgument 表示命名参数 (PHP 8.0+) - name: value
+type NamedArgument struct {
+	BaseNode
+	Name  *IdentifierNode `json:"name"`  // 参数名
+	Value Expression      `json:"value"` // 参数值
+}
+
+func NewNamedArgument(pos lexer.Position, name *IdentifierNode, value Expression) *NamedArgument {
+	return &NamedArgument{
+		BaseNode: BaseNode{
+			Kind:     ASTNamedArg,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:  name,
+		Value: value,
+	}
+}
+
+func (na *NamedArgument) GetChildren() []Node {
+	children := make([]Node, 0)
+	if na.Name != nil {
+		children = append(children, na.Name)
+	}
+	if na.Value != nil {
+		children = append(children, na.Value)
+	}
+	return children
+}
+
+func (na *NamedArgument) Accept(visitor Visitor) {
+	if visitor.Visit(na) {
+		if na.Name != nil {
+			na.Name.Accept(visitor)
+		}
+		if na.Value != nil {
+			na.Value.Accept(visitor)
+		}
+	}
+}
+
+func (na *NamedArgument) expressionNode() {}
+
+func (na *NamedArgument) String() string {
+	return na.Name.String() + ": " + na.Value.String()
+}
+
+// Attribute 表示PHP 8.0属性/注解 - #[AttributeName(arguments)]
+type Attribute struct {
+	BaseNode
+	Name      *IdentifierNode `json:"name"`      // 属性名称
+	Arguments []Expression    `json:"arguments"` // 属性参数
+}
+
+func NewAttribute(pos lexer.Position, name *IdentifierNode, arguments []Expression) *Attribute {
+	return &Attribute{
+		BaseNode: BaseNode{
+			Kind:     ASTAttribute,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:      name,
+		Arguments: arguments,
+	}
+}
+
+func (a *Attribute) GetChildren() []Node {
+	children := make([]Node, 0)
+	if a.Name != nil {
+		children = append(children, a.Name)
+	}
+	for _, arg := range a.Arguments {
+		children = append(children, arg)
+	}
+	return children
+}
+
+func (a *Attribute) Accept(visitor Visitor) {
+	if visitor.Visit(a) {
+		if a.Name != nil {
+			a.Name.Accept(visitor)
+		}
+		for _, arg := range a.Arguments {
+			arg.Accept(visitor)
+		}
+	}
+}
+
+func (a *Attribute) expressionNode() {}
+
+func (a *Attribute) String() string {
+	result := "#[" + a.Name.String()
+	if len(a.Arguments) > 0 {
+		result += "("
+		for i, arg := range a.Arguments {
+			if i > 0 {
+				result += ", "
+			}
+			result += arg.String()
+		}
+		result += ")"
+	}
+	result += "]"
+	return result
+}
+
 // CallExpression 函数调用表达式
 type CallExpression struct {
 	BaseNode
@@ -4470,4 +4576,44 @@ func (ds *DeclareStatement) String() string {
 		result += ";"
 	}
 	return result
+}
+
+// FirstClassCallable 表示第一类可调用语法 function(...), $obj->method(...), Class::method(...)
+type FirstClassCallable struct {
+	BaseNode
+	Callable Expression `json:"callable"` // 被调用的函数/方法/静态方法
+}
+
+func NewFirstClassCallable(pos lexer.Position, callable Expression) *FirstClassCallable {
+	return &FirstClassCallable{
+		BaseNode: BaseNode{
+			Kind:     ASTFirstClassCallable,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Callable: callable,
+	}
+}
+
+func (fcc *FirstClassCallable) GetChildren() []Node {
+	var children []Node
+	if fcc.Callable != nil {
+		children = append(children, fcc.Callable)
+	}
+	return children
+}
+
+func (fcc *FirstClassCallable) Accept(visitor Visitor) {
+	if fcc.Callable != nil {
+		fcc.Callable.Accept(visitor)
+	}
+}
+
+func (fcc *FirstClassCallable) expressionNode() {}
+
+func (fcc *FirstClassCallable) String() string {
+	if fcc.Callable != nil {
+		return fcc.Callable.String() + "(...)"
+	}
+	return "(...)"
 }

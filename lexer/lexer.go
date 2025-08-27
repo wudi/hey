@@ -694,6 +694,12 @@ func (l *Lexer) nextTokenInScripting() Token {
 		return Token{Type: T_CONSTANT_ENCAPSED_STRING, Value: "'" + str + "'", Position: pos}
 		
 	case '#':
+		// 检查是否为属性语法 #[
+		if l.peekChar() == '[' {
+			l.readChar() // 读取 [
+			l.readChar() // 跳过 [，因为我们已经消费了整个 #[ token
+			return Token{Type: T_ATTRIBUTE, Value: "#[", Position: pos}
+		}
 		// 单行注释 (# 形式)
 		comment := l.readLineComment()
 		return Token{Type: T_COMMENT, Value: comment, Position: pos}

@@ -154,6 +154,7 @@ func init() {
 		lexer.T_ARRAY_CAST:               parseTypeCast,
 		lexer.T_OBJECT_CAST:              parseTypeCast,
 		lexer.T_UNSET_CAST:               parseTypeCast,
+		lexer.T_ATTRIBUTE:                parseAttributeExpression,
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
 		lexer.TOKEN_PLUS:            parseInfixExpression,
@@ -1747,6 +1748,16 @@ func parsePostfixExpression(p *Parser, left ast.Expression) ast.Expression {
 // parseCallExpression 解析函数调用表达式
 func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
+	
+	// 检查第一类可调用语法 function(...) 
+	if p.peekToken.Type == lexer.T_ELLIPSIS {
+		p.nextToken() // 移动到 ...
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+		return ast.NewFirstClassCallable(pos, fn)
+	}
+	
 	call := ast.NewCallExpression(pos, fn)
 
 	// 解析参数列表
@@ -1755,7 +1766,7 @@ func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 	return call
 }
 
-// parseExpressionList 解析表达式列表（用于函数调用参数等）
+// parseExpressionList 解析表达式列表（用于函数调用参数等），支持命名参数
 func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	var args []ast.Expression
 
@@ -1769,7 +1780,16 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	for p.currentToken.Type == lexer.T_COMMENT {
 		p.nextToken()
 	}
-	args = append(args, parseExpression(p, LOWEST))
+	
+	// Check for named argument (identifier: value)
+	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+		arg := parseNamedArgument(p)
+		if arg != nil {
+			args = append(args, arg)
+		}
+	} else {
+		args = append(args, parseExpression(p, LOWEST))
+	}
 
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken()
@@ -1778,7 +1798,16 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 		for p.currentToken.Type == lexer.T_COMMENT {
 			p.nextToken()
 		}
-		args = append(args, parseExpression(p, LOWEST))
+		
+		// Check for named argument (identifier: value)
+		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+			arg := parseNamedArgument(p)
+			if arg != nil {
+				args = append(args, arg)
+			}
+		} else {
+			args = append(args, parseExpression(p, LOWEST))
+		}
 	}
 
 	if !p.expectPeek(end) {
@@ -1786,6 +1815,28 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	}
 
 	return args
+}
+
+// parseNamedArgument 解析命名参数 (PHP 8.0+) - name: value
+func parseNamedArgument(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 解析参数名
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	
+	// 期望冒号
+	if !p.expectPeek(lexer.TOKEN_COLON) {
+		return nil
+	}
+	
+	// 解析参数值
+	p.nextToken()
+	value := parseExpression(p, LOWEST)
+	if value == nil {
+		return nil
+	}
+	
+	return ast.NewNamedArgument(pos, name, value)
 }
 
 // PHP 特定的解析函数
@@ -2548,6 +2599,75 @@ func parseEmptyExpression(p *Parser) ast.Expression {
 	}
 
 	return ast.NewEmptyExpression(pos, expr)
+}
+
+// parseAttributeExpression 解析属性表达式 #[AttributeName(args)]
+func parseAttributeExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+
+	// 当前 token 是 T_ATTRIBUTE (#[)
+	// 需要解析属性名称
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	
+	var arguments []ast.Expression
+	
+	// 检查是否有参数列表
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		p.nextToken() // 移动到 (
+		
+		// 解析参数列表（使用与 parseExpressionList 相同的逻辑）
+		if p.peekToken.Type != lexer.TOKEN_RPAREN {
+			p.nextToken()
+			// Skip comments before parsing expression
+			for p.currentToken.Type == lexer.T_COMMENT {
+				p.nextToken()
+			}
+			
+			// Check for named argument (identifier: value)
+			if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+				arg := parseNamedArgument(p)
+				if arg != nil {
+					arguments = append(arguments, arg)
+				}
+			} else {
+				arguments = append(arguments, parseExpression(p, LOWEST))
+			}
+			
+			for p.peekToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 移动到逗号
+				p.nextToken() // 移动到下一个参数
+				// Skip comments after comma
+				for p.currentToken.Type == lexer.T_COMMENT {
+					p.nextToken()
+				}
+				
+				// Check for named argument
+				if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+					arg := parseNamedArgument(p)
+					if arg != nil {
+						arguments = append(arguments, arg)
+					}
+				} else {
+					arguments = append(arguments, parseExpression(p, LOWEST))
+				}
+			}
+		}
+		
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+	}
+	
+	// 期望结束的 ]
+	if !p.expectPeek(lexer.TOKEN_RBRACKET) {
+		return nil
+	}
+	
+	return ast.NewAttribute(pos, name, arguments)
 }
 
 // parseArrayLiteral 解析数组字面量 [] - 根据 PHP 官方语法

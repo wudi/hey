@@ -152,6 +152,7 @@ const (
 	ASTCase               ASTKind = 778
 	ASTEvalExpression     ASTKind = 779 
 	ASTVisibilityModifier ASTKind = 780
+	ASTFirstClassCallable ASTKind = 781
 
 	// 4子节点 - 4 child nodes (bits 8-15 = 4)
 	ASTFor      ASTKind = 1024 // 4 << 8
@@ -449,6 +450,8 @@ func (k ASTKind) String() string {
 		return "EVAL_EXPRESSION"
 	case ASTVisibilityModifier:
 		return "VISIBILITY_MODIFIER"
+	case ASTFirstClassCallable:
+		return "FIRST_CLASS_CALLABLE"
 
 	// 4子节点
 	case ASTFor:

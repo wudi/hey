@@ -3055,6 +3055,302 @@ func TestParsing_NamespaceSeparator(t *testing.T) {
 	}
 }
 
+func TestParsing_Attributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Simple attribute without parameters",
+			input: `<?php #[Route]`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				attr, ok := stmt.Expression.(*ast.Attribute)
+				assert.True(t, ok, "Expected Attribute")
+				assert.Equal(t, "Route", attr.Name.Name)
+				assert.Empty(t, attr.Arguments)
+			},
+		},
+		{
+			name:  "Attribute with string parameter",
+			input: `<?php #[Route("/api/users")]`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				attr, ok := stmt.Expression.(*ast.Attribute)
+				assert.True(t, ok, "Expected Attribute")
+				assert.Equal(t, "Route", attr.Name.Name)
+				assert.Len(t, attr.Arguments, 1)
+				
+				strLit, ok := attr.Arguments[0].(*ast.StringLiteral)
+				assert.True(t, ok, "Expected StringLiteral")
+				assert.Equal(t, "/api/users", strLit.Value)
+			},
+		},
+		{
+			name:  "Attribute with multiple parameters",
+			input: `<?php #[Route("/api/users", "GET")]`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				attr, ok := stmt.Expression.(*ast.Attribute)
+				assert.True(t, ok, "Expected Attribute")
+				assert.Equal(t, "Route", attr.Name.Name)
+				assert.Len(t, attr.Arguments, 2)
+				
+				pathArg, ok := attr.Arguments[0].(*ast.StringLiteral)
+				assert.True(t, ok, "Expected StringLiteral for path")
+				assert.Equal(t, "/api/users", pathArg.Value)
+				
+				methodArg, ok := attr.Arguments[1].(*ast.StringLiteral)
+				assert.True(t, ok, "Expected StringLiteral for method")
+				assert.Equal(t, "GET", methodArg.Value)
+			},
+		},
+		{
+			name:  "Attribute with complex arguments",
+			input: `<?php #[Cache(timeout: 3600)]`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				attr, ok := stmt.Expression.(*ast.Attribute)
+				assert.True(t, ok, "Expected Attribute")
+				assert.Equal(t, "Cache", attr.Name.Name)
+				assert.Len(t, attr.Arguments, 1)
+				
+				namedArg, ok := attr.Arguments[0].(*ast.NamedArgument)
+				assert.True(t, ok, "Expected NamedArgument")
+				assert.Equal(t, "timeout", namedArg.Name.Name)
+				
+				numLit, ok := namedArg.Value.(*ast.NumberLiteral)
+				assert.True(t, ok, "Expected NumberLiteral")
+				assert.Equal(t, "3600", numLit.Value)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_IntersectionTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Function with intersection type return",
+			input: `<?php function test(): Type1&Type2 {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				assert.True(t, ok, "Expected FunctionDeclaration")
+				assert.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
+				
+				assert.NotNil(t, funcDecl.ReturnType)
+				assert.Equal(t, ast.ASTTypeIntersection, funcDecl.ReturnType.GetKind())
+				assert.Len(t, funcDecl.ReturnType.IntersectionTypes, 2)
+				assert.Equal(t, "Type1", funcDecl.ReturnType.IntersectionTypes[0].Name)
+				assert.Equal(t, "Type2", funcDecl.ReturnType.IntersectionTypes[1].Name)
+			},
+		},
+		{
+			name:  "Class method with intersection type return",
+			input: `<?php class Test { public function method(): Interface1&Interface2 {} }`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				classExpr, ok := program.Body[0].(*ast.ExpressionStatement).Expression.(*ast.ClassExpression)
+				assert.True(t, ok, "Expected ClassExpression")
+				assert.Equal(t, "Test", classExpr.Name.(*ast.IdentifierNode).Name)
+				assert.Len(t, classExpr.Body, 1)
+				
+				methodDecl, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				assert.True(t, ok, "Expected FunctionDeclaration")
+				assert.Equal(t, "method", methodDecl.Name.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "public", methodDecl.Visibility)
+				
+				assert.NotNil(t, methodDecl.ReturnType)
+				assert.Equal(t, ast.ASTTypeIntersection, methodDecl.ReturnType.GetKind())
+				assert.Len(t, methodDecl.ReturnType.IntersectionTypes, 2)
+				assert.Equal(t, "Interface1", methodDecl.ReturnType.IntersectionTypes[0].Name)
+				assert.Equal(t, "Interface2", methodDecl.ReturnType.IntersectionTypes[1].Name)
+			},
+		},
+		{
+			name:  "Multiple intersection types",
+			input: `<?php function complex(): A&B&C {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				assert.True(t, ok, "Expected FunctionDeclaration")
+				assert.Equal(t, "complex", funcDecl.Name.(*ast.IdentifierNode).Name)
+				
+				assert.NotNil(t, funcDecl.ReturnType)
+				assert.Equal(t, ast.ASTTypeIntersection, funcDecl.ReturnType.GetKind())
+				assert.Len(t, funcDecl.ReturnType.IntersectionTypes, 3)
+				assert.Equal(t, "A", funcDecl.ReturnType.IntersectionTypes[0].Name)
+				assert.Equal(t, "B", funcDecl.ReturnType.IntersectionTypes[1].Name)
+				assert.Equal(t, "C", funcDecl.ReturnType.IntersectionTypes[2].Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_FirstClassCallable(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Simple function first-class callable",
+			input: `<?php $func = strlen(...);`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expected AssignmentExpression")
+				
+				fcc, ok := assign.Right.(*ast.FirstClassCallable)
+				assert.True(t, ok, "Expected FirstClassCallable")
+				
+				ident, ok := fcc.Callable.(*ast.IdentifierNode)
+				assert.True(t, ok, "Expected IdentifierNode")
+				assert.Equal(t, "strlen", ident.Name)
+			},
+		},
+		{
+			name:  "Object method first-class callable",
+			input: `<?php $method = $obj->method(...);`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expected AssignmentExpression")
+				
+				fcc, ok := assign.Right.(*ast.FirstClassCallable)
+				assert.True(t, ok, "Expected FirstClassCallable")
+				
+				propAccess, ok := fcc.Callable.(*ast.PropertyAccessExpression)
+				assert.True(t, ok, "Expected PropertyAccessExpression")
+				
+				objVar, ok := propAccess.Object.(*ast.Variable)
+				assert.True(t, ok, "Expected Variable")
+				assert.Equal(t, "$obj", objVar.Name)
+				
+				assert.Equal(t, "method", propAccess.Property.Name)
+			},
+		},
+		{
+			name:  "Static method first-class callable",
+			input: `<?php $staticMethod = MyClass::method(...);`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expected AssignmentExpression")
+				
+				fcc, ok := assign.Right.(*ast.FirstClassCallable)
+				assert.True(t, ok, "Expected FirstClassCallable")
+				
+				staticAccess, ok := fcc.Callable.(*ast.StaticAccessExpression)
+				assert.True(t, ok, "Expected StaticAccessExpression")
+				
+				className, ok := staticAccess.Class.(*ast.IdentifierNode)
+				assert.True(t, ok, "Expected IdentifierNode")
+				assert.Equal(t, "MyClass", className.Name)
+				
+				methodName, ok := staticAccess.Property.(*ast.IdentifierNode)
+				assert.True(t, ok, "Expected IdentifierNode")
+				assert.Equal(t, "method", methodName.Name)
+			},
+		},
+		{
+			name:  "Built-in function first-class callable",
+			input: `<?php $builtin = array_map(...);`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+				
+				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expected AssignmentExpression")
+				
+				fcc, ok := assign.Right.(*ast.FirstClassCallable)
+				assert.True(t, ok, "Expected FirstClassCallable")
+				
+				ident, ok := fcc.Callable.(*ast.IdentifierNode)
+				assert.True(t, ok, "Expected IdentifierNode")
+				assert.Equal(t, "array_map", ident.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {
