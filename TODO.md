@@ -28,13 +28,21 @@
 - [x] 左结合性（支持链式操作）
 - [x] 支持简单函数名和函数调用作为右操作数
 
-### 4. 数组展开语法 (...) - ❌ 未实现
-- [ ] 数组中的展开语法：`T_ELLIPSIS expr` 在 `array_pair` 中
-- [ ] 参数中的展开语法：`T_ELLIPSIS expr` 在 `argument` 中
+### 4. 数组展开语法 (...) - ✅ 已完成
+- [x] 数组中的展开语法：`T_ELLIPSIS expr` 在 `array_pair` 中
+- [x] 参数中的展开语法：`T_ELLIPSIS expr` 在 `argument` 中
+- [x] SpreadExpression AST节点实现
+- [x] 支持数组字面量和array()语法中的展开
+- [x] 支持函数调用参数的展开语法
+- [x] 正确区分第一类可调用语法和展开语法
 
-### 5. 命名参数 (Named Arguments) - ❌ 未实现
-- [ ] 实现 `identifier ':' expr` 语法
-- [ ] 在函数调用中支持命名参数
+### 5. 命名参数 (Named Arguments) - ✅ 已完成
+- [x] 实现 `identifier ':' expr` 语法
+- [x] 在函数调用中支持命名参数
+- [x] NamedArgument AST节点实现
+- [x] 支持单个和多个命名参数
+- [x] 支持位置参数与命名参数混合使用
+- [x] 支持复杂表达式作为命名参数值
 
 ## 中优先级 (Medium Priority)
 
