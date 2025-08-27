@@ -5049,3 +5049,202 @@ func TestParsing_PropertyAccessInComplexExpressions(t *testing.T) {
 		})
 	}
 }
+
+// TestParsing_SingleLineControlStructures tests single-line if/while/for statements without braces
+func TestParsing_SingleLineControlStructures(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name:  "Single-line if statement with assignment",
+			input: `<?php if($x > 0) $y = 1; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				ifStmt, ok := program.Body[0].(*ast.IfStatement)
+				require.True(t, ok, "Should be IfStatement")
+				require.NotNil(t, ifStmt.Test)
+				require.Len(t, ifStmt.Consequent, 1)
+				
+				// Check the single statement in consequent
+				exprStmt, ok := ifStmt.Consequent[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Consequent should contain ExpressionStatement")
+				
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Should be assignment")
+				assert.Equal(t, "=", assignment.Operator)
+			},
+		},
+		{
+			name:  "Single-line while statement",
+			input: `<?php while($x > 0) $x--; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				whileStmt, ok := program.Body[0].(*ast.WhileStatement)
+				require.True(t, ok, "Should be WhileStatement")
+				require.NotNil(t, whileStmt.Test)
+				require.Len(t, whileStmt.Body, 1)
+				
+				// Check the single statement in body
+				exprStmt, ok := whileStmt.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Body should contain ExpressionStatement")
+				
+				unary, ok := exprStmt.Expression.(*ast.UnaryExpression)
+				require.True(t, ok, "Should be unary expression")
+				assert.Equal(t, "--", unary.Operator)
+				assert.False(t, unary.Prefix, "Should be postfix")
+			},
+		},
+		{
+			name:  "Single-line for statement",
+			input: `<?php for($i = 0; $i < 10; $i++) echo $i; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				forStmt, ok := program.Body[0].(*ast.ForStatement)
+				require.True(t, ok, "Should be ForStatement")
+				require.NotNil(t, forStmt.Init)
+				require.NotNil(t, forStmt.Test)
+				require.NotNil(t, forStmt.Update)
+				require.Len(t, forStmt.Body, 1)
+				
+				// Check the single statement in body
+				echoStmt, ok := forStmt.Body[0].(*ast.EchoStatement)
+				require.True(t, ok, "Body should contain EchoStatement")
+				require.Len(t, echoStmt.Arguments, 1)
+			},
+		},
+		{
+			name:  "Original failing case - complex regex if statement",
+			input: `<?php if(preg_match("/^([0-9]{3})(-(.*[".CRLF."]{1,2})+\\1)? [^".CRLF."]+[".CRLF."]{1,2}$/", $this->_message, $regs)) $go=false; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				ifStmt, ok := program.Body[0].(*ast.IfStatement)
+				require.True(t, ok, "Should be IfStatement")
+				require.NotNil(t, ifStmt.Test)
+				require.Len(t, ifStmt.Consequent, 1)
+				
+				// Check the preg_match call in condition
+				callExpr, ok := ifStmt.Test.(*ast.CallExpression)
+				require.True(t, ok, "Condition should be function call")
+				
+				callee, ok := callExpr.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Callee should be identifier")
+				assert.Equal(t, "preg_match", callee.Name)
+				require.Len(t, callExpr.Arguments, 3, "preg_match should have 3 arguments")
+				
+				// Check the single assignment statement in consequent
+				exprStmt, ok := ifStmt.Consequent[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Consequent should contain ExpressionStatement")
+				
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Should be assignment")
+				
+				variable, ok := assignment.Left.(*ast.Variable)
+				require.True(t, ok, "Left side should be variable")
+				assert.Equal(t, "$go", variable.Name)
+				
+				identifier, ok := assignment.Right.(*ast.IdentifierNode)
+				require.True(t, ok, "Right side should be identifier")
+				assert.Equal(t, "false", identifier.Name)
+			},
+		},
+		{
+			name:  "Single-line if-else with assignments",
+			input: `<?php if($x > 0) $y = 1; else $y = 0; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				ifStmt, ok := program.Body[0].(*ast.IfStatement)
+				require.True(t, ok, "Should be IfStatement")
+				require.Len(t, ifStmt.Consequent, 1)
+				require.Len(t, ifStmt.Alternate, 1)
+				
+				// Check consequent
+				exprStmt1, ok := ifStmt.Consequent[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Consequent should be ExpressionStatement")
+				assignment1, ok := exprStmt1.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Should be assignment")
+				
+				// Check alternate
+				exprStmt2, ok := ifStmt.Alternate[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Alternate should be ExpressionStatement")
+				assignment2, ok := exprStmt2.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Should be assignment")
+				
+				assert.Equal(t, "=", assignment1.Operator)
+				assert.Equal(t, "=", assignment2.Operator)
+			},
+		},
+		{
+			name:  "Mixed block and single-line statements",
+			input: `<?php if($x > 0) { echo "positive"; } else echo "not positive"; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				ifStmt, ok := program.Body[0].(*ast.IfStatement)
+				require.True(t, ok, "Should be IfStatement")
+				require.Len(t, ifStmt.Consequent, 1, "Block should have 1 statement")
+				require.Len(t, ifStmt.Alternate, 1, "Else should have 1 statement")
+				
+				// Consequent is a block statement
+				echoStmt1, ok := ifStmt.Consequent[0].(*ast.EchoStatement)
+				require.True(t, ok, "Consequent should be EchoStatement")
+				
+				// Alternate is a single-line statement
+				echoStmt2, ok := ifStmt.Alternate[0].(*ast.EchoStatement)
+				require.True(t, ok, "Alternate should be EchoStatement")
+				
+				assert.Len(t, echoStmt1.Arguments, 1)
+				assert.Len(t, echoStmt2.Arguments, 1)
+			},
+		},
+		{
+			name:  "Nested single-line control structures",
+			input: `<?php if($x > 0) if($y > 0) $z = 1; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				outerIf, ok := program.Body[0].(*ast.IfStatement)
+				require.True(t, ok, "Should be IfStatement")
+				require.Len(t, outerIf.Consequent, 1)
+				
+				// Check nested if
+				innerIf, ok := outerIf.Consequent[0].(*ast.IfStatement)
+				require.True(t, ok, "Nested statement should be IfStatement")
+				require.Len(t, innerIf.Consequent, 1)
+				
+				// Check innermost assignment
+				exprStmt, ok := innerIf.Consequent[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Innermost should be ExpressionStatement")
+				
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Should be assignment")
+				assert.Equal(t, "=", assignment.Operator)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// Check for parser errors
+			if len(p.Errors()) != 0 {
+				for _, err := range p.Errors() {
+					t.Errorf("Parser error: %s", err)
+				}
+				t.FailNow()
+			}
+			
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

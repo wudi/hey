@@ -609,13 +609,21 @@ func parseIfStatement(p *Parser) ast.Statement {
 		return parseAlternativeIfStatement(p, pos, condition)
 	}
 
-	// 普通语法 (if (...) { ... })
-	if !p.expectPeek(lexer.TOKEN_LBRACE) {
-		return nil
-	}
-
+	// 普通语法 (if (...) { ... } 或 if (...) statement;)
+	p.nextToken() // 移动到下一个token
+	
 	ifStmt := ast.NewIfStatement(pos, condition)
-	ifStmt.Consequent = parseBlockStatements(p)
+	
+	// 检查是否是块语句 ({})
+	if p.currentToken.Type == lexer.TOKEN_LBRACE {
+		ifStmt.Consequent = parseBlockStatements(p)
+	} else {
+		// 单行语句
+		singleStmt := parseStatement(p)
+		if singleStmt != nil {
+			ifStmt.Consequent = []ast.Statement{singleStmt}
+		}
+	}
 
 	// 检查是否有 else 子句
 	if p.peekToken.Type == lexer.T_ELSE {
@@ -628,10 +636,19 @@ func parseIfStatement(p *Parser) ast.Statement {
 			if elseIfStmt != nil {
 				ifStmt.Alternate = append(ifStmt.Alternate, elseIfStmt)
 			}
-		} else if p.peekToken.Type == lexer.TOKEN_LBRACE {
-			// else block
+		} else {
+			// else block 或单行语句
 			p.nextToken()
-			ifStmt.Alternate = parseBlockStatements(p)
+			if p.currentToken.Type == lexer.TOKEN_LBRACE {
+				// 块语句
+				ifStmt.Alternate = parseBlockStatements(p)
+			} else {
+				// 单行语句
+				elseStmt := parseStatement(p)
+				if elseStmt != nil {
+					ifStmt.Alternate = []ast.Statement{elseStmt}
+				}
+			}
 		}
 	}
 
@@ -745,13 +762,21 @@ func parseWhileStatement(p *Parser) ast.Statement {
 		return parseAlternativeWhileStatement(p, pos, condition)
 	}
 
-	// 普通语法 (while (...) { ... })
-	if !p.expectPeek(lexer.TOKEN_LBRACE) {
-		return nil
-	}
-
+	// 普通语法 (while (...) { ... } 或 while (...) statement;)
+	p.nextToken() // 移动到下一个token
+	
 	whileStmt := ast.NewWhileStatement(pos, condition)
-	whileStmt.Body = parseBlockStatements(p)
+	
+	// 检查是否是块语句 ({})
+	if p.currentToken.Type == lexer.TOKEN_LBRACE {
+		whileStmt.Body = parseBlockStatements(p)
+	} else {
+		// 单行语句
+		singleStmt := parseStatement(p)
+		if singleStmt != nil {
+			whileStmt.Body = []ast.Statement{singleStmt}
+		}
+	}
 
 	return whileStmt
 }
@@ -831,11 +856,9 @@ func parseForStatement(p *Parser) ast.Statement {
 		return parseAlternativeForStatement(p, pos, initExprs, conditionExprs, updateExprs)
 	}
 
-	// 普通语法 (for (...) { ... })
-	if !p.expectPeek(lexer.TOKEN_LBRACE) {
-		return nil
-	}
-
+	// 普通语法 (for (...) { ... } 或 for (...) statement;)
+	p.nextToken() // 移动到下一个token
+	
 	forStmt := ast.NewForStatement(pos)
 	if len(initExprs) > 0 {
 		forStmt.Init = initExprs[0]
@@ -846,7 +869,17 @@ func parseForStatement(p *Parser) ast.Statement {
 	if len(updateExprs) > 0 {
 		forStmt.Update = updateExprs[0]
 	}
-	forStmt.Body = parseBlockStatements(p)
+	
+	// 检查是否是块语句 ({})
+	if p.currentToken.Type == lexer.TOKEN_LBRACE {
+		forStmt.Body = parseBlockStatements(p)
+	} else {
+		// 单行语句
+		singleStmt := parseStatement(p)
+		if singleStmt != nil {
+			forStmt.Body = []ast.Statement{singleStmt}
+		}
+	}
 
 	return forStmt
 }
