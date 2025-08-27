@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/lexer"
 )
@@ -3070,8 +3071,10 @@ func TestParsing_Attributes(t *testing.T) {
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
 				
-				attr, ok := stmt.Expression.(*ast.Attribute)
-				assert.True(t, ok, "Expected Attribute")
+				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
+				assert.True(t, ok, "Expected AttributeGroup")
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "Route", attr.Name.Name)
 				assert.Empty(t, attr.Arguments)
 			},
@@ -3085,8 +3088,10 @@ func TestParsing_Attributes(t *testing.T) {
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
 				
-				attr, ok := stmt.Expression.(*ast.Attribute)
-				assert.True(t, ok, "Expected Attribute")
+				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
+				assert.True(t, ok, "Expected AttributeGroup")
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "Route", attr.Name.Name)
 				assert.Len(t, attr.Arguments, 1)
 				
@@ -3104,8 +3109,10 @@ func TestParsing_Attributes(t *testing.T) {
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
 				
-				attr, ok := stmt.Expression.(*ast.Attribute)
-				assert.True(t, ok, "Expected Attribute")
+				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
+				assert.True(t, ok, "Expected AttributeGroup")
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "Route", attr.Name.Name)
 				assert.Len(t, attr.Arguments, 2)
 				
@@ -3127,8 +3134,10 @@ func TestParsing_Attributes(t *testing.T) {
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
 				
-				attr, ok := stmt.Expression.(*ast.Attribute)
-				assert.True(t, ok, "Expected Attribute")
+				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
+				assert.True(t, ok, "Expected AttributeGroup")
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "Cache", attr.Name.Name)
 				assert.Len(t, attr.Arguments, 1)
 				

@@ -3076,6 +3076,110 @@ func (a *Attribute) String() string {
 	return result
 }
 
+// AttributeGroup 表示属性组 - #[Attr1, Attr2, ...]
+type AttributeGroup struct {
+	BaseNode
+	Attributes []*Attribute `json:"attributes"` // 组内的属性列表
+}
+
+func NewAttributeGroup(pos lexer.Position, attributes []*Attribute) *AttributeGroup {
+	return &AttributeGroup{
+		BaseNode: BaseNode{
+			Kind:     ASTAttributeGroup,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Attributes: attributes,
+	}
+}
+
+func (ag *AttributeGroup) GetChildren() []Node {
+	children := make([]Node, len(ag.Attributes))
+	for i, attr := range ag.Attributes {
+		children[i] = attr
+	}
+	return children
+}
+
+func (ag *AttributeGroup) Accept(visitor Visitor) {
+	if visitor.Visit(ag) {
+		for _, attr := range ag.Attributes {
+			attr.Accept(visitor)
+		}
+	}
+}
+
+func (ag *AttributeGroup) expressionNode() {}
+
+func (ag *AttributeGroup) String() string {
+	result := "#["
+	for i, attr := range ag.Attributes {
+		if i > 0 {
+			result += ", "
+		}
+		// 只输出属性名和参数，不包含外层的#[]
+		result += attr.Name.String()
+		if len(attr.Arguments) > 0 {
+			result += "("
+			for j, arg := range attr.Arguments {
+				if j > 0 {
+					result += ", "
+				}
+				result += arg.String()
+			}
+			result += ")"
+		}
+	}
+	result += "]"
+	return result
+}
+
+// AttributeList 表示多个属性组的列表
+type AttributeList struct {
+	BaseNode
+	Groups []*AttributeGroup `json:"groups"` // 属性组列表
+}
+
+func NewAttributeList(pos lexer.Position, groups []*AttributeGroup) *AttributeList {
+	return &AttributeList{
+		BaseNode: BaseNode{
+			Kind:     ASTAttributeList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Groups: groups,
+	}
+}
+
+func (al *AttributeList) GetChildren() []Node {
+	children := make([]Node, len(al.Groups))
+	for i, group := range al.Groups {
+		children[i] = group
+	}
+	return children
+}
+
+func (al *AttributeList) Accept(visitor Visitor) {
+	if visitor.Visit(al) {
+		for _, group := range al.Groups {
+			group.Accept(visitor)
+		}
+	}
+}
+
+func (al *AttributeList) expressionNode() {}
+
+func (al *AttributeList) String() string {
+	result := ""
+	for i, group := range al.Groups {
+		if i > 0 {
+			result += "\n"
+		}
+		result += group.String()
+	}
+	return result
+}
+
 // CallExpression 函数调用表达式
 type CallExpression struct {
 	BaseNode

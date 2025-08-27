@@ -46,10 +46,17 @@
 
 ## 中优先级 (Medium Priority)
 
-### 6. 属性完整支持 (Attributes) - ⚠️ 部分实现
-- [ ] 完整的属性语法：`attribute_group`, `attribute_list`
-- [ ] 属性参数列表：`attribute_decl`
-- [ ] 多个属性组合
+### 6. 属性完整支持 (Attributes) - ✅ 已完成
+- [x] 完整的属性语法：`attribute_group`, `attribute_list`
+- [x] 属性参数列表：`attribute_decl`
+- [x] 多个属性组合
+- [x] AttributeGroup AST节点实现
+- [x] AttributeList AST节点实现
+- [x] 支持单个属性组中的多个属性：`#[Attr1, Attr2, ...]`
+- [x] 支持带参数的属性：`#[Route("/api", method: "GET")]`
+- [x] 支持命名参数在属性中的使用
+- [x] 更新现有测试以适应新的AST结构
+- [x] 完整的错误处理和边界条件测试
 
 ### 7. 匿名类 (Anonymous Classes) - ❌ 未实现
 - [ ] 基本匿名类语法：`anonymous_class`

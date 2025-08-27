@@ -2679,16 +2679,58 @@ func parseEmptyExpression(p *Parser) ast.Expression {
 	return ast.NewEmptyExpression(pos, expr)
 }
 
-// parseAttributeExpression 解析属性表达式 #[AttributeName(args)]
+// parseAttributeExpression 解析属性表达式 #[AttributeName(args)] 或 #[Attr1, Attr2, ...]
 func parseAttributeExpression(p *Parser) ast.Expression {
-	pos := p.currentToken.Position
-
 	// 当前 token 是 T_ATTRIBUTE (#[)
-	// 需要解析属性名称
+	// 解析属性组：可能包含多个属性，用逗号分隔
+	attributeGroup := parseAttributeGroup(p)
+	if attributeGroup == nil {
+		return nil
+	}
+
+	return attributeGroup
+}
+
+// parseAttributeGroup 解析单个属性组 #[Attr1, Attr2, ...]
+func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
+	pos := p.currentToken.Position
+	var attributes []*ast.Attribute
+
+	// 解析第一个属性
 	if !p.expectPeek(lexer.T_STRING) {
 		return nil
 	}
 
+	firstAttr := parseAttributeDecl(p)
+	if firstAttr == nil {
+		return nil
+	}
+	attributes = append(attributes, firstAttr)
+
+	// 解析可能的后续属性（用逗号分隔）
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // 移动到逗号
+		if !p.expectPeek(lexer.T_STRING) {
+			break
+		}
+		
+		attr := parseAttributeDecl(p)
+		if attr != nil {
+			attributes = append(attributes, attr)
+		}
+	}
+
+	// 期望结束符 ]
+	if !p.expectPeek(lexer.TOKEN_RBRACKET) {
+		return nil
+	}
+
+	return ast.NewAttributeGroup(pos, attributes)
+}
+
+// parseAttributeDecl 解析单个属性声明 AttributeName(args)
+func parseAttributeDecl(p *Parser) *ast.Attribute {
+	pos := p.currentToken.Position
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	
 	var arguments []ast.Expression
@@ -2697,7 +2739,7 @@ func parseAttributeExpression(p *Parser) ast.Expression {
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		p.nextToken() // 移动到 (
 		
-		// 解析参数列表（使用与 parseExpressionList 相同的逻辑）
+		// 解析参数列表
 		if p.peekToken.Type != lexer.TOKEN_RPAREN {
 			p.nextToken()
 			// Skip comments before parsing expression
@@ -2739,12 +2781,7 @@ func parseAttributeExpression(p *Parser) ast.Expression {
 			return nil
 		}
 	}
-	
-	// 期望结束的 ]
-	if !p.expectPeek(lexer.TOKEN_RBRACKET) {
-		return nil
-	}
-	
+
 	return ast.NewAttribute(pos, name, arguments)
 }
 
