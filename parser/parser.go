@@ -1554,22 +1554,15 @@ func parseEnumCase(p *Parser) *ast.EnumCase {
 func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
 
-	// Expect property name (allow reserved keywords and variables)
+	// Expect property name (allow reserved keywords)
 	p.nextToken()
-	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) && p.currentToken.Type != lexer.T_VARIABLE {
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
 
-	var property ast.Expression
-	if p.currentToken.Type == lexer.T_VARIABLE {
-		// Variable property access like $obj->$prop
-		property = parseVariable(p)
-	} else {
-		// String property access like $obj->prop
-		property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	}
+	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	return ast.NewPropertyAccessExpression(pos, left, property)
 }
 
@@ -1577,22 +1570,15 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
 
-	// Expect property name (allow reserved keywords and variables)
+	// Expect property name (allow reserved keywords)
 	p.nextToken()
-	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) && p.currentToken.Type != lexer.T_VARIABLE {
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
 
-	var property ast.Expression
-	if p.currentToken.Type == lexer.T_VARIABLE {
-		// Variable property access like $obj?->$prop
-		property = parseVariable(p)
-	} else {
-		// String property access like $obj?->prop
-		property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	}
+	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	return ast.NewNullsafePropertyAccessExpression(pos, left, property)
 }
 
@@ -3586,8 +3572,8 @@ func parseClassStatement(p *Parser) ast.Statement {
 		} else if p.peekToken.Type == lexer.T_STATIC {
 			// Handle visibility + static combination
 			// This could be either a static method or static property
-			// For now, let parsePropertyDeclaration handle both cases
-			return parsePropertyDeclaration(p)
+			// Let parseFunctionDeclaration handle the logic
+			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_READONLY {
 			// visibility readonly property
 			return parsePropertyDeclaration(p)
@@ -3690,46 +3676,44 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 	// Parse modifiers in order: visibility, static, readonly
 	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
 		visibility = p.currentToken.Value
-		p.nextToken() // Move past visibility modifier
 		
 		// Check for static modifier
-		if p.currentToken.Type == lexer.T_STATIC {
+		if p.peekToken.Type == lexer.T_STATIC {
 			static = true
-			p.nextToken() // Move past static
+			p.nextToken() // Move to static
 		}
 		
 		// Check for readonly modifier
-		if p.currentToken.Type == lexer.T_READONLY {
+		if p.peekToken.Type == lexer.T_READONLY {
 			readOnly = true
-			p.nextToken() // Move past readonly
+			p.nextToken() // Move to readonly
 		}
 	} else if p.currentToken.Type == lexer.T_STATIC {
 		// Static without visibility modifier (defaults to public)
 		visibility = "public"
 		static = true
-		p.nextToken() // Move past static
 	} else if p.currentToken.Type == lexer.T_READONLY {
 		// Readonly without visibility modifier (defaults to public)
 		visibility = "public"
 		readOnly = true
-		p.nextToken() // Move past readonly
 	} else {
 		// Default visibility
 		visibility = "public"
 	}
 	
-	// 检查当前token是否为类型提示
+	// 检查下一个token是否为类型提示
 	var typeHint *ast.TypeHint
-	if p.currentToken.Type != lexer.T_VARIABLE {
+	if p.peekToken.Type != lexer.T_VARIABLE {
+		p.nextToken()
 		// 这是一个类型提示
 		if isTypeToken(p.currentToken.Type) {
 			typeHint = parseTypeHint(p)
 		}
-		
-		// 移动到变量名
-		if !p.expectPeek(lexer.T_VARIABLE) {
-			return nil
-		}
+	}
+	
+	// 移动到变量名
+	if !p.expectPeek(lexer.T_VARIABLE) {
+		return nil
 	}
 	
 	// 解析属性名（去掉$）
