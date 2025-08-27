@@ -91,6 +91,193 @@ func TestParsing_EchoMultipleArguments(t *testing.T) {
 	}
 }
 
+func TestParsing_BitwiseOperators(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected map[string]interface{}
+	}{
+		{
+			name:  "Bitwise NOT operator",
+			input: `<?php $x = ~5; ?>`,
+			expected: map[string]interface{}{
+				"variable":    "$x",
+				"operator":    "=",
+				"rightType":   "UnaryExpression",
+				"unaryOp":     "~",
+				"unaryPrefix": true,
+				"operandType": "IntegerLiteral",
+				"operandVal":  "5",
+			},
+		},
+		{
+			name:  "Bitwise AND operator",
+			input: `<?php $x = 5 & 3; ?>`,
+			expected: map[string]interface{}{
+				"variable":  "$x",
+				"operator":  "=",
+				"rightType": "BinaryExpression",
+				"leftVal":   "5",
+				"binaryOp":  "&",
+				"rightVal":  "3",
+			},
+		},
+		{
+			name:  "Bitwise OR operator",
+			input: `<?php $y = 5 | 3; ?>`,
+			expected: map[string]interface{}{
+				"variable":  "$y",
+				"operator":  "=",
+				"rightType": "BinaryExpression",
+				"leftVal":   "5",
+				"binaryOp":  "|",
+				"rightVal":  "3",
+			},
+		},
+		{
+			name:  "Bitwise XOR operator",
+			input: `<?php $z = 5 ^ 3; ?>`,
+			expected: map[string]interface{}{
+				"variable":  "$z",
+				"operator":  "=",
+				"rightType": "BinaryExpression",
+				"leftVal":   "5",
+				"binaryOp":  "^",
+				"rightVal":  "3",
+			},
+		},
+		{
+			name:  "Complex bitwise expression (original failing case)",
+			input: `<?php error_reporting($this->orig_error_level & ~E_WARNING); ?>`,
+			expected: map[string]interface{}{
+				"stmtType":     "ExpressionStatement",
+				"exprType":     "CallExpression",
+				"callee":       "error_reporting",
+				"argType":      "BinaryExpression",
+				"argLeftType":  "PropertyAccessExpression",
+				"argRightType": "UnaryExpression",
+				"argRightOp":   "~",
+			},
+		},
+		{
+			name:  "Multiple bitwise operators",
+			input: `<?php $result = ($a & $b) | ($c ^ $d) & ~$e; ?>`,
+			expected: map[string]interface{}{
+				"variable": "$result",
+				"operator": "=",
+				"complex":  true, // Just verify it parses without errors
+			},
+		},
+		{
+			name:  "Bitwise with precedence",
+			input: `<?php $x = 8 | 4 & 2; ?>`, // Should be parsed as 8 | (4 & 2) due to precedence
+			expected: map[string]interface{}{
+				"variable":  "$x",
+				"operator":  "=",
+				"rightType": "BinaryExpression",
+				"binaryOp":  "|", // Top level should be OR
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			require.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			
+			// Handle different statement types
+			switch tt.expected["stmtType"] {
+			case "ExpressionStatement":
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				require.True(t, ok, "Statement should be ExpressionStatement")
+				
+				if tt.expected["exprType"] == "CallExpression" {
+					call, ok := exprStmt.Expression.(*ast.CallExpression)
+					require.True(t, ok, "Expression should be CallExpression")
+					
+					callee, ok := call.Callee.(*ast.IdentifierNode)
+					require.True(t, ok, "Callee should be IdentifierNode")
+					assert.Equal(t, tt.expected["callee"], callee.Name)
+					
+					require.Len(t, call.Arguments, 1)
+					arg := call.Arguments[0]
+					
+					binary, ok := arg.(*ast.BinaryExpression)
+					require.True(t, ok, "Argument should be BinaryExpression")
+					
+					// Verify left side (property access)
+					_, ok = binary.Left.(*ast.PropertyAccessExpression)
+					require.True(t, ok, "Left should be PropertyAccessExpression")
+					
+					// Verify right side (unary expression)
+					unary, ok := binary.Right.(*ast.UnaryExpression)
+					require.True(t, ok, "Right should be UnaryExpression")
+					assert.Equal(t, tt.expected["argRightOp"], unary.Operator)
+					assert.True(t, unary.Prefix, "Should be prefix unary operator")
+				}
+			default:
+				// Handle assignment expressions
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				require.True(t, ok, "Statement should be ExpressionStatement")
+
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Expression should be AssignmentExpression")
+
+				// Check variable
+				variable, ok := assignment.Left.(*ast.Variable)
+				require.True(t, ok, "Left side should be Variable")
+				assert.Equal(t, tt.expected["variable"], variable.Name)
+
+				// Check operator
+				assert.Equal(t, tt.expected["operator"], assignment.Operator)
+
+				// Check right side based on type
+				switch tt.expected["rightType"] {
+				case "UnaryExpression":
+					unary, ok := assignment.Right.(*ast.UnaryExpression)
+					require.True(t, ok, "Right side should be UnaryExpression")
+					assert.Equal(t, tt.expected["unaryOp"], unary.Operator)
+					assert.Equal(t, tt.expected["unaryPrefix"], unary.Prefix)
+
+					operand, ok := unary.Operand.(*ast.NumberLiteral)
+					require.True(t, ok, "Operand should be NumberLiteral")
+					assert.Equal(t, tt.expected["operandVal"], operand.Value)
+
+				case "BinaryExpression":
+					binary, ok := assignment.Right.(*ast.BinaryExpression)
+					require.True(t, ok, "Right side should be BinaryExpression")
+
+					if tt.expected["complex"] == true {
+						// For complex expressions, just verify it's a binary expression
+						break
+					}
+
+					assert.Equal(t, tt.expected["binaryOp"], binary.Operator)
+
+					if tt.expected["leftVal"] != nil {
+						leftInt, ok := binary.Left.(*ast.NumberLiteral)
+						require.True(t, ok, "Left operand should be NumberLiteral")
+						assert.Equal(t, tt.expected["leftVal"], leftInt.Value)
+					}
+
+					if tt.expected["rightVal"] != nil {
+						rightInt, ok := binary.Right.(*ast.NumberLiteral)
+						require.True(t, ok, "Right operand should be NumberLiteral")
+						assert.Equal(t, tt.expected["rightVal"], rightInt.Value)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestParsing_IntegerLiterals(t *testing.T) {
 	input := `<?php $x = 123; ?>`
 

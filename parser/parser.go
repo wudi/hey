@@ -73,6 +73,7 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.T_SL:                  BITWISE_SHIFT,
 	lexer.TOKEN_AMPERSAND:       BITWISE_AND,
 	lexer.TOKEN_PIPE:            BITWISE_OR,
+	lexer.TOKEN_CARET:           BITWISE_OR, // XOR has same precedence as OR in PHP
 }
 
 var (
@@ -91,6 +92,7 @@ func init() {
 		lexer.T_STRING:                   parseIdentifier,
 		lexer.TOKEN_EXCLAMATION:          parsePrefixExpression,
 		lexer.TOKEN_MINUS:                parsePrefixExpression,
+		lexer.TOKEN_TILDE:                parsePrefixExpression, // 位运算NOT操作符 ~
 		lexer.T_INC:                      parsePrefixExpression,
 		lexer.T_DEC:                      parsePrefixExpression,
 		lexer.TOKEN_LPAREN:               parseGroupedExpression,
@@ -199,6 +201,7 @@ func init() {
 		lexer.T_SL:                  parseInfixExpression, // << (left shift)
 		lexer.TOKEN_AMPERSAND:       parseInfixExpression, // & (bitwise AND)
 		lexer.TOKEN_PIPE:            parseInfixExpression, // | (bitwise OR)
+		lexer.TOKEN_CARET:           parseInfixExpression, // ^ (bitwise XOR)
 		lexer.TOKEN_LBRACKET:        parseArrayAccess,
 		lexer.TOKEN_QUESTION:        parseTernaryExpression,
 		lexer.T_DOUBLE_ARROW:        parseDoubleArrowExpression,
