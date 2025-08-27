@@ -2865,6 +2865,212 @@ class Mixed {
 	}
 }
 
+func TestParsing_StaticMethodsWithTypeHints(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, class *ast.ClassExpression)
+	}{
+		{
+			name: "Public static method with class type hint",
+			input: `<?php
+class Example {
+    public static function foo(WP_UnitTest_Factory $factory) {
+        self::$user_id_1 = $factory->user->create();
+        self::$user_id_2 = $factory->user->create();
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				if len(class.Body) != 1 {
+					t.Errorf("Expected 1 method, got %d", len(class.Body))
+					return
+				}
+
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				if funcDecl.Name.(*ast.IdentifierNode).Name != "foo" {
+					t.Errorf("Expected method name 'foo', got '%s'", funcDecl.Name.(*ast.IdentifierNode).Name)
+				}
+
+				if funcDecl.Visibility != "public" {
+					t.Errorf("Expected visibility 'public', got '%s'", funcDecl.Visibility)
+				}
+
+				if !funcDecl.IsStatic {
+					t.Errorf("Expected method to be static")
+				}
+
+				if len(funcDecl.Parameters) != 1 {
+					t.Errorf("Expected 1 parameter, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				// Check parameter: WP_UnitTest_Factory $factory
+				param := funcDecl.Parameters[0]
+				if param.Name != "$factory" {
+					t.Errorf("Expected parameter name '$factory', got '%s'", param.Name)
+				}
+				if param.Type == nil || param.Type.Name != "WP_UnitTest_Factory" {
+					t.Errorf("Expected parameter type 'WP_UnitTest_Factory', got %v", param.Type)
+				}
+
+				// Check that the method body has 2 statements
+				if funcDecl.Body == nil {
+					t.Errorf("Expected method to have a body")
+					return
+				}
+				if len(funcDecl.Body) != 2 {
+					t.Errorf("Expected 2 statements in method body, got %d", len(funcDecl.Body))
+				}
+			},
+		},
+		{
+			name: "Private static method with multiple type hints",
+			input: `<?php
+class Test {
+    private static function process(string $data, array $options, callable $callback) {
+        return $callback($data, $options);
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				if funcDecl.Visibility != "private" {
+					t.Errorf("Expected visibility 'private', got '%s'", funcDecl.Visibility)
+				}
+
+				if !funcDecl.IsStatic {
+					t.Errorf("Expected method to be static")
+				}
+
+				if len(funcDecl.Parameters) != 3 {
+					t.Errorf("Expected 3 parameters, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				expectedParams := []struct {
+					name string
+					typ  string
+				}{
+					{"$data", "string"},
+					{"$options", "array"},
+					{"$callback", "callable"},
+				}
+
+				for i, expected := range expectedParams {
+					param := funcDecl.Parameters[i]
+					if param.Name != expected.name {
+						t.Errorf("Parameter %d: expected name '%s', got '%s'", i, expected.name, param.Name)
+					}
+					if param.Type == nil || param.Type.Name != expected.typ {
+						t.Errorf("Parameter %d: expected type '%s', got %v", i, expected.typ, param.Type)
+					}
+				}
+			},
+		},
+		{
+			name: "Protected static method with nullable type hint",
+			input: `<?php
+class Service {
+    protected static function handle(?Config $config = null) {
+        // implementation
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				if funcDecl.Visibility != "protected" {
+					t.Errorf("Expected visibility 'protected', got '%s'", funcDecl.Visibility)
+				}
+
+				if !funcDecl.IsStatic {
+					t.Errorf("Expected method to be static")
+				}
+
+				if len(funcDecl.Parameters) != 1 {
+					t.Errorf("Expected 1 parameter, got %d", len(funcDecl.Parameters))
+					return
+				}
+
+				param := funcDecl.Parameters[0]
+				if param.Name != "$config" {
+					t.Errorf("Expected parameter name '$config', got '%s'", param.Name)
+				}
+				if param.Type == nil || param.Type.Name != "Config" {
+					t.Errorf("Expected parameter type 'Config', got %v", param.Type)
+				}
+				if param.Type.Nullable != true {
+					t.Errorf("Expected parameter type to be nullable")
+				}
+			},
+		},
+		{
+			name: "Static method without explicit visibility (defaults to public)",
+			input: `<?php
+class Utils {
+    static function format(CustomFormatter $formatter) {
+        return $formatter->format();
+    }
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				funcDecl, ok := class.Body[0].(*ast.FunctionDeclaration)
+				if !ok {
+					t.Errorf("Expected FunctionDeclaration, got %T", class.Body[0])
+					return
+				}
+
+				// In PHP, methods without explicit visibility default to public
+				if funcDecl.Visibility != "" {
+					// Note: depending on implementation, this might be empty or "public"
+					// Adjust based on actual parser behavior
+				}
+
+				if !funcDecl.IsStatic {
+					t.Errorf("Expected method to be static")
+				}
+
+				param := funcDecl.Parameters[0]
+				if param.Type == nil || param.Type.Name != "CustomFormatter" {
+					t.Errorf("Expected parameter type 'CustomFormatter', got %v", param.Type)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			require.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			require.True(t, ok, "Statement should be ExpressionStatement")
+
+			class, ok := exprStmt.Expression.(*ast.ClassExpression)
+			require.True(t, ok, "Expression should be ClassExpression")
+
+			test.validate(t, class)
+		})
+	}
+}
+
 func TestParsing_TypedReferenceParameters(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -316,7 +316,8 @@ func (p *Parser) Errors() []string {
 // isTypeToken 检查token是否为有效的类型token
 func isTypeToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
-	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE:
+	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE, 
+		 lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED:
 		return true
 	default:
 		return false
@@ -3570,8 +3571,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_STATIC {
 			// Handle visibility + static combination
-			// This could be method or property, parsePropertyDeclaration will handle both
-			return parsePropertyDeclaration(p)
+			// This could be either a static method or static property
+			// Let parseFunctionDeclaration handle the logic
+			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_READONLY {
 			// visibility readonly property
 			return parsePropertyDeclaration(p)
