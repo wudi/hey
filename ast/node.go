@@ -4811,3 +4811,38 @@ func (ac *AnonymousClass) String() string {
 	
 	return out.String()
 }
+
+
+// SpreadExpression 表示展开表达式 (...expr)
+type SpreadExpression struct {
+	BaseNode
+	Argument Expression `json:"argument"`
+}
+
+func NewSpreadExpression(pos lexer.Position, argument Expression) *SpreadExpression {
+	return &SpreadExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTUnpack, // 使用PHP的ZEND_AST_UNPACK 
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Argument: argument,
+	}
+}
+
+func (se *SpreadExpression) GetChildren() []Node {
+	if se.Argument != nil {
+		return []Node{se.Argument}
+	}
+	return []Node{}
+}
+
+func (se *SpreadExpression) Accept(visitor Visitor) {
+	visitor.Visit(se)
+}
+
+func (se *SpreadExpression) String() string {
+	return "..." + se.Argument.String()
+}
+
+func (se *SpreadExpression) expressionNode() {}

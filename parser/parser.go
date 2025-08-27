@@ -1711,12 +1711,36 @@ func parseArrayExpression(p *Parser) ast.Expression {
 	}
 
 	p.nextToken()
-	array.Elements = append(array.Elements, parseExpression(p, LOWEST))
+	
+	// 解析第一个元素，可能是展开语法
+	if p.currentToken.Type == lexer.T_ELLIPSIS {
+		pos := p.currentToken.Position
+		p.nextToken() // 跳过 ...
+		expr := parseExpression(p, LOWEST)
+		if expr != nil {
+			spreadExpr := ast.NewSpreadExpression(pos, expr)
+			array.Elements = append(array.Elements, spreadExpr)
+		}
+	} else {
+		array.Elements = append(array.Elements, parseExpression(p, LOWEST))
+	}
 
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
 		p.nextToken() // 移动到下一个元素
-		array.Elements = append(array.Elements, parseExpression(p, LOWEST))
+		
+		// 检查展开语法
+		if p.currentToken.Type == lexer.T_ELLIPSIS {
+			pos := p.currentToken.Position
+			p.nextToken() // 跳过 ...
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				spreadExpr := ast.NewSpreadExpression(pos, expr)
+				array.Elements = append(array.Elements, spreadExpr)
+			}
+		} else {
+			array.Elements = append(array.Elements, parseExpression(p, LOWEST))
+		}
 	}
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
@@ -1766,10 +1790,15 @@ func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 	// 检查第一类可调用语法 function(...) 
 	if p.peekToken.Type == lexer.T_ELLIPSIS {
 		p.nextToken() // 移动到 ...
-		if !p.expectPeek(lexer.TOKEN_RPAREN) {
-			return nil
+		if p.peekToken.Type == lexer.TOKEN_RPAREN {
+			// 确实是 function(...) 语法
+			p.nextToken() // 跳过 )
+			return ast.NewFirstClassCallable(pos, fn)
 		}
-		return ast.NewFirstClassCallable(pos, fn)
+		// 如果不是 function(...) 语法，当前token现在是T_ELLIPSIS
+		// 我们需要让parseExpressionList知道已经前进了一步
+	} else {
+		// 正常情况，当前token是(，需要前进到第一个参数或)
 	}
 	
 	call := ast.NewCallExpression(pos, fn)
@@ -1784,22 +1813,42 @@ func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	var args []ast.Expression
 
+	// 检查当前是否已经在end token
+	if p.currentToken.Type == end {
+		return args
+	}
+
+	// 如果没有在end token，但peek是end，则前进
 	if p.peekToken.Type == end {
 		p.nextToken()
 		return args
 	}
 
-	p.nextToken()
+	// 如果当前不是T_ELLIPSIS，则需要前进到第一个参数
+	if p.currentToken.Type != lexer.T_ELLIPSIS {
+		p.nextToken()
+	}
+
 	// Skip comments before parsing expression
 	for p.currentToken.Type == lexer.T_COMMENT {
 		p.nextToken()
 	}
 	
-	// Check for named argument (identifier: value)
+	// Check for different argument types
 	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+		// Named argument (identifier: value)
 		arg := parseNamedArgument(p)
 		if arg != nil {
 			args = append(args, arg)
+		}
+	} else if p.currentToken.Type == lexer.T_ELLIPSIS {
+		// Spread argument (...expr)
+		pos := p.currentToken.Position
+		p.nextToken() // 跳过 ...
+		expr := parseExpression(p, LOWEST)
+		if expr != nil {
+			spreadExpr := ast.NewSpreadExpression(pos, expr)
+			args = append(args, spreadExpr)
 		}
 	} else {
 		args = append(args, parseExpression(p, LOWEST))
@@ -1813,11 +1862,21 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 			p.nextToken()
 		}
 		
-		// Check for named argument (identifier: value)
+		// Check for different argument types
 		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+			// Named argument (identifier: value)
 			arg := parseNamedArgument(p)
 			if arg != nil {
 				args = append(args, arg)
+			}
+		} else if p.currentToken.Type == lexer.T_ELLIPSIS {
+			// Spread argument (...expr)
+			pos := p.currentToken.Position
+			p.nextToken() // 跳过 ...
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				spreadExpr := ast.NewSpreadExpression(pos, expr)
+				args = append(args, spreadExpr)
 			}
 		} else {
 			args = append(args, parseExpression(p, LOWEST))
@@ -2723,9 +2782,23 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 		}
 
 		// 解析数组元素表达式
-		element := parseExpression(p, LOWEST)
-		if element != nil {
-			array.Elements = append(array.Elements, element)
+		// 检查是否是展开语法：T_ELLIPSIS expr
+		if p.currentToken.Type == lexer.T_ELLIPSIS {
+			pos := p.currentToken.Position
+			p.nextToken() // 跳过 ...
+			
+			// 解析展开的表达式
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				// 创建展开表达式节点
+				spreadExpr := ast.NewSpreadExpression(pos, expr)
+				array.Elements = append(array.Elements, spreadExpr)
+			}
+		} else {
+			element := parseExpression(p, LOWEST)
+			if element != nil {
+				array.Elements = append(array.Elements, element)
+			}
 		}
 
 		p.nextToken()
