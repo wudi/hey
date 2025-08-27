@@ -2065,6 +2065,142 @@ func (pd *PropertyDeclaration) String() string {
 	return result
 }
 
+// PropertyHook represents a single property hook (get or set)
+type PropertyHook struct {
+	BaseNode
+	Type       string      `json:"type"`         // "get" or "set"
+	Parameter  *Parameter  `json:"parameter,omitempty"` // For set hooks: set(Type $value)
+	Body       Expression  `json:"body,omitempty"`      // For arrow syntax: get => expr
+	Statements []Statement `json:"statements,omitempty"` // For block syntax: get { ... }
+	ByRef      bool        `json:"byRef,omitempty"`     // For &get
+}
+
+func NewPropertyHook(pos lexer.Position, hookType string, parameter *Parameter, body Expression, statements []Statement, byRef bool) *PropertyHook {
+	return &PropertyHook{
+		BaseNode: BaseNode{
+			Kind:     ASTPropertyHook,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Type:       hookType,
+		Parameter:  parameter,
+		Body:       body,
+		Statements: statements,
+		ByRef:      byRef,
+	}
+}
+
+func (ph *PropertyHook) GetChildren() []Node {
+	var children []Node
+	if ph.Parameter != nil {
+		// Parameters don't implement Node interface, so we skip them for now
+	}
+	if ph.Body != nil {
+		children = append(children, ph.Body)
+	}
+	for _, stmt := range ph.Statements {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+func (ph *PropertyHook) Accept(visitor Visitor) {
+	if visitor.Visit(ph) {
+		if ph.Body != nil {
+			ph.Body.Accept(visitor)
+		}
+		for _, stmt := range ph.Statements {
+			stmt.Accept(visitor)
+		}
+	}
+}
+
+func (ph *PropertyHook) expressionNode() {}
+
+func (ph *PropertyHook) String() string {
+	result := ph.Type
+	if ph.ByRef {
+		result = "&" + result
+	}
+	if ph.Parameter != nil {
+		result += "(" + ph.Parameter.Name + ")"
+	}
+	if ph.Body != nil {
+		result += " => " + ph.Body.String()
+	} else if len(ph.Statements) > 0 {
+		result += " { ... }"
+	}
+	return result
+}
+
+// HookedPropertyDeclaration represents a property with hooks
+type HookedPropertyDeclaration struct {
+	BaseNode
+	Visibility string          `json:"visibility"`   // private, protected, public
+	ReadOnly   bool            `json:"readOnly,omitempty"`     // readonly
+	Type       *TypeHint       `json:"type,omitempty"`
+	Name       string          `json:"name"`         // Property name without $
+	Hooks      []*PropertyHook `json:"hooks"`        // List of property hooks
+}
+
+func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, readOnly bool, typeHint *TypeHint, hooks []*PropertyHook) *HookedPropertyDeclaration {
+	return &HookedPropertyDeclaration{
+		BaseNode: BaseNode{
+			Kind:     ASTHookedProperty,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Visibility: visibility,
+		ReadOnly:   readOnly,
+		Type:       typeHint,
+		Name:       name,
+		Hooks:      hooks,
+	}
+}
+
+func (hpd *HookedPropertyDeclaration) GetChildren() []Node {
+	var children []Node
+	if hpd.Type != nil {
+		children = append(children, hpd.Type)
+	}
+	for _, hook := range hpd.Hooks {
+		children = append(children, hook)
+	}
+	return children
+}
+
+func (hpd *HookedPropertyDeclaration) Accept(visitor Visitor) {
+	if visitor.Visit(hpd) {
+		if hpd.Type != nil {
+			hpd.Type.Accept(visitor)
+		}
+		for _, hook := range hpd.Hooks {
+			hook.Accept(visitor)
+		}
+	}
+}
+
+func (hpd *HookedPropertyDeclaration) statementNode() {}
+
+func (hpd *HookedPropertyDeclaration) String() string {
+	result := hpd.Visibility
+	if hpd.ReadOnly {
+		result += " readonly"
+	}
+	if hpd.Type != nil {
+		result += " " + hpd.Type.String()
+	}
+	result += " $" + hpd.Name + " {"
+	for i, hook := range hpd.Hooks {
+		if i > 0 {
+			result += "; "
+		}
+		result += hook.String()
+	}
+	result += "}"
+	return result
+}
+
 // ReturnStatement return语句
 type ReturnStatement struct {
 	BaseNode

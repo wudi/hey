@@ -1698,7 +1698,7 @@ func isSemiReserved(tokenType lexer.TokenType) bool {
 	return isReservedNonModifier(tokenType) || 
 		tokenType == lexer.T_STATIC || tokenType == lexer.T_ABSTRACT || tokenType == lexer.T_FINAL ||
 		tokenType == lexer.T_PRIVATE || tokenType == lexer.T_PROTECTED || tokenType == lexer.T_PUBLIC ||
-		tokenType == lexer.T_READONLY
+		tokenType == lexer.T_READONLY || tokenType == lexer.T_GET || tokenType == lexer.T_SET
 }
 
 // parseIdentifierWithReserved 解析标识符，支持保留关键字作为标识符
@@ -3690,6 +3690,14 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		propertyName = propertyName[1:]
 	}
 	
+	// 检查是否为property hooks (用 { 而不是 ; 或 =)
+	if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		// 解析property hooks
+		p.nextToken() // 移动到 {
+		hooks := parsePropertyHookList(p)
+		return ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, readOnly, typeHint, hooks)
+	}
+	
 	var defaultValue ast.Expression
 	
 	// 检查是否有默认值
@@ -3705,6 +3713,108 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 	}
 	
 	return ast.NewPropertyDeclaration(pos, visibility, propertyName, readOnly, typeHint, defaultValue)
+}
+
+// parsePropertyHookList 解析属性钩子列表
+func parsePropertyHookList(p *Parser) []*ast.PropertyHook {
+	var hooks []*ast.PropertyHook
+	
+	p.nextToken() // 移动到第一个hook或结束符
+	
+	// 解析hook列表，直到遇到 }
+	for p.currentToken.Type != lexer.TOKEN_RBRACE && !p.isAtEnd() {
+		if p.currentToken.Type == lexer.T_GET || p.currentToken.Type == lexer.T_SET || p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+			hook := parsePropertyHook(p)
+			if hook != nil {
+				hooks = append(hooks, hook)
+			}
+		}
+		
+		// 检查是否有分号分隔符
+		if p.currentToken.Type == lexer.TOKEN_SEMICOLON {
+			p.nextToken()
+		} else if p.currentToken.Type != lexer.TOKEN_RBRACE {
+			// 期望分号或结束符
+			p.nextToken()
+		}
+	}
+	
+	return hooks
+}
+
+// parsePropertyHook 解析单个属性钩子 (get 或 set)
+func parsePropertyHook(p *Parser) *ast.PropertyHook {
+	pos := p.currentToken.Position
+	
+	// 检查是否为引用钩子 (&get)
+	byRef := false
+	if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+		byRef = true
+		p.nextToken()
+	}
+	
+	// 必须是 get 或 set
+	if p.currentToken.Type != lexer.T_GET && p.currentToken.Type != lexer.T_SET {
+		p.errors = append(p.errors, fmt.Sprintf("expected 'get' or 'set', got %s at line: %d col: %d", 
+			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	hookType := p.currentToken.Value
+	
+	// 对于set hook，检查是否有参数
+	var parameter *ast.Parameter
+	if hookType == "set" && p.peekToken.Type == lexer.TOKEN_LPAREN {
+		p.nextToken() // 移动到 (
+		parameter = parsePropertyHookParameter(p)
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+	}
+	
+	p.nextToken() // 移动到下一个token
+	
+	// 检查是arrow syntax (=>) 还是 block syntax ({})
+	if p.currentToken.Type == lexer.T_DOUBLE_ARROW {
+		// Arrow syntax: get => expression;
+		p.nextToken() // 移动到表达式
+		body := parseExpression(p, LOWEST)
+		return ast.NewPropertyHook(pos, hookType, parameter, body, nil, byRef)
+	} else if p.currentToken.Type == lexer.TOKEN_LBRACE {
+		// Block syntax: get { statements }
+		statements := parseBlockStatement(p).Body
+		return ast.NewPropertyHook(pos, hookType, parameter, nil, statements, byRef)
+	} else {
+		p.errors = append(p.errors, fmt.Sprintf("expected '=>' or '{' after hook, got %s at line: %d col: %d", 
+			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+}
+
+// parsePropertyHookParameter 解析set hook的参数
+func parsePropertyHookParameter(p *Parser) *ast.Parameter {
+	p.nextToken() // 移动到参数
+	
+	// 可能有类型提示
+	var typeHint *ast.TypeHint
+	if isTypeToken(p.currentToken.Type) {
+		typeHint = parseTypeHint(p)
+		p.nextToken() // 移动到变量名
+	}
+	
+	// 必须是变量
+	if p.currentToken.Type != lexer.T_VARIABLE {
+		p.errors = append(p.errors, fmt.Sprintf("expected variable in set hook parameter, got %s at line: %d col: %d", 
+			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	paramName := p.currentToken.Value
+	
+	return &ast.Parameter{
+		Name: paramName,
+		Type: typeHint,
+	}
 }
 
 // parseConstExpression 解析常量声明表达式

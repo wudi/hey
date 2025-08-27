@@ -102,11 +102,14 @@
 
 ## 低优先级 (Low Priority)
 
-### 11. 属性钩子 (Property Hooks) - ❌ 未实现
-- [ ] `hooked_property` - 带钩子的属性
-- [ ] `property_hook_list` - 属性钩子列表
-- [ ] `property_hook` - 单个属性钩子
-- [ ] `property_hook_body` - 钩子体
+### 11. 属性钩子 (Property Hooks) - ✅ 已完成
+- [x] `hooked_property` - 带钩子的属性 (HookedPropertyDeclaration AST节点)
+- [x] `property_hook_list` - 属性钩子列表 (parsePropertyHookList函数)
+- [x] `property_hook` - 单个属性钩子 (PropertyHook AST节点) 
+- [x] `property_hook_body` - 钩子体 (支持箭头语法和块语法)
+- [x] 支持get/set钩子的完整语法，包括类型化参数和引用返回
+- [x] 新增T_GET和T_SET词法标记，并加入semi-reserved关键字列表
+- [x] 5个综合测试用例覆盖所有属性钩子使用场景
 
 ### 12. 高级表达式功能 - ❌ 未实现
 - [ ] `T_YIELD_FROM` - yield from语法

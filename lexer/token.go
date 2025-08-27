@@ -149,6 +149,10 @@ const (
 	// 注释
 	T_COMMENT     TokenType = 354
 	T_DOC_COMMENT TokenType = 355
+	
+	// 属性钩子 (Property Hooks) - PHP 8.4
+	T_GET TokenType = 414
+	T_SET TokenType = 415
 
 	// 开放和关闭标签
 	T_OPEN_TAG           TokenType = 356 // <?php
@@ -537,6 +541,9 @@ var Keywords = map[string]TokenType{
 	"array":        T_ARRAY,
 	"callable":     T_CALLABLE,
 	"namespace":    T_NAMESPACE,
+	// 属性钩子关键字 (Property Hooks) - PHP 8.4
+	"get":          T_GET,
+	"set":          T_SET,
 }
 
 // IsKeyword 检查给定字符串是否为 PHP 关键字
