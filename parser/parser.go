@@ -1700,7 +1700,7 @@ func isSemiReserved(tokenType lexer.TokenType) bool {
 	return isReservedNonModifier(tokenType) || 
 		tokenType == lexer.T_STATIC || tokenType == lexer.T_ABSTRACT || tokenType == lexer.T_FINAL ||
 		tokenType == lexer.T_PRIVATE || tokenType == lexer.T_PROTECTED || tokenType == lexer.T_PUBLIC ||
-		tokenType == lexer.T_READONLY || tokenType == lexer.T_GET || tokenType == lexer.T_SET
+		tokenType == lexer.T_READONLY
 }
 
 // parseIdentifierWithReserved 解析标识符，支持保留关键字作为标识符
@@ -3725,7 +3725,7 @@ func parsePropertyHookList(p *Parser) []*ast.PropertyHook {
 	
 	// 解析hook列表，直到遇到 }
 	for p.currentToken.Type != lexer.TOKEN_RBRACE && !p.isAtEnd() {
-		if p.currentToken.Type == lexer.T_GET || p.currentToken.Type == lexer.T_SET || p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+		if (p.currentToken.Type == lexer.T_STRING && (p.currentToken.Value == "get" || p.currentToken.Value == "set")) || p.currentToken.Type == lexer.TOKEN_AMPERSAND {
 			hook := parsePropertyHook(p)
 			if hook != nil {
 				hooks = append(hooks, hook)
@@ -3756,7 +3756,7 @@ func parsePropertyHook(p *Parser) *ast.PropertyHook {
 	}
 	
 	// 必须是 get 或 set
-	if p.currentToken.Type != lexer.T_GET && p.currentToken.Type != lexer.T_SET {
+	if p.currentToken.Type != lexer.T_STRING || (p.currentToken.Value != "get" && p.currentToken.Value != "set") {
 		p.errors = append(p.errors, fmt.Sprintf("expected 'get' or 'set', got %s at line: %d col: %d", 
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
