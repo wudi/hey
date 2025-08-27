@@ -8,43 +8,70 @@ import (
 	"github.com/wudi/php-parser/lexer"
 )
 
-// Precedence 操作符优先级
+// Precedence 操作符优先级 - 根据 PHP 官方优先级顺序
 type Precedence int
 
 const (
 	_ Precedence = iota
 	LOWEST
-	TERNARY     // ? :
-	LOGICAL_OR  // ||
-	LOGICAL_AND // &&
-	COALESCE    // ??
-	BITWISE_OR  // |
-	ASSIGN      // =
-	BITWISE_AND // &
-	EQUALS      // ==
-	LESSGREATER // > or <
-	SUM         // +
-	BITWISE_SHIFT // << >>
-	PRODUCT     // *
-	PREFIX      // -X or !X
-	POSTFIX     // X++ or X--
-	CALL        // myFunction(X)
-	INDEX       // array[index]
+	ASSIGN           // = += -= *= /= .= %= &= |= ^= <<= >>= **= ??=
+	TERNARY         // ? :
+	COALESCE        // ??
+	LOGICAL_OR      // || or
+	LOGICAL_AND     // && and
+	BITWISE_OR      // |
+	BITWISE_XOR     // ^
+	BITWISE_AND     // &
+	EQUALS          // == != === !==
+	LESSGREATER     // < <= > >= <=> instanceof
+	BITWISE_SHIFT   // << >>
+	SUM             // + - .
+	PRODUCT         // * / %
+	EXPONENT        // **
+	PREFIX          // ! ~ -X +X ++X --X (int) (float) (string) (array) (object) (bool) @
+	POSTFIX         // X++ X--
+	CALL            // myFunction(X) $obj->prop Class::$prop
+	INDEX           // array[index]
 )
 
 // 操作符优先级映射
 var precedences = map[lexer.TokenType]Precedence{
-	lexer.TOKEN_QUESTION:        TERNARY,
-	lexer.T_DOUBLE_ARROW:        TERNARY,
-	lexer.T_BOOLEAN_OR:          LOGICAL_OR,
-	lexer.T_BOOLEAN_AND:         LOGICAL_AND,
-	lexer.T_COALESCE:            COALESCE,
+	// 赋值运算符
 	lexer.TOKEN_EQUAL:           ASSIGN,
 	lexer.T_PLUS_EQUAL:          ASSIGN,
 	lexer.T_MINUS_EQUAL:         ASSIGN,
 	lexer.T_MUL_EQUAL:           ASSIGN,
 	lexer.T_DIV_EQUAL:           ASSIGN,
 	lexer.T_CONCAT_EQUAL:        ASSIGN,
+	lexer.T_MOD_EQUAL:           ASSIGN,
+	lexer.T_AND_EQUAL:           ASSIGN,
+	lexer.T_OR_EQUAL:            ASSIGN,
+	lexer.T_XOR_EQUAL:           ASSIGN,
+	lexer.T_SL_EQUAL:            ASSIGN,
+	lexer.T_SR_EQUAL:            ASSIGN,
+	lexer.T_POW_EQUAL:           ASSIGN,
+	lexer.T_COALESCE_EQUAL:      ASSIGN,
+	
+	// 三元运算符
+	lexer.TOKEN_QUESTION:        TERNARY,
+	lexer.T_DOUBLE_ARROW:        TERNARY,
+	
+	// 空合并运算符
+	lexer.T_COALESCE:            COALESCE,
+	
+	// 逻辑运算符
+	lexer.T_BOOLEAN_OR:          LOGICAL_OR,
+	lexer.T_LOGICAL_OR:          LOGICAL_OR,
+	lexer.T_BOOLEAN_AND:         LOGICAL_AND,
+	lexer.T_LOGICAL_AND:         LOGICAL_AND,
+	lexer.T_LOGICAL_XOR:         LOGICAL_AND, // xor has same precedence as and
+	
+	// 位运算符
+	lexer.TOKEN_PIPE:            BITWISE_OR,
+	lexer.TOKEN_CARET:           BITWISE_XOR,
+	lexer.TOKEN_AMPERSAND:       BITWISE_AND,
+	
+	// 比较运算符
 	lexer.T_IS_EQUAL:            EQUALS,
 	lexer.T_IS_NOT_EQUAL:        EQUALS,
 	lexer.T_IS_IDENTICAL:        EQUALS,
@@ -55,25 +82,36 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.T_IS_GREATER_OR_EQUAL: LESSGREATER,
 	lexer.T_SPACESHIP:           LESSGREATER,
 	lexer.T_INSTANCEOF:          LESSGREATER,
-	lexer.T_PIPE:                SUM, // Pipe operator precedence, similar to other binary operators
+	
+	// 位移运算符
+	lexer.T_SR:                  BITWISE_SHIFT,
+	lexer.T_SL:                  BITWISE_SHIFT,
+	
+	// 加减运算符
 	lexer.TOKEN_PLUS:            SUM,
 	lexer.TOKEN_MINUS:           SUM,
-	lexer.TOKEN_DOT:             SUM,
-	lexer.T_OBJECT_OPERATOR:          CALL,
-	lexer.T_NULLSAFE_OBJECT_OPERATOR: CALL,
-	lexer.T_PAAMAYIM_NEKUDOTAYIM:     CALL,
-	lexer.TOKEN_LBRACKET:        INDEX,
+	lexer.TOKEN_DOT:             SUM, // 字符串连接
+	
+	// 乘除运算符
 	lexer.TOKEN_DIVIDE:          PRODUCT,
 	lexer.TOKEN_MULTIPLY:        PRODUCT,
 	lexer.TOKEN_MODULO:          PRODUCT,
+	
+	// 幂运算符
+	lexer.T_POW:                 EXPONENT,
+	
+	// 后缀运算符
 	lexer.T_INC:                 POSTFIX,
 	lexer.T_DEC:                 POSTFIX,
+	
+	// 函数调用和属性访问
+	lexer.T_OBJECT_OPERATOR:          CALL,
+	lexer.T_NULLSAFE_OBJECT_OPERATOR: CALL,
+	lexer.T_PAAMAYIM_NEKUDOTAYIM:     CALL,
 	lexer.TOKEN_LPAREN:          CALL,
-	lexer.T_SR:                  BITWISE_SHIFT,
-	lexer.T_SL:                  BITWISE_SHIFT,
-	lexer.TOKEN_AMPERSAND:       BITWISE_AND,
-	lexer.TOKEN_PIPE:            BITWISE_OR,
-	lexer.TOKEN_CARET:           BITWISE_OR, // XOR has same precedence as OR in PHP
+	
+	// 数组访问
+	lexer.TOKEN_LBRACKET:        INDEX,
 }
 
 var (
@@ -163,13 +201,19 @@ func init() {
 		lexer.T_FN:                       parseArrowFunctionExpression,
 		lexer.T_YIELD:                    parseYieldExpression,
 		lexer.T_YIELD_FROM:               parseYieldFromExpression,
+		lexer.T_POW:                      parseFallback, // ** 作为前缀时是无效的，但需要处理
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
+		// 二元运算符
 		lexer.TOKEN_PLUS:            parseInfixExpression,
 		lexer.TOKEN_MINUS:           parseInfixExpression,
 		lexer.TOKEN_DIVIDE:          parseInfixExpression,
 		lexer.TOKEN_MULTIPLY:        parseInfixExpression,
 		lexer.TOKEN_MODULO:          parseInfixExpression,
+		lexer.T_POW:                 parseInfixExpression,
+		lexer.TOKEN_DOT:             parseInfixExpression,
+		
+		// 比较运算符
 		lexer.T_IS_EQUAL:            parseInfixExpression,
 		lexer.T_IS_NOT_EQUAL:        parseInfixExpression,
 		lexer.T_IS_IDENTICAL:        parseInfixExpression,
@@ -180,31 +224,52 @@ func init() {
 		lexer.T_IS_GREATER_OR_EQUAL: parseInfixExpression,
 		lexer.T_SPACESHIP:           parseInfixExpression,
 		lexer.T_INSTANCEOF:          parseInstanceofExpression,
-		lexer.T_PIPE:                parseInfixExpression,
-		lexer.TOKEN_DOT:             parseInfixExpression,
-		lexer.T_OBJECT_OPERATOR:          parsePropertyAccess,
-		lexer.T_NULLSAFE_OBJECT_OPERATOR: parseNullsafePropertyAccess,
-		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccessExpression,
+		
+		// 位运算符
+		lexer.T_SR:                  parseInfixExpression, // >> (right shift)
+		lexer.T_SL:                  parseInfixExpression, // << (left shift)
+		lexer.TOKEN_AMPERSAND:       parseInfixExpression, // & (bitwise AND)
+		lexer.TOKEN_PIPE:            parseInfixExpression, // | (bitwise OR)
+		lexer.TOKEN_CARET:           parseInfixExpression, // ^ (bitwise XOR)
+		
+		// 逻辑运算符
+		lexer.T_BOOLEAN_AND:         parseBooleanExpression,
+		lexer.T_BOOLEAN_OR:          parseBooleanExpression,
+		lexer.T_LOGICAL_AND:         parseBooleanExpression,
+		lexer.T_LOGICAL_OR:          parseBooleanExpression,
+		lexer.T_LOGICAL_XOR:         parseBooleanExpression,
+		
+		// 赋值运算符
 		lexer.TOKEN_EQUAL:           parseAssignmentExpression,
 		lexer.T_PLUS_EQUAL:          parseAssignmentExpression,
 		lexer.T_MINUS_EQUAL:         parseAssignmentExpression,
 		lexer.T_MUL_EQUAL:           parseAssignmentExpression,
 		lexer.T_DIV_EQUAL:           parseAssignmentExpression,
 		lexer.T_CONCAT_EQUAL:        parseAssignmentExpression,
-		lexer.T_INC:                 parsePostfixExpression,
-		lexer.T_DEC:                 parsePostfixExpression,
-		lexer.TOKEN_LPAREN:          parseCallExpression,
+		lexer.T_MOD_EQUAL:           parseAssignmentExpression,
+		lexer.T_AND_EQUAL:           parseAssignmentExpression,
+		lexer.T_OR_EQUAL:            parseAssignmentExpression,
+		lexer.T_XOR_EQUAL:           parseAssignmentExpression,
+		lexer.T_SL_EQUAL:            parseAssignmentExpression,
+		lexer.T_SR_EQUAL:            parseAssignmentExpression,
+		lexer.T_POW_EQUAL:           parseAssignmentExpression,
+		lexer.T_COALESCE_EQUAL:      parseAssignmentExpression,
+		
+		// 其他运算符
 		lexer.T_COALESCE:            parseCoalesceExpression,
-		lexer.T_BOOLEAN_AND:         parseBooleanExpression,
-		lexer.T_BOOLEAN_OR:          parseBooleanExpression,
-		lexer.T_SR:                  parseInfixExpression, // >> (right shift)
-		lexer.T_SL:                  parseInfixExpression, // << (left shift)
-		lexer.TOKEN_AMPERSAND:       parseInfixExpression, // & (bitwise AND)
-		lexer.TOKEN_PIPE:            parseInfixExpression, // | (bitwise OR)
-		lexer.TOKEN_CARET:           parseInfixExpression, // ^ (bitwise XOR)
-		lexer.TOKEN_LBRACKET:        parseArrayAccess,
 		lexer.TOKEN_QUESTION:        parseTernaryExpression,
 		lexer.T_DOUBLE_ARROW:        parseDoubleArrowExpression,
+		
+		// 后缀运算符
+		lexer.T_INC:                 parsePostfixExpression,
+		lexer.T_DEC:                 parsePostfixExpression,
+		
+		// 访问运算符
+		lexer.T_OBJECT_OPERATOR:          parsePropertyAccess,
+		lexer.T_NULLSAFE_OBJECT_OPERATOR: parseNullsafePropertyAccess,
+		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccessExpression,
+		lexer.TOKEN_LPAREN:          parseCallExpression,
+		lexer.TOKEN_LBRACKET:        parseArrayAccess,
 	}
 }
 
@@ -550,6 +615,8 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseBreakStatement(p)
 	case lexer.T_CONTINUE:
 		return parseContinueStatement(p)
+	case lexer.T_HALT_COMPILER:
+		return parseHaltCompilerStatement(p)
 	case lexer.TOKEN_LBRACE:
 		return parseBlockStatement(p)
 	case lexer.T_STRING:
@@ -739,6 +806,79 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 	}
 
 	return altIfStmt
+}
+
+// parseAlternativeSwitchStatement 解析Alternative语法的switch语句 (switch: ... endswitch;)
+func parseAlternativeSwitchStatement(p *Parser, pos lexer.Position, discriminant ast.Expression) ast.Statement {
+	switchStmt := ast.NewSwitchStatement(pos, discriminant)
+
+	p.nextToken() // 跳过冒号，移到第一个语句/case
+	
+	// 解析switch体中的语句，直到遇到endswitch
+	for p.currentToken.Type != lexer.T_ENDSWITCH && p.currentToken.Type != lexer.T_EOF {
+		if p.currentToken.Type == lexer.T_CASE {
+			casePos := p.currentToken.Position
+			p.nextToken()
+			test := parseExpression(p, LOWEST)
+
+			if !p.expectPeek(lexer.TOKEN_COLON) {
+				continue
+			}
+
+			switchCase := ast.NewSwitchCase(casePos, test)
+			p.nextToken()
+
+			// 解析case体中的语句
+			for p.currentToken.Type != lexer.T_CASE && 
+				p.currentToken.Type != lexer.T_DEFAULT && 
+				p.currentToken.Type != lexer.T_ENDSWITCH && 
+				p.currentToken.Type != lexer.T_EOF {
+				if stmt := parseStatement(p); stmt != nil {
+					switchCase.Body = append(switchCase.Body, stmt)
+				}
+				p.nextToken()
+			}
+			switchStmt.Cases = append(switchStmt.Cases, switchCase)
+		} else if p.currentToken.Type == lexer.T_DEFAULT {
+			defaultPos := p.currentToken.Position
+
+			if !p.expectPeek(lexer.TOKEN_COLON) {
+				continue
+			}
+
+			// default case的test为nil
+			defaultCase := ast.NewSwitchCase(defaultPos, nil)
+			p.nextToken()
+
+			// 解析default体中的语句
+			for p.currentToken.Type != lexer.T_CASE && 
+				p.currentToken.Type != lexer.T_DEFAULT && 
+				p.currentToken.Type != lexer.T_ENDSWITCH && 
+				p.currentToken.Type != lexer.T_EOF {
+				if stmt := parseStatement(p); stmt != nil {
+					defaultCase.Body = append(defaultCase.Body, stmt)
+				}
+				p.nextToken()
+			}
+			switchStmt.Cases = append(switchStmt.Cases, defaultCase)
+		} else {
+			// 如果遇到其他语句，跳过
+			p.nextToken()
+		}
+	}
+
+	// 期望 endswitch
+	if p.currentToken.Type != lexer.T_ENDSWITCH {
+		p.errors = append(p.errors, fmt.Sprintf("expected 'endswitch', got '%s'", p.currentToken.Type))
+		return nil
+	}
+
+	// 期望分号
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+
+	return switchStmt
 }
 
 // parseWhileStatement 解析 while 语句，支持普通语法和Alternative语法
@@ -1703,6 +1843,36 @@ func parseContinueStatement(p *Parser) *ast.ContinueStatement {
 	return ast.NewContinueStatement(pos)
 }
 
+// parseHaltCompilerStatement 解析 __halt_compiler() 语句
+func parseHaltCompilerStatement(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+
+	// 期望 (
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+
+	// 期望 )
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+
+	// 期望 ;
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+
+	// 创建 halt compiler 语句
+	haltStmt := ast.NewHaltCompilerStatement(pos)
+	
+	// 停止解析后续代码 - 设置当前token为EOF来终止解析
+	// 这样模拟PHP中__halt_compiler()的行为
+	p.currentToken = lexer.Token{Type: lexer.T_EOF, Position: pos}
+	p.peekToken = lexer.Token{Type: lexer.T_EOF, Position: pos}
+	
+	return haltStmt
+}
+
 // parseBlockStatement 解析块语句
 func parseBlockStatement(p *Parser) *ast.BlockStatement {
 	pos := p.currentToken.Position
@@ -2537,6 +2707,12 @@ func parseSwitchStatement(p *Parser) ast.Statement {
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		return nil
+	}
+
+	// 检查是否为 Alternative 语法 (switch (...):)
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 :
+		return parseAlternativeSwitchStatement(p, pos, discriminant)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {

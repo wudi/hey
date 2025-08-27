@@ -538,7 +538,8 @@ var Keywords = map[string]TokenType{
 	"list":         T_LIST,
 	"array":        T_ARRAY,
 	"callable":     T_CALLABLE,
-	"namespace":    T_NAMESPACE,
+	"namespace":      T_NAMESPACE,
+	"__halt_compiler": T_HALT_COMPILER,
 	// 属性钩子关键字 (Property Hooks) - PHP 8.4
 }
 

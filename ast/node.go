@@ -2402,6 +2402,37 @@ func (cs *ContinueStatement) String() string {
 	return "continue;"
 }
 
+// HaltCompilerStatement __halt_compiler()语句
+type HaltCompilerStatement struct {
+	BaseNode
+}
+
+func NewHaltCompilerStatement(pos lexer.Position) *HaltCompilerStatement {
+	return &HaltCompilerStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTHaltCompiler,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+	}
+}
+
+// GetChildren 返回子节点
+func (hcs *HaltCompilerStatement) GetChildren() []Node {
+	return nil // __halt_compiler()语句是叶子节点
+}
+
+// Accept 接受访问者
+func (hcs *HaltCompilerStatement) Accept(visitor Visitor) {
+	visitor.Visit(hcs)
+}
+
+func (hcs *HaltCompilerStatement) statementNode() {}
+
+func (hcs *HaltCompilerStatement) String() string {
+	return "__halt_compiler();"
+}
+
 // BlockStatement 块语句
 type BlockStatement struct {
 	BaseNode
