@@ -1657,6 +1657,212 @@ func TestParsing_ArrayWithComments(t *testing.T) {
 	}
 }
 
+// TestParsing_ArrayExpressionWithComments tests parsing array() expressions with comments
+func TestParsing_ArrayExpressionWithComments(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Simple array() with comments",
+			input: `<?php $x = array(
+				// Comment before element
+				'key' => 'value'
+			); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				require.True(t, ok, "Statement should be ExpressionStatement")
+				
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Expression should be AssignmentExpression")
+				
+				arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
+				require.True(t, ok, "Right side should be ArrayExpression")
+				require.Len(t, arrayExpr.Elements, 1)
+				
+				element, ok := arrayExpr.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok, "Element should be ArrayElementExpression")
+				
+				keyLit, ok := element.Key.(*ast.StringLiteral)
+				require.True(t, ok, "Key should be StringLiteral")
+				assert.Equal(t, "key", keyLit.Value)
+				
+				valueLit, ok := element.Value.(*ast.StringLiteral)
+				require.True(t, ok, "Value should be StringLiteral")
+				assert.Equal(t, "value", valueLit.Value)
+			},
+		},
+		{
+			name: "Function call with array() and comments - original failing case",
+			input: `<?php
+register_post_type(
+    self::POST_TYPE,
+    array(
+        'capabilities'    => array(
+            // No one can edit this post type once published.
+            'edit_published_posts' => 'do_not_allow',
+        ),
+        'map_meta_cap'    => true,
+        'supports'        => array( 'revisions' ),
+    )
+); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				require.True(t, ok, "Statement should be ExpressionStatement")
+				
+				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok, "Expression should be CallExpression")
+				
+				// Check function name
+				identifier, ok := callExpr.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Callee should be IdentifierNode")
+				assert.Equal(t, "register_post_type", identifier.Name)
+				
+				// Check arguments count
+				require.Len(t, callExpr.Arguments, 2)
+				
+				// First argument: self::POST_TYPE
+				staticAccessExpr, ok := callExpr.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok, "First argument should be StaticAccessExpression")
+				
+				// Check self part
+				selfIdent, ok := staticAccessExpr.Class.(*ast.IdentifierNode)
+				require.True(t, ok, "Class should be IdentifierNode")
+				assert.Equal(t, "self", selfIdent.Name)
+				
+				// Check POST_TYPE part
+				postTypeIdent, ok := staticAccessExpr.Property.(*ast.IdentifierNode)
+				require.True(t, ok, "Property should be IdentifierNode")
+				assert.Equal(t, "POST_TYPE", postTypeIdent.Name)
+				
+				// Second argument: array(...)
+				arrayExpr, ok := callExpr.Arguments[1].(*ast.ArrayExpression)
+				require.True(t, ok, "Second argument should be ArrayExpression")
+				require.Len(t, arrayExpr.Elements, 3) // capabilities, map_meta_cap, supports
+				
+				// Check 'capabilities' element
+				capElement, ok := arrayExpr.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok, "Element should be ArrayElementExpression")
+				
+				keyLit, ok := capElement.Key.(*ast.StringLiteral)
+				require.True(t, ok, "Key should be StringLiteral")
+				assert.Equal(t, "capabilities", keyLit.Value)
+				
+				// Check nested array
+				nestedArray, ok := capElement.Value.(*ast.ArrayExpression)
+				require.True(t, ok, "Value should be ArrayExpression")
+				require.Len(t, nestedArray.Elements, 1)
+				
+				// Check element with comment before it
+				nestedElement, ok := nestedArray.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok, "Nested element should be ArrayElementExpression")
+				
+				nestedKey, ok := nestedElement.Key.(*ast.StringLiteral)
+				require.True(t, ok, "Nested key should be StringLiteral")
+				assert.Equal(t, "edit_published_posts", nestedKey.Value)
+				
+				nestedValue, ok := nestedElement.Value.(*ast.StringLiteral)
+				require.True(t, ok, "Nested value should be StringLiteral")
+				assert.Equal(t, "do_not_allow", nestedValue.Value)
+			},
+		},
+		{
+			name: "Nested arrays with multiple comments",
+			input: `<?php $data = array(
+				'outer' => array(
+					// First inner comment
+					'inner1' => 'value1',
+					// Second inner comment  
+					'inner2' => array(
+						// Deep comment
+						'deep' => 'deepvalue'
+					)
+				)
+			); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				require.True(t, ok, "Statement should be ExpressionStatement")
+				
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Expression should be AssignmentExpression")
+				
+				arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
+				require.True(t, ok, "Right side should be ArrayExpression")
+				require.Len(t, arrayExpr.Elements, 1)
+				
+				// Check nested structure is correctly parsed
+				element, ok := arrayExpr.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok, "Element should be ArrayElementExpression")
+				
+				keyLit, ok := element.Key.(*ast.StringLiteral)
+				require.True(t, ok, "Key should be StringLiteral")
+				assert.Equal(t, "outer", keyLit.Value)
+				
+				nestedArray, ok := element.Value.(*ast.ArrayExpression)
+				require.True(t, ok, "Value should be ArrayExpression")
+				require.Len(t, nestedArray.Elements, 2) // inner1 and inner2
+			},
+		},
+		{
+			name: "Mixed comments and comma handling",
+			input: `<?php $mixed = array(
+				'first' => 'value1', // comment after first
+				// comment before second
+				'second' => 'value2',
+				// comment before third  
+				'third' => 'value3', // comment after third
+			); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				require.True(t, ok, "Statement should be ExpressionStatement")
+				
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Expression should be AssignmentExpression")
+				
+				arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
+				require.True(t, ok, "Right side should be ArrayExpression")
+				require.Len(t, arrayExpr.Elements, 3)
+				
+				// Verify all elements are correctly parsed
+				for i, expectedKey := range []string{"first", "second", "third"} {
+					element, ok := arrayExpr.Elements[i].(*ast.ArrayElementExpression)
+					require.True(t, ok, fmt.Sprintf("Element %d should be ArrayElementExpression", i))
+					
+					keyLit, ok := element.Key.(*ast.StringLiteral)
+					require.True(t, ok, fmt.Sprintf("Key %d should be StringLiteral", i))
+					assert.Equal(t, expectedKey, keyLit.Value)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+
+			tt.validate(t, program)
+		})
+	}
+}
+
 func TestParsing_FunctionCalls(t *testing.T) {
 	tests := []struct {
 		name     string

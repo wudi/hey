@@ -211,6 +211,18 @@ func init() {
 type PrefixParseFn func(*Parser) ast.Expression
 type InfixParseFn func(*Parser, ast.Expression) ast.Expression
 
+// isNonSyntacticToken 判断token是否在语法解析中无意义，应该被跳过
+func isNonSyntacticToken(tokenType lexer.TokenType) bool {
+	switch tokenType {
+	case lexer.T_COMMENT,
+		 lexer.T_DOC_COMMENT:
+		// 注释token在语法解析中无意义，但保留在token流中供工具使用
+		return true
+	default:
+		return false
+	}
+}
+
 // Parser 解析器结构体
 type Parser struct {
 	lexer        *lexer.Lexer
@@ -224,17 +236,30 @@ func New(l *lexer.Lexer) *Parser {
 		lexer:  l,
 		errors: []string{},
 	}
-	// 读取两个 token，初始化 currentToken 和 peekToken
-	p.nextToken()
-	p.nextToken()
+	
+	// 初始化时也需要跳过非语法token
+	p.currentToken = l.NextToken()
+	for isNonSyntacticToken(p.currentToken.Type) {
+		p.currentToken = l.NextToken()
+	}
+	
+	p.peekToken = l.NextToken() 
+	for isNonSyntacticToken(p.peekToken.Type) {
+		p.peekToken = l.NextToken()
+	}
 
 	return p
 }
 
-// nextToken 前进到下一个 token
+// nextToken 前进到下一个语法有意义的token，自动跳过注释等无意义token
 func (p *Parser) nextToken() {
 	p.currentToken = p.peekToken
 	p.peekToken = p.lexer.NextToken()
+	
+	// 自动跳过语法解析中无意义的token
+	for isNonSyntacticToken(p.peekToken.Type) {
+		p.peekToken = p.lexer.NextToken()
+	}
 }
 
 // 辅助方法
@@ -1925,10 +1950,6 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 		p.nextToken()
 	}
 
-	// Skip comments before parsing expression
-	for p.currentToken.Type == lexer.T_COMMENT {
-		p.nextToken()
-	}
 	
 	// Check for different argument types
 	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
@@ -1953,10 +1974,6 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken()
 		p.nextToken()
-		// Skip comments after comma
-		for p.currentToken.Type == lexer.T_COMMENT {
-			p.nextToken()
-		}
 		
 		// Check for different argument types
 		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
@@ -2849,10 +2866,6 @@ func parseAttributeDecl(p *Parser) *ast.Attribute {
 		// 解析参数列表
 		if p.peekToken.Type != lexer.TOKEN_RPAREN {
 			p.nextToken()
-			// Skip comments before parsing expression
-			for p.currentToken.Type == lexer.T_COMMENT {
-				p.nextToken()
-			}
 			
 			// Check for named argument (identifier: value)
 			if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
@@ -2867,10 +2880,6 @@ func parseAttributeDecl(p *Parser) *ast.Attribute {
 			for p.peekToken.Type == lexer.TOKEN_COMMA {
 				p.nextToken() // 移动到逗号
 				p.nextToken() // 移动到下一个参数
-				// Skip comments after comma
-				for p.currentToken.Type == lexer.T_COMMENT {
-					p.nextToken()
-				}
 				
 				// Check for named argument
 				if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
@@ -2908,10 +2917,6 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 
 	// 解析数组元素列表 (non_empty_array_pair_list)
 	for p.currentToken.Type != lexer.TOKEN_RBRACKET && p.currentToken.Type != lexer.T_EOF {
-		// Skip comments before processing array elements
-		for p.currentToken.Type == lexer.T_COMMENT {
-			p.nextToken()
-		}
 
 		// possible_array_pair: 可以为空（trailing comma情况）
 		if p.currentToken.Type == lexer.TOKEN_COMMA {
@@ -2947,10 +2952,6 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 
 		p.nextToken()
 
-		// Skip comments after parsing element
-		for p.currentToken.Type == lexer.T_COMMENT {
-			p.nextToken()
-		}
 
 		// 检查是否到达数组结尾
 		if p.currentToken.Type == lexer.TOKEN_RBRACKET {
@@ -2960,10 +2961,6 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 		// 期望逗号分隔符，但允许省略（在结尾）
 		if p.currentToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken()
-			// Skip comments after comma
-			for p.currentToken.Type == lexer.T_COMMENT {
-				p.nextToken()
-			}
 			// 允许 trailing comma: [1, 2, 3,]
 			if p.currentToken.Type == lexer.TOKEN_RBRACKET {
 				break
