@@ -713,6 +713,35 @@ func (l *Lexer) nextTokenInScripting() Token {
 			// 标识符或关键字
 			identifier := l.readIdentifier()
 			
+			// 检查特殊复合关键字 "yield from"
+			if identifier == "yield" {
+				// 保存当前位置
+				savedPos := l.position
+				savedReadPos := l.readPosition
+				savedCh := l.ch
+				savedLine := l.line
+				savedColumn := l.column
+				
+				// 跳过空白
+				l.skipWhitespace()
+				
+				// 检查下一个标识符是否为 "from"
+				if isLetter(l.ch) || l.ch == '_' {
+					nextIdentifier := l.readIdentifier()
+					if nextIdentifier == "from" {
+						// 返回 T_YIELD_FROM token
+						return Token{Type: T_YIELD_FROM, Value: "yield from", Position: pos}
+					}
+				}
+				
+				// 恢复位置（没有找到 "from"）
+				l.position = savedPos
+				l.readPosition = savedReadPos
+				l.ch = savedCh
+				l.line = savedLine
+				l.column = savedColumn
+			}
+			
 			// 检查是否为关键字
 			if tokenType, isKeyword := IsKeyword(identifier); isKeyword {
 				return Token{Type: tokenType, Value: identifier, Position: pos}

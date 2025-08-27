@@ -3360,6 +3360,246 @@ func TestParsing_FirstClassCallable(t *testing.T) {
 	}
 }
 
+func TestParsing_YieldExpressions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Empty yield",
+			input: `<?php yield;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldExpr, ok := stmt.Expression.(*ast.YieldExpression)
+				assert.True(t, ok, "Expected YieldExpression")
+				assert.Nil(t, yieldExpr.Key, "Key should be nil for empty yield")
+				assert.Nil(t, yieldExpr.Value, "Value should be nil for empty yield")
+				assert.Equal(t, "yield", yieldExpr.String())
+			},
+		},
+		{
+			name:  "Yield with value",
+			input: `<?php yield $value;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldExpr, ok := stmt.Expression.(*ast.YieldExpression)
+				assert.True(t, ok, "Expected YieldExpression")
+				assert.Nil(t, yieldExpr.Key, "Key should be nil for value-only yield")
+				assert.NotNil(t, yieldExpr.Value, "Value should not be nil")
+
+				valueVar, ok := yieldExpr.Value.(*ast.Variable)
+				assert.True(t, ok, "Value should be Variable")
+				assert.Equal(t, "$value", valueVar.Name)
+				assert.Equal(t, "yield $value", yieldExpr.String())
+			},
+		},
+		{
+			name:  "Yield with key-value pair",
+			input: `<?php yield $key => $value;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldExpr, ok := stmt.Expression.(*ast.YieldExpression)
+				assert.True(t, ok, "Expected YieldExpression")
+				assert.NotNil(t, yieldExpr.Key, "Key should not be nil")
+				assert.NotNil(t, yieldExpr.Value, "Value should not be nil")
+
+				keyVar, ok := yieldExpr.Key.(*ast.Variable)
+				assert.True(t, ok, "Key should be Variable")
+				assert.Equal(t, "$key", keyVar.Name)
+
+				valueVar, ok := yieldExpr.Value.(*ast.Variable)
+				assert.True(t, ok, "Value should be Variable")
+				assert.Equal(t, "$value", valueVar.Name)
+
+				assert.Equal(t, "yield $key => $value", yieldExpr.String())
+			},
+		},
+		{
+			name:  "Yield with complex expressions",
+			input: `<?php yield $obj->method() => $this->property;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldExpr, ok := stmt.Expression.(*ast.YieldExpression)
+				assert.True(t, ok, "Expected YieldExpression")
+				assert.NotNil(t, yieldExpr.Key, "Key should not be nil")
+				assert.NotNil(t, yieldExpr.Value, "Value should not be nil")
+
+				// Key should be method call
+				_, ok = yieldExpr.Key.(*ast.CallExpression)
+				assert.True(t, ok, "Key should be CallExpression")
+
+				// Value should be property access
+				valueProp, ok := yieldExpr.Value.(*ast.PropertyAccessExpression)
+				assert.True(t, ok, "Value should be PropertyAccessExpression")
+				
+				thisVar, ok := valueProp.Object.(*ast.Variable)
+				assert.True(t, ok, "Property object should be Variable")
+				assert.Equal(t, "$this", thisVar.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_YieldFromExpressions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Yield from variable",
+			input: `<?php yield from $generator;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldFromExpr, ok := stmt.Expression.(*ast.YieldFromExpression)
+				assert.True(t, ok, "Expected YieldFromExpression")
+				assert.NotNil(t, yieldFromExpr.Expression, "Expression should not be nil")
+
+				genVar, ok := yieldFromExpr.Expression.(*ast.Variable)
+				assert.True(t, ok, "Expression should be Variable")
+				assert.Equal(t, "$generator", genVar.Name)
+				assert.Equal(t, "yield from $generator", yieldFromExpr.String())
+			},
+		},
+		{
+			name:  "Yield from function call",
+			input: `<?php yield from createGenerator();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldFromExpr, ok := stmt.Expression.(*ast.YieldFromExpression)
+				assert.True(t, ok, "Expected YieldFromExpression")
+				assert.NotNil(t, yieldFromExpr.Expression, "Expression should not be nil")
+
+				callExpr, ok := yieldFromExpr.Expression.(*ast.CallExpression)
+				assert.True(t, ok, "Expression should be CallExpression")
+				
+				funcName, ok := callExpr.Callee.(*ast.IdentifierNode)
+				assert.True(t, ok, "Callee should be IdentifierNode")
+				assert.Equal(t, "createGenerator", funcName.Name)
+			},
+		},
+		{
+			name:  "Yield from method call",
+			input: `<?php yield from $obj->getGenerator();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldFromExpr, ok := stmt.Expression.(*ast.YieldFromExpression)
+				assert.True(t, ok, "Expected YieldFromExpression")
+				assert.NotNil(t, yieldFromExpr.Expression, "Expression should not be nil")
+
+				callExpr, ok := yieldFromExpr.Expression.(*ast.CallExpression)
+				assert.True(t, ok, "Expression should be CallExpression")
+				
+				propAccess, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
+				assert.True(t, ok, "Callee should be PropertyAccessExpression")
+				
+				objVar, ok := propAccess.Object.(*ast.Variable)
+				assert.True(t, ok, "Object should be Variable")
+				assert.Equal(t, "$obj", objVar.Name)
+				assert.Equal(t, "getGenerator", propAccess.Property.Name)
+			},
+		},
+		{
+			name:  "Yield from array",
+			input: `<?php yield from [1, 2, 3];`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldFromExpr, ok := stmt.Expression.(*ast.YieldFromExpression)
+				assert.True(t, ok, "Expected YieldFromExpression")
+				assert.NotNil(t, yieldFromExpr.Expression, "Expression should not be nil")
+
+				arrayExpr, ok := yieldFromExpr.Expression.(*ast.ArrayExpression)
+				assert.True(t, ok, "Expression should be ArrayExpression")
+				assert.Len(t, arrayExpr.Elements, 3, "Array should have 3 elements")
+			},
+		},
+		{
+			name:  "Nested yield from expressions",
+			input: `<?php yield from getOuterGenerator($inner);`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				yieldFromExpr, ok := stmt.Expression.(*ast.YieldFromExpression)
+				assert.True(t, ok, "Expected YieldFromExpression")
+
+				callExpr, ok := yieldFromExpr.Expression.(*ast.CallExpression)
+				assert.True(t, ok, "Expression should be CallExpression")
+				
+				funcName, ok := callExpr.Callee.(*ast.IdentifierNode)
+				assert.True(t, ok, "Callee should be IdentifierNode")
+				assert.Equal(t, "getOuterGenerator", funcName.Name)
+				
+				assert.Len(t, callExpr.Arguments, 1, "Should have one argument")
+				innerVar, ok := callExpr.Arguments[0].(*ast.Variable)
+				assert.True(t, ok, "Argument should be Variable")
+				assert.Equal(t, "$inner", innerVar.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {

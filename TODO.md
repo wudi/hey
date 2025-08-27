@@ -111,8 +111,8 @@
 - [x] 新增T_GET和T_SET词法标记，并加入semi-reserved关键字列表
 - [x] 5个综合测试用例覆盖所有属性钩子使用场景
 
-### 12. 高级表达式功能 - ❌ 未实现
-- [ ] `T_YIELD_FROM` - yield from语法
+### 12. 高级表达式功能 - ⚠️ 部分实现
+- [x] `T_YIELD_FROM` - yield from语法：完整实现，包括词法分析和AST支持
 - [ ] Clone参数列表：`clone_argument_list`
 - [ ] Shell执行：backticks语法
 - [ ] `T_VOID_CAST` - void转换

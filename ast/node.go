@@ -1075,6 +1075,98 @@ type UnaryExpression struct {
 	Prefix   bool       `json:"prefix"` // true for ++$a, false for $a++
 }
 
+// YieldExpression yield 表达式
+type YieldExpression struct {
+	BaseNode
+	Key   Expression `json:"key,omitempty"`   // 可选的键（例如：yield $key => $value）
+	Value Expression `json:"value,omitempty"` // 可选的值
+}
+
+func NewYieldExpression(pos lexer.Position, key Expression, value Expression) *YieldExpression {
+	return &YieldExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTYield,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Key:   key,
+		Value: value,
+	}
+}
+
+func (y *YieldExpression) GetChildren() []Node {
+	children := make([]Node, 0)
+	if y.Key != nil {
+		children = append(children, y.Key)
+	}
+	if y.Value != nil {
+		children = append(children, y.Value)
+	}
+	return children
+}
+
+func (y *YieldExpression) Accept(visitor Visitor) {
+	if visitor.Visit(y) {
+		if y.Key != nil {
+			y.Key.Accept(visitor)
+		}
+		if y.Value != nil {
+			y.Value.Accept(visitor)
+		}
+	}
+}
+
+func (y *YieldExpression) expressionNode() {}
+
+func (y *YieldExpression) String() string {
+	if y.Key != nil && y.Value != nil {
+		return "yield " + y.Key.String() + " => " + y.Value.String()
+	} else if y.Value != nil {
+		return "yield " + y.Value.String()
+	} else {
+		return "yield"
+	}
+}
+
+// YieldFromExpression yield from 表达式
+type YieldFromExpression struct {
+	BaseNode
+	Expression Expression `json:"expression"` // 被 yield from 的表达式
+}
+
+func NewYieldFromExpression(pos lexer.Position, expression Expression) *YieldFromExpression {
+	return &YieldFromExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTYieldFrom,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Expression: expression,
+	}
+}
+
+func (y *YieldFromExpression) GetChildren() []Node {
+	if y.Expression != nil {
+		return []Node{y.Expression}
+	}
+	return []Node{}
+}
+
+func (y *YieldFromExpression) Accept(visitor Visitor) {
+	if visitor.Visit(y) && y.Expression != nil {
+		y.Expression.Accept(visitor)
+	}
+}
+
+func (y *YieldFromExpression) expressionNode() {}
+
+func (y *YieldFromExpression) String() string {
+	if y.Expression != nil {
+		return "yield from " + y.Expression.String()
+	}
+	return "yield from"
+}
+
 // CastExpression 类型转换表达式节点
 type CastExpression struct {
 	BaseNode

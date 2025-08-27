@@ -159,6 +159,8 @@ func init() {
 		lexer.T_UNSET_CAST:               parseTypeCast,
 		lexer.T_ATTRIBUTE:                parseAttributeExpression,
 		lexer.T_FN:                       parseArrowFunctionExpression,
+		lexer.T_YIELD:                    parseYieldExpression,
+		lexer.T_YIELD_FROM:               parseYieldFromExpression,
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
 		lexer.TOKEN_PLUS:            parseInfixExpression,
@@ -4005,6 +4007,61 @@ func parseAbstractExpression(p *Parser) ast.Expression {
 	// abstract 通常用作类或方法修饰符
 	// 在这里作为标识符返回，实际的类声明解析会在其他地方处理
 	return ast.NewIdentifierNode(pos, "abstract")
+}
+
+// parseYieldExpression 解析 yield 表达式
+func parseYieldExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken() // 跳过 yield 关键字
+	
+	// yield 可能有三种形式：
+	// 1. yield;               (无值)
+	// 2. yield $value;        (只有值)
+	// 3. yield $key => $value; (键值对)
+	
+	// 检查是否是空的 yield
+	if p.currentToken.Type == lexer.TOKEN_SEMICOLON || p.currentToken.Type == lexer.T_EOF {
+		return ast.NewYieldExpression(pos, nil, nil)
+	}
+	
+	// 解析第一个表达式，使用较高的优先级以防止 => 被作为中缀操作符解析
+	firstExpr := parseExpression(p, LOGICAL_OR)
+	if firstExpr == nil {
+		return ast.NewYieldExpression(pos, nil, nil)
+	}
+	
+	// 检查是否有 =>，表示这是键值对形式
+	if p.peekToken.Type == lexer.T_DOUBLE_ARROW {
+		p.nextToken() // 跳过 =>
+		p.nextToken() // 移动到值表达式
+		valueExpr := parseExpression(p, LOWEST)
+		return ast.NewYieldExpression(pos, firstExpr, valueExpr)
+	}
+	
+	// 只有值的形式
+	return ast.NewYieldExpression(pos, nil, firstExpr)
+}
+
+// parseYieldFromExpression 解析 yield from 表达式
+func parseYieldFromExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken() // 跳过 "yield from" token
+	
+	// yield from 后面必须跟一个表达式
+	if p.currentToken.Type == lexer.TOKEN_SEMICOLON || p.currentToken.Type == lexer.T_EOF {
+		p.errors = append(p.errors, "yield from requires an expression")
+		return nil
+	}
+	
+	expr := parseExpression(p, LOWEST)
+	if expr == nil {
+		p.errors = append(p.errors, "invalid expression after yield from")
+		return nil
+	}
+	
+	return ast.NewYieldFromExpression(pos, expr)
 }
 
 // parseCloseTagExpression 解析 PHP 结束标签
