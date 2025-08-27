@@ -143,6 +143,7 @@ func init() {
 		lexer.T_EXTENDS:                  parseFallback,
 		lexer.T_LOGICAL_OR:               parseFallback,
 		lexer.T_MATCH:                    parseMatchExpression,
+		lexer.T_ENUM:                     parseEnumExpression,
 		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccess,
 		lexer.T_PRIVATE:                  parseVisibilityModifier,
 		lexer.T_PROTECTED:                parseVisibilityModifier,
@@ -1369,6 +1370,14 @@ func parseTraitProperty(p *Parser, visibility string) *ast.PropertyDeclaration {
 	}
 
 	return property
+}
+
+// parseEnumExpression 解析 enum 表达式 (为前缀解析提供包装)
+// 注意：enum声明实际上是语句，不应该作为表达式出现
+func parseEnumExpression(p *Parser) ast.Expression {
+	// 返回错误，enum不是表达式
+	p.errors = append(p.errors, fmt.Sprintf("enum declaration cannot be used as expression at line: %d col: %d", p.currentToken.Position.Line, p.currentToken.Position.Column))
+	return nil
 }
 
 // parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)
@@ -3319,6 +3328,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 			return parseClassConstantDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
+		} else if p.peekToken.Type == lexer.T_READONLY {
+			// visibility readonly property
+			return parsePropertyDeclaration(p)
 		}
 		return parsePropertyDeclaration(p)
 	case lexer.T_FUNCTION:
