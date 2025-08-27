@@ -3274,3 +3274,128 @@ func (vme *VisibilityModifierExpression) expressionNode() {}
 func (vme *VisibilityModifierExpression) String() string {
 	return vme.Modifier
 }
+
+// IncludeOrEvalExpression 表示 include/require/eval 表达式
+type IncludeOrEvalExpression struct {
+	BaseNode
+	Type lexer.TokenType // T_INCLUDE, T_INCLUDE_ONCE, T_REQUIRE, T_REQUIRE_ONCE, T_EVAL
+	Expr Node            // 要包含的文件表达式
+}
+
+func NewIncludeOrEvalExpression(pos lexer.Position, tokenType lexer.TokenType, expr Node) *IncludeOrEvalExpression {
+	return &IncludeOrEvalExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTIncludeOrEval,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Type: tokenType,
+		Expr: expr,
+	}
+}
+
+func (ie *IncludeOrEvalExpression) GetChildren() []Node {
+	if ie.Expr != nil {
+		return []Node{ie.Expr}
+	}
+	return []Node{}
+}
+
+func (ie *IncludeOrEvalExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ie) && ie.Expr != nil {
+		ie.Expr.Accept(visitor)
+	}
+}
+
+func (ie *IncludeOrEvalExpression) expressionNode() {}
+
+func (ie *IncludeOrEvalExpression) String() string {
+	switch ie.Type {
+	case lexer.T_INCLUDE:
+		return "include " + ie.Expr.String()
+	case lexer.T_INCLUDE_ONCE:
+		return "include_once " + ie.Expr.String()
+	case lexer.T_REQUIRE:
+		return "require " + ie.Expr.String()
+	case lexer.T_REQUIRE_ONCE:
+		return "require_once " + ie.Expr.String()
+	case lexer.T_EVAL:
+		return "eval(" + ie.Expr.String() + ")"
+	default:
+		return "include_or_eval " + ie.Expr.String()
+	}
+}
+
+
+// CloseTagExpression 表示 PHP 结束标签
+type CloseTagExpression struct {
+	BaseNode
+	Content string // ?> 后面的内容（如果有的话）
+}
+
+func NewCloseTagExpression(pos lexer.Position, content string) *CloseTagExpression {
+	return &CloseTagExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTZval, // 使用 Zval 类型表示简单值
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Content: content,
+	}
+}
+
+func (ct *CloseTagExpression) GetChildren() []Node {
+	return []Node{}
+}
+
+func (ct *CloseTagExpression) Accept(visitor Visitor) {
+	visitor.Visit(ct)
+}
+
+func (ct *CloseTagExpression) expressionNode() {}
+
+func (ct *CloseTagExpression) String() string {
+	if ct.Content != "" {
+		return "?>" + ct.Content
+	}
+	return "?>"
+}
+
+// NamespaceExpression 表示命名空间表达式（以 \ 开始）
+type NamespaceExpression struct {
+	BaseNode
+	Name Node // 命名空间名称
+}
+
+func NewNamespaceExpression(pos lexer.Position, name Node) *NamespaceExpression {
+	return &NamespaceExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTNamespace,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name: name,
+	}
+}
+
+func (ne *NamespaceExpression) GetChildren() []Node {
+	if ne.Name != nil {
+		return []Node{ne.Name}
+	}
+	return []Node{}
+}
+
+func (ne *NamespaceExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ne) && ne.Name != nil {
+		ne.Name.Accept(visitor)
+	}
+}
+
+func (ne *NamespaceExpression) expressionNode() {}
+
+func (ne *NamespaceExpression) String() string {
+	if ne.Name != nil {
+		return "\\" + ne.Name.String()
+	}
+	return "\\"
+}

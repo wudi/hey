@@ -113,6 +113,14 @@ func init() {
 		lexer.T_NOWDOC:                   parseNowdocExpression,
 		lexer.T_CURLY_OPEN:               parseCurlyOpenExpression,
 		lexer.TOKEN_QUOTE:                parseInterpolatedString,
+		lexer.T_INCLUDE:                  parseIncludeOrEvalExpression,
+		lexer.T_INCLUDE_ONCE:             parseIncludeOrEvalExpression,
+		lexer.T_REQUIRE:                  parseIncludeOrEvalExpression,
+		lexer.T_REQUIRE_ONCE:             parseIncludeOrEvalExpression,
+		lexer.T_STATIC:                   parseStaticExpression,
+		lexer.T_ABSTRACT:                 parseAbstractExpression,
+		lexer.T_CLOSE_TAG:                parseCloseTagExpression,
+		lexer.T_NS_SEPARATOR:             parseNamespaceExpression,
 		lexer.T_ELSEIF:                   parseFallback,
 		lexer.T_ELSE:                     parseFallback,
 		lexer.TOKEN_QUESTION:             parseFallback,
@@ -2414,4 +2422,103 @@ func parseVisibilityModifier(p *Parser) ast.Expression {
 
 	// 可见性修饰符后面应该跟着属性或方法声明
 	return ast.NewVisibilityModifierExpression(pos, modifier)
+}
+
+// parseIncludeOrEvalExpression 解析 include/require/eval 表达式
+func parseIncludeOrEvalExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	tokenType := p.currentToken.Type
+	
+	p.nextToken() // 跳过 include/require/eval 关键字
+	
+	var expr ast.Node
+	if tokenType == lexer.T_EVAL {
+		// eval 需要括号
+		if !p.expectPeek(lexer.TOKEN_LPAREN) {
+			return nil
+		}
+		p.nextToken() // 跳过 '('
+		expr = parseExpression(p, LOWEST)
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+	} else {
+		// include/require 后面跟表达式
+		expr = parseExpression(p, LOWEST)
+	}
+	
+	return ast.NewIncludeOrEvalExpression(pos, tokenType, expr)
+}
+
+// parseStaticExpression 解析 static 关键字表达式
+func parseStaticExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 检查下一个token来决定如何解析
+	switch p.peekToken.Type {
+	case lexer.T_VARIABLE:
+		// static $var = value; 这实际上是语句级别的，但在表达式上下文中先返回标识符
+		// 实际的静态声明会在语句解析中处理
+		name := ast.NewIdentifierNode(pos, "static")
+		return name
+	case lexer.T_FUNCTION:
+		// static function() { ... } 静态匿名函数
+		p.nextToken() // 跳过 static
+		return parseAnonymousFunctionExpression(p)
+	case lexer.T_PAAMAYIM_NEKUDOTAYIM:
+		// static::method() 静态类引用  
+		name := ast.NewIdentifierNode(pos, "static")
+		return name
+	default:
+		// 单独的 static 关键字，可能用于类型声明或其他用途
+		name := ast.NewIdentifierNode(pos, "static")
+		return name
+	}
+}
+
+
+// parseAbstractExpression 解析 abstract 关键字
+func parseAbstractExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	// abstract 通常用作类或方法修饰符
+	// 在这里作为标识符返回，实际的类声明解析会在其他地方处理
+	return ast.NewIdentifierNode(pos, "abstract")
+}
+
+// parseCloseTagExpression 解析 PHP 结束标签
+func parseCloseTagExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	content := p.currentToken.Value
+	
+	// 结束标签后可能有HTML内容
+	return ast.NewCloseTagExpression(pos, content)
+}
+
+// parseNamespaceExpression 解析命名空间表达式（以 \ 开始）
+func parseNamespaceExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken() // 跳过 \
+	
+	if p.currentToken.Type == lexer.T_STRING {
+		// \Namespace\Class 形式
+		nameStr := p.currentToken.Value
+		
+		// 继续解析后续的命名空间部分，构建完整的命名空间字符串
+		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+			p.nextToken() // 跳到 \
+			p.nextToken() // 跳过 \
+			if p.currentToken.Type == lexer.T_STRING {
+				nameStr += "\\" + p.currentToken.Value
+			}
+		}
+		
+		// 创建完整的命名空间标识符
+		name := ast.NewIdentifierNode(pos, nameStr)
+		return ast.NewNamespaceExpression(pos, name)
+	}
+	
+	// 单独的 \ 
+	return ast.NewNamespaceExpression(pos, nil)
 }

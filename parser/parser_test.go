@@ -2764,6 +2764,298 @@ echo $a + $b;`,
 	}
 }
 
+func TestParsing_IncludeAndRequireStatements(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "require statement",
+			input: `<?php require 'config.php';`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+
+				includeExpr, ok := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
+				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
+				assert.Equal(t, lexer.T_REQUIRE, includeExpr.Type)
+				
+				stringLit, ok := includeExpr.Expr.(*ast.StringLiteral)
+				assert.True(t, ok, "Included file should be StringLiteral")
+				assert.Equal(t, "config.php", stringLit.Value)
+			},
+		},
+		{
+			name:  "require_once statement",
+			input: `<?php require_once 'utils.php';`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+
+				includeExpr, ok := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
+				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
+				assert.Equal(t, lexer.T_REQUIRE_ONCE, includeExpr.Type)
+				
+				stringLit, ok := includeExpr.Expr.(*ast.StringLiteral)
+				assert.True(t, ok, "Included file should be StringLiteral")
+				assert.Equal(t, "utils.php", stringLit.Value)
+			},
+		},
+		{
+			name:  "include and include_once statements",
+			input: `<?php include 'header.php'; include_once 'footer.php';`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 2)
+
+				// Check include
+				exprStmt1, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "First statement should be ExpressionStatement")
+				includeExpr1, ok := exprStmt1.Expression.(*ast.IncludeOrEvalExpression)
+				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
+				assert.Equal(t, lexer.T_INCLUDE, includeExpr1.Type)
+				
+				// Check include_once
+				exprStmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Second statement should be ExpressionStatement")
+				includeExpr2, ok := exprStmt2.Expression.(*ast.IncludeOrEvalExpression)
+				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
+				assert.Equal(t, lexer.T_INCLUDE_ONCE, includeExpr2.Type)
+			},
+		},
+		{
+			name:  "include with variable expression",
+			input: `<?php require $config_file;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+
+				includeExpr, ok := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
+				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
+				assert.Equal(t, lexer.T_REQUIRE, includeExpr.Type)
+				
+				variable, ok := includeExpr.Expr.(*ast.Variable)
+				assert.True(t, ok, "Included expression should be Variable")
+				assert.Equal(t, "$config_file", variable.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_StaticDeclarations(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "static variable declaration",
+			input: `<?php static $counter = 0;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				staticStmt, ok := program.Body[0].(*ast.StaticStatement)
+				assert.True(t, ok, "Statement should be StaticStatement")
+				assert.Len(t, staticStmt.Variables, 1, "Should have one static variable")
+				
+				staticVar := staticStmt.Variables[0]
+				variable, ok := staticVar.Variable.(*ast.Variable)
+				assert.True(t, ok, "Variable should be Variable type")
+				assert.Equal(t, "$counter", variable.Name)
+				
+				defaultValue, ok := staticVar.DefaultValue.(*ast.NumberLiteral)
+				assert.True(t, ok, "Default value should be NumberLiteral")
+				assert.Equal(t, "0", defaultValue.Value)
+			},
+		},
+		{
+			name:  "static as identifier in expression context",
+			input: `<?php $x = static;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+				
+				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expression should be AssignmentExpression")
+				
+				staticIdent, ok := assignExpr.Right.(*ast.IdentifierNode)
+				assert.True(t, ok, "Right should be IdentifierNode")
+				assert.Equal(t, "static", staticIdent.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_AbstractKeyword(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "abstract class declaration",
+			input: `<?php abstract class BaseClass {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 2)
+				
+				// First should be abstract identifier
+				exprStmt1, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "First statement should be ExpressionStatement")
+				abstractIdent, ok := exprStmt1.Expression.(*ast.IdentifierNode)
+				assert.True(t, ok, "Expression should be IdentifierNode")
+				assert.Equal(t, "abstract", abstractIdent.Name)
+				
+				// Second should be class declaration
+				exprStmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Second statement should be ExpressionStatement")
+				classExpr, ok := exprStmt2.Expression.(*ast.ClassExpression)
+				assert.True(t, ok, "Expression should be ClassExpression")
+				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+				assert.True(t, ok, "Class name should be IdentifierNode")
+				assert.Equal(t, "BaseClass", nameIdent.Name)
+			},
+		},
+		{
+			name:  "abstract as identifier in expression",
+			input: `<?php $type = abstract;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+				
+				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expression should be AssignmentExpression")
+				
+				abstractIdent, ok := assignExpr.Right.(*ast.IdentifierNode)
+				assert.True(t, ok, "Right should be IdentifierNode")
+				assert.Equal(t, "abstract", abstractIdent.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_NamespaceSeparator(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "fully qualified namespace call",
+			input: `<?php \DateTime\createFromFormat();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+				
+				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
+				assert.True(t, ok, "Expression should be CallExpression")
+				
+				// The callee should be a namespace expression
+				namespaceExpr, ok := callExpr.Callee.(*ast.NamespaceExpression)
+				assert.True(t, ok, "Callee should be NamespaceExpression")
+				
+				// Check the namespace name contains the full path
+				nameIdent, ok := namespaceExpr.Name.(*ast.IdentifierNode)
+				assert.True(t, ok, "Name should be IdentifierNode")
+				assert.Equal(t, "DateTime\\createFromFormat", nameIdent.Name)
+			},
+		},
+		{
+			name:  "single leading backslash",
+			input: `<?php \test();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+				
+				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
+				assert.True(t, ok, "Expression should be CallExpression")
+				
+				namespaceExpr, ok := callExpr.Callee.(*ast.NamespaceExpression)
+				assert.True(t, ok, "Callee should be NamespaceExpression")
+				
+				nameIdent, ok := namespaceExpr.Name.(*ast.IdentifierNode)
+				assert.True(t, ok, "Name should be IdentifierNode")
+				assert.Equal(t, "test", nameIdent.Name)
+			},
+		},
+		{
+			name:  "bare backslash",
+			input: `<?php $x = \;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+				
+				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok, "Expression should be AssignmentExpression")
+				
+				namespaceExpr, ok := assignExpr.Right.(*ast.NamespaceExpression)
+				assert.True(t, ok, "Right should be NamespaceExpression")
+				assert.Nil(t, namespaceExpr.Name, "Bare backslash should have nil name")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
 // 辅助函数
 
 func checkParserErrors(t *testing.T, p *Parser) {
