@@ -115,19 +115,24 @@ const (
 	ASTSwitch                    ASTKind = 536
 	ASTSwitchCase                ASTKind = 537
 	ASTDeclare                   ASTKind = 538
-	ASTUseTrait                  ASTKind = 539
-	ASTTraitPrecedence           ASTKind = 540
-	ASTMethodReference           ASTKind = 541
-	ASTNamespace                 ASTKind = 542
-	ASTUseElem                   ASTKind = 543
-	ASTTraitAlias                ASTKind = 544
-	ASTGroupUse                  ASTKind = 545
-	ASTAttribute                 ASTKind = 546
-	ASTMatch                     ASTKind = 547
-	ASTMatchArm                  ASTKind = 548
-	ASTNamedArg                  ASTKind = 549
-	ASTParentPropertyHookCall    ASTKind = 550
-	ASTPipe                      ASTKind = 551
+	ASTAltIf                     ASTKind = 539
+	ASTAltWhile                  ASTKind = 540  
+	ASTAltFor                    ASTKind = 541
+	ASTAltForeach                ASTKind = 542
+	ASTElseIf                    ASTKind = 543
+	ASTUseTrait                  ASTKind = 544
+	ASTTraitPrecedence           ASTKind = 545
+	ASTMethodReference           ASTKind = 546
+	ASTNamespace                 ASTKind = 547
+	ASTUseElem                   ASTKind = 548
+	ASTTraitAlias                ASTKind = 549
+	ASTGroupUse                  ASTKind = 550
+	ASTAttribute                 ASTKind = 551
+	ASTMatch                     ASTKind = 552
+	ASTMatchArm                  ASTKind = 553
+	ASTNamedArg                  ASTKind = 554
+	ASTParentPropertyHookCall    ASTKind = 555
+	ASTPipe                      ASTKind = 556
 
 	// 3子节点 - 3 child nodes (bits 8-15 = 3)
 	ASTMethodCall         ASTKind = 768 // 3 << 8
@@ -368,6 +373,16 @@ func (k ASTKind) String() string {
 		return "SWITCH_CASE"
 	case ASTDeclare:
 		return "DECLARE"
+	case ASTAltIf:
+		return "ALT_IF"
+	case ASTAltWhile:
+		return "ALT_WHILE"
+	case ASTAltFor:
+		return "ALT_FOR"
+	case ASTAltForeach:
+		return "ALT_FOREACH"
+	case ASTElseIf:
+		return "ELSEIF"
 	case ASTUseTrait:
 		return "USE_TRAIT"
 	case ASTTraitPrecedence:

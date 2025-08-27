@@ -3399,3 +3399,466 @@ func (ne *NamespaceExpression) String() string {
 	}
 	return "\\"
 }
+
+// AlternativeIfStatement 表示替代语法的if语句 (if: ... endif;)
+type AlternativeIfStatement struct {
+	BaseNode
+	Condition Expression   `json:"condition"`
+	Then      []Statement  `json:"then"`
+	ElseIfs   []*ElseIfClause `json:"elseIfs,omitempty"`
+	Else      []Statement  `json:"else,omitempty"`
+}
+
+// ElseIfClause 表示elseif子句
+type ElseIfClause struct {
+	BaseNode
+	Condition Expression  `json:"condition"`
+	Body      []Statement `json:"body"`
+}
+
+func NewAlternativeIfStatement(pos lexer.Position, condition Expression) *AlternativeIfStatement {
+	return &AlternativeIfStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTAltIf,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Condition: condition,
+		Then:      make([]Statement, 0),
+		ElseIfs:   make([]*ElseIfClause, 0),
+		Else:      make([]Statement, 0),
+	}
+}
+
+func NewElseIfClause(pos lexer.Position, condition Expression) *ElseIfClause {
+	return &ElseIfClause{
+		BaseNode: BaseNode{
+			Kind:     ASTElseIf,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Condition: condition,
+		Body:      make([]Statement, 0),
+	}
+}
+
+func (ais *AlternativeIfStatement) GetChildren() []Node {
+	var children []Node
+	if ais.Condition != nil {
+		children = append(children, ais.Condition)
+	}
+	for _, stmt := range ais.Then {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	for _, elseif := range ais.ElseIfs {
+		if elseif != nil {
+			children = append(children, elseif)
+		}
+	}
+	for _, stmt := range ais.Else {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	return children
+}
+
+func (ais *AlternativeIfStatement) Accept(visitor Visitor) {
+	if visitor.Visit(ais) {
+		if ais.Condition != nil {
+			ais.Condition.Accept(visitor)
+		}
+		for _, stmt := range ais.Then {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+		for _, elseif := range ais.ElseIfs {
+			if elseif != nil {
+				elseif.Accept(visitor)
+			}
+		}
+		for _, stmt := range ais.Else {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (ais *AlternativeIfStatement) statementNode() {}
+
+func (ais *AlternativeIfStatement) String() string {
+	result := "if (" + ais.Condition.String() + "):"
+	for _, stmt := range ais.Then {
+		result += " " + stmt.String()
+	}
+	for _, elseif := range ais.ElseIfs {
+		result += " elseif (" + elseif.Condition.String() + "):"
+		for _, stmt := range elseif.Body {
+			result += " " + stmt.String()
+		}
+	}
+	if len(ais.Else) > 0 {
+		result += " else:"
+		for _, stmt := range ais.Else {
+			result += " " + stmt.String()
+		}
+	}
+	result += " endif;"
+	return result
+}
+
+func (eic *ElseIfClause) GetChildren() []Node {
+	var children []Node
+	if eic.Condition != nil {
+		children = append(children, eic.Condition)
+	}
+	for _, stmt := range eic.Body {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	return children
+}
+
+func (eic *ElseIfClause) Accept(visitor Visitor) {
+	if visitor.Visit(eic) {
+		if eic.Condition != nil {
+			eic.Condition.Accept(visitor)
+		}
+		for _, stmt := range eic.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (eic *ElseIfClause) statementNode() {}
+
+func (eic *ElseIfClause) String() string {
+	result := "elseif (" + eic.Condition.String() + "):"
+	for _, stmt := range eic.Body {
+		result += " " + stmt.String()
+	}
+	return result
+}
+
+// AlternativeWhileStatement 表示替代语法的while语句 (while: ... endwhile;)
+type AlternativeWhileStatement struct {
+	BaseNode
+	Condition Expression  `json:"condition"`
+	Body      []Statement `json:"body"`
+}
+
+func NewAlternativeWhileStatement(pos lexer.Position, condition Expression) *AlternativeWhileStatement {
+	return &AlternativeWhileStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTAltWhile,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Condition: condition,
+		Body:      make([]Statement, 0),
+	}
+}
+
+func (aws *AlternativeWhileStatement) GetChildren() []Node {
+	var children []Node
+	if aws.Condition != nil {
+		children = append(children, aws.Condition)
+	}
+	for _, stmt := range aws.Body {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	return children
+}
+
+func (aws *AlternativeWhileStatement) Accept(visitor Visitor) {
+	if visitor.Visit(aws) {
+		if aws.Condition != nil {
+			aws.Condition.Accept(visitor)
+		}
+		for _, stmt := range aws.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (aws *AlternativeWhileStatement) statementNode() {}
+
+func (aws *AlternativeWhileStatement) String() string {
+	result := "while (" + aws.Condition.String() + "):"
+	for _, stmt := range aws.Body {
+		result += " " + stmt.String()
+	}
+	result += " endwhile;"
+	return result
+}
+
+// AlternativeForStatement 表示替代语法的for语句 (for: ... endfor;)
+type AlternativeForStatement struct {
+	BaseNode
+	Init      []Expression `json:"init,omitempty"`
+	Condition []Expression `json:"condition,omitempty"`
+	Update    []Expression `json:"update,omitempty"`
+	Body      []Statement  `json:"body"`
+}
+
+func NewAlternativeForStatement(pos lexer.Position) *AlternativeForStatement {
+	return &AlternativeForStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTAltFor,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Init:      make([]Expression, 0),
+		Condition: make([]Expression, 0),
+		Update:    make([]Expression, 0),
+		Body:      make([]Statement, 0),
+	}
+}
+
+func (afs *AlternativeForStatement) GetChildren() []Node {
+	var children []Node
+	for _, expr := range afs.Init {
+		if expr != nil {
+			children = append(children, expr)
+		}
+	}
+	for _, expr := range afs.Condition {
+		if expr != nil {
+			children = append(children, expr)
+		}
+	}
+	for _, expr := range afs.Update {
+		if expr != nil {
+			children = append(children, expr)
+		}
+	}
+	for _, stmt := range afs.Body {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	return children
+}
+
+func (afs *AlternativeForStatement) Accept(visitor Visitor) {
+	if visitor.Visit(afs) {
+		for _, expr := range afs.Init {
+			if expr != nil {
+				expr.Accept(visitor)
+			}
+		}
+		for _, expr := range afs.Condition {
+			if expr != nil {
+				expr.Accept(visitor)
+			}
+		}
+		for _, expr := range afs.Update {
+			if expr != nil {
+				expr.Accept(visitor)
+			}
+		}
+		for _, stmt := range afs.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (afs *AlternativeForStatement) statementNode() {}
+
+func (afs *AlternativeForStatement) String() string {
+	result := "for ("
+	for i, expr := range afs.Init {
+		if i > 0 {
+			result += ", "
+		}
+		result += expr.String()
+	}
+	result += "; "
+	for i, expr := range afs.Condition {
+		if i > 0 {
+			result += ", "
+		}
+		result += expr.String()
+	}
+	result += "; "
+	for i, expr := range afs.Update {
+		if i > 0 {
+			result += ", "
+		}
+		result += expr.String()
+	}
+	result += "):"
+	for _, stmt := range afs.Body {
+		result += " " + stmt.String()
+	}
+	result += " endfor;"
+	return result
+}
+
+// AlternativeForeachStatement 表示替代语法的foreach语句 (foreach: ... endforeach;)
+type AlternativeForeachStatement struct {
+	BaseNode
+	Iterable Expression  `json:"iterable"`
+	Key      Expression  `json:"key,omitempty"`
+	Value    Expression  `json:"value"`
+	Body     []Statement `json:"body"`
+}
+
+func NewAlternativeForeachStatement(pos lexer.Position, iterable, value Expression) *AlternativeForeachStatement {
+	return &AlternativeForeachStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTAltForeach,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Iterable: iterable,
+		Value:    value,
+		Body:     make([]Statement, 0),
+	}
+}
+
+func (afs *AlternativeForeachStatement) GetChildren() []Node {
+	var children []Node
+	if afs.Iterable != nil {
+		children = append(children, afs.Iterable)
+	}
+	if afs.Key != nil {
+		children = append(children, afs.Key)
+	}
+	if afs.Value != nil {
+		children = append(children, afs.Value)
+	}
+	for _, stmt := range afs.Body {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	return children
+}
+
+func (afs *AlternativeForeachStatement) Accept(visitor Visitor) {
+	if visitor.Visit(afs) {
+		if afs.Iterable != nil {
+			afs.Iterable.Accept(visitor)
+		}
+		if afs.Key != nil {
+			afs.Key.Accept(visitor)
+		}
+		if afs.Value != nil {
+			afs.Value.Accept(visitor)
+		}
+		for _, stmt := range afs.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (afs *AlternativeForeachStatement) statementNode() {}
+
+func (afs *AlternativeForeachStatement) String() string {
+	result := "foreach (" + afs.Iterable.String() + " as "
+	if afs.Key != nil {
+		result += afs.Key.String() + " => "
+	}
+	result += afs.Value.String() + "):"
+	for _, stmt := range afs.Body {
+		result += " " + stmt.String()
+	}
+	result += " endforeach;"
+	return result
+}
+
+// DeclareStatement 表示declare语句
+type DeclareStatement struct {
+	BaseNode
+	Declarations []Expression `json:"declarations"`
+	Body         []Statement  `json:"body,omitempty"`
+	Alternative  bool         `json:"alternative"` // true for declare(): ... enddeclare;
+}
+
+func NewDeclareStatement(pos lexer.Position, declarations []Expression, alternative bool) *DeclareStatement {
+	return &DeclareStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTDeclare,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Declarations: declarations,
+		Body:         make([]Statement, 0),
+		Alternative:  alternative,
+	}
+}
+
+func (ds *DeclareStatement) GetChildren() []Node {
+	var children []Node
+	for _, decl := range ds.Declarations {
+		if decl != nil {
+			children = append(children, decl)
+		}
+	}
+	for _, stmt := range ds.Body {
+		if stmt != nil {
+			children = append(children, stmt)
+		}
+	}
+	return children
+}
+
+func (ds *DeclareStatement) Accept(visitor Visitor) {
+	if visitor.Visit(ds) {
+		for _, decl := range ds.Declarations {
+			if decl != nil {
+				decl.Accept(visitor)
+			}
+		}
+		for _, stmt := range ds.Body {
+			if stmt != nil {
+				stmt.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (ds *DeclareStatement) statementNode() {}
+
+func (ds *DeclareStatement) String() string {
+	result := "declare ("
+	for i, decl := range ds.Declarations {
+		if i > 0 {
+			result += ", "
+		}
+		result += decl.String()
+	}
+	result += ")"
+	if ds.Alternative {
+		result += ":"
+		for _, stmt := range ds.Body {
+			result += " " + stmt.String()
+		}
+		result += " enddeclare;"
+	} else if len(ds.Body) > 0 {
+		result += " {"
+		for _, stmt := range ds.Body {
+			result += " " + stmt.String()
+		}
+		result += " }"
+	} else {
+		result += ";"
+	}
+	return result
+}

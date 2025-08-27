@@ -476,6 +476,8 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseSwitchStatement(p)
 	case lexer.T_TRY:
 		return parseTryStatement(p)
+	case lexer.T_DECLARE:
+		return parseDeclareStatement(p)
 	case lexer.T_THROW:
 		return parseThrowStatement(p)
 	case lexer.T_GOTO:
@@ -522,8 +524,8 @@ func parseEchoStatement(p *Parser) *ast.EchoStatement {
 	return stmt
 }
 
-// parseIfStatement 解析 if 语句
-func parseIfStatement(p *Parser) *ast.IfStatement {
+// parseIfStatement 解析 if 语句，支持普通语法和Alternative语法
+func parseIfStatement(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
 
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
@@ -537,6 +539,13 @@ func parseIfStatement(p *Parser) *ast.IfStatement {
 		return nil
 	}
 
+	// 检查是否为Alternative语法 (if (...):)
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 :
+		return parseAlternativeIfStatement(p, pos, condition)
+	}
+
+	// 普通语法 (if (...) { ... })
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
 		return nil
 	}
@@ -565,8 +574,94 @@ func parseIfStatement(p *Parser) *ast.IfStatement {
 	return ifStmt
 }
 
-// parseWhileStatement 解析 while 语句
-func parseWhileStatement(p *Parser) *ast.WhileStatement {
+// parseAlternativeIfStatement 解析Alternative语法的if语句 (if: ... elseif: ... else: ... endif;)
+func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Expression) *ast.AlternativeIfStatement {
+	altIfStmt := ast.NewAlternativeIfStatement(pos, condition)
+
+	// 解析第一个if块的语句列表
+	for p.peekToken.Type != lexer.T_ELSEIF && p.peekToken.Type != lexer.T_ELSE && p.peekToken.Type != lexer.T_ENDIF {
+		if p.peekToken.Type == lexer.T_EOF {
+			p.errors = append(p.errors, "Expected endif, but reached end of file")
+			return nil
+		}
+		p.nextToken()
+		if stmt := parseStatement(p); stmt != nil {
+			altIfStmt.Then = append(altIfStmt.Then, stmt)
+		}
+	}
+
+	// 处理elseif子句
+	for p.peekToken.Type == lexer.T_ELSEIF {
+		p.nextToken() // 移动到 elseif
+
+		if !p.expectPeek(lexer.TOKEN_LPAREN) {
+			return nil
+		}
+
+		p.nextToken()
+		elseifCondition := parseExpression(p, LOWEST)
+
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+
+		if !p.expectPeek(lexer.TOKEN_COLON) {
+			return nil
+		}
+
+		elseifClause := ast.NewElseIfClause(p.currentToken.Position, elseifCondition)
+
+		// 解析elseif块的语句列表
+		for p.peekToken.Type != lexer.T_ELSEIF && p.peekToken.Type != lexer.T_ELSE && p.peekToken.Type != lexer.T_ENDIF {
+			if p.peekToken.Type == lexer.T_EOF {
+				p.errors = append(p.errors, "Expected endif, but reached end of file")
+				return nil
+			}
+			p.nextToken()
+			if stmt := parseStatement(p); stmt != nil {
+				elseifClause.Body = append(elseifClause.Body, stmt)
+			}
+		}
+
+		altIfStmt.ElseIfs = append(altIfStmt.ElseIfs, elseifClause)
+	}
+
+	// 处理else子句
+	if p.peekToken.Type == lexer.T_ELSE {
+		p.nextToken() // 移动到 else
+
+		if !p.expectPeek(lexer.TOKEN_COLON) {
+			return nil
+		}
+
+		// 解析else块的语句列表
+		for p.peekToken.Type != lexer.T_ENDIF {
+			if p.peekToken.Type == lexer.T_EOF {
+				p.errors = append(p.errors, "Expected endif, but reached end of file")
+				return nil
+			}
+			p.nextToken()
+			if stmt := parseStatement(p); stmt != nil {
+				altIfStmt.Else = append(altIfStmt.Else, stmt)
+			}
+		}
+	}
+
+	// 期望 endif
+	if !p.expectPeek(lexer.T_ENDIF) {
+		return nil
+	}
+
+	// 期望分号
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+
+	return altIfStmt
+}
+
+// parseWhileStatement 解析 while 语句，支持普通语法和Alternative语法
+func parseWhileStatement(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
 
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
@@ -580,6 +675,13 @@ func parseWhileStatement(p *Parser) *ast.WhileStatement {
 		return nil
 	}
 
+	// 检查是否为Alternative语法 (while (...):)
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 :
+		return parseAlternativeWhileStatement(p, pos, condition)
+	}
+
+	// 普通语法 (while (...) { ... })
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
 		return nil
 	}
@@ -590,19 +692,49 @@ func parseWhileStatement(p *Parser) *ast.WhileStatement {
 	return whileStmt
 }
 
-// parseForStatement 解析 for 语句
-func parseForStatement(p *Parser) *ast.ForStatement {
+// parseAlternativeWhileStatement 解析Alternative语法的while语句 (while: ... endwhile;)
+func parseAlternativeWhileStatement(p *Parser, pos lexer.Position, condition ast.Expression) *ast.AlternativeWhileStatement {
+	altWhileStmt := ast.NewAlternativeWhileStatement(pos, condition)
+
+	// 解析while块的语句列表
+	for p.peekToken.Type != lexer.T_ENDWHILE {
+		if p.peekToken.Type == lexer.T_EOF {
+			p.errors = append(p.errors, "Expected endwhile, but reached end of file")
+			return nil
+		}
+		p.nextToken()
+		if stmt := parseStatement(p); stmt != nil {
+			altWhileStmt.Body = append(altWhileStmt.Body, stmt)
+		}
+	}
+
+	// 期望 endwhile
+	if !p.expectPeek(lexer.T_ENDWHILE) {
+		return nil
+	}
+
+	// 期望分号
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+
+	return altWhileStmt
+}
+
+// parseForStatement 解析 for 语句，支持普通语法和Alternative语法
+func parseForStatement(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
-	forStmt := ast.NewForStatement(pos)
 
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
 	}
 
+	var initExprs, conditionExprs, updateExprs []ast.Expression
+
 	// 解析初始化表达式
 	if p.peekToken.Type != lexer.TOKEN_SEMICOLON {
 		p.nextToken()
-		forStmt.Init = parseExpression(p, LOWEST)
+		initExprs = append(initExprs, parseExpression(p, LOWEST))
 	}
 
 	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
@@ -612,7 +744,7 @@ func parseForStatement(p *Parser) *ast.ForStatement {
 	// 解析条件表达式
 	if p.peekToken.Type != lexer.TOKEN_SEMICOLON {
 		p.nextToken()
-		forStmt.Test = parseExpression(p, LOWEST)
+		conditionExprs = append(conditionExprs, parseExpression(p, LOWEST))
 	}
 
 	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
@@ -622,20 +754,69 @@ func parseForStatement(p *Parser) *ast.ForStatement {
 	// 解析更新表达式
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
-		forStmt.Update = parseExpression(p, LOWEST)
+		updateExprs = append(updateExprs, parseExpression(p, LOWEST))
 	}
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		return nil
 	}
 
+	// 检查是否为Alternative语法 (for (...):)
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 :
+		return parseAlternativeForStatement(p, pos, initExprs, conditionExprs, updateExprs)
+	}
+
+	// 普通语法 (for (...) { ... })
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
 		return nil
 	}
 
+	forStmt := ast.NewForStatement(pos)
+	if len(initExprs) > 0 {
+		forStmt.Init = initExprs[0]
+	}
+	if len(conditionExprs) > 0 {
+		forStmt.Test = conditionExprs[0]
+	}
+	if len(updateExprs) > 0 {
+		forStmt.Update = updateExprs[0]
+	}
 	forStmt.Body = parseBlockStatements(p)
 
 	return forStmt
+}
+
+// parseAlternativeForStatement 解析Alternative语法的for语句 (for: ... endfor;)
+func parseAlternativeForStatement(p *Parser, pos lexer.Position, initExprs, conditionExprs, updateExprs []ast.Expression) *ast.AlternativeForStatement {
+	altForStmt := ast.NewAlternativeForStatement(pos)
+	altForStmt.Init = initExprs
+	altForStmt.Condition = conditionExprs
+	altForStmt.Update = updateExprs
+
+	// 解析for块的语句列表
+	for p.peekToken.Type != lexer.T_ENDFOR {
+		if p.peekToken.Type == lexer.T_EOF {
+			p.errors = append(p.errors, "Expected endfor, but reached end of file")
+			return nil
+		}
+		p.nextToken()
+		if stmt := parseStatement(p); stmt != nil {
+			altForStmt.Body = append(altForStmt.Body, stmt)
+		}
+	}
+
+	// 期望 endfor
+	if !p.expectPeek(lexer.T_ENDFOR) {
+		return nil
+	}
+
+	// 期望分号
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+
+	return altForStmt
 }
 
 // parseFunctionDeclaration 解析函数声明
@@ -1338,10 +1519,141 @@ func parseForeachStatement(p *Parser) ast.Statement {
 		return nil
 	}
 
+	// 检查是否为Alternative语法 (foreach (...):)
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 :
+		return parseAlternativeForeachStatement(p, pos, iterable, key, value)
+	}
+
+	// 普通语法 (foreach (...) { ... })
 	p.nextToken()
 	body := parseStatement(p)
 
 	return ast.NewForeachStatement(pos, iterable, key, value, body)
+}
+
+// parseAlternativeForeachStatement 解析Alternative语法的foreach语句 (foreach: ... endforeach;)
+func parseAlternativeForeachStatement(p *Parser, pos lexer.Position, iterable, key, value ast.Expression) *ast.AlternativeForeachStatement {
+	altForeachStmt := ast.NewAlternativeForeachStatement(pos, iterable, value)
+	altForeachStmt.Key = key
+
+	// 解析foreach块的语句列表
+	for p.peekToken.Type != lexer.T_ENDFOREACH {
+		if p.peekToken.Type == lexer.T_EOF {
+			p.errors = append(p.errors, "Expected endforeach, but reached end of file")
+			return nil
+		}
+		p.nextToken()
+		if stmt := parseStatement(p); stmt != nil {
+			altForeachStmt.Body = append(altForeachStmt.Body, stmt)
+		}
+	}
+
+	// 期望 endforeach
+	if !p.expectPeek(lexer.T_ENDFOREACH) {
+		return nil
+	}
+
+	// 期望分号
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+
+	return altForeachStmt
+}
+
+// parseDeclareStatement 解析declare语句，支持普通语法和Alternative语法
+func parseDeclareStatement(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+
+	// 解析声明列表 (例如: ticks=1, strict_types=1)
+	var declarations []ast.Expression
+	
+	p.nextToken()
+	for {
+		// 解析声明 (identifier = expression)
+		if p.currentToken.Type != lexer.T_STRING {
+			p.errors = append(p.errors, "Expected identifier in declare statement")
+			return nil
+		}
+		
+		name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		
+		if !p.expectPeek(lexer.TOKEN_EQUAL) {
+			return nil
+		}
+		
+		p.nextToken()
+		value := parseExpression(p, LOWEST)
+		
+		// 创建赋值表达式作为声明
+		declaration := ast.NewAssignmentExpression(name.GetPosition(), name, "=", value)
+		declarations = append(declarations, declaration)
+		
+		p.nextToken()
+		if p.currentToken.Type == lexer.TOKEN_RPAREN {
+			break
+		} else if p.currentToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken()
+			continue
+		} else {
+			p.errors = append(p.errors, "Expected ',' or ')' in declare statement")
+			return nil
+		}
+	}
+
+	// 检查是否为Alternative语法 (declare (...):)
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 :
+		return parseAlternativeDeclareStatement(p, pos, declarations)
+	}
+
+	// 普通语法可以是: declare(...); 或 declare(...) { ... }
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken() // 移动到 ;
+		return ast.NewDeclareStatement(pos, declarations, false)
+	} else if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		p.nextToken() // 移动到 {
+		declareStmt := ast.NewDeclareStatement(pos, declarations, false)
+		declareStmt.Body = parseBlockStatements(p)
+		return declareStmt
+	} else {
+		p.errors = append(p.errors, "Expected ';' or '{' after declare")
+		return nil
+	}
+}
+
+// parseAlternativeDeclareStatement 解析Alternative语法的declare语句 (declare(): ... enddeclare;)
+func parseAlternativeDeclareStatement(p *Parser, pos lexer.Position, declarations []ast.Expression) *ast.DeclareStatement {
+	declareStmt := ast.NewDeclareStatement(pos, declarations, true)
+
+	// 解析declare块的语句列表
+	for p.peekToken.Type != lexer.T_ENDDECLARE {
+		if p.peekToken.Type == lexer.T_EOF {
+			p.errors = append(p.errors, "Expected enddeclare, but reached end of file")
+			return nil
+		}
+		p.nextToken()
+		if stmt := parseStatement(p); stmt != nil {
+			declareStmt.Body = append(declareStmt.Body, stmt)
+		}
+	}
+
+	// 期望 enddeclare
+	if !p.expectPeek(lexer.T_ENDDECLARE) {
+		return nil
+	}
+
+	// 期望分号
+	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+		return nil
+	}
+
+	return declareStmt
 }
 
 // parseSwitchStatement 解析switch语句
