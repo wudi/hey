@@ -57,8 +57,9 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.TOKEN_PLUS:            SUM,
 	lexer.TOKEN_MINUS:           SUM,
 	lexer.TOKEN_DOT:             SUM,
-	lexer.T_OBJECT_OPERATOR:     CALL,
-	lexer.T_PAAMAYIM_NEKUDOTAYIM: CALL,
+	lexer.T_OBJECT_OPERATOR:          CALL,
+	lexer.T_NULLSAFE_OBJECT_OPERATOR: CALL,
+	lexer.T_PAAMAYIM_NEKUDOTAYIM:     CALL,
 	lexer.TOKEN_LBRACKET:        INDEX,
 	lexer.TOKEN_DIVIDE:          PRODUCT,
 	lexer.TOKEN_MULTIPLY:        PRODUCT,
@@ -141,6 +142,7 @@ func init() {
 		lexer.T_EVAL:                     parseEvalExpression,
 		lexer.T_EXTENDS:                  parseFallback,
 		lexer.T_LOGICAL_OR:               parseFallback,
+		lexer.T_MATCH:                    parseMatchExpression,
 		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccess,
 		lexer.T_PRIVATE:                  parseVisibilityModifier,
 		lexer.T_PROTECTED:                parseVisibilityModifier,
@@ -169,8 +171,9 @@ func init() {
 		lexer.T_IS_GREATER_OR_EQUAL: parseInfixExpression,
 		lexer.T_INSTANCEOF:          parseInstanceofExpression,
 		lexer.TOKEN_DOT:             parseInfixExpression,
-		lexer.T_OBJECT_OPERATOR:     parsePropertyAccess,
-		lexer.T_PAAMAYIM_NEKUDOTAYIM: parseStaticAccessExpression,
+		lexer.T_OBJECT_OPERATOR:          parsePropertyAccess,
+		lexer.T_NULLSAFE_OBJECT_OPERATOR: parseNullsafePropertyAccess,
+		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccessExpression,
 		lexer.TOKEN_EQUAL:           parseAssignmentExpression,
 		lexer.T_PLUS_EQUAL:          parseAssignmentExpression,
 		lexer.T_MINUS_EQUAL:         parseAssignmentExpression,
@@ -468,6 +471,15 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseInterfaceDeclaration(p)
 	case lexer.T_TRAIT:
 		return parseTraitDeclaration(p)
+	case lexer.T_ENUM:
+		return parseEnumDeclaration(p)
+	case lexer.T_READONLY:
+		// Check if this is "readonly class"
+		if p.peekToken.Type == lexer.T_CLASS {
+			return parseReadonlyClassDeclaration(p)
+		}
+		// Otherwise fall through to expression statement
+		return parseExpressionStatement(p)
 	case lexer.T_RETURN:
 		return parseReturnStatement(p)
 	case lexer.T_GLOBAL:
@@ -1341,7 +1353,7 @@ func parseTraitProperty(p *Parser, visibility string) *ast.PropertyDeclaration {
 	}
 
 	pos := p.currentToken.Position
-	property := ast.NewPropertyDeclaration(pos, visibility, varName, typeHint, nil)
+	property := ast.NewPropertyDeclaration(pos, visibility, varName, false, typeHint, nil)
 
 	// 检查是否有默认值
 	if p.peekToken.Type == lexer.TOKEN_EQUAL {
@@ -1356,6 +1368,139 @@ func parseTraitProperty(p *Parser, visibility string) *ast.PropertyDeclaration {
 	}
 
 	return property
+}
+
+// parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)
+func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
+	pos := p.currentToken.Position
+
+	// 期望 enum 名称
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	enumDecl := ast.NewEnumDeclaration(pos, name)
+
+	// 检查是否有支撑类型 (: string 或 : int)
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 ':'
+		p.nextToken() // 移动到类型
+		
+		backingType := parseTypeHint(p)
+		if backingType != nil {
+			enumDecl.BackingType = backingType
+		}
+	}
+
+	// 检查是否有 implements 子句
+	if p.peekToken.Type == lexer.T_IMPLEMENTS {
+		p.nextToken() // 移动到 implements
+
+		// 解析第一个接口
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		interface1 := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		enumDecl.Implements = append(enumDecl.Implements, interface1)
+
+		// 处理多个接口 (enum Status implements Interface1, Interface2)
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			if !p.expectPeek(lexer.T_STRING) {
+				return nil
+			}
+			interfaceN := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+			enumDecl.Implements = append(enumDecl.Implements, interfaceN)
+		}
+	}
+
+	// 期望开始大括号
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	// 解析 enum 体（案例和方法）
+	for p.peekToken.Type != lexer.TOKEN_RBRACE && p.peekToken.Type != lexer.T_EOF {
+		p.nextToken()
+
+		// 跳过空行和注释
+		if p.currentToken.Type == lexer.T_WHITESPACE {
+			continue
+		}
+
+		if p.currentToken.Type == lexer.T_CASE {
+			// 解析 enum 案例
+			enumCase := parseEnumCase(p)
+			if enumCase != nil {
+				enumDecl.Cases = append(enumDecl.Cases, enumCase)
+			}
+		} else if p.currentToken.Type == lexer.T_FUNCTION ||
+			p.currentToken.Type == lexer.T_PUBLIC ||
+			p.currentToken.Type == lexer.T_PRIVATE ||
+			p.currentToken.Type == lexer.T_PROTECTED {
+			// 解析 enum 方法
+			method := parseFunctionDeclaration(p)
+			if method != nil {
+				enumDecl.Methods = append(enumDecl.Methods, method)
+			}
+		}
+	}
+
+	if !p.expectPeek(lexer.TOKEN_RBRACE) {
+		return nil
+	}
+
+	return enumDecl
+}
+
+// parseEnumCase 解析 enum 案例
+func parseEnumCase(p *Parser) *ast.EnumCase {
+	// 期望案例名称
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	caseName := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	var caseValue ast.Expression
+
+	// 检查是否有值 (case SUCCESS = 'success')
+	if p.peekToken.Type == lexer.TOKEN_EQUAL {
+		p.nextToken() // 移动到 =
+		p.nextToken() // 移动到值
+		caseValue = parseExpression(p, LOWEST)
+	}
+
+	// 期望分号
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+	}
+
+	return ast.NewEnumCase(caseName, caseValue)
+}
+
+// parsePropertyAccess 解析属性访问表达式 ($obj->property)
+func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	return ast.NewPropertyAccessExpression(pos, left, property)
+}
+
+// parseNullsafePropertyAccess 解析空安全属性访问表达式 ($obj?->property)
+func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	return ast.NewNullsafePropertyAccessExpression(pos, left, property)
 }
 
 // parseReturnStatement 解析 return 语句
@@ -2334,15 +2479,6 @@ func parseInstanceofExpression(p *Parser, left ast.Expression) ast.Expression {
 	return ast.NewInstanceofExpression(pos, left, right)
 }
 
-// parsePropertyAccess 解析属性访问表达式
-func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
-	pos := p.currentToken.Position
-
-	p.nextToken()
-	property := parseExpression(p, CALL)
-
-	return ast.NewPropertyAccessExpression(pos, left, property)
-}
 
 // parseErrorSuppression 解析错误抑制操作符 @
 func parseErrorSuppression(p *Parser) ast.Expression {
@@ -2816,7 +2952,7 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 
 	// 解析类名
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	class := ast.NewClassExpression(pos, name, nil, nil)
+	class := ast.NewClassExpression(pos, name, nil, nil, false)
 
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
@@ -2867,6 +3003,178 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 	return ast.NewExpressionStatement(pos, class)
 }
 
+// parseReadonlyClassDeclaration 解析 readonly class 声明语句
+func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+	
+	// 跳过 'readonly' 关键字，移动到 'class'
+	if !p.expectPeek(lexer.T_CLASS) {
+		return nil
+	}
+	
+	// 跳过 'class' 关键字
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	// 解析类名
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	class := ast.NewClassExpression(pos, name, nil, nil, true) // readOnly = true
+
+	// 检查是否有 extends 子句
+	if p.peekToken.Type == lexer.T_EXTENDS {
+		p.nextToken() // 跳过当前token移动到extends
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		extends := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		class.Extends = extends
+	}
+
+	// 检查是否有 implements 子句
+	if p.peekToken.Type == lexer.T_IMPLEMENTS {
+		p.nextToken() // 跳过当前token到implements
+		
+		// 解析接口列表
+		for {
+			if !p.expectPeek(lexer.T_STRING) {
+				return nil
+			}
+			
+			interfaceNode := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+			class.Implements = append(class.Implements, interfaceNode)
+			
+			// 检查是否有更多接口
+			if p.peekToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 跳到逗号
+				continue
+			}
+			break
+		}
+	}
+
+	// 期望左大括号开始类体
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	// 解析类体
+	p.nextToken() // 进入类体
+	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		stmt := parseClassStatement(p)
+		if stmt != nil {
+			class.Body = append(class.Body, stmt)
+		}
+		p.nextToken()
+	}
+
+	return ast.NewExpressionStatement(pos, class)
+}
+
+// parseMatchExpression 解析 match 表达式 (PHP 8.0+)
+func parseMatchExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 跳过 'match'，期望左括号
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	// 解析匹配主体表达式
+	p.nextToken()
+	subject := parseExpression(p, LOWEST)
+	if subject == nil {
+		return nil
+	}
+	
+	// 期望右括号
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	// 期望左大括号开始 match arms
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+	
+	matchExpr := ast.NewMatchExpression(pos, subject)
+	
+	// 解析 match arms
+	p.nextToken() // 进入大括号内
+	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		arm := parseMatchArm(p)
+		if arm != nil {
+			matchExpr.Arms = append(matchExpr.Arms, arm)
+		}
+		
+		// 期望逗号或右大括号
+		if p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 跳过逗号
+			p.nextToken() // 移动到下一个 arm
+		} else if p.peekToken.Type == lexer.TOKEN_RBRACE {
+			break
+		} else {
+			break
+		}
+	}
+	
+	// 期望右大括号结束
+	if !p.expectPeek(lexer.TOKEN_RBRACE) {
+		return nil
+	}
+	
+	return matchExpr
+}
+
+// parseMatchArm 解析 match 表达式的一个分支
+func parseMatchArm(p *Parser) *ast.MatchArm {
+	pos := p.currentToken.Position
+	
+	var conditions []ast.Expression
+	isDefault := false
+	
+	// 检查是否为 default 分支
+	if p.currentToken.Type == lexer.T_DEFAULT {
+		isDefault = true
+	} else {
+		// 解析条件列表
+		for {
+			condition := parseExpression(p, LOGICAL_OR)
+			if condition == nil {
+				return nil
+			}
+			conditions = append(conditions, condition)
+			
+			// 检查下一个 token 是什么
+			if p.peekToken.Type == lexer.TOKEN_COMMA {
+				// 有更多条件
+				p.nextToken() // 跳过逗号
+				p.nextToken() // 移动到下一个条件
+			} else if p.peekToken.Type == lexer.T_DOUBLE_ARROW {
+				// 找到 =>，停止解析条件
+				break
+			} else {
+				// 意外的 token，停止解析
+				break
+			}
+		}
+	}
+	
+	// 期望 '=>'
+	if !p.expectPeek(lexer.T_DOUBLE_ARROW) {
+		return nil
+	}
+	
+	// 解析分支体
+	p.nextToken()
+	body := parseExpression(p, LOWEST)
+	if body == nil {
+		return nil
+	}
+	
+	return ast.NewMatchArm(pos, conditions, body, isDefault)
+}
+
 // parseClassExpression 解析类表达式（保持向后兼容）
 func parseClassExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
@@ -2879,7 +3187,7 @@ func parseClassExpression(p *Parser) ast.Expression {
 		name = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	}
 
-	return ast.NewClassExpression(pos, name, nil, nil) // name, extends, implements
+	return ast.NewClassExpression(pos, name, nil, nil, false) // name, extends, implements
 }
 
 // parseClassStatement 解析类体内的语句（属性和方法）
@@ -2898,6 +3206,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 	case lexer.T_CONST:
 		// const without visibility modifier (defaults to public)
 		return parseClassConstantDeclaration(p)
+	case lexer.T_READONLY:
+		// readonly without visibility modifier (defaults to public)
+		return parsePropertyDeclaration(p)
 	default:
 		// 跳过未识别的token
 		return nil
@@ -2970,8 +3281,23 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 func parsePropertyDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
 	
-	// 解析可见性修饰符
-	visibility := p.currentToken.Value // private, protected, public
+	var visibility string
+	var readOnly bool
+	
+	// Check if current token is readonly (without visibility modifier)
+	if p.currentToken.Type == lexer.T_READONLY {
+		visibility = "public" // Default visibility
+		readOnly = true
+	} else {
+		// 解析可见性修饰符
+		visibility = p.currentToken.Value // private, protected, public
+		
+		// 检查是否为readonly修饰符
+		if p.peekToken.Type == lexer.T_READONLY {
+			readOnly = true
+			p.nextToken() // 移动到readonly
+		}
+	}
 	
 	// 检查下一个token是否为类型提示
 	var typeHint *ast.TypeHint
@@ -3008,7 +3334,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		p.nextToken()
 	}
 	
-	return ast.NewPropertyDeclaration(pos, visibility, propertyName, typeHint, defaultValue)
+	return ast.NewPropertyDeclaration(pos, visibility, propertyName, readOnly, typeHint, defaultValue)
 }
 
 // parseConstExpression 解析常量声明表达式

@@ -824,3 +824,133 @@ endwhile;
 		assert.True(t, statementTypes[expectedType], "Expected %s statement type", expectedType)
 	}
 }
+
+func TestParsing_EnumDeclarations(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Simple enum declaration",
+			input: `<?php
+enum Status {
+    case PENDING;
+    case APPROVED;
+    case REJECTED;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Backed enum with string values",
+			input: `<?php
+enum Status: string {
+    case PENDING = 'pending';
+    case APPROVED = 'approved';
+    case REJECTED = 'rejected';
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Backed enum with integer values",
+			input: `<?php
+enum Priority: int {
+    case LOW = 1;
+    case MEDIUM = 2;
+    case HIGH = 3;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Enum implementing interfaces",
+			input: `<?php
+enum Color implements ColorInterface {
+    case RED;
+    case GREEN;
+    case BLUE;
+    
+    public function getHex(): string {
+        return '#FF0000';
+    }
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Enum with multiple interfaces and methods",
+			input: `<?php
+enum HttpStatus: int implements StatusInterface, JsonSerializable {
+    case OK = 200;
+    case NOT_FOUND = 404;
+    case SERVER_ERROR = 500;
+    
+    public function isError(): bool {
+        return $this->value >= 400;
+    }
+    
+    public function jsonSerialize(): mixed {
+        return $this->value;
+    }
+}
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have an EnumDeclaration
+			stmt := program.Body[0]
+			enumDecl, ok := stmt.(*ast.EnumDeclaration)
+			assert.True(t, ok, "Expected EnumDeclaration, got %T", stmt)
+			assert.NotNil(t, enumDecl.Name, "Expected enum name to be set")
+
+			// Test specific behavior based on test case
+			switch tt.name {
+			case "Simple enum declaration":
+				assert.Equal(t, "Status", enumDecl.Name.Name, "Expected enum name to match")
+				assert.Nil(t, enumDecl.BackingType, "Expected no backing type")
+				assert.Equal(t, 0, len(enumDecl.Implements), "Expected no interfaces")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.Equal(t, 0, len(enumDecl.Methods), "Expected no methods")
+				assert.Equal(t, "PENDING", enumDecl.Cases[0].Name.Name, "Expected first case name")
+				assert.Nil(t, enumDecl.Cases[0].Value, "Expected no value for pure enum case")
+			case "Backed enum with string values":
+				assert.Equal(t, "Status", enumDecl.Name.Name, "Expected enum name to match")
+				assert.NotNil(t, enumDecl.BackingType, "Expected backing type")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.NotNil(t, enumDecl.Cases[0].Value, "Expected value for backed enum case")
+			case "Backed enum with integer values":
+				assert.Equal(t, "Priority", enumDecl.Name.Name, "Expected enum name to match")
+				assert.NotNil(t, enumDecl.BackingType, "Expected backing type")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+			case "Enum implementing interfaces":
+				assert.Equal(t, "Color", enumDecl.Name.Name, "Expected enum name to match")
+				assert.Equal(t, 1, len(enumDecl.Implements), "Expected one interface")
+				assert.Equal(t, "ColorInterface", enumDecl.Implements[0].Name, "Expected interface name")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.Equal(t, 1, len(enumDecl.Methods), "Expected 1 method")
+			case "Enum with multiple interfaces and methods":
+				assert.Equal(t, "HttpStatus", enumDecl.Name.Name, "Expected enum name to match")
+				assert.NotNil(t, enumDecl.BackingType, "Expected backing type")
+				assert.Equal(t, 2, len(enumDecl.Implements), "Expected two interfaces")
+				assert.Equal(t, "StatusInterface", enumDecl.Implements[0].Name, "Expected first interface")
+				assert.Equal(t, "JsonSerializable", enumDecl.Implements[1].Name, "Expected second interface")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.Equal(t, 2, len(enumDecl.Methods), "Expected 2 methods")
+			}
+		})
+	}
+}
+

@@ -136,6 +136,7 @@ const (
 	ASTPipe                      ASTKind = 557
 	ASTInterface                 ASTKind = 558
 	ASTTrait                     ASTKind = 559
+	ASTEnum                      ASTKind = 560
 
 	// 3子节点 - 3 child nodes (bits 8-15 = 3)
 	ASTMethodCall         ASTKind = 768 // 3 << 8
@@ -418,6 +419,8 @@ func (k ASTKind) String() string {
 		return "INTERFACE"
 	case ASTTrait:
 		return "TRAIT"
+	case ASTEnum:
+		return "ENUM"
 
 	// 3子节点
 	case ASTMethodCall:

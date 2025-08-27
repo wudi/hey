@@ -480,6 +480,221 @@ func (t *TraitDeclaration) String() string {
 	return result
 }
 
+// EnumDeclaration 表示 enum 声明 (PHP 8.1+)
+type EnumDeclaration struct {
+	BaseNode
+	Name        *IdentifierNode   `json:"name"`                  // enum 名称
+	BackingType *TypeHint         `json:"backingType,omitempty"` // 可选的支撑类型 (string, int)
+	Implements  []*IdentifierNode `json:"implements,omitempty"`  // 实现的接口
+	Cases       []*EnumCase       `json:"cases"`                 // enum 案例
+	Methods     []*FunctionDeclaration `json:"methods,omitempty"` // enum 方法
+}
+
+// EnumCase 表示 enum 案例
+type EnumCase struct {
+	Name  *IdentifierNode `json:"name"`            // 案例名称
+	Value Expression      `json:"value,omitempty"` // 可选的值（对于支撑枚举）
+}
+
+func NewEnumDeclaration(pos lexer.Position, name *IdentifierNode) *EnumDeclaration {
+	return &EnumDeclaration{
+		BaseNode: BaseNode{
+			Kind:     ASTEnum,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:       name,
+		Implements: make([]*IdentifierNode, 0),
+		Cases:      make([]*EnumCase, 0),
+		Methods:    make([]*FunctionDeclaration, 0),
+	}
+}
+
+func NewEnumCase(name *IdentifierNode, value Expression) *EnumCase {
+	return &EnumCase{
+		Name:  name,
+		Value: value,
+	}
+}
+
+// GetChildren 返回子节点
+func (e *EnumDeclaration) GetChildren() []Node {
+	children := make([]Node, 0)
+	if e.Name != nil {
+		children = append(children, e.Name)
+	}
+	if e.BackingType != nil {
+		children = append(children, e.BackingType)
+	}
+	for _, impl := range e.Implements {
+		children = append(children, impl)
+	}
+	// EnumCase 不直接实现 Node 接口
+	for _, method := range e.Methods {
+		children = append(children, method)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (e *EnumDeclaration) Accept(visitor Visitor) {
+	if visitor.Visit(e) {
+		if e.Name != nil {
+			e.Name.Accept(visitor)
+		}
+		if e.BackingType != nil {
+			e.BackingType.Accept(visitor)
+		}
+		for _, impl := range e.Implements {
+			impl.Accept(visitor)
+		}
+		for _, method := range e.Methods {
+			method.Accept(visitor)
+		}
+	}
+}
+
+func (e *EnumDeclaration) statementNode() {}
+
+func (e *EnumDeclaration) String() string {
+	result := "enum " + e.Name.String()
+	
+	// 添加支撑类型
+	if e.BackingType != nil {
+		result += ": " + e.BackingType.String()
+	}
+	
+	// 添加接口实现
+	if len(e.Implements) > 0 {
+		result += " implements "
+		implNames := make([]string, len(e.Implements))
+		for i, impl := range e.Implements {
+			implNames[i] = impl.String()
+		}
+		result += strings.Join(implNames, ", ")
+	}
+	
+	result += " {\n"
+	
+	// 添加案例
+	for _, enumCase := range e.Cases {
+		result += "  case " + enumCase.Name.String()
+		if enumCase.Value != nil {
+			result += " = " + enumCase.Value.String()
+		}
+		result += ";\n"
+	}
+	
+	// 添加方法
+	if len(e.Methods) > 0 && len(e.Cases) > 0 {
+		result += "\n" // 在案例和方法之间添加空行
+	}
+	for _, method := range e.Methods {
+		result += "  " + method.String() + "\n"
+	}
+	
+	result += "}"
+	return result
+}
+
+// PropertyAccessExpression 表示属性访问表达式 ($obj->property)
+type PropertyAccessExpression struct {
+	BaseNode
+	Object   Expression      `json:"object"`   // 对象表达式
+	Property *IdentifierNode `json:"property"` // 属性名称
+}
+
+func NewPropertyAccessExpression(pos lexer.Position, object Expression, property *IdentifierNode) *PropertyAccessExpression {
+	return &PropertyAccessExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTProp,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Object:   object,
+		Property: property,
+	}
+}
+
+// GetChildren 返回子节点
+func (p *PropertyAccessExpression) GetChildren() []Node {
+	children := make([]Node, 0)
+	if p.Object != nil {
+		children = append(children, p.Object)
+	}
+	if p.Property != nil {
+		children = append(children, p.Property)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (p *PropertyAccessExpression) Accept(visitor Visitor) {
+	if visitor.Visit(p) {
+		if p.Object != nil {
+			p.Object.Accept(visitor)
+		}
+		if p.Property != nil {
+			p.Property.Accept(visitor)
+		}
+	}
+}
+
+func (p *PropertyAccessExpression) expressionNode() {}
+
+func (p *PropertyAccessExpression) String() string {
+	return p.Object.String() + "->" + p.Property.String()
+}
+
+// NullsafePropertyAccessExpression 表示空安全属性访问表达式 ($obj?->property)
+type NullsafePropertyAccessExpression struct {
+	BaseNode
+	Object   Expression      `json:"object"`   // 对象表达式
+	Property *IdentifierNode `json:"property"` // 属性名称
+}
+
+func NewNullsafePropertyAccessExpression(pos lexer.Position, object Expression, property *IdentifierNode) *NullsafePropertyAccessExpression {
+	return &NullsafePropertyAccessExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTNullsafeProp,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Object:   object,
+		Property: property,
+	}
+}
+
+// GetChildren 返回子节点
+func (n *NullsafePropertyAccessExpression) GetChildren() []Node {
+	children := make([]Node, 0)
+	if n.Object != nil {
+		children = append(children, n.Object)
+	}
+	if n.Property != nil {
+		children = append(children, n.Property)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (n *NullsafePropertyAccessExpression) Accept(visitor Visitor) {
+	if visitor.Visit(n) {
+		if n.Object != nil {
+			n.Object.Accept(visitor)
+		}
+		if n.Property != nil {
+			n.Property.Accept(visitor)
+		}
+	}
+}
+
+func (n *NullsafePropertyAccessExpression) expressionNode() {}
+
+func (n *NullsafePropertyAccessExpression) String() string {
+	return n.Object.String() + "?->" + n.Property.String()
+}
+
 // ExpressionStatement 表达式语句
 type ExpressionStatement struct {
 	BaseNode
@@ -1444,12 +1659,13 @@ func (n *NamespaceNameExpression) String() string {
 type PropertyDeclaration struct {
 	BaseNode
 	Visibility   string      `json:"visibility"`   // private, protected, public
+	ReadOnly     bool        `json:"readOnly,omitempty"`     // readonly
 	Type         *TypeHint   `json:"type,omitempty"`
 	Name         string      `json:"name"`         // Property name without $
 	DefaultValue Expression  `json:"defaultValue,omitempty"`
 }
 
-func NewPropertyDeclaration(pos lexer.Position, visibility, name string, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
+func NewPropertyDeclaration(pos lexer.Position, visibility, name string, readOnly bool, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
 	return &PropertyDeclaration{
 		BaseNode: BaseNode{
 			Kind:     ASTPropertyDecl,
@@ -1457,6 +1673,7 @@ func NewPropertyDeclaration(pos lexer.Position, visibility, name string, typeHin
 			LineNo:   uint32(pos.Line),
 		},
 		Visibility:   visibility,
+		ReadOnly:     readOnly,
 		Type:         typeHint,
 		Name:         name,
 		DefaultValue: defaultValue,
@@ -1489,6 +1706,9 @@ func (pd *PropertyDeclaration) statementNode() {}
 
 func (pd *PropertyDeclaration) String() string {
 	result := pd.Visibility
+	if pd.ReadOnly {
+		result += " readonly"
+	}
 	if pd.Type != nil {
 		result += " " + pd.Type.String()
 	}
@@ -2542,59 +2762,118 @@ func (i *InstanceofExpression) String() string {
 	return left + " instanceof " + right
 }
 
-// PropertyAccessExpression 属性访问表达式
-type PropertyAccessExpression struct {
+// MatchExpression 表示 match 表达式 (PHP 8.0+)
+type MatchExpression struct {
 	BaseNode
-	Object   Expression `json:"object"`
-	Property Expression `json:"property"`
+	Subject Expression  `json:"subject"` // 匹配的表达式
+	Arms    []*MatchArm `json:"arms"`    // match arms
 }
 
-func NewPropertyAccessExpression(pos lexer.Position, object, property Expression) *PropertyAccessExpression {
-	return &PropertyAccessExpression{
+// MatchArm 表示 match 表达式的一个分支
+type MatchArm struct {
+	BaseNode
+	Conditions []Expression `json:"conditions,omitempty"` // 条件列表，empty for default
+	Body       Expression   `json:"body"`                 // 分支体
+	IsDefault  bool         `json:"isDefault"`            // 是否为 default 分支
+}
+
+func NewMatchExpression(pos lexer.Position, subject Expression) *MatchExpression {
+	return &MatchExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTProp,
+			Kind:     ASTMatch,
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Object:   object,
-		Property: property,
+		Subject: subject,
+		Arms:    make([]*MatchArm, 0),
 	}
 }
 
-func (p *PropertyAccessExpression) GetChildren() []Node {
-	children := make([]Node, 0, 2)
-	if p.Object != nil {
-		children = append(children, p.Object)
+func NewMatchArm(pos lexer.Position, conditions []Expression, body Expression, isDefault bool) *MatchArm {
+	return &MatchArm{
+		BaseNode: BaseNode{
+			Kind:     ASTMatchArm,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Conditions: conditions,
+		Body:       body,
+		IsDefault:  isDefault,
 	}
-	if p.Property != nil {
-		children = append(children, p.Property)
+}
+
+func (m *MatchExpression) GetChildren() []Node {
+	children := make([]Node, 0)
+	if m.Subject != nil {
+		children = append(children, m.Subject)
+	}
+	for _, arm := range m.Arms {
+		children = append(children, arm)
 	}
 	return children
 }
 
-func (p *PropertyAccessExpression) Accept(visitor Visitor) {
-	if visitor.Visit(p) {
-		if p.Object != nil {
-			p.Object.Accept(visitor)
+func (m *MatchExpression) Accept(visitor Visitor) {
+	if visitor.Visit(m) {
+		if m.Subject != nil {
+			m.Subject.Accept(visitor)
 		}
-		if p.Property != nil {
-			p.Property.Accept(visitor)
+		for _, arm := range m.Arms {
+			arm.Accept(visitor)
 		}
 	}
 }
 
-func (p *PropertyAccessExpression) expressionNode() {}
+func (m *MatchExpression) expressionNode() {}
 
-func (p *PropertyAccessExpression) String() string {
-	obj := ""
-	if p.Object != nil {
-		obj = p.Object.String()
+func (m *MatchExpression) String() string {
+	result := "match (" + m.Subject.String() + ") {"
+	for i, arm := range m.Arms {
+		if i > 0 {
+			result += ", "
+		}
+		result += arm.String()
 	}
-	prop := ""
-	if p.Property != nil {
-		prop = p.Property.String()
+	result += "}"
+	return result
+}
+
+func (ma *MatchArm) GetChildren() []Node {
+	children := make([]Node, 0)
+	for _, condition := range ma.Conditions {
+		children = append(children, condition)
 	}
-	return obj + "->" + prop
+	if ma.Body != nil {
+		children = append(children, ma.Body)
+	}
+	return children
+}
+
+func (ma *MatchArm) Accept(visitor Visitor) {
+	if visitor.Visit(ma) {
+		for _, condition := range ma.Conditions {
+			condition.Accept(visitor)
+		}
+		if ma.Body != nil {
+			ma.Body.Accept(visitor)
+		}
+	}
+}
+
+func (ma *MatchArm) String() string {
+	if ma.IsDefault {
+		return "default => " + ma.Body.String()
+	}
+	
+	result := ""
+	for i, condition := range ma.Conditions {
+		if i > 0 {
+			result += ", "
+		}
+		result += condition.String()
+	}
+	result += " => " + ma.Body.String()
+	return result
 }
 
 // CallExpression 函数调用表达式
@@ -3241,12 +3520,13 @@ func (ce *CaseExpression) String() string {
 type ClassExpression struct {
 	BaseNode
 	Name       Expression   `json:"name"`
+	ReadOnly   bool         `json:"readOnly,omitempty"`   // readonly class
 	Extends    Expression   `json:"extends"`
 	Implements []Expression `json:"implements"`
 	Body       []Statement  `json:"body"`
 }
 
-func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression) *ClassExpression {
+func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression, readOnly bool) *ClassExpression {
 	return &ClassExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTClass,
@@ -3254,6 +3534,7 @@ func NewClassExpression(pos lexer.Position, name, extends Expression, implements
 			LineNo:   uint32(pos.Line),
 		},
 		Name:       name,
+		ReadOnly:   readOnly,
 		Extends:    extends,
 		Implements: implements,
 		Body:       make([]Statement, 0),
@@ -3305,7 +3586,11 @@ func (ce *ClassExpression) Accept(visitor Visitor) {
 func (ce *ClassExpression) expressionNode() {}
 
 func (ce *ClassExpression) String() string {
-	result := "class"
+	result := ""
+	if ce.ReadOnly {
+		result = "readonly "
+	}
+	result += "class"
 	if ce.Name != nil {
 		result += " " + ce.Name.String()
 	}

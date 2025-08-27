@@ -2595,9 +2595,8 @@ $tested = $test->getName();`,
 				assert.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$test", objVar.Name)
 
-				propName, ok := propAccess.Property.(*ast.IdentifierNode)
-				assert.True(t, ok, "Property should be IdentifierNode")
-				assert.Equal(t, "getName", propName.Name)
+				assert.NotNil(t, propAccess.Property, "Property should not be nil")
+				assert.Equal(t, "getName", propAccess.Property.Name)
 			},
 		},
 		{

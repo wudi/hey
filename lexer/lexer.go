@@ -629,7 +629,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 				return Token{Type: T_COALESCE_EQUAL, Value: "??=", Position: pos}
 			}
 			return Token{Type: T_COALESCE, Value: "??", Position: pos}
-		} else if l.peekChar() == '-' && l.peekCharN(3) == '>' {
+		} else if l.peekChar() == '-' && l.peekCharN(1) == '>' {
 			l.readChar()
 			l.readChar()
 			l.readChar()
