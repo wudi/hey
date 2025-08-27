@@ -480,6 +480,257 @@ func (t *TraitDeclaration) String() string {
 	return result
 }
 
+// UseTraitStatement 表示 trait 使用语句 (use TraitA, TraitB { ... })
+type UseTraitStatement struct {
+	BaseNode
+	Traits      []*IdentifierNode  `json:"traits"`      // 使用的 traits
+	Adaptations []TraitAdaptation  `json:"adaptations"` // trait 适配规则
+}
+
+func NewUseTraitStatement(pos lexer.Position, traits []*IdentifierNode, adaptations []TraitAdaptation) *UseTraitStatement {
+	return &UseTraitStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTUseTrait,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Traits:      traits,
+		Adaptations: adaptations,
+	}
+}
+
+// GetChildren 返回子节点
+func (u *UseTraitStatement) GetChildren() []Node {
+	children := make([]Node, 0)
+	for _, trait := range u.Traits {
+		if trait != nil {
+			children = append(children, trait)
+		}
+	}
+	for _, adaptation := range u.Adaptations {
+		if adaptation != nil {
+			children = append(children, adaptation)
+		}
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (u *UseTraitStatement) Accept(visitor Visitor) {
+	if visitor.Visit(u) {
+		for _, trait := range u.Traits {
+			if trait != nil {
+				trait.Accept(visitor)
+			}
+		}
+		for _, adaptation := range u.Adaptations {
+			if adaptation != nil {
+				adaptation.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (u *UseTraitStatement) statementNode() {}
+
+func (u *UseTraitStatement) String() string {
+	result := "use "
+	traitNames := make([]string, len(u.Traits))
+	for i, trait := range u.Traits {
+		traitNames[i] = trait.String()
+	}
+	result += strings.Join(traitNames, ", ")
+	
+	if len(u.Adaptations) > 0 {
+		result += " {\n"
+		for _, adaptation := range u.Adaptations {
+			result += "  " + adaptation.String() + ";\n"
+		}
+		result += "}"
+	} else {
+		result += ";"
+	}
+	
+	return result
+}
+
+// TraitAdaptation 表示 trait 适配规则的基础接口
+type TraitAdaptation interface {
+	Node
+	adaptationNode()
+}
+
+// TraitPrecedenceStatement 表示 trait 优先级声明 (A::method insteadof B, C)
+type TraitPrecedenceStatement struct {
+	BaseNode
+	Method     *TraitMethodReference `json:"method"`     // 方法引用
+	InsteadOf  []*IdentifierNode     `json:"insteadOf"`  // 替代的 traits
+}
+
+func NewTraitPrecedenceStatement(pos lexer.Position, method *TraitMethodReference, insteadOf []*IdentifierNode) *TraitPrecedenceStatement {
+	return &TraitPrecedenceStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTTraitPrecedence,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Method:    method,
+		InsteadOf: insteadOf,
+	}
+}
+
+// GetChildren 返回子节点
+func (t *TraitPrecedenceStatement) GetChildren() []Node {
+	children := make([]Node, 0)
+	if t.Method != nil {
+		children = append(children, t.Method)
+	}
+	for _, trait := range t.InsteadOf {
+		if trait != nil {
+			children = append(children, trait)
+		}
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (t *TraitPrecedenceStatement) Accept(visitor Visitor) {
+	if visitor.Visit(t) {
+		if t.Method != nil {
+			t.Method.Accept(visitor)
+		}
+		for _, trait := range t.InsteadOf {
+			if trait != nil {
+				trait.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (t *TraitPrecedenceStatement) statementNode() {}
+func (t *TraitPrecedenceStatement) adaptationNode() {}
+
+func (t *TraitPrecedenceStatement) String() string {
+	result := t.Method.String() + " insteadof "
+	traitNames := make([]string, len(t.InsteadOf))
+	for i, trait := range t.InsteadOf {
+		traitNames[i] = trait.String()
+	}
+	result += strings.Join(traitNames, ", ")
+	return result
+}
+
+// TraitAliasStatement 表示 trait 别名声明 (A::method as newName; A::method as public newName)
+type TraitAliasStatement struct {
+	BaseNode
+	Method     *TraitMethodReference `json:"method"`              // 方法引用
+	Alias      *IdentifierNode       `json:"alias,omitempty"`     // 新的方法名（可选）
+	Visibility string                `json:"visibility,omitempty"` // 可见性修饰符（可选）
+}
+
+func NewTraitAliasStatement(pos lexer.Position, method *TraitMethodReference, alias *IdentifierNode, visibility string) *TraitAliasStatement {
+	return &TraitAliasStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTTraitAlias,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Method:     method,
+		Alias:      alias,
+		Visibility: visibility,
+	}
+}
+
+// GetChildren 返回子节点
+func (t *TraitAliasStatement) GetChildren() []Node {
+	children := make([]Node, 0)
+	if t.Method != nil {
+		children = append(children, t.Method)
+	}
+	if t.Alias != nil {
+		children = append(children, t.Alias)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (t *TraitAliasStatement) Accept(visitor Visitor) {
+	if visitor.Visit(t) {
+		if t.Method != nil {
+			t.Method.Accept(visitor)
+		}
+		if t.Alias != nil {
+			t.Alias.Accept(visitor)
+		}
+	}
+}
+
+func (t *TraitAliasStatement) statementNode() {}
+func (t *TraitAliasStatement) adaptationNode() {}
+
+func (t *TraitAliasStatement) String() string {
+	result := t.Method.String() + " as "
+	if t.Visibility != "" {
+		result += t.Visibility + " "
+	}
+	if t.Alias != nil {
+		result += t.Alias.String()
+	}
+	return result
+}
+
+// TraitMethodReference 表示 trait 方法引用 (TraitName::methodName or methodName)
+type TraitMethodReference struct {
+	BaseNode
+	Trait  *IdentifierNode `json:"trait,omitempty"`  // trait 名称（可选，如果为空表示当前方法）
+	Method *IdentifierNode `json:"method"`           // 方法名称
+}
+
+func NewTraitMethodReference(pos lexer.Position, trait *IdentifierNode, method *IdentifierNode) *TraitMethodReference {
+	return &TraitMethodReference{
+		BaseNode: BaseNode{
+			Kind:     ASTMethodReference,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Trait:  trait,
+		Method: method,
+	}
+}
+
+// GetChildren 返回子节点
+func (t *TraitMethodReference) GetChildren() []Node {
+	children := make([]Node, 0)
+	if t.Trait != nil {
+		children = append(children, t.Trait)
+	}
+	if t.Method != nil {
+		children = append(children, t.Method)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (t *TraitMethodReference) Accept(visitor Visitor) {
+	if visitor.Visit(t) {
+		if t.Trait != nil {
+			t.Trait.Accept(visitor)
+		}
+		if t.Method != nil {
+			t.Method.Accept(visitor)
+		}
+	}
+}
+
+func (t *TraitMethodReference) expressionNode() {}
+
+func (t *TraitMethodReference) String() string {
+	if t.Trait != nil {
+		return t.Trait.String() + "::" + t.Method.String()
+	}
+	return t.Method.String()
+}
+
 // EnumDeclaration 表示 enum 声明 (PHP 8.1+)
 type EnumDeclaration struct {
 	BaseNode

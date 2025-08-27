@@ -3488,6 +3488,8 @@ func parseClassStatement(p *Parser) ast.Statement {
 	case lexer.T_READONLY:
 		// readonly without visibility modifier (defaults to public)
 		return parsePropertyDeclaration(p)
+	case lexer.T_USE:
+		return parseUseTraitStatement(p)
 	default:
 		// 跳过未识别的token
 		return nil
@@ -4024,5 +4026,185 @@ func parseClassBody(p *Parser) []ast.Statement {
 	}
 	
 	return statements
+}
+
+// parseUseTraitStatement 解析 trait 使用语句 (use TraitA, TraitB { ... })
+func parseUseTraitStatement(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+	
+	// 期望 trait 名称列表
+	p.nextToken() // 跳过 'use'
+	
+	var traits []*ast.IdentifierNode
+	
+	// 解析第一个 trait 名称
+	if p.currentToken.Type != lexer.T_STRING {
+		p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	traits = append(traits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+	
+	// 解析多个 trait（用逗号分隔）
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // 跳过逗号
+		p.nextToken() // 移动到下一个 trait 名称
+		
+		if p.currentToken.Type != lexer.T_STRING {
+			p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+			return nil
+		}
+		
+		traits = append(traits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+	}
+	
+	// 检查是否有适配规则
+	var adaptations []ast.TraitAdaptation
+	
+	if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		p.nextToken() // 跳过 '{'
+		
+		// 解析适配规则
+		for p.peekToken.Type != lexer.TOKEN_RBRACE && p.peekToken.Type != lexer.T_EOF {
+			p.nextToken()
+			adaptation := parseTraitAdaptation(p)
+			if adaptation != nil {
+				adaptations = append(adaptations, adaptation)
+			}
+			
+			// 期望分号
+			if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+				p.nextToken() // 跳过分号
+			}
+		}
+		
+		// 期望右大括号
+		if !p.expectPeek(lexer.TOKEN_RBRACE) {
+			return nil
+		}
+	} else if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken() // 跳过分号
+	}
+	
+	return ast.NewUseTraitStatement(pos, traits, adaptations)
+}
+
+// parseTraitAdaptation 解析 trait 适配规则
+func parseTraitAdaptation(p *Parser) ast.TraitAdaptation {
+	// 解析 trait 方法引用
+	methodRef := parseTraitMethodReference(p)
+	if methodRef == nil {
+		return nil
+	}
+	
+	// 检查是 precedence 还是 alias
+	if p.peekToken.Type == lexer.T_INSTEADOF {
+		return parseTraitPrecedence(p, methodRef)
+	} else if p.peekToken.Type == lexer.T_AS {
+		return parseTraitAlias(p, methodRef)
+	}
+	
+	p.errors = append(p.errors, fmt.Sprintf("expected 'insteadof' or 'as', got %s at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
+	return nil
+}
+
+// parseTraitMethodReference 解析 trait 方法引用 (TraitName::methodName or methodName)
+func parseTraitMethodReference(p *Parser) *ast.TraitMethodReference {
+	pos := p.currentToken.Position
+	
+	if p.currentToken.Type != lexer.T_STRING {
+		p.errors = append(p.errors, fmt.Sprintf("expected method or trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	firstPart := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	
+	// 检查是否是完全限定的方法引用 (TraitName::methodName)
+	if p.peekToken.Type == lexer.T_PAAMAYIM_NEKUDOTAYIM {
+		p.nextToken() // 跳过 '::'
+		p.nextToken() // 移动到方法名
+		
+		if p.currentToken.Type != lexer.T_STRING {
+			p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+			return nil
+		}
+		
+		methodName := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		return ast.NewTraitMethodReference(pos, firstPart, methodName)
+	}
+	
+	// 简单的方法名引用
+	return ast.NewTraitMethodReference(pos, nil, firstPart)
+}
+
+// parseTraitPrecedence 解析 trait 优先级声明 (A::method insteadof B, C)
+func parseTraitPrecedence(p *Parser, methodRef *ast.TraitMethodReference) ast.TraitAdaptation {
+	pos := methodRef.Position
+	
+	// 期望 'insteadof'
+	if !p.expectPeek(lexer.T_INSTEADOF) {
+		return nil
+	}
+	
+	// 解析替代的 trait 列表
+	p.nextToken() // 移动到第一个 trait 名称
+	
+	var insteadOfTraits []*ast.IdentifierNode
+	
+	if p.currentToken.Type != lexer.T_STRING {
+		p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	insteadOfTraits = append(insteadOfTraits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+	
+	// 解析多个 trait（用逗号分隔）
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // 跳过逗号
+		p.nextToken() // 移动到下一个 trait 名称
+		
+		if p.currentToken.Type != lexer.T_STRING {
+			p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+			return nil
+		}
+		
+		insteadOfTraits = append(insteadOfTraits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+	}
+	
+	return ast.NewTraitPrecedenceStatement(pos, methodRef, insteadOfTraits)
+}
+
+// parseTraitAlias 解析 trait 别名声明 (A::method as newName; A::method as public newName)
+func parseTraitAlias(p *Parser, methodRef *ast.TraitMethodReference) ast.TraitAdaptation {
+	pos := methodRef.Position
+	
+	// 期望 'as'
+	if !p.expectPeek(lexer.T_AS) {
+		return nil
+	}
+	
+	p.nextToken() // 移动到别名或可见性修饰符
+	
+	var visibility string
+	var alias *ast.IdentifierNode
+	
+	// 检查是否是可见性修饰符
+	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
+		visibility = p.currentToken.Value
+		
+		// 可选的新方法名
+		if p.peekToken.Type == lexer.T_STRING {
+			p.nextToken() // 移动到方法名
+			alias = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		}
+	} else if p.currentToken.Type == lexer.T_STRING {
+		// 只是别名，没有可见性修饰符
+		alias = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	} else {
+		p.errors = append(p.errors, fmt.Sprintf("expected visibility modifier or method name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		return nil
+	}
+	
+	return ast.NewTraitAliasStatement(pos, methodRef, alias, visibility)
 }
 
