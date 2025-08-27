@@ -124,15 +124,18 @@ const (
 	ASTTraitPrecedence           ASTKind = 545
 	ASTMethodReference           ASTKind = 546
 	ASTNamespace                 ASTKind = 547
-	ASTUseElem                   ASTKind = 548
-	ASTTraitAlias                ASTKind = 549
-	ASTGroupUse                  ASTKind = 550
-	ASTAttribute                 ASTKind = 551
-	ASTMatch                     ASTKind = 552
-	ASTMatchArm                  ASTKind = 553
-	ASTNamedArg                  ASTKind = 554
-	ASTParentPropertyHookCall    ASTKind = 555
-	ASTPipe                      ASTKind = 556
+	ASTNamespaceName             ASTKind = 548
+	ASTUseElem                   ASTKind = 549
+	ASTTraitAlias                ASTKind = 550
+	ASTGroupUse                  ASTKind = 551
+	ASTAttribute                 ASTKind = 552
+	ASTMatch                     ASTKind = 553
+	ASTMatchArm                  ASTKind = 554
+	ASTNamedArg                  ASTKind = 555
+	ASTParentPropertyHookCall    ASTKind = 556
+	ASTPipe                      ASTKind = 557
+	ASTInterface                 ASTKind = 558
+	ASTTrait                     ASTKind = 559
 
 	// 3子节点 - 3 child nodes (bits 8-15 = 3)
 	ASTMethodCall         ASTKind = 768 // 3 << 8
@@ -391,6 +394,8 @@ func (k ASTKind) String() string {
 		return "METHOD_REFERENCE"
 	case ASTNamespace:
 		return "NAMESPACE"
+	case ASTNamespaceName:
+		return "NAMESPACE_NAME"
 	case ASTUseElem:
 		return "USE_ELEM"
 	case ASTTraitAlias:
@@ -409,6 +414,10 @@ func (k ASTKind) String() string {
 		return "PARENT_PROPERTY_HOOK_CALL"
 	case ASTPipe:
 		return "PIPE"
+	case ASTInterface:
+		return "INTERFACE"
+	case ASTTrait:
+		return "TRAIT"
 
 	// 3子节点
 	case ASTMethodCall:

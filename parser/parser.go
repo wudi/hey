@@ -460,6 +460,14 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseFunctionDeclaration(p)
 	case lexer.T_CLASS:
 		return parseClassDeclaration(p)
+	case lexer.T_NAMESPACE:
+		return parseNamespaceStatement(p)
+	case lexer.T_USE:
+		return parseUseStatement(p)
+	case lexer.T_INTERFACE:
+		return parseInterfaceDeclaration(p)
+	case lexer.T_TRAIT:
+		return parseTraitDeclaration(p)
 	case lexer.T_RETURN:
 		return parseReturnStatement(p)
 	case lexer.T_GLOBAL:
@@ -953,6 +961,401 @@ func parseParameter(p *Parser) *ast.Parameter {
 	}
 	
 	return &param
+}
+
+// parseNamespaceStatement 解析命名空间声明语句
+func parseNamespaceStatement(p *Parser) *ast.NamespaceStatement {
+	pos := p.currentToken.Position
+
+	// namespace 关键字后面可能是：
+	// 1. namespace; (全局命名空间)
+	// 2. namespace Foo\Bar; (简单命名空间声明)
+	// 3. namespace Foo\Bar { ... } (带块的命名空间声明)
+
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		// 全局命名空间: namespace;
+		p.nextToken() // 移动到 ;
+		return ast.NewNamespaceStatement(pos, nil)
+	}
+
+	if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		// 匿名命名空间: namespace { ... }
+		p.nextToken() // 移动到 {
+		stmt := ast.NewNamespaceStatement(pos, nil)
+		stmt.Body = parseBlockStatements(p)
+		return stmt
+	}
+
+	// 解析命名空间名称
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	// 构建命名空间名称
+	nameParts := []string{p.currentToken.Value}
+
+	// 处理多级命名空间 (Foo\Bar\Baz)
+	for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+		p.nextToken() // 移动到 \
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		nameParts = append(nameParts, p.currentToken.Value)
+	}
+
+	namespaceName := ast.NewNamespaceNameExpression(pos, nameParts)
+	stmt := ast.NewNamespaceStatement(pos, namespaceName)
+
+	// 检查是否有块语法
+	if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		p.nextToken() // 移动到 {
+		stmt.Body = parseBlockStatements(p)
+	} else if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken() // 移动到 ;
+	}
+
+	return stmt
+}
+
+// parseUseStatement 解析 use 语句
+func parseUseStatement(p *Parser) *ast.UseStatement {
+	pos := p.currentToken.Position
+	stmt := ast.NewUseStatement(pos)
+
+	// 检查是否有类型修饰符 (function, const)
+	var useType string
+	if p.peekToken.Type == lexer.T_FUNCTION || p.peekToken.Type == lexer.T_CONST {
+		p.nextToken()
+		useType = p.currentToken.Value
+	}
+
+	// 解析第一个 use 子句
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	// 构建第一个命名空间名称
+	nameParts := []string{p.currentToken.Value}
+
+	// 处理多级命名空间 (Foo\Bar\Baz)
+	for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+		p.nextToken() // 移动到 \
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		nameParts = append(nameParts, p.currentToken.Value)
+	}
+
+	namespaceName := ast.NewNamespaceNameExpression(pos, nameParts)
+	
+	// 检查是否有别名 (as Alias)
+	var alias string
+	if p.peekToken.Type == lexer.T_AS {
+		p.nextToken() // 移动到 as
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		alias = p.currentToken.Value
+	}
+
+	// 添加第一个 use 子句
+	stmt.Uses = append(stmt.Uses, ast.UseClause{
+		Name:  namespaceName,
+		Alias: alias,
+		Type:  useType,
+	})
+
+	// 处理更多 use 子句 (use A, B, C;)
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // 移动到逗号
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+
+		// 构建命名空间名称
+		nameParts := []string{p.currentToken.Value}
+
+		// 处理多级命名空间
+		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+			p.nextToken() // 移动到 \
+			if !p.expectPeek(lexer.T_STRING) {
+				return nil
+			}
+			nameParts = append(nameParts, p.currentToken.Value)
+		}
+
+		namespaceName := ast.NewNamespaceNameExpression(p.currentToken.Position, nameParts)
+		
+		// 检查是否有别名
+		alias := ""
+		if p.peekToken.Type == lexer.T_AS {
+			p.nextToken() // 移动到 as
+			if !p.expectPeek(lexer.T_STRING) {
+				return nil
+			}
+			alias = p.currentToken.Value
+		}
+
+		// 添加 use 子句
+		stmt.Uses = append(stmt.Uses, ast.UseClause{
+			Name:  namespaceName,
+			Alias: alias,
+			Type:  useType, // 所有子句共享相同的类型
+		})
+	}
+
+	// 期望分号结尾
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+	}
+
+	return stmt
+}
+
+// parseInterfaceDeclaration 解析接口声明
+func parseInterfaceDeclaration(p *Parser) *ast.InterfaceDeclaration {
+	pos := p.currentToken.Position
+
+	// 期望接口名称
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	interfaceDecl := ast.NewInterfaceDeclaration(pos, name)
+
+	// 检查是否有 extends 子句
+	if p.peekToken.Type == lexer.T_EXTENDS {
+		p.nextToken() // 移动到 extends
+
+		// 解析第一个父接口
+		if !p.expectPeek(lexer.T_STRING) {
+			return nil
+		}
+		parentInterface := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		interfaceDecl.Extends = append(interfaceDecl.Extends, parentInterface)
+
+		// 处理多个父接口 (interface Child extends Parent1, Parent2)
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			if !p.expectPeek(lexer.T_STRING) {
+				return nil
+			}
+			parentInterface := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+			interfaceDecl.Extends = append(interfaceDecl.Extends, parentInterface)
+		}
+	}
+
+	// 期望开始大括号
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	// 解析接口体（方法声明）
+	for p.peekToken.Type != lexer.TOKEN_RBRACE && p.peekToken.Type != lexer.T_EOF {
+		p.nextToken()
+
+		// 跳过空行和注释
+		if p.currentToken.Type == lexer.T_WHITESPACE {
+			continue
+		}
+
+		// 解析方法声明
+		method := parseInterfaceMethod(p)
+		if method != nil {
+			interfaceDecl.Methods = append(interfaceDecl.Methods, method)
+		}
+	}
+
+	if !p.expectPeek(lexer.TOKEN_RBRACE) {
+		return nil
+	}
+
+	return interfaceDecl
+}
+
+// parseInterfaceMethod 解析接口方法声明
+func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
+	// 默认可见性为 public（接口方法都是 public）
+	visibility := "public"
+
+	// 检查可见性修饰符（虽然接口方法通常是 public）
+	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
+		visibility = p.currentToken.Value
+		p.nextToken()
+	}
+
+	// 期望 function 关键字
+	if p.currentToken.Type != lexer.T_FUNCTION {
+		return nil
+	}
+
+	// 期望方法名
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	methodName := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+
+	// 期望左括号
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+
+	method := &ast.InterfaceMethod{
+		Name:       methodName,
+		Parameters: make([]ast.Parameter, 0),
+		Visibility: visibility,
+	}
+
+	// 解析参数列表
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+
+		// 解析第一个参数
+		param := parseParameter(p)
+		if param != nil {
+			method.Parameters = append(method.Parameters, *param)
+		}
+
+		// 处理更多参数
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个参数
+			param := parseParameter(p)
+			if param != nil {
+				method.Parameters = append(method.Parameters, *param)
+			}
+		}
+	}
+
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+
+	// 检查返回类型声明
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 ':'
+		p.nextToken() // 移动到类型开始位置
+
+		// 解析返回类型
+		returnType := parseTypeHint(p)
+		if returnType != nil {
+			method.ReturnType = returnType
+		}
+	}
+
+	// 期望分号（接口方法没有方法体）
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+	}
+
+	return method
+}
+
+// parseTraitDeclaration 解析 trait 声明
+func parseTraitDeclaration(p *Parser) *ast.TraitDeclaration {
+	pos := p.currentToken.Position
+
+	// 期望 trait 名称
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	traitDecl := ast.NewTraitDeclaration(pos, name)
+
+	// 期望开始大括号
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	// 解析 trait 体（属性和方法）
+	for p.peekToken.Type != lexer.TOKEN_RBRACE && p.peekToken.Type != lexer.T_EOF {
+		p.nextToken()
+
+		// 跳过空行和注释
+		if p.currentToken.Type == lexer.T_WHITESPACE {
+			continue
+		}
+
+		// 解析可见性修饰符或直接解析成员
+		if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
+			visibility := p.currentToken.Value
+
+			// 检查下一个 token 是什么
+			if p.peekToken.Type == lexer.T_FUNCTION {
+				// 这是一个方法
+				method := parseFunctionDeclaration(p)
+				if method != nil {
+					method.Visibility = visibility
+					traitDecl.Methods = append(traitDecl.Methods, method)
+				}
+			} else {
+				// 这是一个属性声明，先移动到下一个 token
+				p.nextToken()
+				property := parseTraitProperty(p, visibility)
+				if property != nil {
+					traitDecl.Properties = append(traitDecl.Properties, property)
+				}
+			}
+		} else if p.currentToken.Type == lexer.T_FUNCTION {
+			// 无可见性修饰符的方法（默认 public）
+			method := parseFunctionDeclaration(p)
+			if method != nil {
+				traitDecl.Methods = append(traitDecl.Methods, method)
+			}
+		} else {
+			// 可能是无可见性修饰符的属性或其他语句
+			property := parseTraitProperty(p, "public")
+			if property != nil {
+				traitDecl.Properties = append(traitDecl.Properties, property)
+			}
+		}
+	}
+
+	if !p.expectPeek(lexer.TOKEN_RBRACE) {
+		return nil
+	}
+
+	return traitDecl
+}
+
+// parseTraitProperty 解析 trait 属性
+func parseTraitProperty(p *Parser, visibility string) *ast.PropertyDeclaration {
+	// 检查类型提示
+	var typeHint *ast.TypeHint
+	if isTypeToken(p.currentToken.Type) {
+		typeHint = parseTypeHint(p)
+		if !p.expectPeek(lexer.T_VARIABLE) {
+			return nil
+		}
+	} else if p.currentToken.Type != lexer.T_VARIABLE {
+		return nil
+	}
+
+	// 解析变量名（去掉 $ 符号）
+	varName := p.currentToken.Value
+	if len(varName) > 1 && varName[0] == '$' {
+		varName = varName[1:]
+	}
+
+	pos := p.currentToken.Position
+	property := ast.NewPropertyDeclaration(pos, visibility, varName, typeHint, nil)
+
+	// 检查是否有默认值
+	if p.peekToken.Type == lexer.TOKEN_EQUAL {
+		p.nextToken() // 移动到 =
+		p.nextToken() // 移动到默认值
+		property.DefaultValue = parseExpression(p, LOWEST)
+	}
+
+	// 期望分号
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+	}
+
+	return property
 }
 
 // parseReturnStatement 解析 return 语句

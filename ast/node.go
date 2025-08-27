@@ -189,6 +189,297 @@ func (e *EchoStatement) String() string {
 	return "echo " + strings.Join(args, ", ") + ";"
 }
 
+// NamespaceStatement 表示命名空间声明语句
+type NamespaceStatement struct {
+	BaseNode
+	Name *NamespaceNameExpression `json:"name,omitempty"` // nil for global namespace
+	Body []Statement              `json:"body,omitempty"`  // 可选的命名空间主体
+}
+
+func NewNamespaceStatement(pos lexer.Position, name *NamespaceNameExpression) *NamespaceStatement {
+	return &NamespaceStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTNamespace,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name: name,
+		Body: make([]Statement, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (n *NamespaceStatement) GetChildren() []Node {
+	children := make([]Node, 0)
+	if n.Name != nil {
+		children = append(children, n.Name)
+	}
+	for _, stmt := range n.Body {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (n *NamespaceStatement) Accept(visitor Visitor) {
+	if visitor.Visit(n) {
+		if n.Name != nil {
+			n.Name.Accept(visitor)
+		}
+		for _, stmt := range n.Body {
+			stmt.Accept(visitor)
+		}
+	}
+}
+
+func (n *NamespaceStatement) statementNode() {}
+
+func (n *NamespaceStatement) String() string {
+	if n.Name == nil {
+		return "namespace;"
+	}
+	result := "namespace " + n.Name.String()
+	if len(n.Body) > 0 {
+		result += " {\n"
+		for _, stmt := range n.Body {
+			result += "  " + stmt.String() + "\n"
+		}
+		result += "}"
+	} else {
+		result += ";"
+	}
+	return result
+}
+
+// UseStatement 表示 use 语句（导入语句）
+type UseStatement struct {
+	BaseNode
+	Uses []UseClause `json:"uses"` // 支持多个use子句，如 use A, B, C;
+}
+
+type UseClause struct {
+	Name  *NamespaceNameExpression `json:"name"`  // 导入的名称
+	Alias string                   `json:"alias"` // 别名 (如 use Foo as Bar)
+	Type  string                   `json:"type"`  // 类型: "class", "function", "const" 或空字符串
+}
+
+func NewUseStatement(pos lexer.Position) *UseStatement {
+	return &UseStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTUse,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Uses: make([]UseClause, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (u *UseStatement) GetChildren() []Node {
+	children := make([]Node, 0)
+	for _, use := range u.Uses {
+		if use.Name != nil {
+			children = append(children, use.Name)
+		}
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (u *UseStatement) Accept(visitor Visitor) {
+	if visitor.Visit(u) {
+		for _, use := range u.Uses {
+			if use.Name != nil {
+				use.Name.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (u *UseStatement) statementNode() {}
+
+func (u *UseStatement) String() string {
+	result := "use "
+	clauses := make([]string, len(u.Uses))
+	for i, clause := range u.Uses {
+		clauseStr := ""
+		if clause.Type != "" {
+			clauseStr += clause.Type + " "
+		}
+		clauseStr += clause.Name.String()
+		if clause.Alias != "" {
+			clauseStr += " as " + clause.Alias
+		}
+		clauses[i] = clauseStr
+	}
+	result += strings.Join(clauses, ", ") + ";"
+	return result
+}
+
+// InterfaceDeclaration 表示接口声明
+type InterfaceDeclaration struct {
+	BaseNode
+	Name       *IdentifierNode   `json:"name"`                // 接口名称
+	Extends    []*IdentifierNode `json:"extends,omitempty"`   // 继承的接口
+	Methods    []*InterfaceMethod `json:"methods"`             // 接口方法
+}
+
+// InterfaceMethod 表示接口方法声明
+type InterfaceMethod struct {
+	Name       *IdentifierNode `json:"name"`                // 方法名称
+	Parameters []Parameter     `json:"parameters"`          // 参数列表
+	ReturnType *TypeHint       `json:"returnType,omitempty"` // 返回类型
+	Visibility string          `json:"visibility"`          // 可见性 (通常是 public)
+}
+
+func NewInterfaceDeclaration(pos lexer.Position, name *IdentifierNode) *InterfaceDeclaration {
+	return &InterfaceDeclaration{
+		BaseNode: BaseNode{
+			Kind:     ASTInterface,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:    name,
+		Extends: make([]*IdentifierNode, 0),
+		Methods: make([]*InterfaceMethod, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (i *InterfaceDeclaration) GetChildren() []Node {
+	children := make([]Node, 0)
+	if i.Name != nil {
+		children = append(children, i.Name)
+	}
+	for _, extend := range i.Extends {
+		children = append(children, extend)
+	}
+	// 接口方法不直接实现 Node 接口，所以不添加到子节点中
+	return children
+}
+
+// Accept 接受访问者
+func (i *InterfaceDeclaration) Accept(visitor Visitor) {
+	if visitor.Visit(i) {
+		if i.Name != nil {
+			i.Name.Accept(visitor)
+		}
+		for _, extend := range i.Extends {
+			extend.Accept(visitor)
+		}
+	}
+}
+
+func (i *InterfaceDeclaration) statementNode() {}
+
+func (i *InterfaceDeclaration) String() string {
+	result := "interface " + i.Name.String()
+	
+	if len(i.Extends) > 0 {
+		result += " extends "
+		extendNames := make([]string, len(i.Extends))
+		for idx, extend := range i.Extends {
+			extendNames[idx] = extend.String()
+		}
+		result += strings.Join(extendNames, ", ")
+	}
+	
+	result += " {\n"
+	for _, method := range i.Methods {
+		result += "  " + method.Visibility + " function " + method.Name.String() + "("
+		paramStrs := make([]string, len(method.Parameters))
+		for idx, param := range method.Parameters {
+			paramStr := ""
+			if param.Type != nil {
+				paramStr += param.Type.String() + " "
+			}
+			if param.ByReference {
+				paramStr += "&"
+			}
+			paramStr += "$" + param.Name
+			paramStrs[idx] = paramStr
+		}
+		result += strings.Join(paramStrs, ", ")
+		result += ")"
+		if method.ReturnType != nil {
+			result += ": " + method.ReturnType.String()
+		}
+		result += ";\n"
+	}
+	result += "}"
+	return result
+}
+
+// TraitDeclaration 表示 trait 声明
+type TraitDeclaration struct {
+	BaseNode
+	Name       *IdentifierNode       `json:"name"`       // trait 名称
+	Properties []*PropertyDeclaration `json:"properties"` // trait 属性
+	Methods    []*FunctionDeclaration `json:"methods"`    // trait 方法
+}
+
+func NewTraitDeclaration(pos lexer.Position, name *IdentifierNode) *TraitDeclaration {
+	return &TraitDeclaration{
+		BaseNode: BaseNode{
+			Kind:     ASTTrait,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:       name,
+		Properties: make([]*PropertyDeclaration, 0),
+		Methods:    make([]*FunctionDeclaration, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (t *TraitDeclaration) GetChildren() []Node {
+	children := make([]Node, 0)
+	if t.Name != nil {
+		children = append(children, t.Name)
+	}
+	for _, prop := range t.Properties {
+		children = append(children, prop)
+	}
+	for _, method := range t.Methods {
+		children = append(children, method)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (t *TraitDeclaration) Accept(visitor Visitor) {
+	if visitor.Visit(t) {
+		if t.Name != nil {
+			t.Name.Accept(visitor)
+		}
+		for _, prop := range t.Properties {
+			prop.Accept(visitor)
+		}
+		for _, method := range t.Methods {
+			method.Accept(visitor)
+		}
+	}
+}
+
+func (t *TraitDeclaration) statementNode() {}
+
+func (t *TraitDeclaration) String() string {
+	result := "trait " + t.Name.String() + " {\n"
+	
+	// 添加属性
+	for _, prop := range t.Properties {
+		result += "  " + prop.String() + ";\n"
+	}
+	
+	// 添加方法
+	for _, method := range t.Methods {
+		result += "  " + method.String() + "\n"
+	}
+	
+	result += "}"
+	return result
+}
+
 // ExpressionStatement 表达式语句
 type ExpressionStatement struct {
 	BaseNode
@@ -1114,6 +1405,39 @@ func (i *IdentifierNode) identifierNode() {}
 
 func (i *IdentifierNode) String() string {
 	return i.Name
+}
+
+// NamespaceNameExpression 表示命名空间名称表达式
+type NamespaceNameExpression struct {
+	BaseNode
+	Parts []string `json:"parts"` // 命名空间的各部分，如 ["Foo", "Bar"] 表示 Foo\Bar
+}
+
+func NewNamespaceNameExpression(pos lexer.Position, parts []string) *NamespaceNameExpression {
+	return &NamespaceNameExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTNamespaceName,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Parts: parts,
+	}
+}
+
+// GetChildren 返回子节点
+func (n *NamespaceNameExpression) GetChildren() []Node {
+	return nil // 命名空间名称是叶子节点
+}
+
+// Accept 接受访问者
+func (n *NamespaceNameExpression) Accept(visitor Visitor) {
+	visitor.Visit(n)
+}
+
+func (n *NamespaceNameExpression) expressionNode() {}
+
+func (n *NamespaceNameExpression) String() string {
+	return strings.Join(n.Parts, "\\")
 }
 
 // PropertyDeclaration 属性声明语句
