@@ -4184,3 +4184,157 @@ func checkParserErrors(t *testing.T, p *Parser) {
 	}
 	t.FailNow()
 }
+
+func TestParsing_StaticProperties(t *testing.T) {
+	tests := []struct {
+		name                 string
+		input                string
+		expectedClassName    string
+		expectedProperties   int
+		validateProperties   func(t *testing.T, classExpr *ast.ClassExpression)
+	}{
+		{
+			name: "Basic public static property",
+			input: `<?php
+class Foo {
+    public static $user_ids;
+}`,
+			expectedClassName: "Foo",
+			expectedProperties: 1,
+			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
+				property, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "First body item should be PropertyDeclaration")
+				assert.Equal(t, "public", property.Visibility)
+				assert.True(t, property.Static, "Property should be static")
+				assert.Equal(t, "user_ids", property.Name)
+			},
+		},
+		{
+			name: "All visibility modifiers with static",
+			input: `<?php
+class TestClass {
+    public static $public_static;
+    private static $private_static;
+    protected static $protected_static;
+}`,
+			expectedClassName: "TestClass",
+			expectedProperties: 3,
+			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
+				// Test public static
+				property1, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "First property should be PropertyDeclaration")
+				assert.Equal(t, "public", property1.Visibility)
+				assert.True(t, property1.Static, "Property should be static")
+				assert.Equal(t, "public_static", property1.Name)
+
+				// Test private static
+				property2, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "Second property should be PropertyDeclaration")
+				assert.Equal(t, "private", property2.Visibility)
+				assert.True(t, property2.Static, "Property should be static")
+				assert.Equal(t, "private_static", property2.Name)
+
+				// Test protected static
+				property3, ok := classExpr.Body[2].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "Third property should be PropertyDeclaration")
+				assert.Equal(t, "protected", property3.Visibility)
+				assert.True(t, property3.Static, "Property should be static")
+				assert.Equal(t, "protected_static", property3.Name)
+			},
+		},
+		{
+			name: "Static without explicit visibility",
+			input: `<?php
+class Test {
+    static $default_static;
+}`,
+			expectedClassName: "Test",
+			expectedProperties: 1,
+			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
+				property, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "First body item should be PropertyDeclaration")
+				assert.Equal(t, "public", property.Visibility, "Static property without visibility should default to public")
+				assert.True(t, property.Static, "Property should be static")
+				assert.Equal(t, "default_static", property.Name)
+			},
+		},
+		{
+			name: "Static property with type hint and default value",
+			input: `<?php
+class Advanced {
+    public static int $typed_static;
+    public static $initialized_static = 42;
+    private static array $complex_static = ["a", "b"];
+}`,
+			expectedClassName: "Advanced",
+			expectedProperties: 3,
+			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
+				// Test typed static property
+				property1, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "First property should be PropertyDeclaration")
+				assert.Equal(t, "public", property1.Visibility)
+				assert.True(t, property1.Static, "Property should be static")
+				assert.Equal(t, "typed_static", property1.Name)
+				assert.NotNil(t, property1.Type, "Property should have type hint")
+				assert.Equal(t, "int", property1.Type.Name)
+
+				// Test initialized static property
+				property2, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "Second property should be PropertyDeclaration")
+				assert.Equal(t, "public", property2.Visibility)
+				assert.True(t, property2.Static, "Property should be static")
+				assert.Equal(t, "initialized_static", property2.Name)
+				assert.NotNil(t, property2.DefaultValue, "Property should have default value")
+
+				// Test complex static property
+				property3, ok := classExpr.Body[2].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "Third property should be PropertyDeclaration")
+				assert.Equal(t, "private", property3.Visibility)
+				assert.True(t, property3.Static, "Property should be static")
+				assert.Equal(t, "complex_static", property3.Name)
+				assert.NotNil(t, property3.Type, "Property should have type hint")
+				assert.Equal(t, "array", property3.Type.Name)
+				assert.NotNil(t, property3.DefaultValue, "Property should have default value")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			// Check for parser errors
+			errors := p.Errors()
+			if len(errors) != 0 {
+				for _, err := range errors {
+					t.Errorf("Parser error: %s", err)
+				}
+				t.FailNow()
+			}
+
+			require.NotNil(t, program)
+			require.Len(t, program.Body, 1, "Program should have 1 statement")
+
+			// Get the class expression statement
+			exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+			require.True(t, ok, "Statement should be ExpressionStatement")
+
+			classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+			require.True(t, ok, "Expression should be ClassExpression")
+
+			// Validate class name
+			nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+			require.True(t, ok, "Class name should be IdentifierNode")
+			assert.Equal(t, tt.expectedClassName, nameIdent.Name)
+
+			// Validate properties count
+			assert.Len(t, classExpr.Body, tt.expectedProperties, 
+				fmt.Sprintf("Class should have %d properties", tt.expectedProperties))
+
+			// Run custom validation
+			tt.validateProperties(t, classExpr)
+		})
+	}
+}

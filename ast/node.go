@@ -2097,13 +2097,14 @@ func (n *NamespaceNameExpression) String() string {
 type PropertyDeclaration struct {
 	BaseNode
 	Visibility   string      `json:"visibility"`   // private, protected, public
+	Static       bool        `json:"static,omitempty"`       // static
 	ReadOnly     bool        `json:"readOnly,omitempty"`     // readonly
 	Type         *TypeHint   `json:"type,omitempty"`
 	Name         string      `json:"name"`         // Property name without $
 	DefaultValue Expression  `json:"defaultValue,omitempty"`
 }
 
-func NewPropertyDeclaration(pos lexer.Position, visibility, name string, readOnly bool, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
+func NewPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly bool, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
 	return &PropertyDeclaration{
 		BaseNode: BaseNode{
 			Kind:     ASTPropertyDecl,
@@ -2111,6 +2112,7 @@ func NewPropertyDeclaration(pos lexer.Position, visibility, name string, readOnl
 			LineNo:   uint32(pos.Line),
 		},
 		Visibility:   visibility,
+		Static:       static,
 		ReadOnly:     readOnly,
 		Type:         typeHint,
 		Name:         name,
@@ -2229,13 +2231,14 @@ func (ph *PropertyHook) String() string {
 type HookedPropertyDeclaration struct {
 	BaseNode
 	Visibility string          `json:"visibility"`   // private, protected, public
+	Static     bool            `json:"static,omitempty"`       // static
 	ReadOnly   bool            `json:"readOnly,omitempty"`     // readonly
 	Type       *TypeHint       `json:"type,omitempty"`
 	Name       string          `json:"name"`         // Property name without $
 	Hooks      []*PropertyHook `json:"hooks"`        // List of property hooks
 }
 
-func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, readOnly bool, typeHint *TypeHint, hooks []*PropertyHook) *HookedPropertyDeclaration {
+func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly bool, typeHint *TypeHint, hooks []*PropertyHook) *HookedPropertyDeclaration {
 	return &HookedPropertyDeclaration{
 		BaseNode: BaseNode{
 			Kind:     ASTHookedProperty,
@@ -2243,6 +2246,7 @@ func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, r
 			LineNo:   uint32(pos.Line),
 		},
 		Visibility: visibility,
+		Static:     static,
 		ReadOnly:   readOnly,
 		Type:       typeHint,
 		Name:       name,

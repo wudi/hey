@@ -1390,7 +1390,7 @@ func parseTraitProperty(p *Parser, visibility string) *ast.PropertyDeclaration {
 	}
 
 	pos := p.currentToken.Position
-	property := ast.NewPropertyDeclaration(pos, visibility, varName, false, typeHint, nil)
+	property := ast.NewPropertyDeclaration(pos, visibility, varName, false, false, typeHint, nil)
 
 	// 检查是否有默认值
 	if p.peekToken.Type == lexer.TOKEN_EQUAL {
@@ -3572,8 +3572,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 		} else if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_STATIC {
-			// Handle visibility + static combination (e.g., public static function)
-			return parseFunctionDeclaration(p)
+			// Handle visibility + static combination
+			// This could be method or property, parsePropertyDeclaration will handle both
+			return parsePropertyDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_READONLY {
 			// visibility readonly property
 			return parsePropertyDeclaration(p)
@@ -3593,9 +3594,10 @@ func parseClassStatement(p *Parser) ast.Statement {
 		// Handle static function or static property
 		if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
+		} else {
+			// static property (e.g., static $var)
+			return parsePropertyDeclaration(p)
 		}
-		// Could be static property, but for now skip
-		return nil
 	default:
 		// 跳过未识别的token
 		return nil
@@ -3669,21 +3671,35 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
 	
 	var visibility string
+	var static bool
 	var readOnly bool
 	
-	// Check if current token is readonly (without visibility modifier)
-	if p.currentToken.Type == lexer.T_READONLY {
-		visibility = "public" // Default visibility
-		readOnly = true
-	} else {
-		// 解析可见性修饰符
-		visibility = p.currentToken.Value // private, protected, public
+	// Parse modifiers in order: visibility, static, readonly
+	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
+		visibility = p.currentToken.Value
 		
-		// 检查是否为readonly修饰符
+		// Check for static modifier
+		if p.peekToken.Type == lexer.T_STATIC {
+			static = true
+			p.nextToken() // Move to static
+		}
+		
+		// Check for readonly modifier
 		if p.peekToken.Type == lexer.T_READONLY {
 			readOnly = true
-			p.nextToken() // 移动到readonly
+			p.nextToken() // Move to readonly
 		}
+	} else if p.currentToken.Type == lexer.T_STATIC {
+		// Static without visibility modifier (defaults to public)
+		visibility = "public"
+		static = true
+	} else if p.currentToken.Type == lexer.T_READONLY {
+		// Readonly without visibility modifier (defaults to public)
+		visibility = "public"
+		readOnly = true
+	} else {
+		// Default visibility
+		visibility = "public"
 	}
 	
 	// 检查下一个token是否为类型提示
@@ -3712,7 +3728,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		// 解析property hooks
 		p.nextToken() // 移动到 {
 		hooks := parsePropertyHookList(p)
-		return ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, readOnly, typeHint, hooks)
+		return ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, static, readOnly, typeHint, hooks)
 	}
 	
 	var defaultValue ast.Expression
@@ -3729,7 +3745,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		p.nextToken()
 	}
 	
-	return ast.NewPropertyDeclaration(pos, visibility, propertyName, readOnly, typeHint, defaultValue)
+	return ast.NewPropertyDeclaration(pos, visibility, propertyName, static, readOnly, typeHint, defaultValue)
 }
 
 // parsePropertyHookList 解析属性钩子列表
