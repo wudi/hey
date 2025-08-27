@@ -339,6 +339,16 @@ class TestClass {
 }`,
 			expectedError: "expected trait name",
 		},
+		{
+			name: "Missing method name after :: with insteadof",
+			input: `<?php
+class TestClass {
+    use TraitA {
+        TraitA:: insteadof TraitB;
+    }
+}`,
+			expectedError: "expected method name",
+		},
 	}
 
 	for _, test := range tests {

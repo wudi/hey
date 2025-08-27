@@ -4378,13 +4378,20 @@ func parseTraitMethodReference(p *Parser) *ast.TraitMethodReference {
 	// 检查是否是完全限定的方法引用 (TraitName::methodName)
 	if p.peekToken.Type == lexer.T_PAAMAYIM_NEKUDOTAYIM {
 		p.nextToken() // 跳过 '::'
-		p.nextToken() // 移动到方法名
 		
-		if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
-			p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		// 在trait适配上下文中，'as' 和 'insteadof' 应该被视为关键字，而不是方法名
+		if p.peekToken.Type == lexer.T_AS || p.peekToken.Type == lexer.T_INSTEADOF {
+			p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
 			return nil
 		}
 		
+		// 检查下一个token是否是有效的方法名
+		if p.peekToken.Type != lexer.T_STRING && !isSemiReserved(p.peekToken.Type) {
+			p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
+			return nil
+		}
+		
+		p.nextToken() // 移动到方法名
 		methodName := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 		return ast.NewTraitMethodReference(pos, firstPart, methodName)
 	}
