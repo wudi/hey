@@ -2895,7 +2895,7 @@ func parseTryStatement(p *Parser) ast.Statement {
 
 		// 解析类型（可能有多个，用|分隔）
 		for {
-			exceptionType := parseExpression(p, LOWEST)
+			exceptionType := parseQualifiedName(p)
 			types = append(types, exceptionType)
 
 			p.nextToken()

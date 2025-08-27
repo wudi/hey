@@ -3701,6 +3701,174 @@ echo $a + $b;`,
 	}
 }
 
+// TestParsing_CatchBlocksWithQualifiedNames tests parsing catch blocks with fully qualified class names
+func TestParsing_CatchBlocksWithQualifiedNames(t *testing.T) {
+	tests := []struct {
+		name                string
+		input              string
+		expectedCatchCount int
+		expectedTypes      []string
+		expectedVariables  []string
+	}{
+		{
+			name: "simple class name in catch",
+			input: `<?php
+try {
+    $phpmailer->setFrom($from_email, $from_name, false);
+} catch (Exception $e) {
+}`,
+			expectedCatchCount: 1,
+			expectedTypes:      []string{"Exception"},
+			expectedVariables:  []string{"$e"},
+		},
+		{
+			name: "qualified class name in catch",
+			input: `<?php
+try {
+    $phpmailer->setFrom($from_email, $from_name, false);
+} catch (PHPMailer\PHPMailer\Exception $e) {
+}`,
+			expectedCatchCount: 1,
+			expectedTypes:      []string{"PHPMailer\\PHPMailer\\Exception"},
+			expectedVariables:  []string{"$e"},
+		},
+		{
+			name: "fully qualified class name in catch",
+			input: `<?php
+try {
+    $phpmailer->setFrom($from_email, $from_name, false);
+} catch (\PHPMailer\Exception $e) {
+}`,
+			expectedCatchCount: 1,
+			expectedTypes:      []string{"\\PHPMailer\\Exception"},
+			expectedVariables:  []string{"$e"},
+		},
+		{
+			name: "multiple catch blocks with different qualified names",
+			input: `<?php
+try {
+    $phpmailer->setFrom($from_email, $from_name, false);
+} catch (PHPMailer\PHPMailer\Exception $e) {
+} catch (\PHPMailer\Exception $e) {
+} catch (Exception $e) {
+}`,
+			expectedCatchCount: 3,
+			expectedTypes:      []string{"PHPMailer\\PHPMailer\\Exception", "\\PHPMailer\\Exception", "Exception"},
+			expectedVariables:  []string{"$e", "$e", "$e"},
+		},
+		{
+			name: "catch with multiple exception types using pipe",
+			input: `<?php
+try {
+    $phpmailer->setFrom($from_email, $from_name, false);
+} catch (PHPMailer\PHPMailer\Exception | \PHPMailer\Exception | Exception $e) {
+}`,
+			expectedCatchCount: 1,
+			expectedTypes:      []string{"PHPMailer\\PHPMailer\\Exception", "\\PHPMailer\\Exception", "Exception"},
+			expectedVariables:  []string{"$e"},
+		},
+		{
+			name: "original failing case from bug report",
+			input: `<?php
+try {
+    $phpmailer->setFrom( $from_email, $from_name, false );
+} catch ( PHPMailer\PHPMailer\Exception $e ) {
+    
+} catch ( \PHPMailer\Exception $e ) {
+
+}`,
+			expectedCatchCount: 2,
+			expectedTypes:      []string{"PHPMailer\\PHPMailer\\Exception", "\\PHPMailer\\Exception"},
+			expectedVariables:  []string{"$e", "$e"},
+		},
+		{
+			name: "deeply nested namespace",
+			input: `<?php
+try {
+    doSomething();
+} catch (\Foo\Bar\Baz\Qux\Exception $ex) {
+}`,
+			expectedCatchCount: 1,
+			expectedTypes:      []string{"\\Foo\\Bar\\Baz\\Qux\\Exception"},
+			expectedVariables:  []string{"$ex"},
+		},
+		{
+			name: "catch with finally block",
+			input: `<?php
+try {
+    doSomething();
+} catch (PHPMailer\PHPMailer\Exception $e) {
+} finally {
+    cleanup();
+}`,
+			expectedCatchCount: 1,
+			expectedTypes:      []string{"PHPMailer\\PHPMailer\\Exception"},
+			expectedVariables:  []string{"$e"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// Check for parser errors
+			checkParserErrors(t, p)
+			assert.NotNil(t, program, "Program should not be nil")
+			assert.Len(t, program.Body, 1, "Should have one statement (try-catch)")
+
+			// Get the try statement
+			tryStmt, ok := program.Body[0].(*ast.TryStatement)
+			assert.True(t, ok, "Statement should be TryStatement")
+			assert.NotNil(t, tryStmt, "TryStatement should not be nil")
+
+			// Verify catch clauses count
+			assert.Len(t, tryStmt.CatchClauses, tt.expectedCatchCount, 
+				"Should have %d catch clause(s)", tt.expectedCatchCount)
+
+			// Verify each catch clause
+			totalExpectedTypes := len(tt.expectedTypes)
+			actualTypeIndex := 0
+			
+			for i, catchClause := range tryStmt.CatchClauses {
+				assert.NotNil(t, catchClause, "Catch clause %d should not be nil", i)
+				
+				// Check variable
+				assert.NotNil(t, catchClause.Parameter, "Catch clause %d should have a parameter", i)
+				variable, ok := catchClause.Parameter.(*ast.Variable)
+				assert.True(t, ok, "Catch clause %d parameter should be a Variable", i)
+				assert.Equal(t, tt.expectedVariables[i], variable.Name, 
+					"Catch clause %d variable should be %s", i, tt.expectedVariables[i])
+				
+				// Check exception types
+				for j, exceptionType := range catchClause.Types {
+					assert.True(t, actualTypeIndex < totalExpectedTypes, 
+						"Too many exception types found")
+					
+					switch typedExpr := exceptionType.(type) {
+					case *ast.IdentifierNode:
+						// Simple class name or qualified name
+						assert.Equal(t, tt.expectedTypes[actualTypeIndex], typedExpr.Name, 
+							"Catch clause %d, type %d should be %s", i, j, tt.expectedTypes[actualTypeIndex])
+					case *ast.NamespaceExpression:
+						// Fully qualified name starting with \
+						assert.Equal(t, tt.expectedTypes[actualTypeIndex], typedExpr.String(), 
+							"Catch clause %d, type %d should be %s", i, j, tt.expectedTypes[actualTypeIndex])
+					default:
+						t.Errorf("Unexpected exception type: %T", exceptionType)
+					}
+					actualTypeIndex++
+				}
+			}
+			
+			// Ensure we found all expected types
+			assert.Equal(t, totalExpectedTypes, actualTypeIndex, 
+				"Should have found all %d expected exception types", totalExpectedTypes)
+		})
+	}
+}
+
 func TestParsing_IncludeAndRequireStatements(t *testing.T) {
 	tests := []struct {
 		name     string
