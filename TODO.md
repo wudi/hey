@@ -81,10 +81,16 @@
 - [x] 支持多个insteadof traits和复杂适配规则组合
 - [x] 8个综合测试用例覆盖所有功能和边界条件
 
-### 9. 保留关键字处理 - ❌ 未实现
-- [ ] `reserved_non_modifiers` - 保留非修饰符关键字
-- [ ] `semi_reserved` - 半保留关键字
-- [ ] 标识符中的保留字使用
+### 9. 保留关键字处理 - ✅ 已完成  
+- [x] `reserved_non_modifiers` - 保留非修饰符关键字：支持所有PHP官方保留关键字
+- [x] `semi_reserved` - 半保留关键字：包含保留关键字 + 可见性修饰符
+- [x] 标识符中的保留字使用：在类常量名、方法名、属性访问中允许保留关键字
+- [x] 实现isReservedNonModifier()和isSemiReserved()辅助函数
+- [x] 更新类常量声明解析以支持保留关键字作为常量名
+- [x] 更新函数/方法声明解析以支持保留关键字作为方法名
+- [x] 更新属性访问解析以支持保留关键字作为属性名（$obj->class, $obj?->function）
+- [x] 更新trait适配解析以支持保留关键字作为方法引用和别名
+- [x] 16个综合测试用例覆盖所有保留关键字使用场景
 
 ### 10. First-class Callable - ⚠️ 部分实现
 - [ ] 完整的callable语法：`'(' T_ELLIPSIS ')'`

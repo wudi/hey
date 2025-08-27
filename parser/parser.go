@@ -866,7 +866,11 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 		p.nextToken() // 移动到 &
 	}
 
-	if !p.expectPeek(lexer.T_STRING) {
+	// Expect method/function name (allow reserved keywords)
+	p.nextToken()
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected function name, got %s at line: %d col: %d", 
+			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
 
@@ -1498,7 +1502,11 @@ func parseEnumCase(p *Parser) *ast.EnumCase {
 func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
 
-	if !p.expectPeek(lexer.T_STRING) {
+	// Expect property name (allow reserved keywords)
+	p.nextToken()
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
+			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
 
@@ -1510,7 +1518,11 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
 
-	if !p.expectPeek(lexer.T_STRING) {
+	// Expect property name (allow reserved keywords)
+	p.nextToken()
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
+			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
 
@@ -1642,6 +1654,58 @@ func parseVariable(p *Parser) ast.Expression {
 // parseIdentifier 解析标识符
 func parseIdentifier(p *Parser) ast.Expression {
 	return ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+}
+
+// isReservedNonModifier 检查是否为保留非修饰符关键字
+func isReservedNonModifier(tokenType lexer.TokenType) bool {
+	switch tokenType {
+	case lexer.T_INCLUDE, lexer.T_INCLUDE_ONCE, lexer.T_EVAL, lexer.T_REQUIRE, lexer.T_REQUIRE_ONCE,
+		lexer.T_LOGICAL_OR, lexer.T_LOGICAL_XOR, lexer.T_LOGICAL_AND,
+		lexer.T_INSTANCEOF, lexer.T_NEW, lexer.T_CLONE, lexer.T_EXIT, lexer.T_IF, lexer.T_ELSEIF, lexer.T_ELSE, lexer.T_ENDIF,
+		lexer.T_ECHO, lexer.T_DO, lexer.T_WHILE, lexer.T_ENDWHILE,
+		lexer.T_FOR, lexer.T_ENDFOR, lexer.T_FOREACH, lexer.T_ENDFOREACH, lexer.T_DECLARE, lexer.T_ENDDECLARE,
+		lexer.T_AS, lexer.T_TRY, lexer.T_CATCH, lexer.T_FINALLY,
+		lexer.T_THROW, lexer.T_USE, lexer.T_INSTEADOF, lexer.T_GLOBAL, lexer.T_VAR, lexer.T_UNSET, lexer.T_ISSET, lexer.T_EMPTY,
+		lexer.T_CONTINUE, lexer.T_GOTO,
+		lexer.T_FUNCTION, lexer.T_CONST, lexer.T_RETURN, lexer.T_PRINT, lexer.T_YIELD, lexer.T_LIST,
+		lexer.T_SWITCH, lexer.T_ENDSWITCH, lexer.T_CASE, lexer.T_DEFAULT, lexer.T_BREAK,
+		lexer.T_ARRAY, lexer.T_CALLABLE, lexer.T_EXTENDS, lexer.T_IMPLEMENTS, lexer.T_NAMESPACE, lexer.T_TRAIT, lexer.T_INTERFACE, lexer.T_CLASS,
+		lexer.T_CLASS_C, lexer.T_TRAIT_C, lexer.T_FUNC_C, lexer.T_METHOD_C, lexer.T_LINE, lexer.T_FILE, lexer.T_DIR, lexer.T_NS_C, lexer.T_FN, lexer.T_MATCH, lexer.T_ENUM,
+		lexer.T_PROPERTY_C:
+		return true
+	default:
+		return false
+	}
+}
+
+// isSemiReserved 检查是否为半保留关键字
+func isSemiReserved(tokenType lexer.TokenType) bool {
+	return isReservedNonModifier(tokenType) || 
+		tokenType == lexer.T_STATIC || tokenType == lexer.T_ABSTRACT || tokenType == lexer.T_FINAL ||
+		tokenType == lexer.T_PRIVATE || tokenType == lexer.T_PROTECTED || tokenType == lexer.T_PUBLIC ||
+		tokenType == lexer.T_READONLY
+}
+
+// parseIdentifierWithReserved 解析标识符，支持保留关键字作为标识符
+func parseIdentifierWithReserved(p *Parser) ast.Expression {
+	if p.currentToken.Type == lexer.T_STRING || isSemiReserved(p.currentToken.Type) {
+		return ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	}
+	
+	p.errors = append(p.errors, fmt.Sprintf("expected identifier, got %s at line: %d col: %d", 
+		p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+	return nil
+}
+
+// parseIdentifierNameWithReserved 解析标识符名称，支持保留关键字作为标识符
+func parseIdentifierNameWithReserved(p *Parser) string {
+	if p.currentToken.Type == lexer.T_STRING || isSemiReserved(p.currentToken.Type) {
+		return p.currentToken.Value
+	}
+	
+	p.errors = append(p.errors, fmt.Sprintf("expected identifier, got %s at line: %d col: %d", 
+		p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+	return ""
 }
 
 // parseIntegerLiteral 解析整数字面量
@@ -3519,9 +3583,9 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 	var constants []ast.ConstantDeclarator
 	
 	for {
-		// Parse constant name
-		if p.currentToken.Type != lexer.T_STRING {
-			p.errors = append(p.errors, fmt.Sprintf("expected constant name (T_STRING), got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+		// Parse constant name (allow reserved keywords)
+		if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+			p.errors = append(p.errors, fmt.Sprintf("expected constant name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			return nil
 		}
 		
@@ -4112,7 +4176,7 @@ func parseTraitAdaptation(p *Parser) ast.TraitAdaptation {
 func parseTraitMethodReference(p *Parser) *ast.TraitMethodReference {
 	pos := p.currentToken.Position
 	
-	if p.currentToken.Type != lexer.T_STRING {
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected method or trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
@@ -4124,7 +4188,7 @@ func parseTraitMethodReference(p *Parser) *ast.TraitMethodReference {
 		p.nextToken() // 跳过 '::'
 		p.nextToken() // 移动到方法名
 		
-		if p.currentToken.Type != lexer.T_STRING {
+		if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 			p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			return nil
 		}
@@ -4192,13 +4256,13 @@ func parseTraitAlias(p *Parser, methodRef *ast.TraitMethodReference) ast.TraitAd
 	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
 		visibility = p.currentToken.Value
 		
-		// 可选的新方法名
-		if p.peekToken.Type == lexer.T_STRING {
+		// 可选的新方法名 (allow reserved keywords)
+		if p.peekToken.Type == lexer.T_STRING || isReservedNonModifier(p.peekToken.Type) {
 			p.nextToken() // 移动到方法名
 			alias = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 		}
-	} else if p.currentToken.Type == lexer.T_STRING {
-		// 只是别名，没有可见性修饰符
+	} else if p.currentToken.Type == lexer.T_STRING || isReservedNonModifier(p.currentToken.Type) {
+		// 只是别名，没有可见性修饰符 (allow reserved keywords)
 		alias = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	} else {
 		p.errors = append(p.errors, fmt.Sprintf("expected visibility modifier or method name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
