@@ -53,6 +53,7 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.TOKEN_GT:              LESSGREATER,
 	lexer.T_IS_SMALLER_OR_EQUAL: LESSGREATER,
 	lexer.T_IS_GREATER_OR_EQUAL: LESSGREATER,
+	lexer.T_SPACESHIP:           LESSGREATER,
 	lexer.T_INSTANCEOF:          LESSGREATER,
 	lexer.TOKEN_PLUS:            SUM,
 	lexer.TOKEN_MINUS:           SUM,
@@ -172,6 +173,7 @@ func init() {
 		lexer.TOKEN_GT:              parseInfixExpression,
 		lexer.T_IS_SMALLER_OR_EQUAL: parseInfixExpression,
 		lexer.T_IS_GREATER_OR_EQUAL: parseInfixExpression,
+		lexer.T_SPACESHIP:           parseInfixExpression,
 		lexer.T_INSTANCEOF:          parseInstanceofExpression,
 		lexer.TOKEN_DOT:             parseInfixExpression,
 		lexer.T_OBJECT_OPERATOR:          parsePropertyAccess,
@@ -2803,6 +2805,8 @@ func parseExitExpression(p *Parser) ast.Expression {
 }
 
 // parseIssetExpression 解析 isset() 表达式
+// 根据PHP语法: T_ISSET '(' isset_variables possible_comma ')'
+// 多个变量用 AND 连接：isset_variables ',' isset_variable -> zend_ast_create(ZEND_AST_AND, $1, $3)
 func parseIssetExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
@@ -2810,26 +2814,40 @@ func parseIssetExpression(p *Parser) ast.Expression {
 		return nil
 	}
 
-	var arguments []ast.Expression
+	// 至少需要一个参数
+	if p.peekToken.Type == lexer.TOKEN_RPAREN {
+		p.errors = append(p.errors, "isset() expects at least 1 parameter, 0 given")
+		return nil
+	}
 
-	// 解析参数列表
-	if p.peekToken.Type != lexer.TOKEN_RPAREN {
-		p.nextToken()
-		arguments = append(arguments, parseExpression(p, LOWEST))
+	p.nextToken()
+	
+	// 创建第一个 isset 检查
+	firstExpr := parseExpression(p, LOWEST)
+	var result ast.Expression = ast.NewIssetExpression(pos, []ast.Expression{firstExpr})
 
-		// 处理多个参数
-		for p.peekToken.Type == lexer.TOKEN_COMMA {
-			p.nextToken() // 跳过逗号
-			p.nextToken() // 移动到下一个参数
-			arguments = append(arguments, parseExpression(p, LOWEST))
+	// 处理多个参数 - 用 AND 连接
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // 跳过逗号
+		
+		// 检查是否有可选的尾随逗号 (possible_comma)
+		if p.peekToken.Type == lexer.TOKEN_RPAREN {
+			break
 		}
+		
+		p.nextToken() // 移动到下一个参数
+		nextExpr := parseExpression(p, LOWEST)
+		nextIsset := ast.NewIssetExpression(pos, []ast.Expression{nextExpr})
+		
+		// 用 AND 连接多个 isset 检查
+		result = ast.NewBinaryExpression(pos, result, "&&", nextIsset)
 	}
 
 	if !p.expectToken(lexer.TOKEN_RPAREN) {
 		return nil
 	}
 
-	return ast.NewIssetExpression(pos, arguments)
+	return result
 }
 
 // parseListExpression 解析 list() 表达式
