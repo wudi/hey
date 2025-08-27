@@ -92,10 +92,13 @@
 - [x] 更新trait适配解析以支持保留关键字作为方法引用和别名
 - [x] 16个综合测试用例覆盖所有保留关键字使用场景
 
-### 10. First-class Callable - ⚠️ 部分实现
-- [ ] 完整的callable语法：`'(' T_ELLIPSIS ')'`
-- [ ] 对象方法的first-class callable
-- [ ] 静态方法的first-class callable
+### 10. First-class Callable - ✅ 已完成
+- [x] 完整的callable语法：`'(' T_ELLIPSIS ')'`
+- [x] 对象方法的first-class callable
+- [x] 静态方法的first-class callable
+- [x] 支持所有callable类型：函数、对象方法、静态方法、变量函数、闭包
+- [x] 修复static function解析（支持public static function语法）
+- [x] 综合测试用例覆盖所有first-class callable场景
 
 ## 低优先级 (Low Priority)
 

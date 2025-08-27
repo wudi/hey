@@ -1645,6 +1645,7 @@ type FunctionDeclaration struct {
 	Body         []Statement `json:"body"`
 	ByReference  bool        `json:"byReference,omitempty"`   // function &foo()
 	Visibility   string      `json:"visibility,omitempty"`   // public, private, protected (for class methods)
+	IsStatic     bool        `json:"isStatic,omitempty"`     // static function
 }
 
 type Parameter struct {

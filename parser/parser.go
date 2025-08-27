@@ -852,8 +852,22 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 
 	// 检查是否有可见性修饰符 (public, private, protected)
 	var visibility string
+	var isStatic bool
 	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
 		visibility = p.currentToken.Value
+		// 检查是否有 static 修饰符
+		if p.peekToken.Type == lexer.T_STATIC {
+			isStatic = true
+			p.nextToken() // 移动到 static
+			if !p.expectPeek(lexer.T_FUNCTION) {
+				return nil
+			}
+		} else if !p.expectPeek(lexer.T_FUNCTION) {
+			return nil
+		}
+	} else if p.currentToken.Type == lexer.T_STATIC {
+		// Handle static function without explicit visibility
+		isStatic = true
 		if !p.expectPeek(lexer.T_FUNCTION) {
 			return nil
 		}
@@ -878,6 +892,7 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	funcDecl := ast.NewFunctionDeclaration(pos, name)
 	funcDecl.ByReference = byReference
 	funcDecl.Visibility = visibility
+	funcDecl.IsStatic = isStatic
 
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
@@ -3539,6 +3554,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 			return parseClassConstantDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
+		} else if p.peekToken.Type == lexer.T_STATIC {
+			// Handle visibility + static combination (e.g., public static function)
+			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_READONLY {
 			// visibility readonly property
 			return parsePropertyDeclaration(p)
@@ -3554,6 +3572,13 @@ func parseClassStatement(p *Parser) ast.Statement {
 		return parsePropertyDeclaration(p)
 	case lexer.T_USE:
 		return parseUseTraitStatement(p)
+	case lexer.T_STATIC:
+		// Handle static function or static property
+		if p.peekToken.Type == lexer.T_FUNCTION {
+			return parseFunctionDeclaration(p)
+		}
+		// Could be static property, but for now skip
+		return nil
 	default:
 		// 跳过未识别的token
 		return nil
