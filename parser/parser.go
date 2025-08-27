@@ -55,6 +55,7 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.T_IS_GREATER_OR_EQUAL: LESSGREATER,
 	lexer.T_SPACESHIP:           LESSGREATER,
 	lexer.T_INSTANCEOF:          LESSGREATER,
+	lexer.T_PIPE:                SUM, // Pipe operator precedence, similar to other binary operators
 	lexer.TOKEN_PLUS:            SUM,
 	lexer.TOKEN_MINUS:           SUM,
 	lexer.TOKEN_DOT:             SUM,
@@ -175,6 +176,7 @@ func init() {
 		lexer.T_IS_GREATER_OR_EQUAL: parseInfixExpression,
 		lexer.T_SPACESHIP:           parseInfixExpression,
 		lexer.T_INSTANCEOF:          parseInstanceofExpression,
+		lexer.T_PIPE:                parseInfixExpression,
 		lexer.TOKEN_DOT:             parseInfixExpression,
 		lexer.T_OBJECT_OPERATOR:          parsePropertyAccess,
 		lexer.T_NULLSAFE_OBJECT_OPERATOR: parseNullsafePropertyAccess,

@@ -588,6 +588,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 			l.readChar()
 			l.readChar()
 			return Token{Type: T_OR_EQUAL, Value: "|=", Position: pos}
+		} else if l.peekChar() == '>' {
+			l.readChar()
+			l.readChar()
+			return Token{Type: T_PIPE, Value: "|>", Position: pos}
 		}
 		l.readChar()
 		return Token{Type: TOKEN_PIPE, Value: "|", Position: pos}
