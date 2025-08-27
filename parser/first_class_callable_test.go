@@ -54,7 +54,9 @@ $method = $obj->method(...);`,
 				
 				propAccess, ok := fcc.Callable.(*ast.PropertyAccessExpression)
 				require.True(t, ok)
-				assert.Equal(t, "method", propAccess.Property.Name)
+				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
+				require.True(t, ok, "Property should be IdentifierNode")
+				assert.Equal(t, "method", propIdent.Name)
 				
 				objVar, ok := propAccess.Object.(*ast.Variable)
 				require.True(t, ok)

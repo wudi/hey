@@ -1550,35 +1550,83 @@ func parseEnumCase(p *Parser) *ast.EnumCase {
 	return ast.NewEnumCase(caseName, caseValue)
 }
 
-// parsePropertyAccess 解析属性访问表达式 ($obj->property)
+// parsePropertyAccess 解析属性访问表达式
+// Supports: $obj->property, $obj->$variable, $obj->{expression}
 func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
-
-	// Expect property name (allow reserved keywords)
 	p.nextToken()
-	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
-		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
-			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
-		return nil
+
+	var property ast.Expression
+
+	switch p.currentToken.Type {
+	case lexer.T_STRING:
+		// Simple property name: $obj->property
+		property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+
+	case lexer.T_VARIABLE:
+		// Variable property name: $obj->$property_name
+		// Parse as a variable expression
+		property = parseVariable(p)
+
+	case lexer.TOKEN_LBRACE:
+		// Brace-enclosed expression: $obj->{$expr} or $obj->{"property"}
+		p.nextToken()
+		property = parseExpression(p, LOWEST)
+		if !p.expectPeek(lexer.TOKEN_RBRACE) {
+			return nil
+		}
+
+	default:
+		// Check if it's a semi-reserved keyword (can be used as property name)
+		if isSemiReserved(p.currentToken.Type) {
+			property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		} else {
+			p.errors = append(p.errors, fmt.Sprintf("expected property name, variable, or brace-enclosed expression, got %s at line: %d col: %d",
+				p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+			return nil
+		}
 	}
 
-	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	return ast.NewPropertyAccessExpression(pos, left, property)
 }
 
-// parseNullsafePropertyAccess 解析空安全属性访问表达式 ($obj?->property)
+// parseNullsafePropertyAccess 解析空安全属性访问表达式  
+// Supports: $obj?->property, $obj?->$variable, $obj?->{expression}
 func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
-
-	// Expect property name (allow reserved keywords)
 	p.nextToken()
-	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
-		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
-			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
-		return nil
+
+	var property ast.Expression
+
+	switch p.currentToken.Type {
+	case lexer.T_STRING:
+		// Simple property name: $obj?->property
+		property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+
+	case lexer.T_VARIABLE:
+		// Variable property name: $obj?->$property_name
+		// Parse as a variable expression
+		property = parseVariable(p)
+
+	case lexer.TOKEN_LBRACE:
+		// Brace-enclosed expression: $obj?->{$expr} or $obj?->{"property"}
+		p.nextToken()
+		property = parseExpression(p, LOWEST)
+		if !p.expectPeek(lexer.TOKEN_RBRACE) {
+			return nil
+		}
+
+	default:
+		// Check if it's a semi-reserved keyword (can be used as property name)
+		if isSemiReserved(p.currentToken.Type) {
+			property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		} else {
+			p.errors = append(p.errors, fmt.Sprintf("expected property name, variable, or brace-enclosed expression, got %s at line: %d col: %d",
+				p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
+			return nil
+		}
 	}
 
-	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	return ast.NewNullsafePropertyAccessExpression(pos, left, property)
 }
 
@@ -3560,25 +3608,159 @@ func parseClassExpression(p *Parser) ast.Expression {
 	return ast.NewClassExpression(pos, name, nil, nil, false) // name, extends, implements
 }
 
+// isVisibilityStaticFunction 检查 visibility static 后是否为 function
+// 使用简单的状态保存和恢复进行前瞻
+func isVisibilityStaticFunction(p *Parser) bool {
+	// 保存当前状态
+	savedCurrent := p.currentToken
+	savedPeek := p.peekToken
+	
+	// 前进到 static
+	p.nextToken() // 现在 currentToken 是 static
+	// 检查下一个 token 是否为 function
+	isFunction := p.peekToken.Type == lexer.T_FUNCTION
+	
+	// 恢复状态
+	p.currentToken = savedCurrent
+	p.peekToken = savedPeek
+	
+	return isFunction
+}
+
+// parseVisibilityStaticMember 处理 visibility static 组合
+func parseVisibilityStaticMember(p *Parser) ast.Statement {
+	// 保存完整的 parser 状态
+	visibilityToken := p.currentToken
+	staticToken := p.peekToken
+	
+	p.nextToken() // 移动到 static
+	// 现在 current: static, peek: 下一个 token
+	
+	if p.peekToken.Type == lexer.T_FUNCTION {
+		// visibility static function
+		// 完全恢复状态
+		p.currentToken = visibilityToken
+		p.peekToken = staticToken
+		return parseFunctionDeclaration(p)
+	} else {
+		// visibility static property
+		// 完全恢复状态
+		p.currentToken = visibilityToken
+		p.peekToken = staticToken
+		return parsePropertyDeclaration(p)
+	}
+}
+
+// parseVisibilityStaticFunction 解析 visibility static function 声明
+// 在调用时，currentToken 是 static，peekToken 是 function
+func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Position) ast.Statement {
+	// 当前：static token，下一个：function token
+	if !p.expectPeek(lexer.T_FUNCTION) {
+		return nil
+	}
+	
+	// 现在开始解析函数，类似 parseFunctionDeclaration 但已知是 visibility + static
+	
+	// 检查是否为引用返回函数 function &foo()
+	byReference := false
+	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		byReference = true
+		p.nextToken() // 移动到 &
+	}
+	
+	// Expect method/function name (allow reserved keywords)
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected function name, got %s", p.currentToken.Value))
+		return nil
+	}
+
+	funcName := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+
+	// 创建函数声明，设置可见性和静态标志
+	funcDecl := ast.NewFunctionDeclaration(pos, funcName)
+	funcDecl.Visibility = visibility
+	funcDecl.IsStatic = true
+	funcDecl.ByReference = byReference
+
+	// Expect '('
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+
+	// 解析参数列表
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+
+		// 解析第一个参数（支持类型提示）
+		param := parseParameter(p)
+		if param != nil {
+			funcDecl.Parameters = append(funcDecl.Parameters, *param)
+		}
+
+		// 处理更多参数
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个参数
+			param := parseParameter(p)
+			if param != nil {
+				funcDecl.Parameters = append(funcDecl.Parameters, *param)
+			}
+		}
+	}
+
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+
+	// 检查是否有返回类型声明 ": type"
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 移动到 ':'
+		p.nextToken() // 移动到类型开始位置
+
+		// 解析返回类型（支持复杂类型）
+		returnType := parseTypeHint(p)
+		if returnType != nil {
+			funcDecl.ReturnType = returnType
+		}
+	}
+
+	// 解析函数体
+	if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		p.nextToken()
+		funcDecl.Body = parseBlockStatements(p)
+	} else if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		// 抽象方法
+		p.nextToken()
+	}
+
+	return funcDecl
+}
+
 // parseClassStatement 解析类体内的语句（属性和方法）
+// 基于 PHP 官方语法实现：先识别修饰符序列，再根据后续 token 确定声明类型
 func parseClassStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
 	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
-		// Check if this is a class constant, method, or property declaration
+		// 可见性修饰符后可能跟着：const, function, static, readonly, 或直接是属性
 		if p.peekToken.Type == lexer.T_CONST {
 			return parseClassConstantDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_STATIC {
-			// Handle visibility + static combination
-			// This could be either a static method or static property
-			// Let parseFunctionDeclaration handle the logic
-			return parseFunctionDeclaration(p)
+			// visibility static 组合：统一让 parsePropertyDeclaration 处理
+			// parsePropertyDeclaration 内部会检查是否为函数并委派
+			return parsePropertyDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_READONLY {
 			// visibility readonly property
 			return parsePropertyDeclaration(p)
+		} else {
+			// 默认为属性声明（可能有类型提示）
+			return parsePropertyDeclaration(p)
 		}
-		return parsePropertyDeclaration(p)
 	case lexer.T_FUNCTION:
 		return parseFunctionDeclaration(p)
 	case lexer.T_CONST:
@@ -3681,6 +3863,13 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		if p.peekToken.Type == lexer.T_STATIC {
 			static = true
 			p.nextToken() // Move to static
+			
+			// 检查 static 后面是否为 function
+			if p.peekToken.Type == lexer.T_FUNCTION {
+				// 这是静态方法：visibility static function
+				// 从当前位置（static token）开始解析，直接调用专门的函数
+				return parseVisibilityStaticFunction(p, visibility, pos)
+			}
 		}
 		
 		// Check for readonly modifier

@@ -848,14 +848,15 @@ func (e *EnumDeclaration) String() string {
 	return result
 }
 
-// PropertyAccessExpression 表示属性访问表达式 ($obj->property)
+// PropertyAccessExpression 表示属性访问表达式 
+// Supports: $obj->property, $obj->$variable, $obj->{expression}
 type PropertyAccessExpression struct {
 	BaseNode
-	Object   Expression      `json:"object"`   // 对象表达式
-	Property *IdentifierNode `json:"property"` // 属性名称
+	Object   Expression `json:"object"`   // 对象表达式
+	Property Expression `json:"property"` // 属性名称或表达式
 }
 
-func NewPropertyAccessExpression(pos lexer.Position, object Expression, property *IdentifierNode) *PropertyAccessExpression {
+func NewPropertyAccessExpression(pos lexer.Position, object Expression, property Expression) *PropertyAccessExpression {
 	return &PropertyAccessExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTProp,
@@ -897,14 +898,15 @@ func (p *PropertyAccessExpression) String() string {
 	return p.Object.String() + "->" + p.Property.String()
 }
 
-// NullsafePropertyAccessExpression 表示空安全属性访问表达式 ($obj?->property)
+// NullsafePropertyAccessExpression 表示空安全属性访问表达式
+// Supports: $obj?->property, $obj?->$variable, $obj?->{expression}
 type NullsafePropertyAccessExpression struct {
 	BaseNode
-	Object   Expression      `json:"object"`   // 对象表达式
-	Property *IdentifierNode `json:"property"` // 属性名称
+	Object   Expression `json:"object"`   // 对象表达式
+	Property Expression `json:"property"` // 属性名称或表达式
 }
 
-func NewNullsafePropertyAccessExpression(pos lexer.Position, object Expression, property *IdentifierNode) *NullsafePropertyAccessExpression {
+func NewNullsafePropertyAccessExpression(pos lexer.Position, object Expression, property Expression) *NullsafePropertyAccessExpression {
 	return &NullsafePropertyAccessExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTNullsafeProp,
