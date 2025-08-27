@@ -201,6 +201,7 @@ func init() {
 		lexer.T_FN:                       parseArrowFunctionExpression,
 		lexer.T_YIELD:                    parseYieldExpression,
 		lexer.T_YIELD_FROM:               parseYieldFromExpression,
+		lexer.T_THROW:                    parseThrowExpression,
 		lexer.T_POW:                      parseFallback, // ** 作为前缀时是无效的，但需要处理
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
@@ -391,11 +392,16 @@ func isTypeToken(tokenType lexer.TokenType) bool {
 
 // parseTypeHint 解析类型提示，支持nullable, union和intersection类型
 func parseTypeHint(p *Parser) *ast.TypeHint {
-	// 检查nullable类型 ?Type
+	// 检查nullable类型 ?Type 或 ?(Type1|Type2)
 	nullable := false
 	if p.currentToken.Type == lexer.TOKEN_QUESTION {
 		nullable = true
 		p.nextToken() // 移动到类型token
+	}
+	
+	// 检查是否为带括号的复合类型 (Type1&Type2)|Type3
+	if p.currentToken.Type == lexer.TOKEN_LPAREN {
+		return parseParenthesizedTypeHint(p, nullable)
 	}
 	
 	// 解析基本类型
@@ -423,11 +429,16 @@ func parseTypeHint(p *Parser) *ast.TypeHint {
 // parseParameterTypeHint 解析参数类型提示，支持nullable、union和intersection类型
 // 在 PHP 8.1+ 中，intersection类型在参数中是支持的
 func parseParameterTypeHint(p *Parser) *ast.TypeHint {
-	// 检查nullable类型 ?Type
+	// 检查nullable类型 ?Type 或 ?(Type1|Type2)
 	nullable := false
 	if p.currentToken.Type == lexer.TOKEN_QUESTION {
 		nullable = true
 		p.nextToken() // 移动到类型token
+	}
+	
+	// 检查是否为带括号的复合类型 (Type1&Type2)|Type3
+	if p.currentToken.Type == lexer.TOKEN_LPAREN {
+		return parseParenthesizedTypeHint(p, nullable)
 	}
 	
 	// 解析基本类型
@@ -459,19 +470,28 @@ func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 		p.nextToken() // 移动到 |
 		p.nextToken() // 移动到类型token
 		
+		var typeHint *ast.TypeHint
+		
+		// 检查nullable类型
 		nullable := false
 		if p.currentToken.Type == lexer.TOKEN_QUESTION {
 			nullable = true
 			p.nextToken() // 移动到实际类型token
 		}
 		
-		if !isTypeToken(p.currentToken.Type) {
+		// 检查是否为括号表达式
+		if p.currentToken.Type == lexer.TOKEN_LPAREN {
+			typeHint = parseParenthesizedTypeHint(p, nullable)
+		} else if isTypeToken(p.currentToken.Type) {
+			typeHint = ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
+		} else {
 			p.errors = append(p.errors, fmt.Sprintf("expected type name in union type, got `%s` instead", p.currentToken.Value))
 			return nil
 		}
 		
-		typeHint := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
-		types = append(types, typeHint)
+		if typeHint != nil {
+			types = append(types, typeHint)
+		}
 	}
 	
 	return ast.NewUnionTypeHint(pos, types)
@@ -496,6 +516,68 @@ func parseIntersectionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 	}
 	
 	return ast.NewIntersectionTypeHint(pos, types)
+}
+
+// parseParenthesizedTypeHint 解析带括号的复杂类型 (Type1&Type2)|Type3
+func parseParenthesizedTypeHint(p *Parser, nullable bool) *ast.TypeHint {
+	// 跳过开括号 (
+	p.nextToken() // 移动到括号内的第一个类型
+	
+	// 检查是否为空括号
+	if p.currentToken.Type == lexer.TOKEN_RPAREN {
+		p.errors = append(p.errors, "empty parentheses in type expression")
+		return nil
+	}
+	
+	// 递归解析括号内的类型
+	innerType := parseComplexTypeHint(p)
+	if innerType == nil {
+		return nil
+	}
+	
+	// 确保有结束括号
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		p.errors = append(p.errors, "expected closing parenthesis in type expression")
+		return nil
+	}
+	
+	// 应用nullable到括号内的类型
+	if nullable {
+		innerType.Nullable = true
+	}
+	
+	// 检查括号后是否有union/intersection操作符
+	if p.peekToken.Type == lexer.TOKEN_PIPE {
+		return parseUnionType(p, innerType)
+	} else if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		return parseIntersectionType(p, innerType)
+	}
+	
+	return innerType
+}
+
+// parseComplexTypeHint 解析复杂类型（不处理最外层的nullable）
+func parseComplexTypeHint(p *Parser) *ast.TypeHint {
+	// 解析基本类型
+	if !isTypeToken(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected type name in complex type, got `%s` instead", p.currentToken.Value))
+		return nil
+	}
+	
+	// 创建基本类型提示
+	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, false)
+	
+	// 检查是否为union类型 Type1|Type2
+	if p.peekToken.Type == lexer.TOKEN_PIPE {
+		return parseUnionType(p, baseType)
+	}
+	
+	// 检查是否为intersection类型 Type1&Type2
+	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		return parseIntersectionType(p, baseType)
+	}
+	
+	return baseType
 }
 
 // ParseProgram 解析整个程序
@@ -4490,6 +4572,28 @@ func parseYieldFromExpression(p *Parser) ast.Expression {
 	}
 	
 	return ast.NewYieldFromExpression(pos, expr)
+}
+
+// parseThrowExpression 解析 throw 表达式 (PHP 8.0+)
+func parseThrowExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	p.nextToken() // 跳过 throw 关键字
+	
+	// throw 后面必须跟一个表达式
+	if p.currentToken.Type == lexer.TOKEN_SEMICOLON || p.currentToken.Type == lexer.T_EOF {
+		p.errors = append(p.errors, "throw requires an expression")
+		return nil
+	}
+	
+	// 解析异常表达式，使用较高的优先级以防止 ?: 等操作符干扰
+	expr := parseExpression(p, PREFIX)
+	if expr == nil {
+		p.errors = append(p.errors, "invalid expression after throw")
+		return nil
+	}
+	
+	return ast.NewThrowExpression(pos, expr)
 }
 
 // parseCloseTagExpression 解析 PHP 结束标签

@@ -79,6 +79,7 @@ const (
 	ASTHaltCompiler          ASTKind = 281
 	ASTEcho                  ASTKind = 282
 	ASTThrow                 ASTKind = 283
+	ASTThrowExpr             ASTKind = 800  // Throw expression (PHP 8.0+)
 	ASTGoto                  ASTKind = 284
 	ASTBreak                 ASTKind = 285
 	ASTContinue              ASTKind = 286
@@ -310,6 +311,8 @@ func (k ASTKind) String() string {
 		return "ECHO"
 	case ASTThrow:
 		return "THROW"
+	case ASTThrowExpr:
+		return "THROW_EXPR"
 	case ASTGoto:
 		return "GOTO"
 	case ASTBreak:

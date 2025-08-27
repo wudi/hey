@@ -2,6 +2,7 @@ package ast
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/wudi/php-parser/lexer"
@@ -2996,6 +2997,45 @@ func (t *ThrowStatement) String() string {
 	}
 	return "throw " + arg + ";"
 }
+
+// ThrowExpression represents a throw expression (PHP 8.0+)
+type ThrowExpression struct {
+	BaseNode
+	Argument Expression `json:"argument"`
+}
+
+func NewThrowExpression(pos lexer.Position, argument Expression) *ThrowExpression {
+	return &ThrowExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTThrowExpr,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Argument: argument,
+	}
+}
+
+func (t *ThrowExpression) GetChildren() []Node {
+	if t.Argument != nil {
+		return []Node{t.Argument}
+	}
+	return []Node{}
+}
+
+func (t *ThrowExpression) String() string {
+	if t.Argument != nil {
+		return fmt.Sprintf("throw %s", t.Argument.String())
+	}
+	return "throw"
+}
+
+func (t *ThrowExpression) Accept(visitor Visitor) {
+	if visitor.Visit(t) && t.Argument != nil {
+		t.Argument.Accept(visitor)
+	}
+}
+
+func (t *ThrowExpression) expressionNode() {}
 
 // StaticStatement static 变量声明语句
 type StaticStatement struct {
