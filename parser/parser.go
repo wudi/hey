@@ -3067,7 +3067,7 @@ func parseInstanceofExpression(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
 
 	p.nextToken()
-	right := parseExpression(p, LESSGREATER)
+	right := parseQualifiedName(p)
 
 	return ast.NewInstanceofExpression(pos, left, right)
 }
@@ -4631,6 +4631,38 @@ func parseNamespaceExpression(p *Parser) ast.Expression {
 	
 	// 单独的 \ 
 	return ast.NewNamespaceExpression(pos, nil)
+}
+
+// parseQualifiedName 解析限定名称，支持命名空间（如 Foo\Bar\Baz）
+func parseQualifiedName(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 处理以 \ 开头的绝对命名空间
+	if p.currentToken.Type == lexer.T_NS_SEPARATOR {
+		return parseNamespaceExpression(p)
+	}
+	
+	// 处理以标识符开头的相对命名空间
+	if p.currentToken.Type == lexer.T_STRING {
+		nameStr := p.currentToken.Value
+		
+		// 继续解析后续的命名空间部分
+		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+			p.nextToken() // 跳到 \
+			p.nextToken() // 跳过 \
+			if p.currentToken.Type == lexer.T_STRING {
+				nameStr += "\\" + p.currentToken.Value
+			} else {
+				break
+			}
+		}
+		
+		// 创建标识符节点
+		return ast.NewIdentifierNode(pos, nameStr)
+	}
+	
+	// 回退到普通表达式解析
+	return parseExpression(p, LESSGREATER)
 }
 
 // parseArrowFunctionExpression 解析箭头函数表达式 (PHP 7.4+)

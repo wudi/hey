@@ -373,6 +373,108 @@ func TestParsing_BinaryExpressions(t *testing.T) {
 	}
 }
 
+func TestParsing_InstanceofExpressions(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		leftVar     string
+		rightClass  string
+	}{
+		{
+			"simple class name",
+			`<?php $obj instanceof MyClass; ?>`,
+			"$obj",
+			"MyClass",
+		},
+		{
+			"namespaced class name",
+			`<?php $mailer instanceof PHPMailer\PHPMailer; ?>`,
+			"$mailer",
+			"PHPMailer\\PHPMailer",
+		},
+		{
+			"fully qualified class name",
+			`<?php $phpmailer instanceof PHPMailer\PHPMailer\PHPMailer; ?>`,
+			"$phpmailer",
+			"PHPMailer\\PHPMailer\\PHPMailer",
+		},
+		{
+			"absolute namespace",
+			`<?php $obj instanceof \Foo\Bar\Baz; ?>`,
+			"$obj",
+			"\\Foo\\Bar\\Baz",
+		},
+		{
+			"instanceof in if condition",
+			`<?php if ($phpmailer instanceof PHPMailer\PHPMailer\PHPMailer) {} ?>`,
+			"$phpmailer",
+			"PHPMailer\\PHPMailer\\PHPMailer",
+		},
+		{
+			"negated instanceof in if condition", 
+			`<?php if (!($phpmailer instanceof PHPMailer\PHPMailer\PHPMailer)) {} ?>`,
+			"$phpmailer",
+			"PHPMailer\\PHPMailer\\PHPMailer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			var instanceofExpr *ast.InstanceofExpression
+
+			// Handle different contexts where instanceof might appear
+			switch s := stmt.(type) {
+			case *ast.ExpressionStatement:
+				// Direct instanceof expression
+				instanceofExpr, _ = s.Expression.(*ast.InstanceofExpression)
+			case *ast.IfStatement:
+				// instanceof in if condition
+				if s.Test != nil {
+					if unary, ok := s.Test.(*ast.UnaryExpression); ok {
+						// Handle negated instanceof: !($obj instanceof Class)
+						instanceofExpr, _ = unary.Operand.(*ast.InstanceofExpression)
+					} else {
+						instanceofExpr, _ = s.Test.(*ast.InstanceofExpression)
+					}
+				}
+			}
+
+			require.NotNil(t, instanceofExpr, "Should find instanceof expression")
+
+			// Check left operand (variable)
+			leftVar, ok := instanceofExpr.Left.(*ast.Variable)
+			assert.True(t, ok, "Left operand should be Variable")
+			assert.Equal(t, tt.leftVar, leftVar.Name)
+
+			// Check right operand (class name)
+			var rightName string
+			switch right := instanceofExpr.Right.(type) {
+			case *ast.IdentifierNode:
+				rightName = right.Name
+			case *ast.NamespaceExpression:
+				if right.Name != nil {
+					if id, ok := right.Name.(*ast.IdentifierNode); ok {
+						rightName = "\\" + id.Name
+					}
+				}
+			default:
+				t.Errorf("Unexpected right operand type: %T", right)
+			}
+			
+			assert.Equal(t, tt.rightClass, rightName)
+		})
+	}
+}
+
 func TestParsing_PrefixExpressions(t *testing.T) {
 	tests := []struct {
 		input    string
