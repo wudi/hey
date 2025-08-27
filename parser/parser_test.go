@@ -3430,9 +3430,7 @@ $tested = $test->getName();`,
 				assert.Equal(t, "$test", objVar.Name)
 
 				assert.NotNil(t, propAccess.Property, "Property should not be nil")
-				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
-				assert.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "getName", propIdent.Name)
+				assert.Equal(t, "getName", propAccess.Property.Name)
 			},
 		},
 		{
@@ -4001,208 +3999,6 @@ func TestParsing_Attributes(t *testing.T) {
 	}
 }
 
-func TestParsing_VariablePropertyAccess(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		validate func(t *testing.T, program *ast.Program)
-	}{
-		{
-			name:  "Simple variable property access",
-			input: `<?php $obj->$property_name;`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				propAccess, ok := stmt.Expression.(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Expected PropertyAccessExpression")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$obj", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for property")
-				assert.Equal(t, "$property_name", prop.Name)
-			},
-		},
-		{
-			name:  "Brace-enclosed variable property access",
-			input: `<?php $obj->{$property_name};`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				propAccess, ok := stmt.Expression.(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Expected PropertyAccessExpression")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$obj", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for property")
-				assert.Equal(t, "$property_name", prop.Name)
-			},
-		},
-		{
-			name:  "Brace-enclosed string literal property",
-			input: `<?php $obj->{"property"};`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				propAccess, ok := stmt.Expression.(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Expected PropertyAccessExpression")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$obj", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.StringLiteral)
-				assert.True(t, ok, "Expected StringLiteral for property")
-				assert.Equal(t, "property", prop.Value)
-			},
-		},
-		{
-			name:  "Brace-enclosed expression property",
-			input: `<?php $obj->{$a . $b};`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				propAccess, ok := stmt.Expression.(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Expected PropertyAccessExpression")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$obj", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.BinaryExpression)
-				assert.True(t, ok, "Expected BinaryExpression for property")
-				assert.Equal(t, ".", prop.Operator)
-			},
-		},
-		{
-			name:  "Method call with variable property",
-			input: `<?php $obj->$method();`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				callExpr, ok := stmt.Expression.(*ast.CallExpression)
-				assert.True(t, ok, "Expected CallExpression")
-				
-				propAccess, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Expected PropertyAccessExpression for callee")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$obj", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for property")
-				assert.Equal(t, "$method", prop.Name)
-			},
-		},
-		{
-			name:  "Complex example from test case",
-			input: `<?php
-$this->assertSame(
-    $expected_property_value,
-    $post_type->$property_name
-);`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				callExpr, ok := stmt.Expression.(*ast.CallExpression)
-				assert.True(t, ok, "Expected CallExpression")
-				
-				// Check the second argument contains variable property access
-				assert.Len(t, callExpr.Arguments, 2)
-				propAccess, ok := callExpr.Arguments[1].(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Expected PropertyAccessExpression in second argument")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$post_type", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for property")
-				assert.Equal(t, "$property_name", prop.Name)
-			},
-		},
-		{
-			name:  "Nullsafe variable property access",
-			input: `<?php $obj?->$property;`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				propAccess, ok := stmt.Expression.(*ast.NullsafePropertyAccessExpression)
-				assert.True(t, ok, "Expected NullsafePropertyAccessExpression")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$obj", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for property")
-				assert.Equal(t, "$property", prop.Name)
-			},
-		},
-		{
-			name:  "Nullsafe brace-enclosed property access",
-			input: `<?php $obj?->{$prop . "_suffix"};`,
-			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 1)
-				
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Expected ExpressionStatement")
-				
-				propAccess, ok := stmt.Expression.(*ast.NullsafePropertyAccessExpression)
-				assert.True(t, ok, "Expected NullsafePropertyAccessExpression")
-				
-				obj, ok := propAccess.Object.(*ast.Variable)
-				assert.True(t, ok, "Expected Variable for object")
-				assert.Equal(t, "$obj", obj.Name)
-				
-				prop, ok := propAccess.Property.(*ast.BinaryExpression)
-				assert.True(t, ok, "Expected BinaryExpression for property")
-				assert.Equal(t, ".", prop.Operator)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			l := lexer.New(tt.input)
-			p := New(l)
-			program := p.ParseProgram()
-			
-			checkParserErrors(t, p)
-
-			assert.NotNil(t, program)
-			tt.validate(t, program)
-		})
-	}
-}
-
 func TestParsing_IntersectionTypes(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -4331,9 +4127,7 @@ func TestParsing_FirstClassCallable(t *testing.T) {
 				assert.True(t, ok, "Expected Variable")
 				assert.Equal(t, "$obj", objVar.Name)
 				
-				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
-				assert.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "method", propIdent.Name)
+				assert.Equal(t, "method", propAccess.Property.Name)
 			},
 		},
 		{
@@ -4577,9 +4371,7 @@ func TestParsing_YieldFromExpressions(t *testing.T) {
 				objVar, ok := propAccess.Object.(*ast.Variable)
 				assert.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$obj", objVar.Name)
-				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
-				assert.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "getGenerator", propIdent.Name)
+				assert.Equal(t, "getGenerator", propAccess.Property.Name)
 			},
 		},
 		{

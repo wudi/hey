@@ -141,45 +141,35 @@ $obj->new;`,
 				require.True(t, ok)
 				propAccess1, ok := stmt1.Expression.(*ast.PropertyAccessExpression)
 				require.True(t, ok)
-				propIdent1, ok := propAccess1.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "class", propIdent1.Name)
+				assert.Equal(t, "class", propAccess1.Property.Name)
 				
 				// Test $obj->function
 				stmt2, ok := program.Body[1].(*ast.ExpressionStatement)
 				require.True(t, ok)
 				propAccess2, ok := stmt2.Expression.(*ast.PropertyAccessExpression)
 				require.True(t, ok)
-				propIdent2, ok := propAccess2.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "function", propIdent2.Name)
+				assert.Equal(t, "function", propAccess2.Property.Name)
 				
 				// Test $obj->if
 				stmt3, ok := program.Body[2].(*ast.ExpressionStatement)
 				require.True(t, ok)
 				propAccess3, ok := stmt3.Expression.(*ast.PropertyAccessExpression)
 				require.True(t, ok)
-				propIdent3, ok := propAccess3.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "if", propIdent3.Name)
+				assert.Equal(t, "if", propAccess3.Property.Name)
 				
 				// Test $obj->while
 				stmt4, ok := program.Body[3].(*ast.ExpressionStatement)
 				require.True(t, ok)
 				propAccess4, ok := stmt4.Expression.(*ast.PropertyAccessExpression)
 				require.True(t, ok)
-				propIdent4, ok := propAccess4.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "while", propIdent4.Name)
+				assert.Equal(t, "while", propAccess4.Property.Name)
 				
 				// Test $obj->new
 				stmt5, ok := program.Body[4].(*ast.ExpressionStatement)
 				require.True(t, ok)
 				propAccess5, ok := stmt5.Expression.(*ast.PropertyAccessExpression)
 				require.True(t, ok)
-				propIdent5, ok := propAccess5.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "new", propIdent5.Name)
+				assert.Equal(t, "new", propAccess5.Property.Name)
 			},
 		},
 		{
@@ -196,27 +186,21 @@ $obj?->if;`,
 				require.True(t, ok)
 				propAccess1, ok := stmt1.Expression.(*ast.NullsafePropertyAccessExpression)
 				require.True(t, ok)
-				propIdent1, ok := propAccess1.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "class", propIdent1.Name)
+				assert.Equal(t, "class", propAccess1.Property.Name)
 				
 				// Test $obj?->function
 				stmt2, ok := program.Body[1].(*ast.ExpressionStatement)
 				require.True(t, ok)
 				propAccess2, ok := stmt2.Expression.(*ast.NullsafePropertyAccessExpression)
 				require.True(t, ok)
-				propIdent2, ok := propAccess2.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "function", propIdent2.Name)
+				assert.Equal(t, "function", propAccess2.Property.Name)
 				
 				// Test $obj?->if
 				stmt3, ok := program.Body[2].(*ast.ExpressionStatement)
 				require.True(t, ok)
 				propAccess3, ok := stmt3.Expression.(*ast.NullsafePropertyAccessExpression)
 				require.True(t, ok)
-				propIdent3, ok := propAccess3.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected IdentifierNode for property")
-				assert.Equal(t, "if", propIdent3.Name)
+				assert.Equal(t, "if", propAccess3.Property.Name)
 			},
 		},
 		{

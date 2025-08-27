@@ -1554,30 +1554,15 @@ func parseEnumCase(p *Parser) *ast.EnumCase {
 func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
 
-	// Expect property name (allow reserved keywords, variables, and brace-enclosed expressions)
+	// Expect property name (allow reserved keywords)
 	p.nextToken()
-	
-	var property ast.Expression
-	
-	// Handle brace-enclosed expression: $obj->{expr}
-	if p.currentToken.Type == lexer.TOKEN_LBRACE {
-		p.nextToken()
-		property = parseExpression(p, LOWEST)
-		if !p.expectPeek(lexer.TOKEN_RBRACE) {
-			return nil
-		}
-	} else if p.currentToken.Type == lexer.T_VARIABLE {
-		// Variable property access like $obj->$prop
-		property = parseVariable(p)
-	} else if p.currentToken.Type == lexer.T_STRING || isSemiReserved(p.currentToken.Type) {
-		// String property access like $obj->prop
-		property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	} else {
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
+	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	return ast.NewPropertyAccessExpression(pos, left, property)
 }
 
@@ -1585,30 +1570,15 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
 
-	// Expect property name (allow reserved keywords, variables, and brace-enclosed expressions)
+	// Expect property name (allow reserved keywords)
 	p.nextToken()
-	
-	var property ast.Expression
-	
-	// Handle brace-enclosed expression: $obj?->{expr}
-	if p.currentToken.Type == lexer.TOKEN_LBRACE {
-		p.nextToken()
-		property = parseExpression(p, LOWEST)
-		if !p.expectPeek(lexer.TOKEN_RBRACE) {
-			return nil
-		}
-	} else if p.currentToken.Type == lexer.T_VARIABLE {
-		// Variable property access like $obj?->$prop
-		property = parseVariable(p)
-	} else if p.currentToken.Type == lexer.T_STRING || isSemiReserved(p.currentToken.Type) {
-		// String property access like $obj?->prop
-		property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	} else {
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected property name, got %s at line: %d col: %d", 
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
+	property := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	return ast.NewNullsafePropertyAccessExpression(pos, left, property)
 }
 
