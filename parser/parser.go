@@ -390,6 +390,18 @@ func isTypeToken(tokenType lexer.TokenType) bool {
 	}
 }
 
+// isClassNameToken 检查token是否为有效的类名token（根据 class_name 语法规则）
+func isClassNameToken(tokenType lexer.TokenType) bool {
+	switch tokenType {
+	case lexer.T_STATIC, lexer.T_STRING, 
+		 lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED,
+		 lexer.T_NS_SEPARATOR:
+		return true
+	default:
+		return false
+	}
+}
+
 // parseTypeHint 解析类型提示，支持nullable, union和intersection类型
 func parseTypeHint(p *Parser) *ast.TypeHint {
 	// 检查nullable类型 ?Type 或 ?(Type1|Type2)
@@ -1240,6 +1252,18 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 // parseParameter 解析函数参数（支持类型提示、引用、可变参数、可见性修饰符等）
 func parseParameter(p *Parser) *ast.Parameter {
 	var param ast.Parameter
+	
+	// 首先解析属性 (attributes) #[...]
+	// 根据PHP语法：attributed_parameter: attributes parameter | parameter
+	var attributes []*ast.AttributeGroup
+	for p.currentToken.Type == lexer.T_ATTRIBUTE {
+		attrGroup := parseAttributeGroup(p)
+		if attrGroup != nil {
+			attributes = append(attributes, attrGroup)
+		}
+		p.nextToken() // 移动到下一个token
+	}
+	param.Attributes = attributes
 	
 	// 检查可见性修饰符 (public, private, protected, readonly)
 	// 这些通常只在构造函数参数中使用
@@ -3161,7 +3185,10 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 	var attributes []*ast.Attribute
 
 	// 当前token应该是 T_ATTRIBUTE (#[)，需要移动到第一个属性名
-	if !p.expectPeek(lexer.T_STRING) {
+	// 属性名遵循 class_name 语法规则：T_STATIC | T_STRING | T_NAME_* | T_NS_SEPARATOR
+	p.nextToken() // 移动到属性名的第一个token
+	if !isClassNameToken(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected attribute name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
 
@@ -3174,7 +3201,9 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 	// 解析可能的后续属性（用逗号分隔）
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
-		if !p.expectPeek(lexer.T_STRING) {
+		p.nextToken() // 移动到下一个属性名
+		if !isClassNameToken(p.currentToken.Type) {
+			p.errors = append(p.errors, fmt.Sprintf("expected attribute name after comma, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			break
 		}
 		
@@ -3192,10 +3221,58 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 	return ast.NewAttributeGroup(pos, attributes)
 }
 
+// parseClassName 解析类名，支持所有类型的名称（根据 PHP 语法中的 class_name 规则）
+// class_name: T_STATIC | name
+// name: T_STRING | T_NAME_QUALIFIED | T_NAME_FULLY_QUALIFIED | T_NAME_RELATIVE
+func parseClassName(p *Parser) (string, error) {
+	var className string
+	
+	switch p.currentToken.Type {
+	case lexer.T_STATIC:
+		return "static", nil
+	case lexer.T_STRING:
+		return p.currentToken.Value, nil
+	case lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_QUALIFIED, lexer.T_NAME_RELATIVE:
+		return p.currentToken.Value, nil
+	case lexer.T_NS_SEPARATOR:
+		// 处理由多个token组成的完全限定名称: \ + 名称部分
+		className = p.currentToken.Value // 开始于 "\"
+		p.nextToken()
+		
+		// 解析完整的命名空间路径: Namespace\SubNamespace\ClassName
+		for {
+			if p.currentToken.Type != lexer.T_STRING {
+				return "", fmt.Errorf("expected class name after namespace separator, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column)
+			}
+			className += p.currentToken.Value
+			
+			// 检查是否还有更多的命名空间分隔符
+			if p.peekToken.Type == lexer.T_NS_SEPARATOR {
+				p.nextToken() // 移动到 \
+				className += p.currentToken.Value // 添加 "\"
+				p.nextToken() // 移动到下一个名称部分
+			} else {
+				break
+			}
+		}
+		return className, nil
+	default:
+		return "", fmt.Errorf("expected class name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column)
+	}
+}
+
 // parseAttributeDecl 解析单个属性声明 AttributeName(args)
 func parseAttributeDecl(p *Parser) *ast.Attribute {
 	pos := p.currentToken.Position
-	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	
+	// 使用 class_name 语法规则解析属性名
+	attributeName, err := parseClassName(p)
+	if err != nil {
+		p.errors = append(p.errors, err.Error())
+		return nil
+	}
+	
+	name := ast.NewIdentifierNode(pos, attributeName)
 	
 	var arguments []ast.Expression
 	

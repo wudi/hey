@@ -1744,13 +1744,14 @@ type FunctionDeclaration struct {
 }
 
 type Parameter struct {
-	Name         string     `json:"name"`
-	DefaultValue Expression `json:"defaultValue,omitempty"`
-	Type         *TypeHint  `json:"type,omitempty"`
-	ByReference  bool       `json:"byReference,omitempty"`   // &$param
-	Variadic     bool       `json:"variadic,omitempty"`      // ...$params
-	Visibility   string     `json:"visibility,omitempty"`   // public, private, protected
-	ReadOnly     bool       `json:"readOnly,omitempty"`     // readonly
+	Name         string             `json:"name"`
+	DefaultValue Expression         `json:"defaultValue,omitempty"`
+	Type         *TypeHint          `json:"type,omitempty"`
+	ByReference  bool               `json:"byReference,omitempty"`   // &$param
+	Variadic     bool               `json:"variadic,omitempty"`      // ...$params
+	Visibility   string             `json:"visibility,omitempty"`   // public, private, protected
+	ReadOnly     bool               `json:"readOnly,omitempty"`     // readonly
+	Attributes   []*AttributeGroup  `json:"attributes,omitempty"`   // #[...] attributes
 }
 
 // TypeHint represents a PHP type hint

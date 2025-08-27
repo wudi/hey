@@ -194,7 +194,7 @@ func TestParsing_AttributeErrors(t *testing.T) {
 		{
 			name:          "attribute without name",
 			input:         `<?php #[];`,
-			expectedError: "expected next token to be `T_STRING`",
+			expectedError: "expected attribute name",
 		},
 		{
 			name:          "malformed attribute parameters",

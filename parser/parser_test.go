@@ -5518,3 +5518,281 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 		})
 	}
 }
+
+// TestParsing_AttributeParameters tests parameter attributes in various scenarios
+func TestParsing_AttributeParameters(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Namespaced attribute on single parameter",
+			input: `<?php function test(#[\SensitiveParameter] $password) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$password", param.Name)
+				require.Len(t, param.Attributes, 1)
+				
+				attrGroup := param.Attributes[0]
+				require.Len(t, attrGroup.Attributes, 1)
+				
+				attr := attrGroup.Attributes[0]
+				assert.Equal(t, "\\SensitiveParameter", attr.Name.Name)
+				assert.Nil(t, attr.Arguments)
+			},
+		},
+		{
+			name:  "Simple attribute on parameter",
+			input: `<?php function test(#[Deprecated] $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+				require.Len(t, param.Attributes, 1)
+				
+				attr := param.Attributes[0].Attributes[0]
+				assert.Equal(t, "Deprecated", attr.Name.Name)
+			},
+		},
+		{
+			name:  "Attribute with parameters",
+			input: `<?php function test(#[Route('/path', method: 'GET')] $request) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$request", param.Name)
+				require.Len(t, param.Attributes, 1)
+				
+				attr := param.Attributes[0].Attributes[0]
+				assert.Equal(t, "Route", attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+			},
+		},
+		{
+			name:  "Multiple attributes on single parameter",
+			input: `<?php function test(#[Attr1, Attr2] $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+				require.Len(t, param.Attributes, 1)
+				
+				attrGroup := param.Attributes[0]
+				require.Len(t, attrGroup.Attributes, 2)
+				assert.Equal(t, "Attr1", attrGroup.Attributes[0].Name.Name)
+				assert.Equal(t, "Attr2", attrGroup.Attributes[1].Name.Name)
+			},
+		},
+		{
+			name:  "Multiple attribute groups on parameter",
+			input: `<?php function test(#[Attr1] #[Attr2] $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+				require.Len(t, param.Attributes, 2)
+				
+				assert.Equal(t, "Attr1", param.Attributes[0].Attributes[0].Name.Name)
+				assert.Equal(t, "Attr2", param.Attributes[1].Attributes[0].Name.Name)
+			},
+		},
+		{
+			name:  "Attributes with type hint and visibility",
+			input: `<?php class Test { public function __construct(#[\SensitiveParameter] public string $password) {} }`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				classExpr, ok := program.Body[0].(*ast.ExpressionStatement).Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				require.Len(t, classExpr.Body, 1)
+				
+				funcDecl, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Equal(t, "__construct", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$password", param.Name)
+				assert.Equal(t, "public", param.Visibility)
+				assert.NotNil(t, param.Type)
+				assert.Equal(t, "string", param.Type.Name)
+				
+				require.Len(t, param.Attributes, 1)
+				attr := param.Attributes[0].Attributes[0]
+				assert.Equal(t, "\\SensitiveParameter", attr.Name.Name)
+			},
+		},
+		{
+			name:  "Multiple parameters with different attributes",
+			input: `<?php function authenticate(string $username, #[\SensitiveParameter] string $password, #[Optional] array $options = []) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Equal(t, "authenticate", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Len(t, funcDecl.Parameters, 3)
+				
+				// First parameter: no attributes
+				param1 := funcDecl.Parameters[0]
+				assert.Equal(t, "$username", param1.Name)
+				assert.Len(t, param1.Attributes, 0)
+				assert.Equal(t, "string", param1.Type.Name)
+				
+				// Second parameter: SensitiveParameter attribute
+				param2 := funcDecl.Parameters[1]
+				assert.Equal(t, "$password", param2.Name)
+				require.Len(t, param2.Attributes, 1)
+				attr2 := param2.Attributes[0].Attributes[0]
+				assert.Equal(t, "\\SensitiveParameter", attr2.Name.Name)
+				assert.Equal(t, "string", param2.Type.Name)
+				
+				// Third parameter: Optional attribute with default value
+				param3 := funcDecl.Parameters[2]
+				assert.Equal(t, "$options", param3.Name)
+				require.Len(t, param3.Attributes, 1)
+				attr3 := param3.Attributes[0].Attributes[0]
+				assert.Equal(t, "Optional", attr3.Name.Name)
+				assert.Equal(t, "array", param3.Type.Name)
+				assert.NotNil(t, param3.DefaultValue)
+			},
+		},
+		{
+			name:  "Attribute on reference parameter",
+			input: `<?php function test(#[Ref] array &$data) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$data", param.Name)
+				assert.True(t, param.ByReference)
+				assert.Equal(t, "array", param.Type.Name)
+				
+				require.Len(t, param.Attributes, 1)
+				attr := param.Attributes[0].Attributes[0]
+				assert.Equal(t, "Ref", attr.Name.Name)
+			},
+		},
+		{
+			name:  "Attribute on variadic parameter",
+			input: `<?php function test(#[Spread] ...$args) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$args", param.Name)
+				assert.True(t, param.Variadic)
+				
+				require.Len(t, param.Attributes, 1)
+				attr := param.Attributes[0].Attributes[0]
+				assert.Equal(t, "Spread", attr.Name.Name)
+			},
+		},
+		{
+			name:  "Static attribute on parameter",
+			input: `<?php function test(#[static] $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+				require.Len(t, param.Attributes, 1)
+				
+				attr := param.Attributes[0].Attributes[0]
+				assert.Equal(t, "static", attr.Name.Name)
+			},
+		},
+		{
+			name:  "Complex multi-level namespaced attribute",
+			input: `<?php function test(#[\Global\Fully\Qualified\Attribute] $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+				require.Len(t, param.Attributes, 1)
+				
+				attr := param.Attributes[0].Attributes[0]
+				assert.Equal(t, "\\Global\\Fully\\Qualified\\Attribute", attr.Name.Name)
+			},
+		},
+		{
+			name:  "Mixed attribute types in one group",
+			input: `<?php function test(#[Simple, static, \Namespaced\Attr] $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+				require.Len(t, param.Attributes, 1)
+				
+				attrGroup := param.Attributes[0]
+				require.Len(t, attrGroup.Attributes, 3)
+				
+				assert.Equal(t, "Simple", attrGroup.Attributes[0].Name.Name)
+				assert.Equal(t, "static", attrGroup.Attributes[1].Name.Name) 
+				assert.Equal(t, "\\Namespaced\\Attr", attrGroup.Attributes[2].Name.Name)
+			},
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
