@@ -36,14 +36,15 @@ echo '<?php echo "Hello"; ?>' | ./php-parser  # Parse from stdin
 - AST test case write into `ast/ast_test.go`
 
 **Workflow**
-- Plan todo list before coding in `TODO.md` and update it frequently
-- Before fix syntax error, ultrathink top-down analysis of the original PHP syntax tree
-- Be sure to unit test when you’re done making a series of code changes
-- After fixing a bug, add a test case to cover the bug
-- After fixing a bug, run all tests to ensure no regressions
-- After code changes, consider globally whether there are better implementations, or even refactorings
-- Prefer running single tests, and not the whole test suite, for performance
-- Create a descriptive commit message
+- Plan todo list before coding using TodoWrite tool and update frequently
+- Before implementing new syntax, analyze PHP grammar from `/home/ubuntu/php-src/Zend/zend_language_parser.y` 
+- Always add test cases first, then implement functionality (TDD approach)
+- After adding new syntax support, create test files (test_*.php) to verify functionality
+- Use CLI tool to verify parsing: `./php-parser test_file.php`
+- Run targeted tests: `go test ./parser -run=TestSpecificFeature -v`
+- After fixing a bug, run all tests to ensure no regressions: `go test ./...`
+- For major changes, run benchmarks: `go test ./parser -bench=. -run=^$`
+- Create descriptive commit messages with detailed changelog
 
 **PHP Compatibility Testing:**
 ```bash
@@ -69,11 +70,14 @@ This is a PHP parser implementation in Go with the following structure:
   - `lexer.go`: Main lexer implementation with shebang support and PHP tag recognition
 
 - **`parser/`**: Recursive descent parser with Pratt parsing
-  - `parser.go`: 2370+ lines implementing 40+ parse expression functions
-  - Comprehensive PHP syntax support (variables, functions, classes, control flow)
+  - `parser.go`: 2800+ lines implementing 50+ parse expression functions
+  - Comprehensive PHP 8.4 syntax support (variables, functions, classes, control flow)
+  - Complete operator support including assignment operators (??=, **=, &=, |=, ^=, <<=, >>=), power (**), spaceship (<=>)
+  - Alternative syntax support for all control structures (if/endif, while/endwhile, for/endfor, foreach/endforeach, switch/endswitch)
+  - Special statement handling (__halt_compiler()) with proper parsing termination
   - Class method visibility parsing with public/private/protected modifiers
-  - Operator precedence handling (LOWEST to HIGHEST including TERNARY)
-  - Expression parsing: binary ops, unary ops, method calls, array access, etc.
+  - Enhanced operator precedence with 14 levels matching PHP 8.4 specification
+  - Expression parsing: binary ops, unary ops, method calls, array access, match expressions
 
 - **`ast/`**: Abstract Syntax Tree nodes
   - `node.go`: Interface-based AST node system with visitor pattern
@@ -91,10 +95,13 @@ This is a PHP parser implementation in Go with the following structure:
   - Position-aware error reporting with line:column information
 
 ### Key Design Features
-- **PHP Compatibility**: Token IDs match PHP 8.4 official implementation
-- **Pratt Parser**: Elegant operator precedence handling with prefix/infix functions
-- **State Machine**: Lexer supports 11 states including shebang recognition
-- **Interface-Based AST**: Visitor pattern support with 150+ node types
+- **PHP 8.4 Compatibility**: Token IDs and grammar rules match PHP 8.4 official implementation exactly
+- **Complete Operator Support**: All PHP operators including modern additions (**, <=>, ??=, etc.)
+- **Alternative Syntax**: Full support for alternative control structure syntax (switch:...endswitch;, etc.)
+- **Special Constructs**: __halt_compiler() with proper parsing termination, match expressions
+- **Pratt Parser**: Elegant operator precedence handling with 14 distinct precedence levels
+- **State Machine**: Lexer supports 11 states including shebang recognition and string interpolation
+- **Interface-Based AST**: Visitor pattern support with 150+ node types matching zend_ast.h
 - **Position Tracking**: Precise error location with line/column information
 - **Performance**: Benchmarking support for parser optimization
 
@@ -103,7 +110,7 @@ This is a PHP parser implementation in Go with the following structure:
 **Parser Architecture:**
 - Prefix parse functions: handle tokens that start expressions (variables, literals, unary ops)
 - Infix parse functions: handle binary operators, method calls, array access
-- Precedence levels: LOWEST, EQUALS, LESSGREATER, SUM, PRODUCT, EXPONENT, PREFIX, CALL, INDEX, TERNARY, HIGHEST
+- Precedence levels (PHP 8.4 compliant): ASSIGN, TERNARY, COALESCE, LOGICAL_OR, LOGICAL_AND, BITWISE_OR, BITWISE_XOR, BITWISE_AND, EQUALS, LESSGREATER, BITWISE_SHIFT, SUM, PRODUCT, EXPONENT, PREFIX, POSTFIX, CALL, INDEX
 - Error recovery: continues parsing after errors to find multiple issues
 
 **Lexer States:**
@@ -142,12 +149,14 @@ This is a PHP parser implementation in Go with the following structure:
 ## Important Reminders
 
 **When Adding New PHP Syntax Support:**
-1. Add new token types to `lexer/token.go` if needed (maintain PHP compatibility)
-2. Implement prefix or infix parse functions in `parser/parser.go`
-3. Create corresponding AST node types in `ast/node.go` with full interface implementation
-4. Add AST kind constants to `ast/kind.go` (follow PHP's zend_ast.h numbering)
-5. Update the String() method in `ast/kind.go` for new node types
-6. Add constructor functions (NewXXXExpression) following existing patterns
+1. Add new token types to `lexer/token.go` if needed (maintain PHP compatibility) - check Keywords map for reserved words
+2. Add prefix/infix parse functions in `parser/parser.go` (globalPrefixParseFns/globalInfixParseFns maps)
+3. Set correct operator precedence in precedences map (follow PHP 8.4 precedence levels)
+4. Create corresponding AST node types in `ast/node.go` with full interface implementation
+5. Add AST kind constants to `ast/kind.go` (follow PHP's zend_ast.h numbering)
+6. Update the String() method in `ast/kind.go` for new node types
+7. Add constructor functions (NewXXXExpression) following existing patterns
+8. Add comprehensive test cases covering all syntax variations and edge cases
 
 **When Adding New Class Member Types:**
 1. Analyze PHP grammar rules in `/home/ubuntu/php-src/Zend/zend_language_parser.y`
@@ -158,8 +167,8 @@ This is a PHP parser implementation in Go with the following structure:
 6. Ensure AST nodes implement full Node interface (GetChildren, Accept, String)
 
 **Parser Error Debugging:**
-- "no prefix parse function found" → add prefix parse function to parser initialization in `parser.go:80-100`
-- "no infix parse function found" → add infix parse function with correct precedence in `parser.go:100-120`
+- "no prefix parse function found" → add prefix parse function to parser initialization in `parser.go:87-204`
+- "no infix parse function found" → add infix parse function with correct precedence in `parser.go:205-272`
 - "expected next token to be T_VARIABLE, got T_STRING instead" for class constants → check `parseClassStatement` logic at `parser.go:2117`
 - Class method visibility parsing issues → verify `parseFunctionDeclaration` handles visibility at `parser.go:608-614`
 - Property parsing with visibility modifiers → check `parsePropertyDeclaration` function
@@ -181,7 +190,15 @@ This is a PHP parser implementation in Go with the following structure:
 
 ## Recent Improvements
 
-**Class Method Visibility Parsing (Latest):**
+**PHP 8.4 Grammar Enhancements (Latest - 2024-12-19):**
+- **Complete Operator Support**: Added all missing assignment operators (??=, **=, &=, |=, ^=, <<=, >>=), power operator (**), spaceship operator (<=>), logical XOR (xor)
+- **Alternative Syntax**: Full support for alternative switch syntax (switch: ... endswitch;) alongside existing if/endif, while/endwhile, for/endfor, foreach/endforeach
+- **Special Statements**: __halt_compiler() statement with proper parsing termination behavior
+- **Enhanced Precedence**: Updated operator precedence to exactly match PHP 8.4 official specification with 14 distinct levels
+- **AST Improvements**: Added HaltCompilerStatement AST node, improved error handling and position tracking
+- **Comprehensive Testing**: Added test coverage for new operators, match expressions, alternative syntax, and halt compiler functionality
+
+**Class Method Visibility Parsing:**
 - Enhanced `FunctionDeclaration` AST node with `Visibility` field at `ast/node.go:890`
 - Updated `parseFunctionDeclaration` to handle visibility modifiers at `parser.go:608-614`
 - Fixed `parseClassStatement` to properly route visibility + function combinations at `parser.go:2123-2124`
