@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -3829,6 +3830,155 @@ func TestParsing_YieldFromExpressions(t *testing.T) {
 
 			assert.NotNil(t, program)
 			tt.validate(t, program)
+		})
+	}
+}
+
+// TestParsing_ArrayWithHTMLPrefix tests parsing arrays after inline HTML content
+func TestParsing_ArrayWithHTMLPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []interface{} // expected array elements
+	}{
+		{
+			name:     "Simple array after HTML",
+			input:    "html\n<?php [1,2,3];",
+			expected: []interface{}{1, 2, 3},
+		},
+		{
+			name:     "Array with strings after HTML",
+			input:    "<!DOCTYPE html>\n<?php [\"a\", \"b\", \"c\"];",
+			expected: []interface{}{"a", "b", "c"},
+		},
+		{
+			name:     "Empty array after HTML",
+			input:    "<h1>Title</h1>\n<?php [];",
+			expected: []interface{}{},
+		},
+		{
+			name:     "Nested array after HTML",
+			input:    "content\n<?php [[1,2], [3,4]];",
+			expected: []interface{}{[]interface{}{1, 2}, []interface{}{3, 4}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			
+			// Should have 2 statements: HTML inline content and the array expression
+			require.Len(t, program.Body, 2)
+
+			// First statement should be HTML inline content
+			htmlStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+			require.True(t, ok, "First statement should be ExpressionStatement")
+			
+			htmlExpr, ok := htmlStmt.Expression.(*ast.StringLiteral)
+			require.True(t, ok, "First expression should be StringLiteral (HTML)")
+			// Just verify it contains some HTML content (any non-empty string)
+			assert.NotEmpty(t, htmlExpr.Value, "HTML content should not be empty")
+
+			// Second statement should be array expression
+			arrayStmt, ok := program.Body[1].(*ast.ExpressionStatement)
+			require.True(t, ok, "Second statement should be ExpressionStatement")
+			
+			arrayExpr, ok := arrayStmt.Expression.(*ast.ArrayExpression)
+			require.True(t, ok, "Second expression should be ArrayExpression")
+			
+			// Check array elements
+			assert.Len(t, arrayExpr.Elements, len(tt.expected))
+			
+			for i, expectedElement := range tt.expected {
+				switch expected := expectedElement.(type) {
+				case int:
+					numLit, ok := arrayExpr.Elements[i].(*ast.NumberLiteral)
+					require.True(t, ok, "Array element should be NumberLiteral")
+					assert.Equal(t, fmt.Sprintf("%d", expected), numLit.Value)
+					assert.Equal(t, "integer", numLit.Kind)
+				case string:
+					strLit, ok := arrayExpr.Elements[i].(*ast.StringLiteral)
+					require.True(t, ok, "Array element should be StringLiteral")
+					assert.Equal(t, expected, strLit.Value)
+				case []interface{}:
+					nestedArray, ok := arrayExpr.Elements[i].(*ast.ArrayExpression)
+					require.True(t, ok, "Array element should be nested ArrayExpression")
+					assert.Len(t, nestedArray.Elements, len(expected))
+				}
+			}
+		})
+	}
+}
+
+// TestParsing_ArrayAccessVsArrayLiteral tests that we correctly distinguish between array access and array literals
+func TestParsing_ArrayAccessVsArrayLiteral(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expectAccess bool // true = expect array access, false = expect array literal
+	}{
+		{
+			name:         "Array literal",
+			input:        "<?php [1,2,3];",
+			expectAccess: false,
+		},
+		{
+			name:         "Array access on variable",
+			input:        "<?php $arr[0];",
+			expectAccess: true,
+		},
+		{
+			name:         "Array literal after HTML",
+			input:        "html\n<?php [1,2,3];",
+			expectAccess: false,
+		},
+		{
+			name:         "Array access after assignment",
+			input:        "<?php $x = [1,2,3]; $x[0];",
+			expectAccess: true, // This tests the second expression
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			require.Greater(t, len(program.Body), 0)
+
+			// Find the relevant expression statement
+			var targetExpr ast.Expression
+			if tt.input == "<?php $x = [1,2,3]; $x[0];" {
+				// For this case, we want to check the second statement
+				require.Len(t, program.Body, 2)
+				exprStmt := program.Body[1].(*ast.ExpressionStatement)
+				targetExpr = exprStmt.Expression
+			} else if strings.Contains(tt.input, "html") {
+				// For HTML cases, the array is in the second statement
+				require.Len(t, program.Body, 2)
+				exprStmt := program.Body[1].(*ast.ExpressionStatement)
+				targetExpr = exprStmt.Expression
+			} else {
+				// For simple cases, it's the first (and only) statement
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				targetExpr = exprStmt.Expression
+			}
+
+			if tt.expectAccess {
+				_, isArrayAccess := targetExpr.(*ast.ArrayAccessExpression)
+				assert.True(t, isArrayAccess, "Expected ArrayAccessExpression")
+			} else {
+				_, isArrayLiteral := targetExpr.(*ast.ArrayExpression)
+				assert.True(t, isArrayLiteral, "Expected ArrayExpression (literal)")
+			}
 		})
 	}
 }

@@ -417,6 +417,12 @@ func (p *Parser) ParseProgram() *ast.Program {
 		if p.currentToken.Type == lexer.T_CLOSE_TAG {
 			break
 		}
+		
+		// Skip T_OPEN_TAG tokens in the middle of the program
+		if p.currentToken.Type == lexer.T_OPEN_TAG {
+			p.nextToken()
+			continue
+		}
 
 		stmt := parseStatement(p)
 		if stmt != nil {
@@ -1648,7 +1654,7 @@ func parseExpression(p *Parser, precedence Precedence) ast.Expression {
 
 	leftExp := prefix(p)
 
-	for p.peekToken.Type != lexer.TOKEN_SEMICOLON && precedence < p.peekPrecedence() {
+	for p.peekToken.Type != lexer.TOKEN_SEMICOLON && p.peekToken.Type != lexer.T_OPEN_TAG && precedence < p.peekPrecedence() {
 		infix := globalInfixParseFns[p.peekToken.Type]
 		if infix == nil {
 			return leftExp
