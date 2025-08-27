@@ -1588,6 +1588,100 @@ func (fd *FunctionDeclaration) String() string {
 	return out.String()
 }
 
+// ArrowFunctionExpression 箭头函数表达式 (PHP 7.4+)
+type ArrowFunctionExpression struct {
+	BaseNode
+	Parameters []Parameter `json:"parameters"`
+	ReturnType *TypeHint   `json:"returnType,omitempty"`
+	Body       Expression  `json:"body"`
+	Static     bool        `json:"static,omitempty"`
+}
+
+func NewArrowFunctionExpression(pos lexer.Position, parameters []Parameter, returnType *TypeHint, body Expression, static bool) *ArrowFunctionExpression {
+	return &ArrowFunctionExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTArrowFunc,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Parameters: parameters,
+		ReturnType: returnType,
+		Body:       body,
+		Static:     static,
+	}
+}
+
+// GetChildren 返回子节点
+func (af *ArrowFunctionExpression) GetChildren() []Node {
+	children := make([]Node, 0)
+	if af.ReturnType != nil {
+		children = append(children, af.ReturnType)
+	}
+	for _, param := range af.Parameters {
+		if param.Type != nil {
+			children = append(children, param.Type)
+		}
+		if param.DefaultValue != nil {
+			children = append(children, param.DefaultValue)
+		}
+	}
+	if af.Body != nil {
+		children = append(children, af.Body)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (af *ArrowFunctionExpression) Accept(visitor Visitor) {
+	if visitor.Visit(af) {
+		if af.ReturnType != nil {
+			af.ReturnType.Accept(visitor)
+		}
+		for _, param := range af.Parameters {
+			if param.DefaultValue != nil {
+				param.DefaultValue.Accept(visitor)
+			}
+		}
+		if af.Body != nil {
+			af.Body.Accept(visitor)
+		}
+	}
+}
+
+func (af *ArrowFunctionExpression) expressionNode() {}
+
+func (af *ArrowFunctionExpression) String() string {
+	var out strings.Builder
+	if af.Static {
+		out.WriteString("static ")
+	}
+	out.WriteString("fn(")
+	for i, param := range af.Parameters {
+		if i > 0 {
+			out.WriteString(", ")
+		}
+		if param.Type != nil {
+			out.WriteString(param.Type.String() + " ")
+		}
+		if param.ByReference {
+			out.WriteString("&")
+		}
+		out.WriteString("$" + param.Name)
+		if param.DefaultValue != nil {
+			out.WriteString(" = " + param.DefaultValue.String())
+		}
+	}
+	out.WriteString(")")
+	if af.ReturnType != nil {
+		out.WriteString(": " + af.ReturnType.String())
+	}
+	out.WriteString(" => ")
+	if af.Body != nil {
+		out.WriteString(af.Body.String())
+	}
+	return out.String()
+}
+
 // IdentifierNode 标识符节点
 type IdentifierNode struct {
 	BaseNode
@@ -4616,4 +4710,104 @@ func (fcc *FirstClassCallable) String() string {
 		return fcc.Callable.String() + "(...)"
 	}
 	return "(...)"
+}
+
+// AnonymousClass 表示匿名类表达式
+type AnonymousClass struct {
+	BaseNode
+	Arguments  []Expression `json:"arguments,omitempty"`  // 构造函数参数
+	Extends    Expression   `json:"extends,omitempty"`    // 继承的类
+	Implements []Expression `json:"implements,omitempty"` // 实现的接口
+	Body       []Statement  `json:"body"`                 // 类体
+}
+
+func NewAnonymousClass(pos lexer.Position, args []Expression, extends Expression, implements []Expression, body []Statement) *AnonymousClass {
+	return &AnonymousClass{
+		BaseNode: BaseNode{
+			Kind:     ASTAnonymousClass,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Arguments:  args,
+		Extends:    extends,
+		Implements: implements,
+		Body:       body,
+	}
+}
+
+// GetChildren 返回子节点
+func (ac *AnonymousClass) GetChildren() []Node {
+	children := make([]Node, 0)
+	for _, arg := range ac.Arguments {
+		children = append(children, arg)
+	}
+	if ac.Extends != nil {
+		children = append(children, ac.Extends)
+	}
+	for _, impl := range ac.Implements {
+		children = append(children, impl)
+	}
+	for _, stmt := range ac.Body {
+		children = append(children, stmt)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (ac *AnonymousClass) Accept(visitor Visitor) {
+	if visitor.Visit(ac) {
+		for _, arg := range ac.Arguments {
+			arg.Accept(visitor)
+		}
+		if ac.Extends != nil {
+			ac.Extends.Accept(visitor)
+		}
+		for _, impl := range ac.Implements {
+			impl.Accept(visitor)
+		}
+		for _, stmt := range ac.Body {
+			stmt.Accept(visitor)
+		}
+	}
+}
+
+func (ac *AnonymousClass) expressionNode() {}
+
+func (ac *AnonymousClass) String() string {
+	var out strings.Builder
+	out.WriteString("new class")
+	
+	if len(ac.Arguments) > 0 {
+		out.WriteString("(")
+		for i, arg := range ac.Arguments {
+			if i > 0 {
+				out.WriteString(", ")
+			}
+			out.WriteString(arg.String())
+		}
+		out.WriteString(")")
+	}
+	
+	if ac.Extends != nil {
+		out.WriteString(" extends ")
+		out.WriteString(ac.Extends.String())
+	}
+	
+	if len(ac.Implements) > 0 {
+		out.WriteString(" implements ")
+		for i, impl := range ac.Implements {
+			if i > 0 {
+				out.WriteString(", ")
+			}
+			out.WriteString(impl.String())
+		}
+	}
+	
+	out.WriteString(" {\n")
+	for _, stmt := range ac.Body {
+		out.WriteString("  " + stmt.String() + "\n")
+	}
+	out.WriteString("}")
+	
+	return out.String()
 }

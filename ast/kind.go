@@ -153,6 +153,7 @@ const (
 	ASTEvalExpression     ASTKind = 779 
 	ASTVisibilityModifier ASTKind = 780
 	ASTFirstClassCallable ASTKind = 781
+	ASTAnonymousClass     ASTKind = 782
 
 	// 4子节点 - 4 child nodes (bits 8-15 = 4)
 	ASTFor      ASTKind = 1024 // 4 << 8
@@ -452,6 +453,8 @@ func (k ASTKind) String() string {
 		return "VISIBILITY_MODIFIER"
 	case ASTFirstClassCallable:
 		return "FIRST_CLASS_CALLABLE"
+	case ASTAnonymousClass:
+		return "ANONYMOUS_CLASS"
 
 	// 4子节点
 	case ASTFor:

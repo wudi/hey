@@ -118,7 +118,7 @@ func init() {
 		lexer.T_INCLUDE_ONCE:             parseIncludeOrEvalExpression,
 		lexer.T_REQUIRE:                  parseIncludeOrEvalExpression,
 		lexer.T_REQUIRE_ONCE:             parseIncludeOrEvalExpression,
-		lexer.T_STATIC:                   parseStaticExpression,
+		lexer.T_STATIC:                   parseStaticOrArrowFunctionExpression,
 		lexer.T_ABSTRACT:                 parseAbstractExpression,
 		lexer.T_CLOSE_TAG:                parseCloseTagExpression,
 		lexer.T_NS_SEPARATOR:             parseNamespaceExpression,
@@ -156,6 +156,7 @@ func init() {
 		lexer.T_OBJECT_CAST:              parseTypeCast,
 		lexer.T_UNSET_CAST:               parseTypeCast,
 		lexer.T_ATTRIBUTE:                parseAttributeExpression,
+		lexer.T_FN:                       parseArrowFunctionExpression,
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
 		lexer.TOKEN_PLUS:            parseInfixExpression,
@@ -319,8 +320,8 @@ func parseTypeHint(p *Parser) *ast.TypeHint {
 	return baseType
 }
 
-// parseParameterTypeHint 解析参数类型提示，支持nullable和union类型，但不支持intersection类型
-// 因为在参数上下文中，& 表示引用而不是intersection
+// parseParameterTypeHint 解析参数类型提示，支持nullable、union和intersection类型
+// 在 PHP 8.1+ 中，intersection类型在参数中是支持的
 func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 	// 检查nullable类型 ?Type
 	nullable := false
@@ -343,8 +344,8 @@ func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 		return parseUnionType(p, baseType)
 	}
 	
-	// 注意：在参数上下文中，我们不检查intersection类型（&）
-	// 因为 & 在参数中表示引用参数，而不是intersection类型
+	// 注意：在参数上下文中暂时不支持intersection类型
+	// 因为 & 在参数中更常见的是表示引用参数，需要更复杂的前瞻来区分
 	
 	return baseType
 }
@@ -2494,6 +2495,11 @@ func parseGotoStatement(p *Parser) ast.Statement {
 func parseNewExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
+	// 检查是否是匿名类 "new class"
+	if p.peekToken.Type == lexer.T_CLASS {
+		return parseAnonymousClass(p, pos)
+	}
+
 	p.nextToken()
 	class := parseExpression(p, PREFIX)
 
@@ -3695,3 +3701,165 @@ func parseNamespaceExpression(p *Parser) ast.Expression {
 	// 单独的 \ 
 	return ast.NewNamespaceExpression(pos, nil)
 }
+
+// parseArrowFunctionExpression 解析箭头函数表达式 (PHP 7.4+)
+func parseArrowFunctionExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	var static bool
+	
+	// 检查是否是静态箭头函数
+	if p.currentToken.Type == lexer.T_STATIC {
+		static = true
+		if !p.expectPeek(lexer.T_FN) {
+			return nil
+		}
+	}
+	
+	// 跳过 'fn'，期望左括号
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	// 解析参数列表
+	var parameters []ast.Parameter
+	
+	// 解析参数列表
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+
+		// 解析第一个参数
+		param := parseParameter(p)
+		if param != nil {
+			parameters = append(parameters, *param)
+		}
+
+		// 处理更多参数
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个参数
+			param := parseParameter(p)
+			if param != nil {
+				parameters = append(parameters, *param)
+			}
+		}
+	}
+	
+	// 期望右括号
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	// 可选的返回类型
+	var returnType *ast.TypeHint
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 跳过冒号
+		p.nextToken() // 进入返回类型
+		returnType = parseTypeHint(p)
+	}
+	
+	// 期望双箭头 =>
+	if !p.expectPeek(lexer.T_DOUBLE_ARROW) {
+		return nil
+	}
+	
+	// 解析函数体表达式
+	p.nextToken()
+	body := parseExpression(p, LOWEST)
+	if body == nil {
+		return nil
+	}
+	
+	return ast.NewArrowFunctionExpression(pos, parameters, returnType, body, static)
+}
+
+// parseStaticOrArrowFunctionExpression 处理 static 关键字（可能是静态箭头函数或其他静态表达式）
+func parseStaticOrArrowFunctionExpression(p *Parser) ast.Expression {
+	// 检查是否是静态箭头函数 static fn
+	if p.peekToken.Type == lexer.T_FN {
+		// 这是静态箭头函数，委托给箭头函数解析器
+		return parseArrowFunctionExpression(p)
+	}
+	
+	// 否则使用原来的静态表达式解析
+	return parseStaticExpression(p)
+}
+
+// parseAnonymousClass 解析匿名类表达式 new class(args) extends Parent implements Interface { ... }
+func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
+	// 跳过 'new' 移动到 'class'
+	p.nextToken()
+	
+	var arguments []ast.Expression
+	
+	// 检查构造函数参数
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		p.nextToken() // 移动到 (
+		
+		// 解析参数列表
+		if p.peekToken.Type != lexer.TOKEN_RPAREN {
+			p.nextToken()
+			arguments = append(arguments, parseExpression(p, LOWEST))
+			
+			for p.peekToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 移动到逗号
+				p.nextToken() // 移动到下一个参数
+				arguments = append(arguments, parseExpression(p, LOWEST))
+			}
+		}
+		
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+	}
+	
+	// 检查 extends 子句
+	var extends ast.Expression
+	if p.peekToken.Type == lexer.T_EXTENDS {
+		p.nextToken() // 移动到 extends
+		p.nextToken() // 移动到类名
+		extends = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	}
+	
+	// 检查 implements 子句
+	var implements []ast.Expression
+	if p.peekToken.Type == lexer.T_IMPLEMENTS {
+		p.nextToken() // 移动到 implements
+		p.nextToken() // 移动到第一个接口名
+		implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+		
+		// 处理多个接口
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个接口名
+			implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+		}
+	}
+	
+	// 期望类体开始
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+	
+	// 解析类体
+	body := parseClassBody(p)
+	
+	return ast.NewAnonymousClass(pos, arguments, extends, implements, body)
+}
+
+// parseClassBody 解析类体
+func parseClassBody(p *Parser) []ast.Statement {
+	var statements []ast.Statement
+	
+	p.nextToken() // 进入类体
+	
+	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		stmt := parseClassStatement(p)
+		if stmt != nil {
+			statements = append(statements, stmt)
+		}
+		p.nextToken()
+	}
+	
+	return statements
+}
+
