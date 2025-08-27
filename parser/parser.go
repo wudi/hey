@@ -1808,6 +1808,12 @@ func parseArrayExpression(p *Parser) ast.Expression {
 
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
+		
+		// 检查是否为尾随逗号：如果逗号后面是右括号，则不解析更多元素
+		if p.peekToken.Type == lexer.TOKEN_RPAREN {
+			break
+		}
+		
 		p.nextToken() // 移动到下一个元素
 		
 		// 检查展开语法
@@ -3630,15 +3636,15 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 		// Create constant declarator
 		constants = append(constants, *ast.NewConstantDeclarator(constPos, name, value))
 		
-		p.nextToken()
-		// Check for comma (multiple constants)
-		if p.currentToken.Type == lexer.TOKEN_COMMA {
+		// Check for comma (multiple constants) using peekToken
+		if p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // Move to comma
 			p.nextToken() // Skip comma and continue
 			continue
 		}
 		
 		// Should end with semicolon
-		if p.currentToken.Type == lexer.TOKEN_SEMICOLON {
+		if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
 			break
 		}
 		

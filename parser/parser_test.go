@@ -702,6 +702,239 @@ func TestParsing_ArrayExpression(t *testing.T) {
 	}
 }
 
+// TestParsing_ArrayTrailingCommas tests parsing arrays with trailing commas
+func TestParsing_ArrayTrailingCommas(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Simple array with trailing comma",
+			input: `<?php $arr = array(1, 2, 3,); ?>`,
+			check: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				assign := stmt.Expression.(*ast.AssignmentExpression)
+				arr := assign.Right.(*ast.ArrayExpression)
+				assert.Len(t, arr.Elements, 3)
+				
+				// Check first element
+				num1 := arr.Elements[0].(*ast.NumberLiteral)
+				assert.Equal(t, "1", num1.Value)
+				
+				// Check second element  
+				num2 := arr.Elements[1].(*ast.NumberLiteral)
+				assert.Equal(t, "2", num2.Value)
+				
+				// Check third element
+				num3 := arr.Elements[2].(*ast.NumberLiteral)
+				assert.Equal(t, "3", num3.Value)
+			},
+		},
+		{
+			name:  "Associative array with trailing comma",
+			input: `<?php $arr = array("key" => "value", "key2" => "value2",); ?>`,
+			check: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				assign := stmt.Expression.(*ast.AssignmentExpression)
+				arr := assign.Right.(*ast.ArrayExpression)
+				assert.Len(t, arr.Elements, 2)
+				
+				// Check first element (key => value)
+				elem1 := arr.Elements[0].(*ast.ArrayElementExpression)
+				key1 := elem1.Key.(*ast.StringLiteral)
+				assert.Equal(t, "key", key1.Value)
+				val1 := elem1.Value.(*ast.StringLiteral)
+				assert.Equal(t, "value", val1.Value)
+				
+				// Check second element
+				elem2 := arr.Elements[1].(*ast.ArrayElementExpression)
+				key2 := elem2.Key.(*ast.StringLiteral)
+				assert.Equal(t, "key2", key2.Value)
+				val2 := elem2.Value.(*ast.StringLiteral)
+				assert.Equal(t, "value2", val2.Value)
+			},
+		},
+		{
+			name:  "Nested arrays with trailing commas",
+			input: `<?php $arr = array("nested" => array(1, 2,), "simple" => 3,); ?>`,
+			check: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				assign := stmt.Expression.(*ast.AssignmentExpression)
+				arr := assign.Right.(*ast.ArrayExpression)
+				assert.Len(t, arr.Elements, 2)
+				
+				// Check first element (nested array)
+				elem1 := arr.Elements[0].(*ast.ArrayElementExpression)
+				key1 := elem1.Key.(*ast.StringLiteral)
+				assert.Equal(t, "nested", key1.Value)
+				
+				nestedArr := elem1.Value.(*ast.ArrayExpression)
+				assert.Len(t, nestedArr.Elements, 2)
+				
+				num1 := nestedArr.Elements[0].(*ast.NumberLiteral)
+				assert.Equal(t, "1", num1.Value)
+				num2 := nestedArr.Elements[1].(*ast.NumberLiteral)
+				assert.Equal(t, "2", num2.Value)
+				
+				// Check second element
+				elem2 := arr.Elements[1].(*ast.ArrayElementExpression)
+				key2 := elem2.Key.(*ast.StringLiteral)
+				assert.Equal(t, "simple", key2.Value)
+				val2 := elem2.Value.(*ast.NumberLiteral)
+				assert.Equal(t, "3", val2.Value)
+			},
+		},
+		{
+			name:  "Complex class constant array with trailing commas",
+			input: `<?php
+class TestClass {
+    const COMPLEX = array(
+        self::KEY1 => array(
+            "sub1" => array(self::VALUE1,),
+            "sub2" => self::VALUE2,
+        ),
+        "simple" => "value",
+    );
+}`,
+			check: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				classExpr := stmt.Expression.(*ast.ClassExpression)
+				
+				// Find the constant declaration
+				var constDecl *ast.ClassConstantDeclaration
+				for _, member := range classExpr.Body {
+					if decl, ok := member.(*ast.ClassConstantDeclaration); ok {
+						constDecl = decl
+						break
+					}
+				}
+				require.NotNil(t, constDecl)
+				require.Len(t, constDecl.Constants, 1)
+				
+				// Check the constant has a complex array value
+				constant := constDecl.Constants[0]
+				constName, ok := constant.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "COMPLEX", constName.Name)
+				
+				arr, ok := constant.Value.(*ast.ArrayExpression)
+				require.True(t, ok, "Constant value should be an array")
+				assert.Len(t, arr.Elements, 2)
+				
+				// Check first element structure (complex nested)
+				elem1 := arr.Elements[0].(*ast.ArrayElementExpression)
+				classConst1 := elem1.Key.(*ast.StaticAccessExpression)
+				assert.Equal(t, "self", classConst1.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "KEY1", classConst1.Property.(*ast.IdentifierNode).Name)
+				
+				nestedArr1 := elem1.Value.(*ast.ArrayExpression)
+				assert.Len(t, nestedArr1.Elements, 2)
+				
+				// Check second element is simple
+				elem2 := arr.Elements[1].(*ast.ArrayElementExpression)
+				key2 := elem2.Key.(*ast.StringLiteral)
+				assert.Equal(t, "simple", key2.Value)
+				val2 := elem2.Value.(*ast.StringLiteral)
+				assert.Equal(t, "value", val2.Value)
+			},
+		},
+		{
+			name:  "Original failing case",
+			input: `<?php
+class Foo extends Boo {
+    const HOOKED_BLOCKS = array(
+        self::ANCHOR_BLOCK_TYPE => array(
+            'after'  => array( self::HOOKED_BLOCK_TYPE ),
+            'before' => array( self::OTHER_HOOKED_BLOCK_TYPE ),
+        ),
+    );
+}`,
+			check: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				classExpr := stmt.Expression.(*ast.ClassExpression)
+				
+				// Verify class name and inheritance
+				assert.Equal(t, "Foo", classExpr.Name.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "Boo", classExpr.Extends.(*ast.IdentifierNode).Name)
+				
+				// Find the constant declaration
+				var constDecl *ast.ClassConstantDeclaration
+				for _, member := range classExpr.Body {
+					if decl, ok := member.(*ast.ClassConstantDeclaration); ok {
+						constDecl = decl
+						break
+					}
+				}
+				require.NotNil(t, constDecl)
+				require.Len(t, constDecl.Constants, 1)
+				
+				// Check the constant structure
+				constant := constDecl.Constants[0]
+				constName, ok := constant.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "HOOKED_BLOCKS", constName.Name)
+				
+				arr, ok := constant.Value.(*ast.ArrayExpression)
+				require.True(t, ok, "Constant value should be an array")
+				assert.Len(t, arr.Elements, 1)
+				
+				// Check the main array element with self::ANCHOR_BLOCK_TYPE key
+				mainElem := arr.Elements[0].(*ast.ArrayElementExpression)
+				selfConst := mainElem.Key.(*ast.StaticAccessExpression)
+				assert.Equal(t, "self", selfConst.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "ANCHOR_BLOCK_TYPE", selfConst.Property.(*ast.IdentifierNode).Name)
+				
+				// Check the nested array value
+				nestedArr := mainElem.Value.(*ast.ArrayExpression)
+				assert.Len(t, nestedArr.Elements, 2)
+				
+				// Check 'after' element
+				afterElem := nestedArr.Elements[0].(*ast.ArrayElementExpression)
+				afterKey := afterElem.Key.(*ast.StringLiteral)
+				assert.Equal(t, "after", afterKey.Value)
+				
+				afterArr := afterElem.Value.(*ast.ArrayExpression)
+				assert.Len(t, afterArr.Elements, 1)
+				
+				afterValue := afterArr.Elements[0].(*ast.StaticAccessExpression)
+				assert.Equal(t, "self", afterValue.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "HOOKED_BLOCK_TYPE", afterValue.Property.(*ast.IdentifierNode).Name)
+				
+				// Check 'before' element
+				beforeElem := nestedArr.Elements[1].(*ast.ArrayElementExpression)
+				beforeKey := beforeElem.Key.(*ast.StringLiteral)
+				assert.Equal(t, "before", beforeKey.Value)
+				
+				beforeArr := beforeElem.Value.(*ast.ArrayExpression)
+				assert.Len(t, beforeArr.Elements, 1)
+				
+				beforeValue := beforeArr.Elements[0].(*ast.StaticAccessExpression)
+				assert.Equal(t, "self", beforeValue.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "OTHER_HOOKED_BLOCK_TYPE", beforeValue.Property.(*ast.IdentifierNode).Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			
+			tt.check(t, program)
+		})
+	}
+}
+
 func TestParsing_GroupedExpression(t *testing.T) {
 	input := `<?php $result = (5 + 3) * 2; ?>`
 
