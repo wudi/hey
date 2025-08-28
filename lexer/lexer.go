@@ -7,23 +7,23 @@ import (
 
 // Lexer 词法分析器结构体
 type Lexer struct {
-	input         string        // 输入源代码
-	position      int           // 当前位置（指向当前字符）
-	readPosition  int           // 当前读取位置（指向当前字符之后的字符）
-	ch            byte          // 当前字符
-	line          int           // 当前行号
-	column        int           // 当前列号
-	
+	input        string // 输入源代码
+	position     int    // 当前位置（指向当前字符）
+	readPosition int    // 当前读取位置（指向当前字符之后的字符）
+	ch           byte   // 当前字符
+	line         int    // 当前行号
+	column       int    // 当前列号
+
 	// 状态管理
-	state         LexerState    // 当前状态
-	stateStack    *StateStack   // 状态栈
-	
+	state      LexerState  // 当前状态
+	stateStack *StateStack // 状态栈
+
 	// Heredoc/Nowdoc 支持
-	heredocLabel  string        // 当前 Heredoc 标签
-	heredocLabels []string      // Heredoc 标签栈
-	
+	heredocLabel  string   // 当前 Heredoc 标签
+	heredocLabels []string // Heredoc 标签栈
+
 	// 错误处理
-	errors        []string      // 错误列表
+	errors []string // 错误列表
 }
 
 // New 创建新的词法分析器
@@ -37,10 +37,10 @@ func New(input string) *Lexer {
 		heredocLabels: make([]string, 0),
 		errors:        make([]string, 0),
 	}
-	
+
 	// 跳过 shebang 行（如 #!/usr/bin/php）
 	l.skipShebang()
-	
+
 	l.readChar() // 读取第一个字符
 	return l
 }
@@ -54,7 +54,7 @@ func (l *Lexer) skipShebang() {
 		for i < len(l.input) && l.input[i] != '\n' && l.input[i] != '\r' {
 			i++
 		}
-		
+
 		// 处理不同的行尾格式
 		if i < len(l.input) {
 			if l.input[i] == '\r' {
@@ -67,7 +67,7 @@ func (l *Lexer) skipShebang() {
 				i++ // 跳过 \n (LF)
 			}
 		}
-		
+
 		// 更新输入，从 shebang 行之后开始
 		if i > 0 && i < len(l.input) {
 			l.input = l.input[i:]
@@ -83,15 +83,15 @@ func (l *Lexer) readChar() {
 	// 先更新位置指针
 	l.position = l.readPosition
 	l.readPosition++
-	
+
 	// 根据当前读取的字符更新行列信息
 	if l.position >= len(l.input) {
 		l.ch = 0 // EOF
 		return
 	}
-	
+
 	l.ch = l.input[l.position]
-	
+
 	// 更新行列信息：基于当前字符位置
 	if l.position == 0 {
 		// 第一个字符
@@ -156,7 +156,7 @@ func (l *Lexer) readIdentifier() string {
 func (l *Lexer) readNumber() (string, TokenType) {
 	position := l.position
 	tokenType := T_LNUMBER // 默认为整数
-	
+
 	// 处理十六进制
 	if l.ch == '0' && (l.peekChar() == 'x' || l.peekChar() == 'X') {
 		l.readChar() // 跳过 '0'
@@ -166,7 +166,7 @@ func (l *Lexer) readNumber() (string, TokenType) {
 		}
 		return l.input[position:l.position], T_LNUMBER
 	}
-	
+
 	// 处理八进制
 	if l.ch == '0' && isDigit(l.peekChar()) {
 		for isOctalDigit(l.ch) {
@@ -174,7 +174,7 @@ func (l *Lexer) readNumber() (string, TokenType) {
 		}
 		return l.input[position:l.position], T_LNUMBER
 	}
-	
+
 	// 处理二进制
 	if l.ch == '0' && (l.peekChar() == 'b' || l.peekChar() == 'B') {
 		l.readChar() // 跳过 '0'
@@ -184,12 +184,12 @@ func (l *Lexer) readNumber() (string, TokenType) {
 		}
 		return l.input[position:l.position], T_LNUMBER
 	}
-	
+
 	// 处理十进制
 	for isDigit(l.ch) {
 		l.readChar()
 	}
-	
+
 	// 检查是否为浮点数
 	if l.ch == '.' && isDigit(l.peekChar()) {
 		tokenType = T_DNUMBER
@@ -198,7 +198,7 @@ func (l *Lexer) readNumber() (string, TokenType) {
 			l.readChar()
 		}
 	}
-	
+
 	// 检查科学计数法
 	if l.ch == 'e' || l.ch == 'E' {
 		tokenType = T_DNUMBER
@@ -210,16 +210,16 @@ func (l *Lexer) readNumber() (string, TokenType) {
 			l.readChar()
 		}
 	}
-	
+
 	return l.input[position:l.position], tokenType
 }
 
 // readString 读取字符串
 func (l *Lexer) readString(delimiter byte) (string, error) {
 	l.readChar() // 移动到引号后
-	
+
 	var result strings.Builder
-	
+
 	for l.ch != delimiter && l.ch != 0 {
 		if l.ch == '\\' {
 			// 处理转义字符
@@ -247,11 +247,11 @@ func (l *Lexer) readString(delimiter byte) (string, error) {
 		}
 		l.readChar()
 	}
-	
+
 	if l.ch != delimiter {
 		return "", fmt.Errorf("unterminated string at line %d, column %d", l.line, l.column)
 	}
-	
+
 	l.readChar() // 跳过结束的引号
 	return result.String(), nil
 }
@@ -268,7 +268,7 @@ func (l *Lexer) readLineComment() string {
 // readBlockComment 读取块注释
 func (l *Lexer) readBlockComment() string {
 	position := l.position
-	
+
 	for {
 		if l.ch == 0 {
 			break
@@ -280,7 +280,7 @@ func (l *Lexer) readBlockComment() string {
 		}
 		l.readChar()
 	}
-	
+
 	return l.input[position:l.position]
 }
 
@@ -307,7 +307,7 @@ func (l *Lexer) NextToken() Token {
 func (l *Lexer) nextTokenInitial() Token {
 	var content strings.Builder
 	pos := l.getCurrentPosition()
-	
+
 	// 查找 PHP 开始标签
 	for l.ch != 0 {
 		if l.ch == '<' {
@@ -318,20 +318,20 @@ func (l *Lexer) nextTokenInitial() Token {
 					if content.Len() > 0 {
 						return Token{Type: T_INLINE_HTML, Value: content.String(), Position: pos}
 					}
-					
+
 					// 读取 <?php
 					result := ""
 					for i := 0; i < 5; i++ {
 						result += string(l.ch)
 						l.readChar()
 					}
-					
+
 					// 跳过可能的空白
 					if l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
 						result += string(l.ch)
 						l.readChar()
 					}
-					
+
 					l.state = ST_IN_SCRIPTING
 					return Token{Type: T_OPEN_TAG, Value: result, Position: pos}
 				} else if l.peekCharN(1) == '=' {
@@ -339,40 +339,40 @@ func (l *Lexer) nextTokenInitial() Token {
 					if content.Len() > 0 {
 						return Token{Type: T_INLINE_HTML, Value: content.String(), Position: pos}
 					}
-					
+
 					result := string(l.ch) + string(l.peekChar()) + string(l.peekCharN(1))
 					l.readChar() // <
 					l.readChar() // ?
 					l.readChar() // =
-					
+
 					l.state = ST_IN_SCRIPTING
 					return Token{Type: T_OPEN_TAG_WITH_ECHO, Value: result, Position: pos}
 				}
 			}
 		}
-		
+
 		content.WriteByte(l.ch)
 		l.readChar()
 	}
-	
+
 	// 文件结束
 	if content.Len() > 0 {
 		return Token{Type: T_INLINE_HTML, Value: content.String(), Position: pos}
 	}
-	
+
 	return Token{Type: T_EOF, Value: "", Position: l.getCurrentPosition()}
 }
 
 // nextTokenInScripting 在 PHP 脚本模式获取下一个token
 func (l *Lexer) nextTokenInScripting() Token {
 	l.skipWhitespace()
-	
+
 	pos := l.getCurrentPosition()
-	
+
 	switch l.ch {
 	case 0:
 		return Token{Type: T_EOF, Value: "", Position: pos}
-		
+
 	// 单字符 tokens
 	case ';':
 		l.readChar()
@@ -412,7 +412,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 	case '@':
 		l.readChar()
 		return Token{Type: TOKEN_AT, Value: "@", Position: pos}
-		
+
 	// 可能是多字符的操作符
 	case '+':
 		if l.peekChar() == '+' {
@@ -426,7 +426,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_PLUS, Value: "+", Position: pos}
-		
+
 	case '-':
 		if l.peekChar() == '-' {
 			l.readChar()
@@ -443,7 +443,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_MINUS, Value: "-", Position: pos}
-		
+
 	case '*':
 		if l.peekChar() == '*' {
 			l.readChar()
@@ -460,7 +460,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_MULTIPLY, Value: "*", Position: pos}
-		
+
 	case '/':
 		if l.peekChar() == '/' {
 			// 单行注释
@@ -469,10 +469,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 		} else if l.peekChar() == '*' {
 			// 块注释 - 先检查是否为文档注释
 			isDocComment := l.peekChar() == '*' && l.peekCharN(1) == '*' // 检查是否为 /**
-			l.readChar() // 跳过 /
+			l.readChar()                                                 // 跳过 /
 			comment := l.readBlockComment()
 			fullComment := "/" + comment
-			
+
 			if isDocComment {
 				return Token{Type: T_DOC_COMMENT, Value: fullComment, Position: pos}
 			}
@@ -484,7 +484,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_DIVIDE, Value: "/", Position: pos}
-		
+
 	case '%':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -493,7 +493,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_MODULO, Value: "%", Position: pos}
-		
+
 	case '=':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -510,7 +510,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_EQUAL, Value: "=", Position: pos}
-		
+
 	case '!':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -523,7 +523,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_EXCLAMATION, Value: "!", Position: pos}
-		
+
 	case '<':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -548,7 +548,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_LT, Value: "<", Position: pos}
-		
+
 	case '>':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -565,7 +565,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_GT, Value: ">", Position: pos}
-		
+
 	case '&':
 		if l.peekChar() == '&' {
 			l.readChar()
@@ -578,7 +578,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_AMPERSAND, Value: "&", Position: pos}
-		
+
 	case '|':
 		if l.peekChar() == '|' {
 			l.readChar()
@@ -588,14 +588,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 			l.readChar()
 			l.readChar()
 			return Token{Type: T_OR_EQUAL, Value: "|=", Position: pos}
-		} else if l.peekChar() == '>' {
-			l.readChar()
-			l.readChar()
-			return Token{Type: T_PIPE, Value: "|>", Position: pos}
 		}
 		l.readChar()
 		return Token{Type: TOKEN_PIPE, Value: "|", Position: pos}
-		
+
 	case '^':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -604,7 +600,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_CARET, Value: "^", Position: pos}
-		
+
 	case '.':
 		if l.peekChar() == '=' {
 			l.readChar()
@@ -612,7 +608,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 			return Token{Type: T_CONCAT_EQUAL, Value: ".=", Position: pos}
 		} else if l.peekChar() == '.' && l.peekCharN(1) == '.' {
 			// Ellipsis (...) - first dot already consumed by switch
-			l.readChar() // move to second dot  
+			l.readChar() // move to second dot
 			l.readChar() // move to third dot
 			l.readChar() // move past third dot
 			return Token{Type: T_ELLIPSIS, Value: "...", Position: pos}
@@ -623,7 +619,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_DOT, Value: ".", Position: pos}
-		
+
 	case '?':
 		if l.peekChar() == '?' {
 			l.readChar()
@@ -647,7 +643,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_QUESTION, Value: "?", Position: pos}
-		
+
 	case ':':
 		if l.peekChar() == ':' {
 			l.readChar()
@@ -656,7 +652,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_COLON, Value: ":", Position: pos}
-		
+
 	case '$':
 		if isLetter(l.peekChar()) || l.peekChar() == '_' {
 			// 变量
@@ -666,11 +662,11 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		l.readChar()
 		return Token{Type: TOKEN_DOLLAR, Value: "$", Position: pos}
-		
+
 	case '\\':
 		l.readChar()
 		return Token{Type: T_NS_SEPARATOR, Value: "\\", Position: pos}
-		
+
 	case '"':
 		// 双引号字符串 - 检查是否包含变量插值
 		if l.containsInterpolation('"') {
@@ -683,20 +679,20 @@ func (l *Lexer) nextTokenInScripting() Token {
 			str, err := l.readString('"')
 			if err != nil {
 				l.addError(err.Error())
-				return Token{Type: T_UNKNOWN, Value: "", Position: pos}
+				return Token{Type: T_BAD_CHARACTER, Value: "", Position: pos}
 			}
 			return Token{Type: T_CONSTANT_ENCAPSED_STRING, Value: `"` + str + `"`, Position: pos}
 		}
-		
+
 	case '\'':
 		// 单引号字符串
 		str, err := l.readString('\'')
 		if err != nil {
 			l.addError(err.Error())
-			return Token{Type: T_UNKNOWN, Value: "", Position: pos}
+			return Token{Type: T_BAD_CHARACTER, Value: "", Position: pos}
 		}
 		return Token{Type: T_CONSTANT_ENCAPSED_STRING, Value: "'" + str + "'", Position: pos}
-		
+
 	case '#':
 		// 检查是否为属性语法 #[
 		if l.peekChar() == '[' {
@@ -707,12 +703,12 @@ func (l *Lexer) nextTokenInScripting() Token {
 		// 单行注释 (# 形式)
 		comment := l.readLineComment()
 		return Token{Type: T_COMMENT, Value: comment, Position: pos}
-		
+
 	default:
 		if isLetter(l.ch) || l.ch == '_' {
 			// 标识符或关键字
 			identifier := l.readIdentifier()
-			
+
 			// 检查特殊复合关键字 "yield from"
 			if identifier == "yield" {
 				// 保存当前位置
@@ -721,10 +717,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 				savedCh := l.ch
 				savedLine := l.line
 				savedColumn := l.column
-				
+
 				// 跳过空白
 				l.skipWhitespace()
-				
+
 				// 检查下一个标识符是否为 "from"
 				if isLetter(l.ch) || l.ch == '_' {
 					nextIdentifier := l.readIdentifier()
@@ -733,7 +729,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 						return Token{Type: T_YIELD_FROM, Value: "yield from", Position: pos}
 					}
 				}
-				
+
 				// 恢复位置（没有找到 "from"）
 				l.position = savedPos
 				l.readPosition = savedReadPos
@@ -741,12 +737,12 @@ func (l *Lexer) nextTokenInScripting() Token {
 				l.line = savedLine
 				l.column = savedColumn
 			}
-			
+
 			// 检查是否为关键字
 			if tokenType, isKeyword := IsKeyword(identifier); isKeyword {
 				return Token{Type: tokenType, Value: identifier, Position: pos}
 			}
-			
+
 			return Token{Type: T_STRING, Value: identifier, Position: pos}
 		} else if isDigit(l.ch) {
 			// 数字
@@ -765,21 +761,21 @@ func (l *Lexer) nextTokenInScripting() Token {
 // nextTokenInDoubleQuotes 在双引号字符串中获取token
 func (l *Lexer) nextTokenInDoubleQuotes() Token {
 	pos := l.getCurrentPosition()
-	
+
 	// 检查是否到达字符串结尾
 	if l.ch == '"' {
 		l.readChar() // 跳过结束引号
 		l.state = ST_IN_SCRIPTING
 		return Token{Type: TOKEN_QUOTE, Value: "\"", Position: pos}
 	}
-	
+
 	if l.ch == 0 {
 		l.addError("unterminated string")
 		return Token{Type: T_EOF, Value: "", Position: pos}
 	}
-	
+
 	var content strings.Builder
-	
+
 	for l.ch != '"' && l.ch != 0 {
 		// 检查 {$variable} 语法
 		if l.ch == '{' && l.peekChar() == '$' {
@@ -802,7 +798,7 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 			identifier := l.readIdentifier()
 			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
 		}
-		
+
 		// 处理转义字符
 		if l.ch == '\\' {
 			l.readChar() // 跳过反斜杠
@@ -830,11 +826,11 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 			l.readChar()
 		}
 	}
-		
+
 	if content.Len() > 0 {
 		return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
 	}
-	
+
 	return Token{Type: T_EOF, Value: "", Position: pos}
 }
 
@@ -843,15 +839,15 @@ func (l *Lexer) handleHeredocStart(pos Position) Token {
 	l.readChar() // 跳过第一个 <
 	l.readChar() // 跳过第二个 <
 	l.readChar() // 跳过第三个 <
-	
+
 	// 跳过空白
 	for l.ch == ' ' || l.ch == '\t' {
 		l.readChar()
 	}
-	
+
 	isNowdoc := false
 	var label string
-	
+
 	// 检查是否为 Nowdoc (<<<'LABEL')
 	if l.ch == '\'' {
 		isNowdoc = true
@@ -871,12 +867,12 @@ func (l *Lexer) handleHeredocStart(pos Position) Token {
 		// 普通 Heredoc <<<LABEL
 		label = l.readHeredocLabel()
 	}
-	
+
 	if label == "" {
 		l.addError("invalid heredoc/nowdoc label")
-		return Token{Type: T_UNKNOWN, Value: "<<<", Position: pos}
+		return Token{Type: T_START_HEREDOC, Value: "<<<", Position: pos}
 	}
-	
+
 	// 跳过到行尾，并记录换行符用于token值
 	var lineEnding string
 	for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
@@ -890,12 +886,12 @@ func (l *Lexer) handleHeredocStart(pos Position) Token {
 		lineEnding += string(l.ch)
 		l.readChar()
 	}
-	
+
 	// 保存标签并切换状态
 	l.heredocLabel = label
 	if isNowdoc {
 		l.state = ST_NOWDOC
-		return Token{Type: T_NOWDOC, Value: "<<<'" + label + "'" + lineEnding, Position: pos}
+		return Token{Type: T_START_HEREDOC, Value: "<<<'" + label + "'" + lineEnding, Position: pos}
 	} else {
 		l.state = ST_HEREDOC
 		return Token{Type: T_START_HEREDOC, Value: "<<<" + label + lineEnding, Position: pos}
@@ -905,24 +901,24 @@ func (l *Lexer) handleHeredocStart(pos Position) Token {
 // readHeredocLabel 读取 Heredoc/Nowdoc 标签
 func (l *Lexer) readHeredocLabel() string {
 	var label strings.Builder
-	
+
 	// 第一个字符必须是字母或下划线
 	if !isLetter(l.ch) {
 		return ""
 	}
-	
+
 	for isLetter(l.ch) || isDigit(l.ch) {
 		label.WriteByte(l.ch)
 		l.readChar()
 	}
-	
+
 	return label.String()
 }
 
 // nextTokenInHeredoc 在Heredoc中获取token
 func (l *Lexer) nextTokenInHeredoc() Token {
 	pos := l.getCurrentPosition()
-	
+
 	// 检查是否到达结束标签
 	if l.isAtHeredocEnd() {
 		// 计算缩进长度
@@ -930,20 +926,20 @@ func (l *Lexer) nextTokenInHeredoc() Token {
 		for indentStart > 0 && l.input[indentStart-1] != '\n' && l.input[indentStart-1] != '\r' {
 			indentStart--
 		}
-		
+
 		// 读取结束标签（包含缩进）
-		endTokenValue := l.input[indentStart:l.position+len(l.heredocLabel)]
-		
+		endTokenValue := l.input[indentStart : l.position+len(l.heredocLabel)]
+
 		// 移动到标签结束位置
 		for i := 0; i < len(l.heredocLabel); i++ {
 			l.readChar()
 		}
-		
+
 		l.heredocLabel = ""
 		l.state = ST_IN_SCRIPTING
 		return Token{Type: T_END_HEREDOC, Value: endTokenValue, Position: pos}
 	}
-	
+
 	// 读取 Heredoc 内容
 	var content strings.Builder
 	for !l.isAtHeredocEnd() && l.ch != 0 {
@@ -969,18 +965,18 @@ func (l *Lexer) nextTokenInHeredoc() Token {
 		content.WriteByte(l.ch)
 		l.readChar()
 	}
-	
+
 	if content.Len() > 0 {
 		return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
 	}
-	
+
 	return Token{Type: T_EOF, Value: "", Position: pos}
 }
 
 // nextTokenInNowdoc 在Nowdoc中获取token
 func (l *Lexer) nextTokenInNowdoc() Token {
 	pos := l.getCurrentPosition()
-	
+
 	// 检查是否到达结束标签
 	if l.isAtHeredocEnd() {
 		// 计算缩进长度
@@ -988,31 +984,31 @@ func (l *Lexer) nextTokenInNowdoc() Token {
 		for indentStart > 0 && l.input[indentStart-1] != '\n' && l.input[indentStart-1] != '\r' {
 			indentStart--
 		}
-		
+
 		// 读取结束标签（包含缩进）
-		endTokenValue := l.input[indentStart:l.position+len(l.heredocLabel)]
-		
+		endTokenValue := l.input[indentStart : l.position+len(l.heredocLabel)]
+
 		// 移动到标签结束位置
 		for i := 0; i < len(l.heredocLabel); i++ {
 			l.readChar()
 		}
-		
+
 		l.heredocLabel = ""
 		l.state = ST_IN_SCRIPTING
 		return Token{Type: T_END_HEREDOC, Value: endTokenValue, Position: pos}
 	}
-	
+
 	// 读取 Nowdoc 内容（无变量插值）
 	var content strings.Builder
 	for !l.isAtHeredocEnd() && l.ch != 0 {
 		content.WriteByte(l.ch)
 		l.readChar()
 	}
-	
+
 	if content.Len() > 0 {
 		return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
 	}
-	
+
 	return Token{Type: T_EOF, Value: "", Position: pos}
 }
 
@@ -1021,7 +1017,7 @@ func (l *Lexer) isAtHeredocEnd() bool {
 	if l.heredocLabel == "" {
 		return false
 	}
-	
+
 	// 检查当前位置是否在行首（允许缩进）
 	if l.column != 0 {
 		// 如果不在第0列，检查是否在行首的缩进位置
@@ -1035,31 +1031,31 @@ func (l *Lexer) isAtHeredocEnd() bool {
 		}
 		// 如果到达这里，说明从行首到当前位置都是缩进字符
 	}
-	
+
 	labelLen := len(l.heredocLabel)
 	if l.position+labelLen > len(l.input) {
 		return false
 	}
-	
+
 	// 检查是否匹配标签
-	candidateLabel := l.input[l.position:l.position+labelLen]
+	candidateLabel := l.input[l.position : l.position+labelLen]
 	if candidateLabel != l.heredocLabel {
 		return false
 	}
-	
+
 	// 检查标签后面的字符是否不是标签的延续（参考PHP的IS_LABEL_SUCCESSOR逻辑）
 	nextPos := l.position + labelLen
 	if nextPos >= len(l.input) {
 		return true // 文件结尾
 	}
-	
+
 	nextChar := l.input[nextPos]
 	// 如果下一个字符不是字母、数字、下划线，则是有效的结束标记
 	// 这与 PHP 的 !IS_LABEL_SUCCESSOR() 检查一致
-	isLabelSuccessor := (nextChar >= 'a' && nextChar <= 'z') || 
-	                   (nextChar >= 'A' && nextChar <= 'Z') || 
-	                   (nextChar >= '0' && nextChar <= '9') || 
-	                   nextChar == '_'
+	isLabelSuccessor := (nextChar >= 'a' && nextChar <= 'z') ||
+		(nextChar >= 'A' && nextChar <= 'Z') ||
+		(nextChar >= '0' && nextChar <= '9') ||
+		nextChar == '_'
 	return !isLabelSuccessor
 }
 
@@ -1088,15 +1084,15 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 	oldCh := l.ch
 	oldLine := l.line
 	oldColumn := l.column
-	
+
 	// 读取左括号后面的内容
 	l.readChar() // 跳过 '('
-	
+
 	// 跳过空白字符
 	for l.ch == ' ' || l.ch == '\t' {
 		l.readChar()
 	}
-	
+
 	// 读取类型名称
 	start := l.position
 	if isLetter(l.ch) {
@@ -1104,14 +1100,14 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 			l.readChar()
 		}
 	}
-	
+
 	typeName := l.input[start:l.position]
-	
+
 	// 跳过空白字符
 	for l.ch == ' ' || l.ch == '\t' {
 		l.readChar()
 	}
-	
+
 	// 检查是否以 ')' 结尾
 	if l.ch != ')' {
 		// 恢复位置
@@ -1122,11 +1118,11 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 		l.column = oldColumn
 		return 0, "", false
 	}
-	
+
 	// 检查是否是有效的类型
 	var tokenType TokenType
 	var tokenValue string
-	
+
 	switch typeName {
 	case "int", "integer":
 		tokenType = T_INT_CAST
@@ -1161,10 +1157,10 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 		l.column = oldColumn
 		return 0, "", false
 	}
-	
+
 	// 跳过 ')'
 	l.readChar()
-	
+
 	return tokenType, tokenValue, true
 }
 
@@ -1191,14 +1187,14 @@ func isBinaryDigit(ch byte) bool {
 // containsInterpolation 检查字符串是否包含变量插值
 func (l *Lexer) containsInterpolation(delimiter byte) bool {
 	pos := l.position + 1 // 跳过开头的引号
-	
+
 	for pos < len(l.input) && l.input[pos] != delimiter {
 		if l.input[pos] == '\\' {
 			// 跳过转义字符
 			pos += 2
 			continue
 		}
-		
+
 		// 检查变量插值
 		if l.input[pos] == '$' && pos+1 < len(l.input) {
 			nextChar := l.input[pos+1]
@@ -1206,14 +1202,14 @@ func (l *Lexer) containsInterpolation(delimiter byte) bool {
 				return true
 			}
 		}
-		
+
 		// 检查花括号插值 {$var}
 		if l.input[pos] == '{' && pos+1 < len(l.input) && l.input[pos+1] == '$' {
 			return true
 		}
-		
+
 		pos++
 	}
-	
+
 	return false
 }
