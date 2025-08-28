@@ -191,31 +191,31 @@ func TestParsing_BitwiseOperators(t *testing.T) {
 			require.Len(t, program.Body, 1)
 
 			stmt := program.Body[0]
-			
+
 			// Handle different statement types
 			switch tt.expected["stmtType"] {
 			case "ExpressionStatement":
 				exprStmt, ok := stmt.(*ast.ExpressionStatement)
 				require.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				if tt.expected["exprType"] == "CallExpression" {
 					call, ok := exprStmt.Expression.(*ast.CallExpression)
 					require.True(t, ok, "Expression should be CallExpression")
-					
+
 					callee, ok := call.Callee.(*ast.IdentifierNode)
 					require.True(t, ok, "Callee should be IdentifierNode")
 					assert.Equal(t, tt.expected["callee"], callee.Name)
-					
+
 					require.Len(t, call.Arguments, 1)
 					arg := call.Arguments[0]
-					
+
 					binary, ok := arg.(*ast.BinaryExpression)
 					require.True(t, ok, "Argument should be BinaryExpression")
-					
+
 					// Verify left side (property access)
 					_, ok = binary.Left.(*ast.PropertyAccessExpression)
 					require.True(t, ok, "Left should be PropertyAccessExpression")
-					
+
 					// Verify right side (unary expression)
 					unary, ok := binary.Right.(*ast.UnaryExpression)
 					require.True(t, ok, "Right should be UnaryExpression")
@@ -375,10 +375,10 @@ func TestParsing_BinaryExpressions(t *testing.T) {
 
 func TestParsing_InstanceofExpressions(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		leftVar     string
-		rightClass  string
+		name       string
+		input      string
+		leftVar    string
+		rightClass string
 	}{
 		{
 			"simple class name",
@@ -411,7 +411,7 @@ func TestParsing_InstanceofExpressions(t *testing.T) {
 			"PHPMailer\\PHPMailer\\PHPMailer",
 		},
 		{
-			"negated instanceof in if condition", 
+			"negated instanceof in if condition",
 			`<?php if (!($phpmailer instanceof PHPMailer\PHPMailer\PHPMailer)) {} ?>`,
 			"$phpmailer",
 			"PHPMailer\\PHPMailer\\PHPMailer",
@@ -469,7 +469,7 @@ func TestParsing_InstanceofExpressions(t *testing.T) {
 			default:
 				t.Errorf("Unexpected right operand type: %T", right)
 			}
-			
+
 			assert.Equal(t, tt.rightClass, rightName)
 		})
 	}
@@ -895,7 +895,7 @@ func TestParsing_BitwiseOperations(t *testing.T) {
 			operator: ">>",
 		},
 		{
-			name:     "Bitwise left shift", 
+			name:     "Bitwise left shift",
 			input:    `<?php $result = $value << 3; ?>`,
 			operator: "<<",
 		},
@@ -935,12 +935,12 @@ func TestParsing_BitwiseOperations(t *testing.T) {
 				binaryExpr, ok := exprStmt.Expression.(*ast.BinaryExpression)
 				assert.True(t, ok, "Expression should be BinaryExpression")
 				assert.Equal(t, tt.operator, binaryExpr.Operator)
-				
+
 				// Check left side is a bitwise AND operation
 				leftExpr, ok := binaryExpr.Left.(*ast.BinaryExpression)
 				assert.True(t, ok, "Left side should be BinaryExpression")
 				assert.Equal(t, "&", leftExpr.Operator)
-				
+
 				// Check the left side of bitwise AND is a right shift operation
 				leftLeftExpr, ok := leftExpr.Left.(*ast.BinaryExpression)
 				assert.True(t, ok, "Left left should be BinaryExpression")
@@ -1008,15 +1008,15 @@ func TestParsing_ArrayTrailingCommas(t *testing.T) {
 				assign := stmt.Expression.(*ast.AssignmentExpression)
 				arr := assign.Right.(*ast.ArrayExpression)
 				assert.Len(t, arr.Elements, 3)
-				
+
 				// Check first element
 				num1 := arr.Elements[0].(*ast.NumberLiteral)
 				assert.Equal(t, "1", num1.Value)
-				
-				// Check second element  
+
+				// Check second element
 				num2 := arr.Elements[1].(*ast.NumberLiteral)
 				assert.Equal(t, "2", num2.Value)
-				
+
 				// Check third element
 				num3 := arr.Elements[2].(*ast.NumberLiteral)
 				assert.Equal(t, "3", num3.Value)
@@ -1031,14 +1031,14 @@ func TestParsing_ArrayTrailingCommas(t *testing.T) {
 				assign := stmt.Expression.(*ast.AssignmentExpression)
 				arr := assign.Right.(*ast.ArrayExpression)
 				assert.Len(t, arr.Elements, 2)
-				
+
 				// Check first element (key => value)
 				elem1 := arr.Elements[0].(*ast.ArrayElementExpression)
 				key1 := elem1.Key.(*ast.StringLiteral)
 				assert.Equal(t, "key", key1.Value)
 				val1 := elem1.Value.(*ast.StringLiteral)
 				assert.Equal(t, "value", val1.Value)
-				
+
 				// Check second element
 				elem2 := arr.Elements[1].(*ast.ArrayElementExpression)
 				key2 := elem2.Key.(*ast.StringLiteral)
@@ -1056,20 +1056,20 @@ func TestParsing_ArrayTrailingCommas(t *testing.T) {
 				assign := stmt.Expression.(*ast.AssignmentExpression)
 				arr := assign.Right.(*ast.ArrayExpression)
 				assert.Len(t, arr.Elements, 2)
-				
+
 				// Check first element (nested array)
 				elem1 := arr.Elements[0].(*ast.ArrayElementExpression)
 				key1 := elem1.Key.(*ast.StringLiteral)
 				assert.Equal(t, "nested", key1.Value)
-				
+
 				nestedArr := elem1.Value.(*ast.ArrayExpression)
 				assert.Len(t, nestedArr.Elements, 2)
-				
+
 				num1 := nestedArr.Elements[0].(*ast.NumberLiteral)
 				assert.Equal(t, "1", num1.Value)
 				num2 := nestedArr.Elements[1].(*ast.NumberLiteral)
 				assert.Equal(t, "2", num2.Value)
-				
+
 				// Check second element
 				elem2 := arr.Elements[1].(*ast.ArrayElementExpression)
 				key2 := elem2.Key.(*ast.StringLiteral)
@@ -1079,7 +1079,7 @@ func TestParsing_ArrayTrailingCommas(t *testing.T) {
 			},
 		},
 		{
-			name:  "Complex class constant array with trailing commas",
+			name: "Complex class constant array with trailing commas",
 			input: `<?php
 class TestClass {
     const COMPLEX = array(
@@ -1094,7 +1094,7 @@ class TestClass {
 				require.Len(t, program.Body, 1)
 				stmt := program.Body[0].(*ast.ExpressionStatement)
 				classExpr := stmt.Expression.(*ast.ClassExpression)
-				
+
 				// Find the constant declaration
 				var constDecl *ast.ClassConstantDeclaration
 				for _, member := range classExpr.Body {
@@ -1105,26 +1105,26 @@ class TestClass {
 				}
 				require.NotNil(t, constDecl)
 				require.Len(t, constDecl.Constants, 1)
-				
+
 				// Check the constant has a complex array value
 				constant := constDecl.Constants[0]
 				constName, ok := constant.Name.(*ast.IdentifierNode)
 				require.True(t, ok)
 				assert.Equal(t, "COMPLEX", constName.Name)
-				
+
 				arr, ok := constant.Value.(*ast.ArrayExpression)
 				require.True(t, ok, "Constant value should be an array")
 				assert.Len(t, arr.Elements, 2)
-				
+
 				// Check first element structure (complex nested)
 				elem1 := arr.Elements[0].(*ast.ArrayElementExpression)
 				classConst1 := elem1.Key.(*ast.StaticAccessExpression)
 				assert.Equal(t, "self", classConst1.Class.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "KEY1", classConst1.Property.(*ast.IdentifierNode).Name)
-				
+
 				nestedArr1 := elem1.Value.(*ast.ArrayExpression)
 				assert.Len(t, nestedArr1.Elements, 2)
-				
+
 				// Check second element is simple
 				elem2 := arr.Elements[1].(*ast.ArrayElementExpression)
 				key2 := elem2.Key.(*ast.StringLiteral)
@@ -1134,7 +1134,7 @@ class TestClass {
 			},
 		},
 		{
-			name:  "Original failing case",
+			name: "Original failing case",
 			input: `<?php
 class Foo extends Boo {
     const HOOKED_BLOCKS = array(
@@ -1148,11 +1148,11 @@ class Foo extends Boo {
 				require.Len(t, program.Body, 1)
 				stmt := program.Body[0].(*ast.ExpressionStatement)
 				classExpr := stmt.Expression.(*ast.ClassExpression)
-				
+
 				// Verify class name and inheritance
 				assert.Equal(t, "Foo", classExpr.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "Boo", classExpr.Extends.(*ast.IdentifierNode).Name)
-				
+
 				// Find the constant declaration
 				var constDecl *ast.ClassConstantDeclaration
 				for _, member := range classExpr.Body {
@@ -1163,47 +1163,47 @@ class Foo extends Boo {
 				}
 				require.NotNil(t, constDecl)
 				require.Len(t, constDecl.Constants, 1)
-				
+
 				// Check the constant structure
 				constant := constDecl.Constants[0]
 				constName, ok := constant.Name.(*ast.IdentifierNode)
 				require.True(t, ok)
 				assert.Equal(t, "HOOKED_BLOCKS", constName.Name)
-				
+
 				arr, ok := constant.Value.(*ast.ArrayExpression)
 				require.True(t, ok, "Constant value should be an array")
 				assert.Len(t, arr.Elements, 1)
-				
+
 				// Check the main array element with self::ANCHOR_BLOCK_TYPE key
 				mainElem := arr.Elements[0].(*ast.ArrayElementExpression)
 				selfConst := mainElem.Key.(*ast.StaticAccessExpression)
 				assert.Equal(t, "self", selfConst.Class.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "ANCHOR_BLOCK_TYPE", selfConst.Property.(*ast.IdentifierNode).Name)
-				
+
 				// Check the nested array value
 				nestedArr := mainElem.Value.(*ast.ArrayExpression)
 				assert.Len(t, nestedArr.Elements, 2)
-				
+
 				// Check 'after' element
 				afterElem := nestedArr.Elements[0].(*ast.ArrayElementExpression)
 				afterKey := afterElem.Key.(*ast.StringLiteral)
 				assert.Equal(t, "after", afterKey.Value)
-				
+
 				afterArr := afterElem.Value.(*ast.ArrayExpression)
 				assert.Len(t, afterArr.Elements, 1)
-				
+
 				afterValue := afterArr.Elements[0].(*ast.StaticAccessExpression)
 				assert.Equal(t, "self", afterValue.Class.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "HOOKED_BLOCK_TYPE", afterValue.Property.(*ast.IdentifierNode).Name)
-				
+
 				// Check 'before' element
 				beforeElem := nestedArr.Elements[1].(*ast.ArrayElementExpression)
 				beforeKey := beforeElem.Key.(*ast.StringLiteral)
 				assert.Equal(t, "before", beforeKey.Value)
-				
+
 				beforeArr := beforeElem.Value.(*ast.ArrayExpression)
 				assert.Len(t, beforeArr.Elements, 1)
-				
+
 				beforeValue := beforeArr.Elements[0].(*ast.StaticAccessExpression)
 				assert.Equal(t, "self", beforeValue.Class.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "OTHER_HOOKED_BLOCK_TYPE", beforeValue.Property.(*ast.IdentifierNode).Name)
@@ -1219,7 +1219,7 @@ class Foo extends Boo {
 
 			checkParserErrors(t, p)
 			require.NotNil(t, program)
-			
+
 			tt.check(t, program)
 		})
 	}
@@ -1287,29 +1287,29 @@ func TestParsing_OperatorPrecedence(t *testing.T) {
 
 func TestParsing_HeredocStrings(t *testing.T) {
 	tests := []struct {
-		name             string
-		input            string
-		expectedContent  string
+		name                string
+		input               string
+		expectedContent     string
 		expectInterpolation bool
-		expectedParts    int
+		expectedParts       int
 	}{
 		{
-			name:             "Simple Heredoc",
-			input:            `<?php $str = <<<EOD
+			name: "Simple Heredoc",
+			input: `<?php $str = <<<EOD
 Hello World
 EOD; ?>`,
-			expectedContent:  "Hello World\n",
+			expectedContent:     "Hello World\n",
 			expectInterpolation: false,
-			expectedParts:    1,
+			expectedParts:       1,
 		},
 		{
-			name:             "Heredoc with variable",
-			input:            `<?php $str = <<<EOD
+			name: "Heredoc with variable",
+			input: `<?php $str = <<<EOD
 Hello $name
 EOD; ?>`,
-			expectedContent:  "Hello ", // First part content
+			expectedContent:     "Hello ", // First part content
 			expectInterpolation: true,
-			expectedParts:    3, // "Hello " + $name + "\n"
+			expectedParts:       3, // "Hello " + $name + "\n"
 		},
 	}
 
@@ -1335,7 +1335,7 @@ EOD; ?>`,
 				interpolatedStr, ok := assignment.Right.(*ast.InterpolatedStringExpression)
 				assert.True(t, ok, "Right side should be InterpolatedStringExpression for heredoc with variables")
 				assert.Len(t, interpolatedStr.Parts, tt.expectedParts)
-				
+
 				// Check first part is string literal with expected content
 				if len(interpolatedStr.Parts) > 0 {
 					firstPart, ok := interpolatedStr.Parts[0].(*ast.StringLiteral)
@@ -1455,15 +1455,15 @@ func TestParsing_NowdocStrings(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "Simple Nowdoc",
-			input:    `<?php $str = <<<'EOD'
+			name: "Simple Nowdoc",
+			input: `<?php $str = <<<'EOD'
 Hello World
 EOD; ?>`,
 			expected: "Hello World\n",
 		},
 		{
-			name:     "Nowdoc with $variable (no interpolation)",
-			input:    `<?php $str = <<<'EOD'
+			name: "Nowdoc with $variable (no interpolation)",
+			input: `<?php $str = <<<'EOD'
 Hello $name
 EOD; ?>`,
 			expected: "Hello $name\n",
@@ -1496,25 +1496,25 @@ EOD; ?>`,
 
 func TestParsing_StringInterpolation(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
-		partCount   int
-		firstPart   string
-		secondPart  string
+		name       string
+		input      string
+		partCount  int
+		firstPart  string
+		secondPart string
 	}{
 		{
-			name:        "Simple variable interpolation",
-			input:       `<?php $str = "Hello $name"; ?>`,
-			partCount:   2,
-			firstPart:   "Hello ",
-			secondPart:  "$name",
+			name:       "Simple variable interpolation",
+			input:      `<?php $str = "Hello $name"; ?>`,
+			partCount:  2,
+			firstPart:  "Hello ",
+			secondPart: "$name",
 		},
 		{
-			name:        "String with multiple variables",
-			input:       `<?php $str = "Hello $first and $second"; ?>`,
-			partCount:   4,  // "Hello ", "$first", " and ", "$second"
-			firstPart:   "Hello ",
-			secondPart:  "$first",
+			name:       "String with multiple variables",
+			input:      `<?php $str = "Hello $first and $second"; ?>`,
+			partCount:  4, // "Hello ", "$first", " and ", "$second"
+			firstPart:  "Hello ",
+			secondPart: "$first",
 		},
 	}
 
@@ -1538,14 +1538,14 @@ func TestParsing_StringInterpolation(t *testing.T) {
 			// 检查是否是插值字符串
 			if interpolatedStr, ok := assignment.Right.(*ast.InterpolatedStringExpression); ok {
 				assert.Len(t, interpolatedStr.Parts, tt.partCount)
-				
+
 				// 检查第一部分
 				if len(interpolatedStr.Parts) > 0 {
 					if stringPart, ok := interpolatedStr.Parts[0].(*ast.StringLiteral); ok {
 						assert.Equal(t, tt.firstPart, stringPart.Value)
 					}
 				}
-				
+
 				// 检查第二部分
 				if len(interpolatedStr.Parts) > 1 {
 					if len(tt.secondPart) > 0 {
@@ -1774,25 +1774,25 @@ func TestParsing_ArrayExpressionWithComments(t *testing.T) {
 			); ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt := program.Body[0]
 				exprStmt, ok := stmt.(*ast.ExpressionStatement)
 				require.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Expression should be AssignmentExpression")
-				
+
 				arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
 				require.True(t, ok, "Right side should be ArrayExpression")
 				require.Len(t, arrayExpr.Elements, 1)
-				
+
 				element, ok := arrayExpr.Elements[0].(*ast.ArrayElementExpression)
 				require.True(t, ok, "Element should be ArrayElementExpression")
-				
+
 				keyLit, ok := element.Key.(*ast.StringLiteral)
 				require.True(t, ok, "Key should be StringLiteral")
 				assert.Equal(t, "key", keyLit.Value)
-				
+
 				valueLit, ok := element.Value.(*ast.StringLiteral)
 				require.True(t, ok, "Value should be StringLiteral")
 				assert.Equal(t, "value", valueLit.Value)
@@ -1814,62 +1814,62 @@ register_post_type(
 ); ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt := program.Body[0]
 				exprStmt, ok := stmt.(*ast.ExpressionStatement)
 				require.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
 				require.True(t, ok, "Expression should be CallExpression")
-				
+
 				// Check function name
 				identifier, ok := callExpr.Callee.(*ast.IdentifierNode)
 				require.True(t, ok, "Callee should be IdentifierNode")
 				assert.Equal(t, "register_post_type", identifier.Name)
-				
+
 				// Check arguments count
 				require.Len(t, callExpr.Arguments, 2)
-				
+
 				// First argument: self::POST_TYPE
 				staticAccessExpr, ok := callExpr.Arguments[0].(*ast.StaticAccessExpression)
 				require.True(t, ok, "First argument should be StaticAccessExpression")
-				
+
 				// Check self part
 				selfIdent, ok := staticAccessExpr.Class.(*ast.IdentifierNode)
 				require.True(t, ok, "Class should be IdentifierNode")
 				assert.Equal(t, "self", selfIdent.Name)
-				
+
 				// Check POST_TYPE part
 				postTypeIdent, ok := staticAccessExpr.Property.(*ast.IdentifierNode)
 				require.True(t, ok, "Property should be IdentifierNode")
 				assert.Equal(t, "POST_TYPE", postTypeIdent.Name)
-				
+
 				// Second argument: array(...)
 				arrayExpr, ok := callExpr.Arguments[1].(*ast.ArrayExpression)
 				require.True(t, ok, "Second argument should be ArrayExpression")
 				require.Len(t, arrayExpr.Elements, 3) // capabilities, map_meta_cap, supports
-				
+
 				// Check 'capabilities' element
 				capElement, ok := arrayExpr.Elements[0].(*ast.ArrayElementExpression)
 				require.True(t, ok, "Element should be ArrayElementExpression")
-				
+
 				keyLit, ok := capElement.Key.(*ast.StringLiteral)
 				require.True(t, ok, "Key should be StringLiteral")
 				assert.Equal(t, "capabilities", keyLit.Value)
-				
+
 				// Check nested array
 				nestedArray, ok := capElement.Value.(*ast.ArrayExpression)
 				require.True(t, ok, "Value should be ArrayExpression")
 				require.Len(t, nestedArray.Elements, 1)
-				
+
 				// Check element with comment before it
 				nestedElement, ok := nestedArray.Elements[0].(*ast.ArrayElementExpression)
 				require.True(t, ok, "Nested element should be ArrayElementExpression")
-				
+
 				nestedKey, ok := nestedElement.Key.(*ast.StringLiteral)
 				require.True(t, ok, "Nested key should be StringLiteral")
 				assert.Equal(t, "edit_published_posts", nestedKey.Value)
-				
+
 				nestedValue, ok := nestedElement.Value.(*ast.StringLiteral)
 				require.True(t, ok, "Nested value should be StringLiteral")
 				assert.Equal(t, "do_not_allow", nestedValue.Value)
@@ -1890,26 +1890,26 @@ register_post_type(
 			); ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt := program.Body[0]
 				exprStmt, ok := stmt.(*ast.ExpressionStatement)
 				require.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Expression should be AssignmentExpression")
-				
+
 				arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
 				require.True(t, ok, "Right side should be ArrayExpression")
 				require.Len(t, arrayExpr.Elements, 1)
-				
+
 				// Check nested structure is correctly parsed
 				element, ok := arrayExpr.Elements[0].(*ast.ArrayElementExpression)
 				require.True(t, ok, "Element should be ArrayElementExpression")
-				
+
 				keyLit, ok := element.Key.(*ast.StringLiteral)
 				require.True(t, ok, "Key should be StringLiteral")
 				assert.Equal(t, "outer", keyLit.Value)
-				
+
 				nestedArray, ok := element.Value.(*ast.ArrayExpression)
 				require.True(t, ok, "Value should be ArrayExpression")
 				require.Len(t, nestedArray.Elements, 2) // inner1 and inner2
@@ -1926,23 +1926,23 @@ register_post_type(
 			); ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt := program.Body[0]
 				exprStmt, ok := stmt.(*ast.ExpressionStatement)
 				require.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Expression should be AssignmentExpression")
-				
+
 				arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
 				require.True(t, ok, "Right side should be ArrayExpression")
 				require.Len(t, arrayExpr.Elements, 3)
-				
+
 				// Verify all elements are correctly parsed
 				for i, expectedKey := range []string{"first", "second", "third"} {
 					element, ok := arrayExpr.Elements[i].(*ast.ArrayElementExpression)
 					require.True(t, ok, fmt.Sprintf("Element %d should be ArrayElementExpression", i))
-					
+
 					keyLit, ok := element.Key.(*ast.StringLiteral)
 					require.True(t, ok, fmt.Sprintf("Key %d should be StringLiteral", i))
 					assert.Equal(t, expectedKey, keyLit.Value)
@@ -1991,8 +1991,8 @@ func TestParsing_FunctionCalls(t *testing.T) {
 			argCount: 3,
 		},
 		{
-			name:     "Function call in expression context",
-			input:    `<?php save_text($file, <<<'PHP'
+			name: "Function call in expression context",
+			input: `<?php save_text($file, <<<'PHP'
 test
 PHP); ?>`,
 			funcName: "save_text",
@@ -2119,7 +2119,7 @@ func TestParsing_AnonymousFunctions(t *testing.T) {
 			assert.True(t, ok, "Statement should be ExpressionStatement")
 
 			var anonFunc *ast.AnonymousFunctionExpression
-			
+
 			// Check if it's a direct assignment or function call
 			if assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression); ok {
 				// Direct assignment: $var = function(...) {...}
@@ -2352,14 +2352,14 @@ class MixedProps {
 			for i, bodyStmt := range classExpr.Body {
 				propDecl, ok := bodyStmt.(*ast.PropertyDeclaration)
 				assert.True(t, ok, "Class body item %d should be PropertyDeclaration", i)
-				
+
 				// Check that visibility is set
-				assert.Contains(t, []string{"public", "protected", "private"}, propDecl.Visibility, 
+				assert.Contains(t, []string{"public", "protected", "private"}, propDecl.Visibility,
 					"Property %d should have valid visibility", i)
-				
+
 				// Check that property name is set and doesn't start with $
 				assert.NotEmpty(t, propDecl.Name)
-				assert.False(t, strings.HasPrefix(propDecl.Name, "$"), 
+				assert.False(t, strings.HasPrefix(propDecl.Name, "$"),
 					"Property name should not start with $")
 			}
 		})
@@ -2368,10 +2368,10 @@ class MixedProps {
 
 func TestParsing_StaticAccessExpressions(t *testing.T) {
 	tests := []struct {
-		name              string
-		input             string
-		expectedClass     string
-		expectedProperty  string
+		name             string
+		input            string
+		expectedClass    string
+		expectedProperty string
 	}{
 		{
 			name:             "Simple static access",
@@ -2380,7 +2380,7 @@ func TestParsing_StaticAccessExpressions(t *testing.T) {
 			expectedProperty: "CONSTANT",
 		},
 		{
-			name:             "Class name static access", 
+			name:             "Class name static access",
 			input:            `<?php $x = MyClass::STATIC_VAR;`,
 			expectedClass:    "MyClass",
 			expectedProperty: "STATIC_VAR",
@@ -2411,7 +2411,7 @@ func TestParsing_StaticAccessExpressions(t *testing.T) {
 			assert.True(t, ok, "Expression should be AssignmentExpression")
 
 			var staticAccess *ast.StaticAccessExpression
-			
+
 			// Handle both direct static access and static access in binary expressions
 			if sa, ok := assignExpr.Right.(*ast.StaticAccessExpression); ok {
 				staticAccess = sa
@@ -2478,12 +2478,12 @@ func TestParsing_ErrorCases(t *testing.T) {
 
 func TestParsing_ClassConstants(t *testing.T) {
 	tests := []struct {
-		name                 string
-		input                string
-		expectedClassName    string
-		expectedConstGroups  int
-		expectedTotalConsts  int
-		validateConstants    func(t *testing.T, classExpr *ast.ClassExpression)
+		name                string
+		input               string
+		expectedClassName   string
+		expectedConstGroups int
+		expectedTotalConsts int
+		validateConstants   func(t *testing.T, classExpr *ast.ClassExpression)
 	}{
 		{
 			name: "Private class constant with array value",
@@ -2503,12 +2503,12 @@ class JUnit {
 				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
 				assert.Equal(t, "private", constGroup.Visibility)
 				assert.Len(t, constGroup.Constants, 1)
-				
+
 				constant := constGroup.Constants[0]
 				nameIdent, ok := constant.Name.(*ast.IdentifierNode)
 				assert.True(t, ok, "Constant name should be IdentifierNode")
 				assert.Equal(t, "EMPTY_SUITE", nameIdent.Name)
-				
+
 				arrayExpr, ok := constant.Value.(*ast.ArrayExpression)
 				assert.True(t, ok, "Constant value should be ArrayExpression")
 				assert.Len(t, arrayExpr.Elements, 3)
@@ -2528,17 +2528,17 @@ class TestConsts {
 				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
 				assert.Equal(t, "public", constGroup.Visibility) // Default visibility
 				assert.Len(t, constGroup.Constants, 3)
-				
+
 				// Check first constant: A = 1
 				nameA, ok := constGroup.Constants[0].Name.(*ast.IdentifierNode)
 				assert.True(t, ok, "Constant A name should be IdentifierNode")
 				assert.Equal(t, "A", nameA.Name)
-				
+
 				// Check second constant: B = 2
 				nameB, ok := constGroup.Constants[1].Name.(*ast.IdentifierNode)
 				assert.True(t, ok, "Constant B name should be IdentifierNode")
 				assert.Equal(t, "B", nameB.Name)
-				
+
 				// Check third constant: C = "hello"
 				nameC, ok := constGroup.Constants[2].Name.(*ast.IdentifierNode)
 				assert.True(t, ok, "Constant C name should be IdentifierNode")
@@ -2565,7 +2565,7 @@ class VisibilityConsts {
 				pubName, ok := pubGroup.Constants[0].Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "PUB", pubName.Name)
-				
+
 				// Check protected constant
 				protGroup, ok := classExpr.Body[1].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok, "Second body item should be ClassConstantDeclaration")
@@ -2574,7 +2574,7 @@ class VisibilityConsts {
 				protName, ok := protGroup.Constants[0].Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "PROT", protName.Name)
-				
+
 				// Check private constant
 				privGroup, ok := classExpr.Body[2].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok, "Third body item should be ClassConstantDeclaration")
@@ -2598,7 +2598,7 @@ class Mixed {
 			expectedTotalConsts: 2,
 			validateConstants: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Len(t, classExpr.Body, 3) // 2 const groups + 1 property
-				
+
 				// Check first constant
 				constGroup1, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
@@ -2606,13 +2606,13 @@ class Mixed {
 				versionName, ok := constGroup1.Constants[0].Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "VERSION", versionName.Name)
-				
+
 				// Check property
 				propDecl, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
 				assert.True(t, ok, "Second body item should be PropertyDeclaration")
 				assert.Equal(t, "private", propDecl.Visibility)
 				assert.Equal(t, "property", propDecl.Name)
-				
+
 				// Check second constant
 				constGroup2, ok := classExpr.Body[2].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok, "Third body item should be ClassConstantDeclaration")
@@ -2646,7 +2646,7 @@ class ComplexConsts {
 				arrayValue, ok := constGroup1.Constants[0].Value.(*ast.ArrayExpression)
 				assert.True(t, ok)
 				assert.Len(t, arrayValue.Elements, 4)
-				
+
 				// Check second constant with nested array
 				constGroup2, ok := classExpr.Body[1].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -2692,7 +2692,7 @@ class ComplexConsts {
 					totalConsts += len(constGroup.Constants)
 				}
 			}
-			
+
 			assert.Equal(t, tt.expectedConstGroups, constGroups, "Expected %d constant groups", tt.expectedConstGroups)
 			assert.Equal(t, tt.expectedTotalConsts, totalConsts, "Expected %d total constants", tt.expectedTotalConsts)
 
@@ -2751,7 +2751,7 @@ class JUnit {
 					t.Errorf("Expected first parameter type 'array', got %v", param1.Type)
 				}
 
-				// Check second parameter: int $workerID  
+				// Check second parameter: int $workerID
 				param2 := funcDecl.Parameters[1]
 				if param2.Name != "$workerID" {
 					t.Errorf("Expected second parameter name '$workerID', got '%s'", param2.Name)
@@ -2875,8 +2875,8 @@ class Complex {
 				}
 
 				expectedParams := []struct {
-					name     string
-					typeName string
+					name       string
+					typeName   string
 					hasDefault bool
 				}{
 					{"$config", "array", false},
@@ -3283,10 +3283,10 @@ function test(&$a, array &$b, string $c, callable &$d): bool {
 					hasType     bool
 					byReference bool
 				}{
-					{"$a", "", false, true},           // &$a (no type)
-					{"$b", "array", true, true},       // array &$b
-					{"$c", "string", true, false},     // string $c
-					{"$d", "callable", true, true},    // callable &$d
+					{"$a", "", false, true},        // &$a (no type)
+					{"$b", "array", true, true},    // array &$b
+					{"$c", "string", true, false},  // string $c
+					{"$d", "callable", true, true}, // callable &$d
 				}
 
 				for i, expected := range expectedParams {
@@ -3559,7 +3559,7 @@ $result = $obj->process();`,
 				_, ok = tryStmt.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Try statement should be assignment")
 
-				// Check catch block content  
+				// Check catch block content
 				catch := tryStmt.CatchClauses[0]
 				assert.Len(t, catch.Body, 1, "Catch block should have one statement")
 				echoStmt, ok := catch.Body[0].(*ast.EchoStatement)
@@ -3652,7 +3652,7 @@ $final = complete();`,
 			},
 		},
 		{
-			name: "empty try-catch followed by multiple statements", 
+			name: "empty try-catch followed by multiple statements",
 			input: `<?php
 try {
 } catch (Exception $ex) {
@@ -3671,7 +3671,7 @@ echo $a + $b;`,
 				for i := 1; i < 4; i++ {
 					stmt := program.Body[i]
 					assert.NotNil(t, stmt, "Statement %d should not be nil", i)
-					
+
 					if i < 3 {
 						// First two should be assignments
 						exprStmt, ok := stmt.(*ast.ExpressionStatement)
@@ -3704,7 +3704,7 @@ echo $a + $b;`,
 // TestParsing_CatchBlocksWithQualifiedNames tests parsing catch blocks with fully qualified class names
 func TestParsing_CatchBlocksWithQualifiedNames(t *testing.T) {
 	tests := []struct {
-		name                string
+		name               string
 		input              string
 		expectedCatchCount int
 		expectedTypes      []string
@@ -3812,7 +3812,7 @@ try {
 			l := lexer.New(tt.input)
 			p := New(l)
 			program := p.ParseProgram()
-			
+
 			// Check for parser errors
 			checkParserErrors(t, p)
 			assert.NotNil(t, program, "Program should not be nil")
@@ -3824,36 +3824,36 @@ try {
 			assert.NotNil(t, tryStmt, "TryStatement should not be nil")
 
 			// Verify catch clauses count
-			assert.Len(t, tryStmt.CatchClauses, tt.expectedCatchCount, 
+			assert.Len(t, tryStmt.CatchClauses, tt.expectedCatchCount,
 				"Should have %d catch clause(s)", tt.expectedCatchCount)
 
 			// Verify each catch clause
 			totalExpectedTypes := len(tt.expectedTypes)
 			actualTypeIndex := 0
-			
+
 			for i, catchClause := range tryStmt.CatchClauses {
 				assert.NotNil(t, catchClause, "Catch clause %d should not be nil", i)
-				
+
 				// Check variable
 				assert.NotNil(t, catchClause.Parameter, "Catch clause %d should have a parameter", i)
 				variable, ok := catchClause.Parameter.(*ast.Variable)
 				assert.True(t, ok, "Catch clause %d parameter should be a Variable", i)
-				assert.Equal(t, tt.expectedVariables[i], variable.Name, 
+				assert.Equal(t, tt.expectedVariables[i], variable.Name,
 					"Catch clause %d variable should be %s", i, tt.expectedVariables[i])
-				
+
 				// Check exception types
 				for j, exceptionType := range catchClause.Types {
-					assert.True(t, actualTypeIndex < totalExpectedTypes, 
+					assert.True(t, actualTypeIndex < totalExpectedTypes,
 						"Too many exception types found")
-					
+
 					switch typedExpr := exceptionType.(type) {
 					case *ast.IdentifierNode:
 						// Simple class name or qualified name
-						assert.Equal(t, tt.expectedTypes[actualTypeIndex], typedExpr.Name, 
+						assert.Equal(t, tt.expectedTypes[actualTypeIndex], typedExpr.Name,
 							"Catch clause %d, type %d should be %s", i, j, tt.expectedTypes[actualTypeIndex])
 					case *ast.NamespaceExpression:
 						// Fully qualified name starting with \
-						assert.Equal(t, tt.expectedTypes[actualTypeIndex], typedExpr.String(), 
+						assert.Equal(t, tt.expectedTypes[actualTypeIndex], typedExpr.String(),
 							"Catch clause %d, type %d should be %s", i, j, tt.expectedTypes[actualTypeIndex])
 					default:
 						t.Errorf("Unexpected exception type: %T", exceptionType)
@@ -3861,9 +3861,9 @@ try {
 					actualTypeIndex++
 				}
 			}
-			
+
 			// Ensure we found all expected types
-			assert.Equal(t, totalExpectedTypes, actualTypeIndex, 
+			assert.Equal(t, totalExpectedTypes, actualTypeIndex,
 				"Should have found all %d expected exception types", totalExpectedTypes)
 		})
 	}
@@ -3886,7 +3886,7 @@ func TestParsing_IncludeAndRequireStatements(t *testing.T) {
 				includeExpr, ok := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
 				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
 				assert.Equal(t, lexer.T_REQUIRE, includeExpr.Type)
-				
+
 				stringLit, ok := includeExpr.Expr.(*ast.StringLiteral)
 				assert.True(t, ok, "Included file should be StringLiteral")
 				assert.Equal(t, "config.php", stringLit.Value)
@@ -3903,7 +3903,7 @@ func TestParsing_IncludeAndRequireStatements(t *testing.T) {
 				includeExpr, ok := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
 				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
 				assert.Equal(t, lexer.T_REQUIRE_ONCE, includeExpr.Type)
-				
+
 				stringLit, ok := includeExpr.Expr.(*ast.StringLiteral)
 				assert.True(t, ok, "Included file should be StringLiteral")
 				assert.Equal(t, "utils.php", stringLit.Value)
@@ -3921,7 +3921,7 @@ func TestParsing_IncludeAndRequireStatements(t *testing.T) {
 				includeExpr1, ok := exprStmt1.Expression.(*ast.IncludeOrEvalExpression)
 				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
 				assert.Equal(t, lexer.T_INCLUDE, includeExpr1.Type)
-				
+
 				// Check include_once
 				exprStmt2, ok := program.Body[1].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Second statement should be ExpressionStatement")
@@ -3941,7 +3941,7 @@ func TestParsing_IncludeAndRequireStatements(t *testing.T) {
 				includeExpr, ok := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
 				assert.True(t, ok, "Expression should be IncludeOrEvalExpression")
 				assert.Equal(t, lexer.T_REQUIRE, includeExpr.Type)
-				
+
 				variable, ok := includeExpr.Expr.(*ast.Variable)
 				assert.True(t, ok, "Included expression should be Variable")
 				assert.Equal(t, "$config_file", variable.Name)
@@ -3973,16 +3973,16 @@ func TestParsing_StaticDeclarations(t *testing.T) {
 			input: `<?php static $counter = 0;`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				staticStmt, ok := program.Body[0].(*ast.StaticStatement)
 				assert.True(t, ok, "Statement should be StaticStatement")
 				assert.Len(t, staticStmt.Variables, 1, "Should have one static variable")
-				
+
 				staticVar := staticStmt.Variables[0]
 				variable, ok := staticVar.Variable.(*ast.Variable)
 				assert.True(t, ok, "Variable should be Variable type")
 				assert.Equal(t, "$counter", variable.Name)
-				
+
 				defaultValue, ok := staticVar.DefaultValue.(*ast.NumberLiteral)
 				assert.True(t, ok, "Default value should be NumberLiteral")
 				assert.Equal(t, "0", defaultValue.Value)
@@ -3993,13 +3993,13 @@ func TestParsing_StaticDeclarations(t *testing.T) {
 			input: `<?php $x = static;`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				assert.True(t, ok, "Expression should be AssignmentExpression")
-				
+
 				staticIdent, ok := assignExpr.Right.(*ast.IdentifierNode)
 				assert.True(t, ok, "Right should be IdentifierNode")
 				assert.Equal(t, "static", staticIdent.Name)
@@ -4031,14 +4031,14 @@ func TestParsing_AbstractKeyword(t *testing.T) {
 			input: `<?php abstract class BaseClass {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 2)
-				
+
 				// First should be abstract identifier
 				exprStmt1, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "First statement should be ExpressionStatement")
 				abstractIdent, ok := exprStmt1.Expression.(*ast.IdentifierNode)
 				assert.True(t, ok, "Expression should be IdentifierNode")
 				assert.Equal(t, "abstract", abstractIdent.Name)
-				
+
 				// Second should be class declaration
 				exprStmt2, ok := program.Body[1].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Second statement should be ExpressionStatement")
@@ -4054,13 +4054,13 @@ func TestParsing_AbstractKeyword(t *testing.T) {
 			input: `<?php $type = abstract;`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				assert.True(t, ok, "Expression should be AssignmentExpression")
-				
+
 				abstractIdent, ok := assignExpr.Right.(*ast.IdentifierNode)
 				assert.True(t, ok, "Right should be IdentifierNode")
 				assert.Equal(t, "abstract", abstractIdent.Name)
@@ -4092,17 +4092,17 @@ func TestParsing_NamespaceSeparator(t *testing.T) {
 			input: `<?php \DateTime\createFromFormat();`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
 				assert.True(t, ok, "Expression should be CallExpression")
-				
+
 				// The callee should be a namespace expression
 				namespaceExpr, ok := callExpr.Callee.(*ast.NamespaceExpression)
 				assert.True(t, ok, "Callee should be NamespaceExpression")
-				
+
 				// Check the namespace name contains the full path
 				nameIdent, ok := namespaceExpr.Name.(*ast.IdentifierNode)
 				assert.True(t, ok, "Name should be IdentifierNode")
@@ -4114,16 +4114,16 @@ func TestParsing_NamespaceSeparator(t *testing.T) {
 			input: `<?php \test();`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
 				assert.True(t, ok, "Expression should be CallExpression")
-				
+
 				namespaceExpr, ok := callExpr.Callee.(*ast.NamespaceExpression)
 				assert.True(t, ok, "Callee should be NamespaceExpression")
-				
+
 				nameIdent, ok := namespaceExpr.Name.(*ast.IdentifierNode)
 				assert.True(t, ok, "Name should be IdentifierNode")
 				assert.Equal(t, "test", nameIdent.Name)
@@ -4134,13 +4134,13 @@ func TestParsing_NamespaceSeparator(t *testing.T) {
 			input: `<?php $x = \;`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Statement should be ExpressionStatement")
-				
+
 				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				assert.True(t, ok, "Expression should be AssignmentExpression")
-				
+
 				namespaceExpr, ok := assignExpr.Right.(*ast.NamespaceExpression)
 				assert.True(t, ok, "Right should be NamespaceExpression")
 				assert.Nil(t, namespaceExpr.Name, "Bare backslash should have nil name")
@@ -4172,10 +4172,10 @@ func TestParsing_Attributes(t *testing.T) {
 			input: `<?php #[Route]`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
 				assert.True(t, ok, "Expected AttributeGroup")
 				require.Len(t, attrGroup.Attributes, 1)
@@ -4189,17 +4189,17 @@ func TestParsing_Attributes(t *testing.T) {
 			input: `<?php #[Route("/api/users")]`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
 				assert.True(t, ok, "Expected AttributeGroup")
 				require.Len(t, attrGroup.Attributes, 1)
 				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "Route", attr.Name.Name)
 				assert.Len(t, attr.Arguments, 1)
-				
+
 				strLit, ok := attr.Arguments[0].(*ast.StringLiteral)
 				assert.True(t, ok, "Expected StringLiteral")
 				assert.Equal(t, "/api/users", strLit.Value)
@@ -4210,21 +4210,21 @@ func TestParsing_Attributes(t *testing.T) {
 			input: `<?php #[Route("/api/users", "GET")]`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
 				assert.True(t, ok, "Expected AttributeGroup")
 				require.Len(t, attrGroup.Attributes, 1)
 				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "Route", attr.Name.Name)
 				assert.Len(t, attr.Arguments, 2)
-				
+
 				pathArg, ok := attr.Arguments[0].(*ast.StringLiteral)
 				assert.True(t, ok, "Expected StringLiteral for path")
 				assert.Equal(t, "/api/users", pathArg.Value)
-				
+
 				methodArg, ok := attr.Arguments[1].(*ast.StringLiteral)
 				assert.True(t, ok, "Expected StringLiteral for method")
 				assert.Equal(t, "GET", methodArg.Value)
@@ -4235,21 +4235,21 @@ func TestParsing_Attributes(t *testing.T) {
 			input: `<?php #[Cache(timeout: 3600)]`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				attrGroup, ok := stmt.Expression.(*ast.AttributeGroup)
 				assert.True(t, ok, "Expected AttributeGroup")
 				require.Len(t, attrGroup.Attributes, 1)
 				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "Cache", attr.Name.Name)
 				assert.Len(t, attr.Arguments, 1)
-				
+
 				namedArg, ok := attr.Arguments[0].(*ast.NamedArgument)
 				assert.True(t, ok, "Expected NamedArgument")
 				assert.Equal(t, "timeout", namedArg.Name.Name)
-				
+
 				numLit, ok := namedArg.Value.(*ast.NumberLiteral)
 				assert.True(t, ok, "Expected NumberLiteral")
 				assert.Equal(t, "3600", numLit.Value)
@@ -4262,7 +4262,7 @@ func TestParsing_Attributes(t *testing.T) {
 			l := lexer.New(tt.input)
 			p := New(l)
 			program := p.ParseProgram()
-			
+
 			checkParserErrors(t, p)
 
 			assert.NotNil(t, program)
@@ -4282,11 +4282,11 @@ func TestParsing_IntersectionTypes(t *testing.T) {
 			input: `<?php function test(): Type1&Type2 {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				assert.True(t, ok, "Expected FunctionDeclaration")
 				assert.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
-				
+
 				assert.NotNil(t, funcDecl.ReturnType)
 				assert.Equal(t, ast.ASTTypeIntersection, funcDecl.ReturnType.GetKind())
 				assert.Len(t, funcDecl.ReturnType.IntersectionTypes, 2)
@@ -4299,17 +4299,17 @@ func TestParsing_IntersectionTypes(t *testing.T) {
 			input: `<?php class Test { public function method(): Interface1&Interface2 {} }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				classExpr, ok := program.Body[0].(*ast.ExpressionStatement).Expression.(*ast.ClassExpression)
 				assert.True(t, ok, "Expected ClassExpression")
 				assert.Equal(t, "Test", classExpr.Name.(*ast.IdentifierNode).Name)
 				assert.Len(t, classExpr.Body, 1)
-				
+
 				methodDecl, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.True(t, ok, "Expected FunctionDeclaration")
 				assert.Equal(t, "method", methodDecl.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "public", methodDecl.Visibility)
-				
+
 				assert.NotNil(t, methodDecl.ReturnType)
 				assert.Equal(t, ast.ASTTypeIntersection, methodDecl.ReturnType.GetKind())
 				assert.Len(t, methodDecl.ReturnType.IntersectionTypes, 2)
@@ -4322,11 +4322,11 @@ func TestParsing_IntersectionTypes(t *testing.T) {
 			input: `<?php function complex(): A&B&C {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				assert.True(t, ok, "Expected FunctionDeclaration")
 				assert.Equal(t, "complex", funcDecl.Name.(*ast.IdentifierNode).Name)
-				
+
 				assert.NotNil(t, funcDecl.ReturnType)
 				assert.Equal(t, ast.ASTTypeIntersection, funcDecl.ReturnType.GetKind())
 				assert.Len(t, funcDecl.ReturnType.IntersectionTypes, 3)
@@ -4342,7 +4342,7 @@ func TestParsing_IntersectionTypes(t *testing.T) {
 			l := lexer.New(tt.input)
 			p := New(l)
 			program := p.ParseProgram()
-			
+
 			checkParserErrors(t, p)
 
 			assert.NotNil(t, program)
@@ -4362,16 +4362,16 @@ func TestParsing_FirstClassCallable(t *testing.T) {
 			input: `<?php $func = strlen(...);`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
 				assert.True(t, ok, "Expected AssignmentExpression")
-				
+
 				fcc, ok := assign.Right.(*ast.FirstClassCallable)
 				assert.True(t, ok, "Expected FirstClassCallable")
-				
+
 				ident, ok := fcc.Callable.(*ast.IdentifierNode)
 				assert.True(t, ok, "Expected IdentifierNode")
 				assert.Equal(t, "strlen", ident.Name)
@@ -4382,23 +4382,23 @@ func TestParsing_FirstClassCallable(t *testing.T) {
 			input: `<?php $method = $obj->method(...);`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
 				assert.True(t, ok, "Expected AssignmentExpression")
-				
+
 				fcc, ok := assign.Right.(*ast.FirstClassCallable)
 				assert.True(t, ok, "Expected FirstClassCallable")
-				
+
 				propAccess, ok := fcc.Callable.(*ast.PropertyAccessExpression)
 				assert.True(t, ok, "Expected PropertyAccessExpression")
-				
+
 				objVar, ok := propAccess.Object.(*ast.Variable)
 				assert.True(t, ok, "Expected Variable")
 				assert.Equal(t, "$obj", objVar.Name)
-				
+
 				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
 				assert.True(t, ok, "Property should be IdentifierNode")
 				assert.Equal(t, "method", propIdent.Name)
@@ -4409,23 +4409,23 @@ func TestParsing_FirstClassCallable(t *testing.T) {
 			input: `<?php $staticMethod = MyClass::method(...);`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
 				assert.True(t, ok, "Expected AssignmentExpression")
-				
+
 				fcc, ok := assign.Right.(*ast.FirstClassCallable)
 				assert.True(t, ok, "Expected FirstClassCallable")
-				
+
 				staticAccess, ok := fcc.Callable.(*ast.StaticAccessExpression)
 				assert.True(t, ok, "Expected StaticAccessExpression")
-				
+
 				className, ok := staticAccess.Class.(*ast.IdentifierNode)
 				assert.True(t, ok, "Expected IdentifierNode")
 				assert.Equal(t, "MyClass", className.Name)
-				
+
 				methodName, ok := staticAccess.Property.(*ast.IdentifierNode)
 				assert.True(t, ok, "Expected IdentifierNode")
 				assert.Equal(t, "method", methodName.Name)
@@ -4436,16 +4436,16 @@ func TestParsing_FirstClassCallable(t *testing.T) {
 			input: `<?php $builtin = array_map(...);`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok, "Expected ExpressionStatement")
-				
+
 				assign, ok := stmt.Expression.(*ast.AssignmentExpression)
 				assert.True(t, ok, "Expected AssignmentExpression")
-				
+
 				fcc, ok := assign.Right.(*ast.FirstClassCallable)
 				assert.True(t, ok, "Expected FirstClassCallable")
-				
+
 				ident, ok := fcc.Callable.(*ast.IdentifierNode)
 				assert.True(t, ok, "Expected IdentifierNode")
 				assert.Equal(t, "array_map", ident.Name)
@@ -4458,7 +4458,7 @@ func TestParsing_FirstClassCallable(t *testing.T) {
 			l := lexer.New(tt.input)
 			p := New(l)
 			program := p.ParseProgram()
-			
+
 			checkParserErrors(t, p)
 
 			assert.NotNil(t, program)
@@ -4555,7 +4555,7 @@ func TestParsing_YieldExpressions(t *testing.T) {
 				// Value should be property access
 				valueProp, ok := yieldExpr.Value.(*ast.PropertyAccessExpression)
 				assert.True(t, ok, "Value should be PropertyAccessExpression")
-				
+
 				thisVar, ok := valueProp.Object.(*ast.Variable)
 				assert.True(t, ok, "Property object should be Variable")
 				assert.Equal(t, "$this", thisVar.Name)
@@ -4617,7 +4617,7 @@ func TestParsing_YieldFromExpressions(t *testing.T) {
 
 				callExpr, ok := yieldFromExpr.Expression.(*ast.CallExpression)
 				assert.True(t, ok, "Expression should be CallExpression")
-				
+
 				funcName, ok := callExpr.Callee.(*ast.IdentifierNode)
 				assert.True(t, ok, "Callee should be IdentifierNode")
 				assert.Equal(t, "createGenerator", funcName.Name)
@@ -4638,10 +4638,10 @@ func TestParsing_YieldFromExpressions(t *testing.T) {
 
 				callExpr, ok := yieldFromExpr.Expression.(*ast.CallExpression)
 				assert.True(t, ok, "Expression should be CallExpression")
-				
+
 				propAccess, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
 				assert.True(t, ok, "Callee should be PropertyAccessExpression")
-				
+
 				objVar, ok := propAccess.Object.(*ast.Variable)
 				assert.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$obj", objVar.Name)
@@ -4682,11 +4682,11 @@ func TestParsing_YieldFromExpressions(t *testing.T) {
 
 				callExpr, ok := yieldFromExpr.Expression.(*ast.CallExpression)
 				assert.True(t, ok, "Expression should be CallExpression")
-				
+
 				funcName, ok := callExpr.Callee.(*ast.IdentifierNode)
 				assert.True(t, ok, "Callee should be IdentifierNode")
 				assert.Equal(t, "getOuterGenerator", funcName.Name)
-				
+
 				assert.Len(t, callExpr.Arguments, 1, "Should have one argument")
 				innerVar, ok := callExpr.Arguments[0].(*ast.Variable)
 				assert.True(t, ok, "Argument should be Variable")
@@ -4746,14 +4746,14 @@ func TestParsing_ArrayWithHTMLPrefix(t *testing.T) {
 
 			checkParserErrors(t, p)
 			assert.NotNil(t, program)
-			
+
 			// Should have 2 statements: HTML inline content and the array expression
 			require.Len(t, program.Body, 2)
 
 			// First statement should be HTML inline content
 			htmlStmt, ok := program.Body[0].(*ast.ExpressionStatement)
 			require.True(t, ok, "First statement should be ExpressionStatement")
-			
+
 			htmlExpr, ok := htmlStmt.Expression.(*ast.StringLiteral)
 			require.True(t, ok, "First expression should be StringLiteral (HTML)")
 			// Just verify it contains some HTML content (any non-empty string)
@@ -4762,13 +4762,13 @@ func TestParsing_ArrayWithHTMLPrefix(t *testing.T) {
 			// Second statement should be array expression
 			arrayStmt, ok := program.Body[1].(*ast.ExpressionStatement)
 			require.True(t, ok, "Second statement should be ExpressionStatement")
-			
+
 			arrayExpr, ok := arrayStmt.Expression.(*ast.ArrayExpression)
 			require.True(t, ok, "Second expression should be ArrayExpression")
-			
+
 			// Check array elements
 			assert.Len(t, arrayExpr.Elements, len(tt.expected))
-			
+
 			for i, expectedElement := range tt.expected {
 				switch expected := expectedElement.(type) {
 				case int:
@@ -4793,8 +4793,8 @@ func TestParsing_ArrayWithHTMLPrefix(t *testing.T) {
 // TestParsing_ArrayAccessVsArrayLiteral tests that we correctly distinguish between array access and array literals
 func TestParsing_ArrayAccessVsArrayLiteral(t *testing.T) {
 	tests := []struct {
-		name        string
-		input       string
+		name         string
+		input        string
 		expectAccess bool // true = expect array access, false = expect array literal
 	}{
 		{
@@ -4875,11 +4875,11 @@ func checkParserErrors(t *testing.T, p *Parser) {
 
 func TestParsing_StaticProperties(t *testing.T) {
 	tests := []struct {
-		name                 string
-		input                string
-		expectedClassName    string
-		expectedProperties   int
-		validateProperties   func(t *testing.T, classExpr *ast.ClassExpression)
+		name               string
+		input              string
+		expectedClassName  string
+		expectedProperties int
+		validateProperties func(t *testing.T, classExpr *ast.ClassExpression)
 	}{
 		{
 			name: "Basic public static property",
@@ -4887,7 +4887,7 @@ func TestParsing_StaticProperties(t *testing.T) {
 class Foo {
     public static $user_ids;
 }`,
-			expectedClassName: "Foo",
+			expectedClassName:  "Foo",
 			expectedProperties: 1,
 			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
 				property, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
@@ -4905,7 +4905,7 @@ class TestClass {
     private static $private_static;
     protected static $protected_static;
 }`,
-			expectedClassName: "TestClass",
+			expectedClassName:  "TestClass",
 			expectedProperties: 3,
 			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
 				// Test public static
@@ -4936,7 +4936,7 @@ class TestClass {
 class Test {
     static $default_static;
 }`,
-			expectedClassName: "Test",
+			expectedClassName:  "Test",
 			expectedProperties: 1,
 			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
 				property, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
@@ -4954,7 +4954,7 @@ class Advanced {
     public static $initialized_static = 42;
     private static array $complex_static = ["a", "b"];
 }`,
-			expectedClassName: "Advanced",
+			expectedClassName:  "Advanced",
 			expectedProperties: 3,
 			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
 				// Test typed static property
@@ -5018,7 +5018,7 @@ class Advanced {
 			assert.Equal(t, tt.expectedClassName, nameIdent.Name)
 
 			// Validate properties count
-			assert.Len(t, classExpr.Body, tt.expectedProperties, 
+			assert.Len(t, classExpr.Body, tt.expectedProperties,
 				fmt.Sprintf("Class should have %d properties", tt.expectedProperties))
 
 			// Run custom validation
@@ -5083,11 +5083,11 @@ func TestParsing_PropertyAccess(t *testing.T) {
 				binaryExpr, ok := prop.(*ast.BinaryExpression)
 				assert.True(t, ok, "Property should be BinaryExpression")
 				assert.Equal(t, ".", binaryExpr.Operator)
-				
+
 				left, ok := binaryExpr.Left.(*ast.Variable)
 				assert.True(t, ok, "Left should be Variable")
 				assert.Equal(t, "$prefix", left.Name)
-				
+
 				right, ok := binaryExpr.Right.(*ast.StringLiteral)
 				assert.True(t, ok, "Right should be StringLiteral")
 				assert.Equal(t, "suffix", right.Value)
@@ -5204,7 +5204,7 @@ func TestParsing_PropertyAccess(t *testing.T) {
 			expectedStr := strings.ReplaceAll(tt.input, "<?php ", "")
 			expectedStr = strings.ReplaceAll(expectedStr, "; ?>", "")
 			expectedStr = strings.TrimSpace(expectedStr)
-			
+
 			// Skip string representation test for brace-enclosed expressions for now
 			// as the parser correctly parses them but doesn't preserve braces in string output
 			if !strings.Contains(expectedStr, "{") {
@@ -5332,16 +5332,16 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			input: `<?php if($x > 0) $y = 1; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				ifStmt, ok := program.Body[0].(*ast.IfStatement)
 				require.True(t, ok, "Should be IfStatement")
 				require.NotNil(t, ifStmt.Test)
 				require.Len(t, ifStmt.Consequent, 1)
-				
+
 				// Check the single statement in consequent
 				exprStmt, ok := ifStmt.Consequent[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Consequent should contain ExpressionStatement")
-				
+
 				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Should be assignment")
 				assert.Equal(t, "=", assignment.Operator)
@@ -5352,16 +5352,16 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			input: `<?php while($x > 0) $x--; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				whileStmt, ok := program.Body[0].(*ast.WhileStatement)
 				require.True(t, ok, "Should be WhileStatement")
 				require.NotNil(t, whileStmt.Test)
 				require.Len(t, whileStmt.Body, 1)
-				
+
 				// Check the single statement in body
 				exprStmt, ok := whileStmt.Body[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Body should contain ExpressionStatement")
-				
+
 				unary, ok := exprStmt.Expression.(*ast.UnaryExpression)
 				require.True(t, ok, "Should be unary expression")
 				assert.Equal(t, "--", unary.Operator)
@@ -5373,14 +5373,14 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			input: `<?php for($i = 0; $i < 10; $i++) echo $i; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				forStmt, ok := program.Body[0].(*ast.ForStatement)
 				require.True(t, ok, "Should be ForStatement")
 				require.NotNil(t, forStmt.Init)
 				require.NotNil(t, forStmt.Test)
 				require.NotNil(t, forStmt.Update)
 				require.Len(t, forStmt.Body, 1)
-				
+
 				// Check the single statement in body
 				echoStmt, ok := forStmt.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Body should contain EchoStatement")
@@ -5392,32 +5392,32 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			input: `<?php if(preg_match("/^([0-9]{3})(-(.*[".CRLF."]{1,2})+\\1)? [^".CRLF."]+[".CRLF."]{1,2}$/", $this->_message, $regs)) $go=false; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				ifStmt, ok := program.Body[0].(*ast.IfStatement)
 				require.True(t, ok, "Should be IfStatement")
 				require.NotNil(t, ifStmt.Test)
 				require.Len(t, ifStmt.Consequent, 1)
-				
+
 				// Check the preg_match call in condition
 				callExpr, ok := ifStmt.Test.(*ast.CallExpression)
 				require.True(t, ok, "Condition should be function call")
-				
+
 				callee, ok := callExpr.Callee.(*ast.IdentifierNode)
 				require.True(t, ok, "Callee should be identifier")
 				assert.Equal(t, "preg_match", callee.Name)
 				require.Len(t, callExpr.Arguments, 3, "preg_match should have 3 arguments")
-				
+
 				// Check the single assignment statement in consequent
 				exprStmt, ok := ifStmt.Consequent[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Consequent should contain ExpressionStatement")
-				
+
 				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Should be assignment")
-				
+
 				variable, ok := assignment.Left.(*ast.Variable)
 				require.True(t, ok, "Left side should be variable")
 				assert.Equal(t, "$go", variable.Name)
-				
+
 				identifier, ok := assignment.Right.(*ast.IdentifierNode)
 				require.True(t, ok, "Right side should be identifier")
 				assert.Equal(t, "false", identifier.Name)
@@ -5428,24 +5428,24 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			input: `<?php if($x > 0) $y = 1; else $y = 0; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				ifStmt, ok := program.Body[0].(*ast.IfStatement)
 				require.True(t, ok, "Should be IfStatement")
 				require.Len(t, ifStmt.Consequent, 1)
 				require.Len(t, ifStmt.Alternate, 1)
-				
+
 				// Check consequent
 				exprStmt1, ok := ifStmt.Consequent[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Consequent should be ExpressionStatement")
 				assignment1, ok := exprStmt1.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Should be assignment")
-				
+
 				// Check alternate
 				exprStmt2, ok := ifStmt.Alternate[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Alternate should be ExpressionStatement")
 				assignment2, ok := exprStmt2.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Should be assignment")
-				
+
 				assert.Equal(t, "=", assignment1.Operator)
 				assert.Equal(t, "=", assignment2.Operator)
 			},
@@ -5455,20 +5455,20 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			input: `<?php if($x > 0) { echo "positive"; } else echo "not positive"; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				ifStmt, ok := program.Body[0].(*ast.IfStatement)
 				require.True(t, ok, "Should be IfStatement")
 				require.Len(t, ifStmt.Consequent, 1, "Block should have 1 statement")
 				require.Len(t, ifStmt.Alternate, 1, "Else should have 1 statement")
-				
+
 				// Consequent is a block statement
 				echoStmt1, ok := ifStmt.Consequent[0].(*ast.EchoStatement)
 				require.True(t, ok, "Consequent should be EchoStatement")
-				
+
 				// Alternate is a single-line statement
 				echoStmt2, ok := ifStmt.Alternate[0].(*ast.EchoStatement)
 				require.True(t, ok, "Alternate should be EchoStatement")
-				
+
 				assert.Len(t, echoStmt1.Arguments, 1)
 				assert.Len(t, echoStmt2.Arguments, 1)
 			},
@@ -5478,20 +5478,20 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			input: `<?php if($x > 0) if($y > 0) $z = 1; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				outerIf, ok := program.Body[0].(*ast.IfStatement)
 				require.True(t, ok, "Should be IfStatement")
 				require.Len(t, outerIf.Consequent, 1)
-				
+
 				// Check nested if
 				innerIf, ok := outerIf.Consequent[0].(*ast.IfStatement)
 				require.True(t, ok, "Nested statement should be IfStatement")
 				require.Len(t, innerIf.Consequent, 1)
-				
+
 				// Check innermost assignment
 				exprStmt, ok := innerIf.Consequent[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Innermost should be ExpressionStatement")
-				
+
 				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok, "Should be assignment")
 				assert.Equal(t, "=", assignment.Operator)
@@ -5504,7 +5504,7 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 			l := lexer.New(tt.input)
 			p := New(l)
 			program := p.ParseProgram()
-			
+
 			// Check for parser errors
 			if len(p.Errors()) != 0 {
 				for _, err := range p.Errors() {
@@ -5512,7 +5512,7 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 				}
 				t.FailNow()
 			}
-			
+
 			require.NotNil(t, program)
 			tt.validate(t, program)
 		})
@@ -5531,19 +5531,19 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[\SensitiveParameter] $password) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$password", param.Name)
 				require.Len(t, param.Attributes, 1)
-				
+
 				attrGroup := param.Attributes[0]
 				require.Len(t, attrGroup.Attributes, 1)
-				
+
 				attr := attrGroup.Attributes[0]
 				assert.Equal(t, "\\SensitiveParameter", attr.Name.Name)
 				assert.Nil(t, attr.Arguments)
@@ -5554,15 +5554,15 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[Deprecated] $param) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$param", param.Name)
 				require.Len(t, param.Attributes, 1)
-				
+
 				attr := param.Attributes[0].Attributes[0]
 				assert.Equal(t, "Deprecated", attr.Name.Name)
 			},
@@ -5572,15 +5572,15 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[Route('/path', method: 'GET')] $request) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$request", param.Name)
 				require.Len(t, param.Attributes, 1)
-				
+
 				attr := param.Attributes[0].Attributes[0]
 				assert.Equal(t, "Route", attr.Name.Name)
 				require.Len(t, attr.Arguments, 2)
@@ -5591,15 +5591,15 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[Attr1, Attr2] $param) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$param", param.Name)
 				require.Len(t, param.Attributes, 1)
-				
+
 				attrGroup := param.Attributes[0]
 				require.Len(t, attrGroup.Attributes, 2)
 				assert.Equal(t, "Attr1", attrGroup.Attributes[0].Name.Name)
@@ -5611,15 +5611,15 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[Attr1] #[Attr2] $param) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$param", param.Name)
 				require.Len(t, param.Attributes, 2)
-				
+
 				assert.Equal(t, "Attr1", param.Attributes[0].Attributes[0].Name.Name)
 				assert.Equal(t, "Attr2", param.Attributes[1].Attributes[0].Name.Name)
 			},
@@ -5629,22 +5629,22 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php class Test { public function __construct(#[\SensitiveParameter] public string $password) {} }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				classExpr, ok := program.Body[0].(*ast.ExpressionStatement).Expression.(*ast.ClassExpression)
 				require.True(t, ok)
 				require.Len(t, classExpr.Body, 1)
-				
+
 				funcDecl, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Equal(t, "__construct", funcDecl.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$password", param.Name)
 				assert.Equal(t, "public", param.Visibility)
 				assert.NotNil(t, param.Type)
 				assert.Equal(t, "string", param.Type.Name)
-				
+
 				require.Len(t, param.Attributes, 1)
 				attr := param.Attributes[0].Attributes[0]
 				assert.Equal(t, "\\SensitiveParameter", attr.Name.Name)
@@ -5655,18 +5655,18 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function authenticate(string $username, #[\SensitiveParameter] string $password, #[Optional] array $options = []) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Equal(t, "authenticate", funcDecl.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, funcDecl.Parameters, 3)
-				
+
 				// First parameter: no attributes
 				param1 := funcDecl.Parameters[0]
 				assert.Equal(t, "$username", param1.Name)
 				assert.Len(t, param1.Attributes, 0)
 				assert.Equal(t, "string", param1.Type.Name)
-				
+
 				// Second parameter: SensitiveParameter attribute
 				param2 := funcDecl.Parameters[1]
 				assert.Equal(t, "$password", param2.Name)
@@ -5674,7 +5674,7 @@ func TestParsing_AttributeParameters(t *testing.T) {
 				attr2 := param2.Attributes[0].Attributes[0]
 				assert.Equal(t, "\\SensitiveParameter", attr2.Name.Name)
 				assert.Equal(t, "string", param2.Type.Name)
-				
+
 				// Third parameter: Optional attribute with default value
 				param3 := funcDecl.Parameters[2]
 				assert.Equal(t, "$options", param3.Name)
@@ -5690,16 +5690,16 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[Ref] array &$data) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$data", param.Name)
 				assert.True(t, param.ByReference)
 				assert.Equal(t, "array", param.Type.Name)
-				
+
 				require.Len(t, param.Attributes, 1)
 				attr := param.Attributes[0].Attributes[0]
 				assert.Equal(t, "Ref", attr.Name.Name)
@@ -5710,15 +5710,15 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[Spread] ...$args) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$args", param.Name)
 				assert.True(t, param.Variadic)
-				
+
 				require.Len(t, param.Attributes, 1)
 				attr := param.Attributes[0].Attributes[0]
 				assert.Equal(t, "Spread", attr.Name.Name)
@@ -5729,15 +5729,15 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[static] $param) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$param", param.Name)
 				require.Len(t, param.Attributes, 1)
-				
+
 				attr := param.Attributes[0].Attributes[0]
 				assert.Equal(t, "static", attr.Name.Name)
 			},
@@ -5747,15 +5747,15 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[\Global\Fully\Qualified\Attribute] $param) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$param", param.Name)
 				require.Len(t, param.Attributes, 1)
-				
+
 				attr := param.Attributes[0].Attributes[0]
 				assert.Equal(t, "\\Global\\Fully\\Qualified\\Attribute", attr.Name.Name)
 			},
@@ -5765,20 +5765,20 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			input: `<?php function test(#[Simple, static, \Namespaced\Attr] $param) {}`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Len(t, funcDecl.Parameters, 1)
-				
+
 				param := funcDecl.Parameters[0]
 				assert.Equal(t, "$param", param.Name)
 				require.Len(t, param.Attributes, 1)
-				
+
 				attrGroup := param.Attributes[0]
 				require.Len(t, attrGroup.Attributes, 3)
-				
+
 				assert.Equal(t, "Simple", attrGroup.Attributes[0].Name.Name)
-				assert.Equal(t, "static", attrGroup.Attributes[1].Name.Name) 
+				assert.Equal(t, "static", attrGroup.Attributes[1].Name.Name)
 				assert.Equal(t, "\\Namespaced\\Attr", attrGroup.Attributes[2].Name.Name)
 			},
 		},
@@ -5789,10 +5789,3471 @@ func TestParsing_AttributeParameters(t *testing.T) {
 			l := lexer.New(tt.input)
 			p := New(l)
 			program := p.ParseProgram()
-			
+
 			checkParserErrors(t, p)
 			require.NotNil(t, program)
 			tt.validate(t, program)
 		})
 	}
+}
+
+func TestParsing_PropertyHooks_Complete(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Simple get hook with arrow syntax",
+			input: `<?php
+class Example {
+    public string $name {
+        get => 'test';
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				hookedProp, ok := classExpr.Body[0].(*ast.HookedPropertyDeclaration)
+				require.True(t, ok)
+
+				assert.Equal(t, "public", hookedProp.Visibility)
+				assert.Equal(t, "name", hookedProp.Name)
+				assert.Equal(t, "string", hookedProp.Type.Name)
+
+				require.Len(t, hookedProp.Hooks, 1)
+				getHook := hookedProp.Hooks[0]
+				assert.Equal(t, "get", getHook.Type)
+				assert.False(t, getHook.ByRef)
+				assert.NotNil(t, getHook.Body)
+				assert.Nil(t, getHook.Parameter)
+			},
+		},
+		{
+			name: "Set hook with parameter and arrow syntax",
+			input: `<?php
+class Example {
+    public string $email {
+        set(string $value) => strtolower($value);
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				hookedProp, ok := classExpr.Body[0].(*ast.HookedPropertyDeclaration)
+				require.True(t, ok)
+
+				assert.Equal(t, "public", hookedProp.Visibility)
+				assert.Equal(t, "email", hookedProp.Name)
+
+				require.Len(t, hookedProp.Hooks, 1)
+				setHook := hookedProp.Hooks[0]
+				assert.Equal(t, "set", setHook.Type)
+				assert.False(t, setHook.ByRef)
+				assert.NotNil(t, setHook.Body)
+				assert.NotNil(t, setHook.Parameter)
+				assert.Equal(t, "$value", setHook.Parameter.Name)
+			},
+		},
+		{
+			name: "Both get and set hooks",
+			input: `<?php
+class Example {
+    public string $fullName {
+        get => $this->first . ' ' . $this->last;
+        set(string $value) => $this->parseFullName($value);
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				hookedProp, ok := classExpr.Body[0].(*ast.HookedPropertyDeclaration)
+				require.True(t, ok)
+
+				assert.Equal(t, "public", hookedProp.Visibility)
+				assert.Equal(t, "fullName", hookedProp.Name)
+
+				require.Len(t, hookedProp.Hooks, 2)
+
+				getHook := hookedProp.Hooks[0]
+				assert.Equal(t, "get", getHook.Type)
+				assert.NotNil(t, getHook.Body)
+
+				setHook := hookedProp.Hooks[1]
+				assert.Equal(t, "set", setHook.Type)
+				assert.NotNil(t, setHook.Body)
+				assert.NotNil(t, setHook.Parameter)
+			},
+		},
+		{
+			name: "Reference get hook",
+			input: `<?php
+class Example {
+    public array $data {
+        &get => $this->internalData;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				hookedProp, ok := classExpr.Body[0].(*ast.HookedPropertyDeclaration)
+				require.True(t, ok)
+
+				require.Len(t, hookedProp.Hooks, 1)
+				getHook := hookedProp.Hooks[0]
+				assert.Equal(t, "get", getHook.Type)
+				assert.True(t, getHook.ByRef)
+				assert.NotNil(t, getHook.Body)
+			},
+		},
+		{
+			name: "Mixed hooked and regular properties",
+			input: `<?php
+class Example {
+    public string $name {
+        get => 'test';
+    }
+    private string $internal;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 2)
+
+				// First property should be hooked
+				hookedProp, ok := classExpr.Body[0].(*ast.HookedPropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "name", hookedProp.Name)
+				require.Len(t, hookedProp.Hooks, 1)
+
+				// Second property should be regular
+				regularProp, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "internal", regularProp.Name)
+				assert.Equal(t, "private", regularProp.Visibility)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			parser := New(l)
+			program := parser.ParseProgram()
+
+			require.NotNil(t, program)
+			if len(parser.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", parser.Errors())
+			}
+
+			test.expected(t, program)
+		})
+	}
+}
+
+func TestParsing_AlternativeIfStatement(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Alternative If with elseif and else",
+			input: `<?php
+if ($condition):
+    echo "true";
+elseif ($other):
+    echo "other";
+else:
+    echo "false";
+endif;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Alternative If simple",
+			input: `<?php
+if ($x > 0):
+    echo "positive";
+endif;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Alternative If with multiple elseifs",
+			input: `<?php
+if ($x == 1):
+    echo "one";
+elseif ($x == 2):
+    echo "two";
+elseif ($x == 3):
+    echo "three";
+else:
+    echo "other";
+endif;
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have an AlternativeIfStatement
+			stmt := program.Body[0]
+			altIfStmt, ok := stmt.(*ast.AlternativeIfStatement)
+			assert.True(t, ok, "Expected AlternativeIfStatement, got %T", stmt)
+			assert.NotNil(t, altIfStmt.Condition, "Expected condition to be set")
+		})
+	}
+}
+
+func TestParsing_AlternativeWhileStatement(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Alternative While loop",
+			input: `<?php
+while ($counter < 10):
+    echo $counter;
+    $counter++;
+endwhile;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Alternative While with complex condition",
+			input: `<?php
+while ($i < count($array) && $flag):
+    process($array[$i]);
+    $i++;
+endwhile;
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have an AlternativeWhileStatement
+			stmt := program.Body[0]
+			altWhileStmt, ok := stmt.(*ast.AlternativeWhileStatement)
+			assert.True(t, ok, "Expected AlternativeWhileStatement, got %T", stmt)
+			assert.NotNil(t, altWhileStmt.Condition, "Expected condition to be set")
+			assert.Greater(t, len(altWhileStmt.Body), 0, "Expected body statements")
+		})
+	}
+}
+
+func TestParsing_AlternativeForStatement(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Alternative For loop",
+			input: `<?php
+for ($i = 0; $i < 5; $i++):
+    echo $i;
+endfor;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Alternative For with empty init",
+			input: `<?php
+for (; $i < 10; $i++):
+    echo $i;
+endfor;
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have an AlternativeForStatement
+			stmt := program.Body[0]
+			altForStmt, ok := stmt.(*ast.AlternativeForStatement)
+			assert.True(t, ok, "Expected AlternativeForStatement, got %T", stmt)
+			assert.Greater(t, len(altForStmt.Body), 0, "Expected body statements")
+		})
+	}
+}
+
+func TestParsing_AlternativeForeachStatement(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Alternative Foreach with value only",
+			input: `<?php
+foreach ($array as $value):
+    echo $value;
+endforeach;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Alternative Foreach with key and value",
+			input: `<?php
+foreach ($array as $key => $value):
+    echo $key . ": " . $value;
+endforeach;
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have an AlternativeForeachStatement
+			stmt := program.Body[0]
+			altForeachStmt, ok := stmt.(*ast.AlternativeForeachStatement)
+			assert.True(t, ok, "Expected AlternativeForeachStatement, got %T", stmt)
+			assert.NotNil(t, altForeachStmt.Iterable, "Expected iterable to be set")
+			assert.NotNil(t, altForeachStmt.Value, "Expected value to be set")
+			assert.Greater(t, len(altForeachStmt.Body), 0, "Expected body statements")
+		})
+	}
+}
+
+func TestParsing_DeclareStatement(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+		expectAlt      bool
+	}{
+		{
+			name: "Alternative Declare statement",
+			input: `<?php
+declare(strict_types=1):
+    function test(): int {
+        return 42;
+    }
+enddeclare;
+?>`,
+			expectedErrors: 0,
+			expectAlt:      true,
+		},
+		{
+			name: "Alternative Declare with multiple declarations",
+			input: `<?php
+declare(ticks=1, encoding='UTF-8'):
+    echo "Hello World";
+enddeclare;
+?>`,
+			expectedErrors: 0,
+			expectAlt:      true,
+		},
+		{
+			name: "Regular Declare statement",
+			input: `<?php
+declare(strict_types=1);
+?>`,
+			expectedErrors: 0,
+			expectAlt:      false,
+		},
+		{
+			name: "Regular Declare with block",
+			input: `<?php
+declare(strict_types=1) {
+    function test() {}
+}
+?>`,
+			expectedErrors: 0,
+			expectAlt:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have a DeclareStatement
+			stmt := program.Body[0]
+			declareStmt, ok := stmt.(*ast.DeclareStatement)
+			assert.True(t, ok, "Expected DeclareStatement, got %T", stmt)
+			assert.Greater(t, len(declareStmt.Declarations), 0, "Expected at least one declaration")
+			assert.Equal(t, tt.expectAlt, declareStmt.Alternative, "Expected alternative flag to match")
+		})
+	}
+}
+
+func TestParsing_NamespaceStatements(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Simple namespace declaration",
+			input: `<?php
+namespace App;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Multi-level namespace declaration",
+			input: `<?php
+namespace App\Http\Controllers;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Global namespace declaration",
+			input: `<?php
+namespace;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Namespace with block syntax",
+			input: `<?php
+namespace App {
+    function test() {}
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Anonymous namespace with block syntax",
+			input: `<?php
+namespace {
+    function test() {}
+}
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have a NamespaceStatement
+			stmt := program.Body[0]
+			namespaceStmt, ok := stmt.(*ast.NamespaceStatement)
+			assert.True(t, ok, "Expected NamespaceStatement, got %T", stmt)
+
+			// Test specific behavior based on test case
+			switch tt.name {
+			case "Simple namespace declaration":
+				assert.NotNil(t, namespaceStmt.Name, "Expected namespace name to be set")
+				assert.Equal(t, []string{"App"}, namespaceStmt.Name.Parts, "Expected namespace parts to match")
+				assert.Equal(t, 0, len(namespaceStmt.Body), "Expected empty body for simple declaration")
+			case "Multi-level namespace declaration":
+				assert.NotNil(t, namespaceStmt.Name, "Expected namespace name to be set")
+				assert.Equal(t, []string{"App", "Http", "Controllers"}, namespaceStmt.Name.Parts, "Expected namespace parts to match")
+				assert.Equal(t, 0, len(namespaceStmt.Body), "Expected empty body for simple declaration")
+			case "Global namespace declaration":
+				assert.Nil(t, namespaceStmt.Name, "Expected namespace name to be nil for global namespace")
+				assert.Equal(t, 0, len(namespaceStmt.Body), "Expected empty body for global namespace")
+			case "Namespace with block syntax":
+				assert.NotNil(t, namespaceStmt.Name, "Expected namespace name to be set")
+				assert.Equal(t, []string{"App"}, namespaceStmt.Name.Parts, "Expected namespace parts to match")
+				assert.Greater(t, len(namespaceStmt.Body), 0, "Expected body statements for block syntax")
+			case "Anonymous namespace with block syntax":
+				assert.Nil(t, namespaceStmt.Name, "Expected namespace name to be nil for anonymous namespace")
+				assert.Greater(t, len(namespaceStmt.Body), 0, "Expected body statements for block syntax")
+			}
+		})
+	}
+}
+
+func TestParsing_UseStatements(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Simple use statement",
+			input: `<?php
+use App\Http\Controller;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Use statement with alias",
+			input: `<?php
+use App\Http\Controller as BaseController;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Multiple use statements",
+			input: `<?php
+use App\Http\Request, App\Http\Response;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Mixed use statements with aliases",
+			input: `<?php
+use App\Http\Request as Req, App\Http\Response, App\Http\Controller as BaseController;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Use function statement",
+			input: `<?php
+use function App\Http\helper_function;
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Use const statement",
+			input: `<?php
+use const App\Http\SOME_CONSTANT;
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have a UseStatement
+			stmt := program.Body[0]
+			useStmt, ok := stmt.(*ast.UseStatement)
+			assert.True(t, ok, "Expected UseStatement, got %T", stmt)
+			assert.Greater(t, len(useStmt.Uses), 0, "Expected at least one use clause")
+
+			// Test specific behavior based on test case
+			switch tt.name {
+			case "Simple use statement":
+				assert.Equal(t, 1, len(useStmt.Uses), "Expected one use clause")
+				assert.Equal(t, []string{"App", "Http", "Controller"}, useStmt.Uses[0].Name.Parts, "Expected namespace parts to match")
+				assert.Equal(t, "", useStmt.Uses[0].Alias, "Expected no alias")
+				assert.Equal(t, "", useStmt.Uses[0].Type, "Expected no type")
+			case "Use statement with alias":
+				assert.Equal(t, 1, len(useStmt.Uses), "Expected one use clause")
+				assert.Equal(t, []string{"App", "Http", "Controller"}, useStmt.Uses[0].Name.Parts, "Expected namespace parts to match")
+				assert.Equal(t, "BaseController", useStmt.Uses[0].Alias, "Expected alias to match")
+				assert.Equal(t, "", useStmt.Uses[0].Type, "Expected no type")
+			case "Multiple use statements":
+				assert.Equal(t, 2, len(useStmt.Uses), "Expected two use clauses")
+				assert.Equal(t, []string{"App", "Http", "Request"}, useStmt.Uses[0].Name.Parts, "Expected first namespace to match")
+				assert.Equal(t, []string{"App", "Http", "Response"}, useStmt.Uses[1].Name.Parts, "Expected second namespace to match")
+				assert.Equal(t, "", useStmt.Uses[0].Alias, "Expected no alias on first")
+				assert.Equal(t, "", useStmt.Uses[1].Alias, "Expected no alias on second")
+			case "Mixed use statements with aliases":
+				assert.Equal(t, 3, len(useStmt.Uses), "Expected three use clauses")
+				assert.Equal(t, "Req", useStmt.Uses[0].Alias, "Expected alias on first")
+				assert.Equal(t, "", useStmt.Uses[1].Alias, "Expected no alias on second")
+				assert.Equal(t, "BaseController", useStmt.Uses[2].Alias, "Expected alias on third")
+			case "Use function statement":
+				assert.Equal(t, 1, len(useStmt.Uses), "Expected one use clause")
+				assert.Equal(t, "function", useStmt.Uses[0].Type, "Expected function type")
+				assert.Equal(t, []string{"App", "Http", "helper_function"}, useStmt.Uses[0].Name.Parts, "Expected namespace parts to match")
+			case "Use const statement":
+				assert.Equal(t, 1, len(useStmt.Uses), "Expected one use clause")
+				assert.Equal(t, "const", useStmt.Uses[0].Type, "Expected const type")
+				assert.Equal(t, []string{"App", "Http", "SOME_CONSTANT"}, useStmt.Uses[0].Name.Parts, "Expected namespace parts to match")
+			}
+		})
+	}
+}
+
+func TestParsing_InterfaceDeclarations(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Simple interface declaration",
+			input: `<?php
+interface UserInterface {
+    public function getName(): string;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Interface with multiple methods",
+			input: `<?php
+interface DatabaseInterface {
+    public function connect(): bool;
+    public function query(string $sql, array $params): array;
+    public function disconnect(): void;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Interface extending another interface",
+			input: `<?php
+interface AdminInterface extends UserInterface {
+    public function getPermissions(): array;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Interface extending multiple interfaces",
+			input: `<?php
+interface SuperAdminInterface extends UserInterface, AdminInterface {
+    public function deleteUser(int $id): bool;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Interface with complex method signatures",
+			input: `<?php
+interface ServiceInterface {
+    public function process(string $data, ?array $options = null): ?object;
+    public function validate(array &$data): bool;
+}
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have an InterfaceDeclaration
+			stmt := program.Body[0]
+			interfaceDecl, ok := stmt.(*ast.InterfaceDeclaration)
+			assert.True(t, ok, "Expected InterfaceDeclaration, got %T", stmt)
+			assert.NotNil(t, interfaceDecl.Name, "Expected interface name to be set")
+
+			// Test specific behavior based on test case
+			switch tt.name {
+			case "Simple interface declaration":
+				assert.Equal(t, "UserInterface", interfaceDecl.Name.Name, "Expected interface name to match")
+				assert.Equal(t, 0, len(interfaceDecl.Extends), "Expected no parent interfaces")
+				assert.Equal(t, 1, len(interfaceDecl.Methods), "Expected one method")
+				assert.Equal(t, "getName", interfaceDecl.Methods[0].Name.Name, "Expected method name to match")
+				assert.Equal(t, "public", interfaceDecl.Methods[0].Visibility, "Expected public visibility")
+				assert.NotNil(t, interfaceDecl.Methods[0].ReturnType, "Expected return type")
+			case "Interface with multiple methods":
+				assert.Equal(t, "DatabaseInterface", interfaceDecl.Name.Name, "Expected interface name to match")
+				assert.Equal(t, 3, len(interfaceDecl.Methods), "Expected three methods")
+				assert.Equal(t, "connect", interfaceDecl.Methods[0].Name.Name, "Expected first method name")
+				assert.Equal(t, "query", interfaceDecl.Methods[1].Name.Name, "Expected second method name")
+				assert.Equal(t, "disconnect", interfaceDecl.Methods[2].Name.Name, "Expected third method name")
+			case "Interface extending another interface":
+				assert.Equal(t, "AdminInterface", interfaceDecl.Name.Name, "Expected interface name to match")
+				assert.Equal(t, 1, len(interfaceDecl.Extends), "Expected one parent interface")
+				assert.Equal(t, "UserInterface", interfaceDecl.Extends[0].Name, "Expected parent interface name")
+				assert.Equal(t, 1, len(interfaceDecl.Methods), "Expected one method")
+			case "Interface extending multiple interfaces":
+				assert.Equal(t, "SuperAdminInterface", interfaceDecl.Name.Name, "Expected interface name to match")
+				assert.Equal(t, 2, len(interfaceDecl.Extends), "Expected two parent interfaces")
+				assert.Equal(t, "UserInterface", interfaceDecl.Extends[0].Name, "Expected first parent interface")
+				assert.Equal(t, "AdminInterface", interfaceDecl.Extends[1].Name, "Expected second parent interface")
+			case "Interface with complex method signatures":
+				assert.Equal(t, "ServiceInterface", interfaceDecl.Name.Name, "Expected interface name to match")
+				assert.Equal(t, 2, len(interfaceDecl.Methods), "Expected two methods")
+				assert.Equal(t, "process", interfaceDecl.Methods[0].Name.Name, "Expected first method name")
+				assert.Equal(t, "validate", interfaceDecl.Methods[1].Name.Name, "Expected second method name")
+				// Test that the second method has reference parameter
+				assert.True(t, interfaceDecl.Methods[1].Parameters[0].ByReference, "Expected reference parameter")
+			}
+		})
+	}
+}
+
+func TestParsing_TraitDeclarations(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Simple trait declaration",
+			input: `<?php
+trait LoggerTrait {
+    public function log(string $message): void {
+        echo $message;
+    }
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Trait with properties and methods",
+			input: `<?php
+trait DatabaseTrait {
+    private $connection;
+    protected $config;
+    
+    public function connect(): bool {
+        return true;
+    }
+    
+    private function getConfig(): array {
+        return $this->config;
+    }
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Trait with mixed visibility modifiers",
+			input: `<?php
+trait UtilityTrait {
+    public $publicProperty;
+    private $privateProperty;
+    protected $protectedProperty;
+    
+    public function publicMethod(): void {}
+    private function privateMethod(): string { return "private"; }
+    protected function protectedMethod(array $data): array { return $data; }
+}
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have a TraitDeclaration
+			stmt := program.Body[0]
+			traitDecl, ok := stmt.(*ast.TraitDeclaration)
+			assert.True(t, ok, "Expected TraitDeclaration, got %T", stmt)
+			assert.NotNil(t, traitDecl.Name, "Expected trait name to be set")
+
+			// Test specific behavior based on test case
+			switch tt.name {
+			case "Simple trait declaration":
+				assert.Equal(t, "LoggerTrait", traitDecl.Name.Name, "Expected trait name to match")
+				assert.Equal(t, 0, len(traitDecl.Properties), "Expected no properties")
+				assert.Equal(t, 1, len(traitDecl.Methods), "Expected one method")
+				assert.Equal(t, "log", traitDecl.Methods[0].Name.String(), "Expected method name to match")
+				assert.Equal(t, "public", traitDecl.Methods[0].Visibility, "Expected public visibility")
+			case "Trait with properties and methods":
+				assert.Equal(t, "DatabaseTrait", traitDecl.Name.Name, "Expected trait name to match")
+				assert.Equal(t, 2, len(traitDecl.Properties), "Expected two properties")
+				assert.Equal(t, 2, len(traitDecl.Methods), "Expected two methods")
+				assert.Equal(t, "connection", traitDecl.Properties[0].Name, "Expected first property name")
+				assert.Equal(t, "config", traitDecl.Properties[1].Name, "Expected second property name")
+				assert.Equal(t, "private", traitDecl.Properties[0].Visibility, "Expected private visibility")
+				assert.Equal(t, "protected", traitDecl.Properties[1].Visibility, "Expected protected visibility")
+			case "Trait with mixed visibility modifiers":
+				assert.Equal(t, "UtilityTrait", traitDecl.Name.Name, "Expected trait name to match")
+				assert.Equal(t, 3, len(traitDecl.Properties), "Expected three properties")
+				assert.Equal(t, 3, len(traitDecl.Methods), "Expected three methods")
+				// Test property visibilities
+				assert.Equal(t, "public", traitDecl.Properties[0].Visibility, "Expected public visibility")
+				assert.Equal(t, "private", traitDecl.Properties[1].Visibility, "Expected private visibility")
+				assert.Equal(t, "protected", traitDecl.Properties[2].Visibility, "Expected protected visibility")
+				// Test method visibilities
+				assert.Equal(t, "public", traitDecl.Methods[0].Visibility, "Expected public method visibility")
+				assert.Equal(t, "private", traitDecl.Methods[1].Visibility, "Expected private method visibility")
+				assert.Equal(t, "protected", traitDecl.Methods[2].Visibility, "Expected protected method visibility")
+			}
+		})
+	}
+}
+
+func TestParsing_ComprehensiveModernPHP(t *testing.T) {
+	// This test demonstrates all the newly implemented features working together
+	input := `<?php
+namespace App\Http\Controllers;
+
+use App\Models\User;
+use App\Services\AuthService as Auth;
+use function App\Helpers\sanitize_input;
+use const App\Config\DEFAULT_TIMEOUT;
+
+interface UserRepositoryInterface {
+    public function findById(int $id): ?User;
+    public function create(array $data): User;
+    public function update(int $id, array $data): bool;
+}
+
+trait LoggerTrait {
+    protected string $logFile = 'app.log';
+    
+    public function log(string $message): void {
+        // Implementation here
+    }
+}
+?>`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+
+	assert.Equal(t, 0, len(p.Errors()), "Parser errors: %v", p.Errors())
+	assert.NotNil(t, program)
+	assert.Greater(t, len(program.Body), 5, "Expected multiple top-level statements")
+
+	// Test namespace declaration
+	namespaceStmt, ok := program.Body[0].(*ast.NamespaceStatement)
+	assert.True(t, ok, "Expected first statement to be namespace")
+	assert.Equal(t, []string{"App", "Http", "Controllers"}, namespaceStmt.Name.Parts)
+
+	// Find and test use statements (they might be separate statements)
+	var useStatements []*ast.UseStatement
+	var interfaceDecl *ast.InterfaceDeclaration
+	var traitDecl *ast.TraitDeclaration
+
+	for _, stmt := range program.Body {
+		switch s := stmt.(type) {
+		case *ast.UseStatement:
+			useStatements = append(useStatements, s)
+		case *ast.InterfaceDeclaration:
+			interfaceDecl = s
+		case *ast.TraitDeclaration:
+			traitDecl = s
+		}
+	}
+
+	// Test use statements
+	assert.Greater(t, len(useStatements), 0, "Expected at least one use statement")
+	if len(useStatements) > 0 {
+		// Test first use statement
+		assert.Equal(t, []string{"App", "Models", "User"}, useStatements[0].Uses[0].Name.Parts)
+	}
+	if len(useStatements) > 1 {
+		// Test aliased use statement
+		assert.Equal(t, "Auth", useStatements[1].Uses[0].Alias, "Expected alias")
+	}
+
+	// Test interface declaration
+	assert.NotNil(t, interfaceDecl, "Expected interface declaration")
+	if interfaceDecl != nil {
+		assert.Equal(t, "UserRepositoryInterface", interfaceDecl.Name.Name)
+		assert.Equal(t, 3, len(interfaceDecl.Methods), "Expected 3 interface methods")
+	}
+
+	// Test trait declaration
+	assert.NotNil(t, traitDecl, "Expected trait declaration")
+	if traitDecl != nil {
+		assert.Equal(t, "LoggerTrait", traitDecl.Name.Name)
+		assert.Equal(t, 1, len(traitDecl.Properties), "Expected 1 trait property")
+		assert.Equal(t, 1, len(traitDecl.Methods), "Expected 1 trait method")
+	}
+}
+
+func TestParsing_AlternativeSyntaxWithModernFeatures(t *testing.T) {
+	// This test combines alternative syntax with modern PHP features
+	input := `<?php
+namespace App\Utils;
+
+use App\Services\Logger;
+
+trait CacheTrait {
+    private array $cache = [];
+}
+
+interface ProcessorInterface {
+    public function process(array $data): bool;
+}
+
+if ($condition):
+    echo "Processing...";
+endif;
+
+foreach ($items as $item):
+    echo $item;
+endforeach;
+
+while ($running):
+    echo "Running...";
+endwhile;
+?>`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+
+	assert.Equal(t, 0, len(p.Errors()), "Parser errors: %v", p.Errors())
+	assert.NotNil(t, program)
+	assert.Equal(t, 7, len(program.Body), "Expected 7 statements combining modern features with alternative syntax")
+
+	// Verify we have all the different types of statements
+	statementTypes := make(map[string]bool)
+	for _, stmt := range program.Body {
+		switch stmt.(type) {
+		case *ast.NamespaceStatement:
+			statementTypes["namespace"] = true
+		case *ast.UseStatement:
+			statementTypes["use"] = true
+		case *ast.TraitDeclaration:
+			statementTypes["trait"] = true
+		case *ast.InterfaceDeclaration:
+			statementTypes["interface"] = true
+		case *ast.AlternativeIfStatement:
+			statementTypes["alt_if"] = true
+		case *ast.AlternativeForeachStatement:
+			statementTypes["alt_foreach"] = true
+		case *ast.AlternativeWhileStatement:
+			statementTypes["alt_while"] = true
+		}
+	}
+
+	// Verify we have all expected statement types
+	expectedTypes := []string{"namespace", "use", "trait", "interface", "alt_if", "alt_foreach", "alt_while"}
+	for _, expectedType := range expectedTypes {
+		assert.True(t, statementTypes[expectedType], "Expected %s statement type", expectedType)
+	}
+}
+
+func TestParsing_EnumDeclarations(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+	}{
+		{
+			name: "Simple enum declaration",
+			input: `<?php
+enum Status {
+    case PENDING;
+    case APPROVED;
+    case REJECTED;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Backed enum with string values",
+			input: `<?php
+enum Status: string {
+    case PENDING = 'pending';
+    case APPROVED = 'approved';
+    case REJECTED = 'rejected';
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Backed enum with integer values",
+			input: `<?php
+enum Priority: int {
+    case LOW = 1;
+    case MEDIUM = 2;
+    case HIGH = 3;
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Enum implementing interfaces",
+			input: `<?php
+enum Color implements ColorInterface {
+    case RED;
+    case GREEN;
+    case BLUE;
+    
+    public function getHex(): string {
+        return '#FF0000';
+    }
+}
+?>`,
+			expectedErrors: 0,
+		},
+		{
+			name: "Enum with multiple interfaces and methods",
+			input: `<?php
+enum HttpStatus: int implements StatusInterface, JsonSerializable {
+    case OK = 200;
+    case NOT_FOUND = 404;
+    case SERVER_ERROR = 500;
+    
+    public function isError(): bool {
+        return $this->value >= 400;
+    }
+    
+    public function jsonSerialize(): mixed {
+        return $this->value;
+    }
+}
+?>`,
+			expectedErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have an EnumDeclaration
+			stmt := program.Body[0]
+			enumDecl, ok := stmt.(*ast.EnumDeclaration)
+			assert.True(t, ok, "Expected EnumDeclaration, got %T", stmt)
+			assert.NotNil(t, enumDecl.Name, "Expected enum name to be set")
+
+			// Test specific behavior based on test case
+			switch tt.name {
+			case "Simple enum declaration":
+				assert.Equal(t, "Status", enumDecl.Name.Name, "Expected enum name to match")
+				assert.Nil(t, enumDecl.BackingType, "Expected no backing type")
+				assert.Equal(t, 0, len(enumDecl.Implements), "Expected no interfaces")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.Equal(t, 0, len(enumDecl.Methods), "Expected no methods")
+				assert.Equal(t, "PENDING", enumDecl.Cases[0].Name.Name, "Expected first case name")
+				assert.Nil(t, enumDecl.Cases[0].Value, "Expected no value for pure enum case")
+			case "Backed enum with string values":
+				assert.Equal(t, "Status", enumDecl.Name.Name, "Expected enum name to match")
+				assert.NotNil(t, enumDecl.BackingType, "Expected backing type")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.NotNil(t, enumDecl.Cases[0].Value, "Expected value for backed enum case")
+			case "Backed enum with integer values":
+				assert.Equal(t, "Priority", enumDecl.Name.Name, "Expected enum name to match")
+				assert.NotNil(t, enumDecl.BackingType, "Expected backing type")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+			case "Enum implementing interfaces":
+				assert.Equal(t, "Color", enumDecl.Name.Name, "Expected enum name to match")
+				assert.Equal(t, 1, len(enumDecl.Implements), "Expected one interface")
+				assert.Equal(t, "ColorInterface", enumDecl.Implements[0].Name, "Expected interface name")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.Equal(t, 1, len(enumDecl.Methods), "Expected 1 method")
+			case "Enum with multiple interfaces and methods":
+				assert.Equal(t, "HttpStatus", enumDecl.Name.Name, "Expected enum name to match")
+				assert.NotNil(t, enumDecl.BackingType, "Expected backing type")
+				assert.Equal(t, 2, len(enumDecl.Implements), "Expected two interfaces")
+				assert.Equal(t, "StatusInterface", enumDecl.Implements[0].Name, "Expected first interface")
+				assert.Equal(t, "JsonSerializable", enumDecl.Implements[1].Name, "Expected second interface")
+				assert.Equal(t, 3, len(enumDecl.Cases), "Expected 3 enum cases")
+				assert.Equal(t, 2, len(enumDecl.Methods), "Expected 2 methods")
+			}
+		})
+	}
+}
+
+func TestParsing_FirstClassCallable_Complete(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Simple function first-class callable",
+			input: `<?php
+$func = strlen(...);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				fcc, ok := assignment.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				identNode, ok := fcc.Callable.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "strlen", identNode.Name)
+			},
+		},
+		{
+			name: "Object method first-class callable",
+			input: `<?php
+$obj = new stdClass();
+$method = $obj->method(...);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 2)
+
+				stmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assignment, ok := stmt2.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				fcc, ok := assignment.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				propAccess, ok := fcc.Callable.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
+				require.True(t, ok, "Property should be IdentifierNode")
+				assert.Equal(t, "method", propIdent.Name)
+
+				objVar, ok := propAccess.Object.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$obj", objVar.Name)
+			},
+		},
+		{
+			name: "Static method first-class callable",
+			input: `<?php
+$static = MyClass::staticMethod(...);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				fcc, ok := assignment.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				staticAccess, ok := fcc.Callable.(*ast.StaticAccessExpression)
+				require.True(t, ok)
+
+				propertyNode, ok := staticAccess.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "staticMethod", propertyNode.Name)
+
+				className, ok := staticAccess.Class.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "MyClass", className.Name)
+			},
+		},
+		{
+			name: "Variable function first-class callable",
+			input: `<?php
+$funcName = 'strlen';
+$variableFunc = $funcName(...);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 2)
+
+				stmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assignment, ok := stmt2.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				fcc, ok := assignment.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				varNode, ok := fcc.Callable.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$funcName", varNode.Name)
+			},
+		},
+		{
+			name: "Self static method first-class callable",
+			input: `<?php
+class TestClass {
+    public function test() {
+        $self = self::method(...);
+        $parent = parent::method(...);
+        $static = static::method(...);
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := stmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				method, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+
+				require.Len(t, method.Body, 3)
+
+				// Test self::method(...)
+				selfStmt, ok := method.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				selfAssign, ok := selfStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				selfFCC, ok := selfAssign.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				selfStatic, ok := selfFCC.Callable.(*ast.StaticAccessExpression)
+				require.True(t, ok)
+
+				selfClass, ok := selfStatic.Class.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "self", selfClass.Name)
+
+				selfPropertyNode, ok := selfStatic.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "method", selfPropertyNode.Name)
+
+				// Test parent::method(...)
+				parentStmt, ok := method.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				parentAssign, ok := parentStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				parentFCC, ok := parentAssign.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				parentStatic, ok := parentFCC.Callable.(*ast.StaticAccessExpression)
+				require.True(t, ok)
+
+				parentClass, ok := parentStatic.Class.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "parent", parentClass.Name)
+
+				parentPropertyNode, ok := parentStatic.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "method", parentPropertyNode.Name)
+
+				// Test static::method(...)
+				staticStmt, ok := method.Body[2].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				staticAssign, ok := staticStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				staticFCC, ok := staticAssign.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				staticStatic, ok := staticFCC.Callable.(*ast.StaticAccessExpression)
+				require.True(t, ok)
+
+				staticClass, ok := staticStatic.Class.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "static", staticClass.Name)
+
+				staticPropertyNode, ok := staticStatic.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "method", staticPropertyNode.Name)
+			},
+		},
+		{
+			name: "Closure first-class callable",
+			input: `<?php
+$closure = function() { return 'test'; };
+$closureFCC = $closure(...);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 2)
+
+				stmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assignment, ok := stmt2.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				fcc, ok := assignment.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				varNode, ok := fcc.Callable.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$closure", varNode.Name)
+			},
+		},
+		{
+			name: "Complex array method first-class callable",
+			input: `<?php
+$arrayMethod = [new stdClass(), 'toString'](...);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				fcc, ok := assignment.Right.(*ast.FirstClassCallable)
+				require.True(t, ok)
+
+				arrayLit, ok := fcc.Callable.(*ast.ArrayExpression)
+				require.True(t, ok)
+
+				require.Len(t, arrayLit.Elements, 2)
+
+				// First element should be new stdClass()
+				newExpr, ok := arrayLit.Elements[0].(*ast.NewExpression)
+				require.True(t, ok)
+
+				className, ok := newExpr.Class.(*ast.CallExpression)
+				require.True(t, ok)
+
+				classIdent, ok := className.Callee.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "stdClass", classIdent.Name)
+
+				// Second element should be 'toString' string
+				stringLit, ok := arrayLit.Elements[1].(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "toString", stringLit.Value)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			parser := New(l)
+			program := parser.ParseProgram()
+
+			require.NotNil(t, program)
+			if len(parser.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", parser.Errors())
+			}
+
+			test.expected(t, program)
+		})
+	}
+}
+
+// Test edge cases and error handling
+func TestParsing_FirstClassCallable_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           string
+		shouldHaveError bool
+	}{
+		{
+			name: "Valid ellipsis syntax",
+			input: `<?php
+$func = strlen(...);`,
+			shouldHaveError: false,
+		},
+		{
+			name: "Invalid ellipsis usage (not in function call)",
+			input: `<?php  
+$invalid = ...;`,
+			shouldHaveError: true,
+		},
+		{
+			name: "Nested function calls with first-class callable",
+			input: `<?php
+$result = call_user_func(strlen(...), 'test');`,
+			shouldHaveError: false,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			parser := New(l)
+			program := parser.ParseProgram()
+
+			require.NotNil(t, program)
+			errors := parser.Errors()
+
+			if test.shouldHaveError {
+				assert.NotEmpty(t, errors, "Expected parser errors but got none")
+			} else {
+				if len(errors) > 0 {
+					t.Errorf("Unexpected parser errors: %v", errors)
+				}
+			}
+		})
+	}
+}
+
+func TestParsing_AnonymousClass(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, result ast.Node)
+	}{
+		{
+			name:  "basic anonymous class",
+			input: `<?php $obj = new class {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				assert.Empty(t, anonClass.Arguments)
+				assert.Nil(t, anonClass.Extends)
+				assert.Empty(t, anonClass.Implements)
+				assert.Empty(t, anonClass.Body)
+			},
+		},
+		{
+			name:  "anonymous class with constructor arguments",
+			input: `<?php $obj = new class($arg1, $arg2) {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				require.Len(t, anonClass.Arguments, 2)
+
+				arg1, ok := anonClass.Arguments[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$arg1", arg1.Name)
+
+				arg2, ok := anonClass.Arguments[1].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$arg2", arg2.Name)
+			},
+		},
+		{
+			name:  "anonymous class with extends",
+			input: `<?php $obj = new class extends BaseClass {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				require.NotNil(t, anonClass.Extends)
+				extends, ok := anonClass.Extends.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "BaseClass", extends.Name)
+			},
+		},
+		{
+			name:  "anonymous class with implements",
+			input: `<?php $obj = new class implements Interface1, Interface2 {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				require.Len(t, anonClass.Implements, 2)
+
+				iface1, ok := anonClass.Implements[0].(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Interface1", iface1.Name)
+
+				iface2, ok := anonClass.Implements[1].(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Interface2", iface2.Name)
+			},
+		},
+		{
+			name:  "anonymous class with class body",
+			input: `<?php $obj = new class { private $prop; public function method() {} };`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				// Should have property and method in body
+				require.Len(t, anonClass.Body, 2)
+
+				// First should be property declaration
+				_, ok = anonClass.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Expected PropertyDeclaration, got %T", anonClass.Body[0])
+
+				// Second should be method declaration
+				_, ok = anonClass.Body[1].(*ast.FunctionDeclaration)
+				require.True(t, ok, "Expected FunctionDeclaration, got %T", anonClass.Body[1])
+			},
+		},
+		{
+			name:  "anonymous class with final modifier",
+			input: `<?php $obj = new final class {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				assert.Equal(t, []string{"final"}, anonClass.Modifiers)
+				assert.Empty(t, anonClass.Arguments)
+				assert.Nil(t, anonClass.Extends)
+				assert.Empty(t, anonClass.Implements)
+				assert.Empty(t, anonClass.Body)
+			},
+		},
+		{
+			name:  "anonymous class with readonly modifier",
+			input: `<?php $obj = new readonly class {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				assert.Equal(t, []string{"readonly"}, anonClass.Modifiers)
+				assert.Empty(t, anonClass.Arguments)
+				assert.Nil(t, anonClass.Extends)
+				assert.Empty(t, anonClass.Implements)
+				assert.Empty(t, anonClass.Body)
+			},
+		},
+		{
+			name:  "anonymous class with abstract modifier",
+			input: `<?php $obj = new abstract class {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				assert.Equal(t, []string{"abstract"}, anonClass.Modifiers)
+				assert.Empty(t, anonClass.Arguments)
+				assert.Nil(t, anonClass.Extends)
+				assert.Empty(t, anonClass.Implements)
+				assert.Empty(t, anonClass.Body)
+			},
+		},
+		{
+			name:  "anonymous class with multiple modifiers and complex structure",
+			input: `<?php $obj = new final readonly class($param) extends Parent implements Interface { private $prop; };`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				assert.Equal(t, []string{"final", "readonly"}, anonClass.Modifiers)
+
+				// Check constructor argument
+				require.Len(t, anonClass.Arguments, 1)
+				arg, ok := anonClass.Arguments[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$param", arg.Name)
+
+				// Check extends
+				require.NotNil(t, anonClass.Extends)
+				extends, ok := anonClass.Extends.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Parent", extends.Name)
+
+				// Check implements
+				require.Len(t, anonClass.Implements, 1)
+				iface, ok := anonClass.Implements[0].(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Interface", iface.Name)
+
+				// Check class body
+				require.Len(t, anonClass.Body, 1)
+			},
+		},
+		{
+			name:  "anonymous class with attributes",
+			input: `<?php $obj = new #[Attribute] class {};`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				anonClass, ok := assign.Right.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				// Check attributes
+				require.Len(t, anonClass.Attributes, 1)
+				attrGroup := anonClass.Attributes[0]
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
+				assert.Equal(t, "Attribute", attr.Name.Name)
+				assert.Empty(t, attr.Arguments)
+
+				assert.Empty(t, anonClass.Modifiers)
+				assert.Empty(t, anonClass.Arguments)
+				assert.Nil(t, anonClass.Extends)
+				assert.Empty(t, anonClass.Implements)
+				assert.Empty(t, anonClass.Body)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			result := p.ParseProgram()
+
+			require.NotNil(t, result)
+			assert.Empty(t, p.Errors(), "Parser errors: %v", p.Errors())
+
+			tt.expected(t, result)
+		})
+	}
+}
+
+func TestParsing_AttributesEnhanced(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, result ast.Node)
+	}{
+		{
+			name:  "single attribute without parameters",
+			input: `<?php $attr = #[Route];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok)
+
+				require.Len(t, attrGroup.Attributes, 1)
+				assert.Equal(t, "Route", attrGroup.Attributes[0].Name.Name)
+				assert.Empty(t, attrGroup.Attributes[0].Arguments)
+			},
+		},
+		{
+			name:  "single attribute with parameters",
+			input: `<?php $attr = #[Route("/api/users")];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok)
+
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
+				assert.Equal(t, "Route", attr.Name.Name)
+				require.Len(t, attr.Arguments, 1)
+
+				arg, ok := attr.Arguments[0].(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "/api/users", arg.Value)
+			},
+		},
+		{
+			name:  "attribute group with multiple attributes",
+			input: `<?php $expr = #[Route("/api"), Method("GET")];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok, "Expected AttributeGroup, got %T", assign.Right)
+
+				require.Len(t, attrGroup.Attributes, 2)
+
+				// First attribute: Route("/api")
+				assert.Equal(t, "Route", attrGroup.Attributes[0].Name.Name)
+				require.Len(t, attrGroup.Attributes[0].Arguments, 1)
+
+				arg1, ok := attrGroup.Attributes[0].Arguments[0].(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "/api", arg1.Value)
+
+				// Second attribute: Method("GET")
+				assert.Equal(t, "Method", attrGroup.Attributes[1].Name.Name)
+				require.Len(t, attrGroup.Attributes[1].Arguments, 1)
+
+				arg2, ok := attrGroup.Attributes[1].Arguments[0].(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "GET", arg2.Value)
+			},
+		},
+		{
+			name:  "attribute with named parameters",
+			input: `<?php $expr = #[Cache(ttl: 3600, tags: ["users"])];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok)
+
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
+
+				assert.Equal(t, "Cache", attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+
+				// First argument: ttl: 3600
+				namedArg1, ok := attr.Arguments[0].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "ttl", namedArg1.Name.Name)
+
+				num, ok := namedArg1.Value.(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "3600", num.Value)
+
+				// Second argument: tags: ["users"]
+				namedArg2, ok := attr.Arguments[1].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "tags", namedArg2.Name.Name)
+
+				arrayExpr, ok := namedArg2.Value.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, arrayExpr.Elements, 1)
+			},
+		},
+		{
+			name:  "multiple attributes without parameters",
+			input: `<?php $expr = #[Deprecated, Internal, Final];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok)
+
+				require.Len(t, attrGroup.Attributes, 3)
+
+				expectedNames := []string{"Deprecated", "Internal", "Final"}
+				for i, attr := range attrGroup.Attributes {
+					assert.Equal(t, expectedNames[i], attr.Name.Name)
+					assert.Empty(t, attr.Arguments)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			result := p.ParseProgram()
+
+			require.NotNil(t, result)
+			assert.Empty(t, p.Errors(), "Parser errors: %v", p.Errors())
+
+			tt.expected(t, result)
+		})
+	}
+}
+
+func TestParsing_AttributeErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedError string
+	}{
+		{
+			name:          "unclosed attribute group",
+			input:         `<?php #[Route("/api");`,
+			expectedError: "expected next token to be `]`",
+		},
+		{
+			name:          "attribute without name",
+			input:         `<?php #[];`,
+			expectedError: "expected attribute name",
+		},
+		{
+			name:          "malformed attribute parameters",
+			input:         `<?php #[Route(;`,
+			expectedError: "expected next token to be `)`",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			result := p.ParseProgram()
+
+			// Should have parsing errors
+			errors := p.Errors()
+			require.NotEmpty(t, errors, "Expected parsing errors but got none")
+
+			// Check if expected error message is present
+			found := false
+			for _, err := range errors {
+				if contains(err, tt.expectedError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "Expected error containing '%s', got: %v", tt.expectedError, errors)
+
+			// Result should still be parseable (error recovery)
+			require.NotNil(t, result)
+		})
+	}
+}
+
+func TestParsing_InternalFunctions(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(*testing.T, *ast.Program)
+	}{
+		{
+			name:  "Isset with single variable",
+			input: `<?php isset($x);`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				issetExpr := exprStmt.Expression.(*ast.IssetExpression)
+				assert.Len(t, issetExpr.Arguments, 1)
+				varExpr := issetExpr.Arguments[0].(*ast.Variable)
+				assert.Equal(t, "$x", varExpr.Name)
+			},
+		},
+		{
+			name:  "Isset with multiple variables (should be AND connected)",
+			input: `<?php isset($x, $y, $z);`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+
+				// The result should be: isset($x) && isset($y) && isset($z)
+				// So the top level should be a binary expression with &&
+				binaryExpr := exprStmt.Expression.(*ast.BinaryExpression)
+				assert.Equal(t, "&&", binaryExpr.Operator)
+
+				// Left side should be another binary expression for isset($x) && isset($y)
+				leftBinary := binaryExpr.Left.(*ast.BinaryExpression)
+				assert.Equal(t, "&&", leftBinary.Operator)
+
+				// Check the innermost isset($x)
+				issetX := leftBinary.Left.(*ast.IssetExpression)
+				assert.Len(t, issetX.Arguments, 1)
+				varX := issetX.Arguments[0].(*ast.Variable)
+				assert.Equal(t, "$x", varX.Name)
+
+				// Check isset($y)
+				issetY := leftBinary.Right.(*ast.IssetExpression)
+				assert.Len(t, issetY.Arguments, 1)
+				varY := issetY.Arguments[0].(*ast.Variable)
+				assert.Equal(t, "$y", varY.Name)
+
+				// Check isset($z) on the right side
+				issetZ := binaryExpr.Right.(*ast.IssetExpression)
+				assert.Len(t, issetZ.Arguments, 1)
+				varZ := issetZ.Arguments[0].(*ast.Variable)
+				assert.Equal(t, "$z", varZ.Name)
+			},
+		},
+		{
+			name:  "Empty function",
+			input: `<?php empty($var);`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				emptyExpr := exprStmt.Expression.(*ast.EmptyExpression)
+				varExpr := emptyExpr.Expression.(*ast.Variable)
+				assert.Equal(t, "$var", varExpr.Name)
+			},
+		},
+		{
+			name:  "Include statement",
+			input: `<?php include 'file.php';`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				includeExpr := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
+				assert.Equal(t, lexer.T_INCLUDE, includeExpr.Type)
+				stringExpr := includeExpr.Expr.(*ast.StringLiteral)
+				assert.Equal(t, "file.php", stringExpr.Value)
+			},
+		},
+		{
+			name:  "Require_once statement",
+			input: `<?php require_once "config.php";`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				requireExpr := exprStmt.Expression.(*ast.IncludeOrEvalExpression)
+				assert.Equal(t, lexer.T_REQUIRE_ONCE, requireExpr.Type)
+				stringExpr := requireExpr.Expr.(*ast.StringLiteral)
+				assert.Equal(t, "config.php", stringExpr.Value)
+			},
+		},
+		{
+			name:  "Eval statement",
+			input: `<?php eval($code);`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				evalExpr := exprStmt.Expression.(*ast.EvalExpression)
+				varExpr := evalExpr.Argument.(*ast.Variable)
+				assert.Equal(t, "$code", varExpr.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			// Check for parser errors
+			if len(p.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", p.Errors())
+				return
+			}
+
+			assert.NotNil(t, program)
+			tt.check(t, program)
+		})
+	}
+}
+
+func TestParsing_SpaceshipOperator(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(*testing.T, *ast.Program)
+	}{
+		{
+			name:  "Simple spaceship comparison",
+			input: `<?php $result = $a <=> $b;`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+
+				// Right side should be spaceship expression
+				spaceshipExpr := assignExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "<=>", spaceshipExpr.Operator)
+
+				// Check left and right operands
+				leftVar := spaceshipExpr.Left.(*ast.Variable)
+				assert.Equal(t, "$a", leftVar.Name)
+
+				rightVar := spaceshipExpr.Right.(*ast.Variable)
+				assert.Equal(t, "$b", rightVar.Name)
+			},
+		},
+		{
+			name:  "Spaceship with numbers",
+			input: `<?php $result = 1 <=> 2;`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+
+				spaceshipExpr := assignExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "<=>", spaceshipExpr.Operator)
+
+				leftNum := spaceshipExpr.Left.(*ast.NumberLiteral)
+				assert.Equal(t, "1", leftNum.Value)
+				assert.Equal(t, "integer", leftNum.Kind)
+
+				rightNum := spaceshipExpr.Right.(*ast.NumberLiteral)
+				assert.Equal(t, "2", rightNum.Value)
+				assert.Equal(t, "integer", rightNum.Kind)
+			},
+		},
+		{
+			name:  "Complex spaceship expression",
+			input: `<?php $result = ($a + 1) <=> ($b * 2);`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+
+				spaceshipExpr := assignExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "<=>", spaceshipExpr.Operator)
+
+				// Left side should be a binary expression ($a + 1)
+				leftExpr := spaceshipExpr.Left.(*ast.BinaryExpression)
+				assert.Equal(t, "+", leftExpr.Operator)
+
+				// Right side should be a binary expression ($b * 2)
+				rightExpr := spaceshipExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "*", rightExpr.Operator)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			// Check for parser errors
+			if len(p.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", p.Errors())
+				return
+			}
+
+			assert.NotNil(t, program)
+			tt.check(t, program)
+		})
+	}
+}
+
+func TestParsing_NamedArguments(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, result ast.Node)
+	}{
+		{
+			name:  "single named argument",
+			input: `<?php test(name: "John");`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				call, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 1)
+
+				namedArg, ok := call.Arguments[0].(*ast.NamedArgument)
+				require.True(t, ok)
+
+				assert.Equal(t, "name", namedArg.Name.Name)
+
+				stringLiteral, ok := namedArg.Value.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "John", stringLiteral.Value)
+			},
+		},
+		{
+			name:  "multiple named arguments",
+			input: `<?php calculate(x: 10, y: 20, operation: "add");`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				call, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 3)
+
+				// First argument: x: 10
+				namedArg1, ok := call.Arguments[0].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "x", namedArg1.Name.Name)
+
+				num1, ok := namedArg1.Value.(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "10", num1.Value)
+
+				// Second argument: y: 20
+				namedArg2, ok := call.Arguments[1].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "y", namedArg2.Name.Name)
+
+				num2, ok := namedArg2.Value.(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "20", num2.Value)
+
+				// Third argument: operation: "add"
+				namedArg3, ok := call.Arguments[2].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "operation", namedArg3.Name.Name)
+
+				str, ok := namedArg3.Value.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "add", str.Value)
+			},
+		},
+		{
+			name:  "mixed positional and named arguments",
+			input: `<?php mixed_args(1, 2, name: "Alice", value: 42);`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				call, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 4)
+
+				// First argument: 1 (positional)
+				num1, ok := call.Arguments[0].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "1", num1.Value)
+
+				// Second argument: 2 (positional)
+				num2, ok := call.Arguments[1].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "2", num2.Value)
+
+				// Third argument: name: "Alice" (named)
+				namedArg1, ok := call.Arguments[2].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "name", namedArg1.Name.Name)
+
+				str, ok := namedArg1.Value.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "Alice", str.Value)
+
+				// Fourth argument: value: 42 (named)
+				namedArg2, ok := call.Arguments[3].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "value", namedArg2.Name.Name)
+
+				num4, ok := namedArg2.Value.(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "42", num4.Value)
+			},
+		},
+		{
+			name:  "named argument with variable value",
+			input: `<?php test(name: $userName);`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				call, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 1)
+
+				namedArg, ok := call.Arguments[0].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "name", namedArg.Name.Name)
+
+				variable, ok := namedArg.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$userName", variable.Name)
+			},
+		},
+		{
+			name:  "named argument with complex expression",
+			input: `<?php test(result: $a + $b * 2);`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				call, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 1)
+
+				namedArg, ok := call.Arguments[0].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "result", namedArg.Name.Name)
+
+				// Should be a binary expression: $a + ($b * 2)
+				binaryExpr, ok := namedArg.Value.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "+", binaryExpr.Operator)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			result := p.ParseProgram()
+
+			require.NotNil(t, result)
+			assert.Empty(t, p.Errors(), "Parser errors: %v", p.Errors())
+
+			tt.expected(t, result)
+		})
+	}
+}
+
+func TestParsing_NamedArgumentsErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedError string
+	}{
+		{
+			name:          "named argument without value",
+			input:         `<?php test(name:);`,
+			expectedError: "expected next token to be `)`, got `;`",
+		},
+		{
+			name:          "named argument without colon",
+			input:         `<?php test(name "value");`,
+			expectedError: "expected next token to be `)`, got `T_CONSTANT_ENCAPSED_STRING`",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			result := p.ParseProgram()
+
+			// Should have parsing errors
+			errors := p.Errors()
+			require.NotEmpty(t, errors, "Expected parsing errors but got none")
+
+			// Check if expected error message is present
+			found := false
+			for _, err := range errors {
+				if contains(err, tt.expectedError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "Expected error containing '%s', got: %v", tt.expectedError, errors)
+
+			// Result should still be parseable (error recovery)
+			require.NotNil(t, result)
+		})
+	}
+}
+
+func TestParsing_PipeOperator(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		check func(*testing.T, *ast.Program)
+	}{
+		{
+			name:  "Simple pipe operation",
+			input: `<?php $result = $input |> strtoupper;`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+
+				// Right side should be pipe expression
+				pipeExpr := assignExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "|>", pipeExpr.Operator)
+
+				// Check left and right operands
+				leftVar := pipeExpr.Left.(*ast.Variable)
+				assert.Equal(t, "$input", leftVar.Name)
+
+				rightFunc := pipeExpr.Right.(*ast.IdentifierNode)
+				assert.Equal(t, "strtoupper", rightFunc.Name)
+			},
+		},
+		{
+			name:  "Chained pipe operations",
+			input: `<?php $result = $input |> strtoupper |> trim;`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+
+				// Should be left-associative: (($input |> strtoupper) |> trim)
+				outerPipe := assignExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "|>", outerPipe.Operator)
+
+				// Left side should be another pipe expression
+				innerPipe := outerPipe.Left.(*ast.BinaryExpression)
+				assert.Equal(t, "|>", innerPipe.Operator)
+
+				// Check the innermost operands
+				inputVar := innerPipe.Left.(*ast.Variable)
+				assert.Equal(t, "$input", inputVar.Name)
+
+				strToUpperFunc := innerPipe.Right.(*ast.IdentifierNode)
+				assert.Equal(t, "strtoupper", strToUpperFunc.Name)
+
+				// Check the final function
+				trimFunc := outerPipe.Right.(*ast.IdentifierNode)
+				assert.Equal(t, "trim", trimFunc.Name)
+			},
+		},
+		{
+			name:  "Pipe with function call",
+			input: `<?php $result = $input |> trim(_);`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+
+				pipeExpr := assignExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "|>", pipeExpr.Operator)
+
+				// Left side should be variable
+				leftVar := pipeExpr.Left.(*ast.Variable)
+				assert.Equal(t, "$input", leftVar.Name)
+
+				// Right side should be function call
+				rightCall := pipeExpr.Right.(*ast.CallExpression)
+				funcName := rightCall.Callee.(*ast.IdentifierNode)
+				assert.Equal(t, "trim", funcName.Name)
+				assert.Len(t, rightCall.Arguments, 1)
+
+				// Argument should be placeholder _
+				argIdent := rightCall.Arguments[0].(*ast.IdentifierNode)
+				assert.Equal(t, "_", argIdent.Name)
+			},
+		},
+		{
+			name:  "Complex pipe chain with function calls",
+			input: `<?php $result = $data |> array_filter(_) |> array_values(_);`,
+			check: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+
+				// Should be chained pipe operations
+				outerPipe := assignExpr.Right.(*ast.BinaryExpression)
+				assert.Equal(t, "|>", outerPipe.Operator)
+
+				innerPipe := outerPipe.Left.(*ast.BinaryExpression)
+				assert.Equal(t, "|>", innerPipe.Operator)
+
+				// Check the data variable at the start
+				dataVar := innerPipe.Left.(*ast.Variable)
+				assert.Equal(t, "$data", dataVar.Name)
+
+				// Check array_filter call
+				arrayFilterCall := innerPipe.Right.(*ast.CallExpression)
+				filterFunc := arrayFilterCall.Callee.(*ast.IdentifierNode)
+				assert.Equal(t, "array_filter", filterFunc.Name)
+
+				// Check array_values call
+				arrayValuesCall := outerPipe.Right.(*ast.CallExpression)
+				valuesFunc := arrayValuesCall.Callee.(*ast.IdentifierNode)
+				assert.Equal(t, "array_values", valuesFunc.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			// Check for parser errors
+			if len(p.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", p.Errors())
+				return
+			}
+
+			assert.NotNil(t, program)
+			tt.check(t, program)
+		})
+	}
+}
+
+func TestParsing_ReservedKeywords(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Class constants with reserved keywords",
+			input: `<?php
+class TestClass {
+    const class = 'class_value';
+    const function = 'function_value';
+    const if = 'if_value';
+    public const new = 'new_value';
+    private const while = 'while_value';
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 5)
+
+				// Test first constant: const class = 'class_value';
+				constDecl1, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "public", constDecl1.Visibility)
+				assert.Len(t, constDecl1.Constants, 1)
+				nameNode1, ok := constDecl1.Constants[0].Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "class", nameNode1.Name)
+
+				// Test public const new = 'new_value';
+				constDecl4, ok := classExpr.Body[3].(*ast.ClassConstantDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "public", constDecl4.Visibility)
+				nameNode4, ok := constDecl4.Constants[0].Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "new", nameNode4.Name)
+
+				// Test private const while = 'while_value';
+				constDecl5, ok := classExpr.Body[4].(*ast.ClassConstantDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "private", constDecl5.Visibility)
+				nameNode5, ok := constDecl5.Constants[0].Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "while", nameNode5.Name)
+			},
+		},
+		{
+			name: "Method names with reserved keywords",
+			input: `<?php
+class TestClass {
+    public function class() {
+        return 'class';
+    }
+    
+    private function if() {
+        return 'if';
+    }
+    
+    protected function while() {
+        return 'while';
+    }
+    
+    public function function() {
+        return 'function';
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 4)
+
+				// Test public function class()
+				method1, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				nameNode1, ok := method1.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "class", nameNode1.Name)
+				assert.Equal(t, "public", method1.Visibility)
+
+				// Test private function if()
+				method2, ok := classExpr.Body[1].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				nameNode2, ok := method2.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "if", nameNode2.Name)
+				assert.Equal(t, "private", method2.Visibility)
+
+				// Test protected function while()
+				method3, ok := classExpr.Body[2].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				nameNode3, ok := method3.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "while", nameNode3.Name)
+				assert.Equal(t, "protected", method3.Visibility)
+
+				// Test public function function()
+				method4, ok := classExpr.Body[3].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				nameNode4, ok := method4.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "function", nameNode4.Name)
+				assert.Equal(t, "public", method4.Visibility)
+			},
+		},
+		{
+			name: "Property access with reserved keywords",
+			input: `<?php
+$obj->class;
+$obj->function;
+$obj->if;
+$obj->while;
+$obj->new;`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 5)
+
+				// Test $obj->class
+				stmt1, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess1, ok := stmt1.Expression.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				propIdent1, ok := propAccess1.Property.(*ast.IdentifierNode)
+				assert.True(t, ok, "Property should be IdentifierNode")
+				assert.Equal(t, "class", propIdent1.Name)
+
+				// Test $obj->function
+				stmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess2, ok := stmt2.Expression.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "function", propAccess2.Property.(*ast.IdentifierNode).Name)
+
+				// Test $obj->if
+				stmt3, ok := program.Body[2].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess3, ok := stmt3.Expression.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "if", propAccess3.Property.(*ast.IdentifierNode).Name)
+
+				// Test $obj->while
+				stmt4, ok := program.Body[3].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess4, ok := stmt4.Expression.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "while", propAccess4.Property.(*ast.IdentifierNode).Name)
+
+				// Test $obj->new
+				stmt5, ok := program.Body[4].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess5, ok := stmt5.Expression.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "new", propAccess5.Property.(*ast.IdentifierNode).Name)
+			},
+		},
+		{
+			name: "Nullsafe property access with reserved keywords",
+			input: `<?php
+$obj?->class;
+$obj?->function;
+$obj?->if;`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 3)
+
+				// Test $obj?->class
+				stmt1, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess1, ok := stmt1.Expression.(*ast.NullsafePropertyAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "class", propAccess1.Property.(*ast.IdentifierNode).Name)
+
+				// Test $obj?->function
+				stmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess2, ok := stmt2.Expression.(*ast.NullsafePropertyAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "function", propAccess2.Property.(*ast.IdentifierNode).Name)
+
+				// Test $obj?->if
+				stmt3, ok := program.Body[2].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				propAccess3, ok := stmt3.Expression.(*ast.NullsafePropertyAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "if", propAccess3.Property.(*ast.IdentifierNode).Name)
+			},
+		},
+		{
+			name: "Trait adaptations with reserved keywords",
+			input: `<?php
+class TestClass {
+    use TestTrait {
+        class as function;
+        if as while;
+        TestTrait::class as public echo;
+        function as private new;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				require.Len(t, useTraitStmt.Adaptations, 4)
+
+				// Test class as function
+				alias1, ok := useTraitStmt.Adaptations[0].(*ast.TraitAliasStatement)
+				require.True(t, ok)
+				assert.Equal(t, "class", alias1.Method.Method.Name)
+				assert.Equal(t, "function", alias1.Alias.Name)
+
+				// Test if as while
+				alias2, ok := useTraitStmt.Adaptations[1].(*ast.TraitAliasStatement)
+				require.True(t, ok)
+				assert.Equal(t, "if", alias2.Method.Method.Name)
+				assert.Equal(t, "while", alias2.Alias.Name)
+
+				// Test TestTrait::class as public echo
+				alias3, ok := useTraitStmt.Adaptations[2].(*ast.TraitAliasStatement)
+				require.True(t, ok)
+				assert.Equal(t, "TestTrait", alias3.Method.Trait.Name)
+				assert.Equal(t, "class", alias3.Method.Method.Name)
+				assert.Equal(t, "public", alias3.Visibility)
+				assert.Equal(t, "echo", alias3.Alias.Name)
+
+				// Test function as private new
+				alias4, ok := useTraitStmt.Adaptations[3].(*ast.TraitAliasStatement)
+				require.True(t, ok)
+				assert.Equal(t, "function", alias4.Method.Method.Name)
+				assert.Equal(t, "private", alias4.Visibility)
+				assert.Equal(t, "new", alias4.Alias.Name)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			parser := New(l)
+			program := parser.ParseProgram()
+
+			require.NotNil(t, program)
+			if len(parser.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", parser.Errors())
+			}
+
+			test.expected(t, program)
+		})
+	}
+}
+
+func TestParsing_ReservedKeywords_IsHelperFunctions(t *testing.T) {
+	tests := []struct {
+		name       string
+		tokenType  lexer.TokenType
+		isReserved bool
+		isSemi     bool
+	}{
+		{"T_CLASS is reserved non-modifier", lexer.T_CLASS, true, true},
+		{"T_FUNCTION is reserved non-modifier", lexer.T_FUNCTION, true, true},
+		{"T_IF is reserved non-modifier", lexer.T_IF, true, true},
+		{"T_WHILE is reserved non-modifier", lexer.T_WHILE, true, true},
+		{"T_NEW is reserved non-modifier", lexer.T_NEW, true, true},
+		{"T_PRIVATE is not reserved non-modifier but is semi-reserved", lexer.T_PRIVATE, false, true},
+		{"T_PUBLIC is not reserved non-modifier but is semi-reserved", lexer.T_PUBLIC, false, true},
+		{"T_PROTECTED is not reserved non-modifier but is semi-reserved", lexer.T_PROTECTED, false, true},
+		{"T_STATIC is not reserved non-modifier but is semi-reserved", lexer.T_STATIC, false, true},
+		{"T_STRING is not reserved", lexer.T_STRING, false, false},
+		{"T_VARIABLE is not reserved", lexer.T_VARIABLE, false, false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			assert.Equal(t, test.isReserved, isReservedNonModifier(test.tokenType))
+			assert.Equal(t, test.isSemi, isSemiReserved(test.tokenType))
+		})
+	}
+}
+
+func TestParsing_SpreadSyntax(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, result ast.Node)
+	}{
+		{
+			name:  "array spread with single array",
+			input: `<?php $arr2 = [...$arr1];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program, ok := result.(*ast.Program)
+				require.True(t, ok)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				arrayExpr, ok := assign.Right.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, arrayExpr.Elements, 1)
+
+				spread, ok := arrayExpr.Elements[0].(*ast.SpreadExpression)
+				require.True(t, ok)
+
+				variable, ok := spread.Argument.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$arr1", variable.Name)
+			},
+		},
+		{
+			name:  "array spread with mixed elements",
+			input: `<?php $arr2 = [...$arr1, 4, 5];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program, ok := result.(*ast.Program)
+				require.True(t, ok)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				arrayExpr, ok := assign.Right.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, arrayExpr.Elements, 3)
+
+				// First element: spread
+				spread, ok := arrayExpr.Elements[0].(*ast.SpreadExpression)
+				require.True(t, ok)
+				variable, ok := spread.Argument.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$arr1", variable.Name)
+
+				// Second element: number 4
+				num1, ok := arrayExpr.Elements[1].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "4", num1.Value)
+
+				// Third element: number 5
+				num2, ok := arrayExpr.Elements[2].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "5", num2.Value)
+			},
+		},
+		{
+			name:  "array() spread with mixed elements",
+			input: `<?php $arr3 = array(0, ...$arr1, 6);`,
+			expected: func(t *testing.T, result ast.Node) {
+				program, ok := result.(*ast.Program)
+				require.True(t, ok)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				arrayExpr, ok := assign.Right.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, arrayExpr.Elements, 3)
+
+				// First element: number 0
+				num0, ok := arrayExpr.Elements[0].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "0", num0.Value)
+
+				// Second element: spread
+				spread, ok := arrayExpr.Elements[1].(*ast.SpreadExpression)
+				require.True(t, ok)
+				variable, ok := spread.Argument.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$arr1", variable.Name)
+
+				// Third element: number 6
+				num6, ok := arrayExpr.Elements[2].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "6", num6.Value)
+			},
+		},
+		{
+			name:  "function call with spread arguments",
+			input: `<?php $result = test(...$arr1);`,
+			expected: func(t *testing.T, result ast.Node) {
+				program, ok := result.(*ast.Program)
+				require.True(t, ok)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				call, ok := assign.Right.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 1)
+
+				spread, ok := call.Arguments[0].(*ast.SpreadExpression)
+				require.True(t, ok)
+
+				variable, ok := spread.Argument.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$arr1", variable.Name)
+			},
+		},
+		{
+			name:  "function call with mixed arguments",
+			input: `<?php $mixed = test(1, ...[2, 3]);`,
+			expected: func(t *testing.T, result ast.Node) {
+				program, ok := result.(*ast.Program)
+				require.True(t, ok)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				call, ok := assign.Right.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 2)
+
+				// First argument: number 1
+				num1, ok := call.Arguments[0].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "1", num1.Value)
+
+				// Second argument: spread of array literal
+				spread, ok := call.Arguments[1].(*ast.SpreadExpression)
+				require.True(t, ok)
+
+				arrayExpr, ok := spread.Argument.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, arrayExpr.Elements, 2)
+
+				num2, ok := arrayExpr.Elements[0].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "2", num2.Value)
+
+				num3, ok := arrayExpr.Elements[1].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "3", num3.Value)
+			},
+		},
+		{
+			name:  "multiple spread in array",
+			input: `<?php $arr = [...$a, ...$b, ...$c];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program, ok := result.(*ast.Program)
+				require.True(t, ok)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				arrayExpr, ok := assign.Right.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, arrayExpr.Elements, 3)
+
+				// All elements should be spread expressions
+				for i, element := range arrayExpr.Elements {
+					spread, ok := element.(*ast.SpreadExpression)
+					require.True(t, ok, "Element %d should be spread expression", i)
+
+					variable, ok := spread.Argument.(*ast.Variable)
+					require.True(t, ok)
+
+					expectedNames := []string{"$a", "$b", "$c"}
+					assert.Equal(t, expectedNames[i], variable.Name)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			result := p.ParseProgram()
+
+			require.NotNil(t, result)
+			assert.Empty(t, p.Errors(), "Parser errors: %v", p.Errors())
+
+			tt.expected(t, result)
+		})
+	}
+}
+
+func TestParsing_SpreadSyntaxErrors(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedError string
+	}{
+		{
+			name:          "spread without expression",
+			input:         `<?php $arr = [...];`,
+			expectedError: "expected ',' or ']' in array",
+		},
+		{
+			name:          "spread in wrong context",
+			input:         `<?php $x = ...5;`,
+			expectedError: "no prefix parse function for `T_ELLIPSIS`",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			result := p.ParseProgram()
+
+			// Should have parsing errors
+			errors := p.Errors()
+			require.NotEmpty(t, errors, "Expected parsing errors but got none")
+
+			// Check if expected error message is present
+			found := false
+			for _, err := range errors {
+				if contains(err, tt.expectedError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "Expected error containing '%s', got: %v", tt.expectedError, errors)
+
+			// Result should still be parseable (error recovery)
+			require.NotNil(t, result)
+		})
+	}
+}
+
+// Helper function to check if error message contains expected text
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && s[:len(substr)] == substr ||
+		len(s) > len(substr) &&
+			(s[len(s)-len(substr):] == substr ||
+				indexOf(s, substr) != -1)
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestParsing_TraitAdaptations(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Simple trait usage without adaptations",
+			input: `<?php
+class TestClass {
+    use TraitA;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				assert.Len(t, useTraitStmt.Traits, 1)
+				assert.Equal(t, "TraitA", useTraitStmt.Traits[0].Name)
+				assert.Nil(t, useTraitStmt.Adaptations)
+			},
+		},
+		{
+			name: "Multiple traits usage without adaptations",
+			input: `<?php
+class TestClass {
+    use TraitA, TraitB, TraitC;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				assert.Len(t, useTraitStmt.Traits, 3)
+				assert.Equal(t, "TraitA", useTraitStmt.Traits[0].Name)
+				assert.Equal(t, "TraitB", useTraitStmt.Traits[1].Name)
+				assert.Equal(t, "TraitC", useTraitStmt.Traits[2].Name)
+				assert.Nil(t, useTraitStmt.Adaptations)
+			},
+		},
+		{
+			name: "Trait precedence (insteadof)",
+			input: `<?php
+class TestClass {
+    use TraitA, TraitB {
+        TraitA::foo insteadof TraitB;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				assert.Len(t, useTraitStmt.Traits, 2)
+				require.Len(t, useTraitStmt.Adaptations, 1)
+
+				adaptation := useTraitStmt.Adaptations[0]
+				precedence, ok := adaptation.(*ast.TraitPrecedenceStatement)
+				require.True(t, ok)
+
+				assert.Equal(t, "TraitA", precedence.Method.Trait.Name)
+				assert.Equal(t, "foo", precedence.Method.Method.Name)
+				assert.Len(t, precedence.InsteadOf, 1)
+				assert.Equal(t, "TraitB", precedence.InsteadOf[0].Name)
+			},
+		},
+		{
+			name: "Trait alias with new name",
+			input: `<?php
+class TestClass {
+    use TraitA {
+        foo as newFoo;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				require.Len(t, useTraitStmt.Adaptations, 1)
+
+				adaptation := useTraitStmt.Adaptations[0]
+				alias, ok := adaptation.(*ast.TraitAliasStatement)
+				require.True(t, ok)
+
+				assert.Nil(t, alias.Method.Trait) // Simple method reference
+				assert.Equal(t, "foo", alias.Method.Method.Name)
+				assert.Equal(t, "newFoo", alias.Alias.Name)
+				assert.Empty(t, alias.Visibility)
+			},
+		},
+		{
+			name: "Trait alias with visibility change",
+			input: `<?php
+class TestClass {
+    use TraitA {
+        foo as private;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				require.Len(t, useTraitStmt.Adaptations, 1)
+
+				adaptation := useTraitStmt.Adaptations[0]
+				alias, ok := adaptation.(*ast.TraitAliasStatement)
+				require.True(t, ok)
+
+				assert.Equal(t, "foo", alias.Method.Method.Name)
+				assert.Nil(t, alias.Alias) // No new name, only visibility change
+				assert.Equal(t, "private", alias.Visibility)
+			},
+		},
+		{
+			name: "Trait alias with visibility and new name",
+			input: `<?php
+class TestClass {
+    use TraitA {
+        TraitA::bar as protected newBar;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				require.Len(t, useTraitStmt.Adaptations, 1)
+
+				adaptation := useTraitStmt.Adaptations[0]
+				alias, ok := adaptation.(*ast.TraitAliasStatement)
+				require.True(t, ok)
+
+				assert.Equal(t, "TraitA", alias.Method.Trait.Name)
+				assert.Equal(t, "bar", alias.Method.Method.Name)
+				assert.Equal(t, "newBar", alias.Alias.Name)
+				assert.Equal(t, "protected", alias.Visibility)
+			},
+		},
+		{
+			name: "Multiple adaptations",
+			input: `<?php
+class TestClass {
+    use TraitA, TraitB {
+        TraitA::foo insteadof TraitB;
+        TraitB::foo as fooFromB;
+        bar as private privateBar;
+        TraitA::baz as public publicBaz;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				require.Len(t, useTraitStmt.Adaptations, 4)
+
+				// First adaptation - precedence
+				precedence, ok := useTraitStmt.Adaptations[0].(*ast.TraitPrecedenceStatement)
+				require.True(t, ok)
+				assert.Equal(t, "TraitA", precedence.Method.Trait.Name)
+				assert.Equal(t, "foo", precedence.Method.Method.Name)
+				assert.Equal(t, "TraitB", precedence.InsteadOf[0].Name)
+
+				// Second adaptation - alias
+				alias1, ok := useTraitStmt.Adaptations[1].(*ast.TraitAliasStatement)
+				require.True(t, ok)
+				assert.Equal(t, "TraitB", alias1.Method.Trait.Name)
+				assert.Equal(t, "foo", alias1.Method.Method.Name)
+				assert.Equal(t, "fooFromB", alias1.Alias.Name)
+
+				// Third adaptation - visibility change
+				alias2, ok := useTraitStmt.Adaptations[2].(*ast.TraitAliasStatement)
+				require.True(t, ok)
+				assert.Nil(t, alias2.Method.Trait)
+				assert.Equal(t, "bar", alias2.Method.Method.Name)
+				assert.Equal(t, "privateBar", alias2.Alias.Name)
+				assert.Equal(t, "private", alias2.Visibility)
+
+				// Fourth adaptation - visibility with new name
+				alias3, ok := useTraitStmt.Adaptations[3].(*ast.TraitAliasStatement)
+				require.True(t, ok)
+				assert.Equal(t, "TraitA", alias3.Method.Trait.Name)
+				assert.Equal(t, "baz", alias3.Method.Method.Name)
+				assert.Equal(t, "publicBaz", alias3.Alias.Name)
+				assert.Equal(t, "public", alias3.Visibility)
+			},
+		},
+		{
+			name: "Multiple insteadof traits",
+			input: `<?php
+class TestClass {
+    use TraitA, TraitB, TraitC {
+        TraitA::foo insteadof TraitB, TraitC;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				classStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classExpr, ok := classStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				require.Len(t, classExpr.Body, 1)
+				useTraitStmt, ok := classExpr.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok)
+
+				require.Len(t, useTraitStmt.Adaptations, 1)
+
+				adaptation := useTraitStmt.Adaptations[0]
+				precedence, ok := adaptation.(*ast.TraitPrecedenceStatement)
+				require.True(t, ok)
+
+				assert.Equal(t, "TraitA", precedence.Method.Trait.Name)
+				assert.Equal(t, "foo", precedence.Method.Method.Name)
+				assert.Len(t, precedence.InsteadOf, 2)
+				assert.Equal(t, "TraitB", precedence.InsteadOf[0].Name)
+				assert.Equal(t, "TraitC", precedence.InsteadOf[1].Name)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			parser := New(l)
+			program := parser.ParseProgram()
+
+			require.NotNil(t, program)
+			if len(parser.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", parser.Errors())
+			}
+
+			test.expected(t, program)
+		})
+	}
+}
+
+func TestParsing_TraitAdaptations_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedError string
+	}{
+		{
+			name: "Missing trait name after use",
+			input: `<?php
+class TestClass {
+    use ;
+}`,
+			expectedError: "expected trait name",
+		},
+		{
+			name: "Missing method name after ::",
+			input: `<?php
+class TestClass {
+    use TraitA {
+        TraitA:: as foo;
+    }
+}`,
+			expectedError: "expected method name",
+		},
+		{
+			name: "Missing insteadof trait name",
+			input: `<?php
+class TestClass {
+    use TraitA {
+        foo insteadof ;
+    }
+}`,
+			expectedError: "expected trait name",
+		},
+		{
+			name: "Missing method name after :: with insteadof",
+			input: `<?php
+class TestClass {
+    use TraitA {
+        TraitA:: insteadof TraitB;
+    }
+}`,
+			expectedError: "expected method name",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			parser := New(l)
+			program := parser.ParseProgram()
+
+			require.NotNil(t, program)
+			errors := parser.Errors()
+			require.NotEmpty(t, errors, "Expected parser errors but got none")
+
+			found := false
+			for _, err := range errors {
+				if containsSubstring(err, test.expectedError) {
+					found = true
+					break
+				}
+			}
+			assert.True(t, found, "Expected error containing '%s', but got: %v", test.expectedError, errors)
+		})
+	}
+}
+
+func containsSubstring(str, substr string) bool {
+	return len(str) >= len(substr) && str[:len(substr)] == substr
 }
