@@ -9128,6 +9128,61 @@ func containsSubstring(str, substr string) bool {
 	return len(str) >= len(substr) && str[:len(substr)] == substr
 }
 
+func TestParsing_MixedAlternativeRegularSyntax(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name: "alternative if with nested regular if-elseif",
+			input: `<?php if ($condition1) : ?>
+<div>HTML content</div>
+<?php 
+if ($condition2) {
+    echo "normal syntax";
+} elseif ($condition3) {
+    echo "this elseif should work";
+}
+?>
+<?php endif; ?>`,
+		},
+		{
+			name: "alternative if with multiple nested regular syntax",
+			input: `<?php if ($outer) : ?>
+<h1>Title</h1>
+<?php 
+if ($inner1) {
+    if ($deep1) {
+        echo "deep1";
+    } elseif ($deep2) {
+        echo "deep2";  
+    }
+} elseif ($inner2) {
+    echo "inner2";
+}
+?>
+<?php endif; ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			errors := p.Errors()
+			if len(errors) > 0 {
+				t.Fatalf("Parser errors: %v", errors)
+			}
+
+			require.NotNil(t, program)
+			assert.GreaterOrEqual(t, len(program.Body), 1, 
+				"Expected at least 1 statement, got %d", len(program.Body))
+		})
+	}
+}
+
 func TestParsing_MixedPHPHTML(t *testing.T) {
 	tests := []struct {
 		name     string

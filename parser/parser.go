@@ -801,6 +801,38 @@ func parseIfStatement(p *Parser) ast.Statement {
 		}
 	}
 
+	// 检查是否有 elseif 或 else 子句
+	for p.peekToken.Type == lexer.T_ELSEIF {
+		p.nextToken() // 移动到 elseif
+
+		if !p.expectPeek(lexer.TOKEN_LPAREN) {
+			return ifStmt
+		}
+
+		p.nextToken()
+		elseifCondition := parseExpression(p, LOWEST)
+
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return ifStmt
+		}
+
+		// elseif 语句体
+		p.nextToken()
+		elseifStmt := ast.NewIfStatement(p.currentToken.Position, elseifCondition)
+		
+		if p.currentToken.Type == lexer.TOKEN_LBRACE {
+			elseifStmt.Consequent = parseBlockStatements(p)
+		} else {
+			// 单行语句
+			singleStmt := parseStatement(p)
+			if singleStmt != nil {
+				elseifStmt.Consequent = []ast.Statement{singleStmt}
+			}
+		}
+
+		ifStmt.Alternate = append(ifStmt.Alternate, elseifStmt)
+	}
+
 	// 检查是否有 else 子句
 	if p.peekToken.Type == lexer.T_ELSE {
 		p.nextToken() // 移动到 else
