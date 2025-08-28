@@ -131,7 +131,7 @@ func (p *PrattParser) parseIfStatement() ast.Statement {
 			BaseNode: ast.BaseNode{
 				Kind:     ast.ASTIfElem,
 				Position: elseIfPos,
-				LineNo:   uint32(elseIfPos.Line),
+				LineNo:   elseIfPos.Line,
 			},
 			Condition: elseIfCondition,
 			Body:      elseIfBody,
@@ -174,6 +174,7 @@ func (p *PrattParser) parseIfStatement() ast.Statement {
 		ThenStatement:    thenStatement,
 		ElseIfStatements: elseIfStatements,
 		ElseStatement:    elseStatement,
+		IsAlternative:    isAlternative,
 	}
 }
 
@@ -198,8 +199,10 @@ func (p *PrattParser) parseWhileStatement() ast.Statement {
 	
 	// Check for alternative syntax (while: ... endwhile;)
 	var body ast.Statement
+	var isAlternative bool
 	
 	if p.currentTokenIs(lexer.TOKEN_COLON) {
+		isAlternative = true
 		p.nextToken()
 		body = p.parseStatementList([]lexer.TokenType{lexer.T_ENDWHILE})
 		
@@ -223,8 +226,9 @@ func (p *PrattParser) parseWhileStatement() ast.Statement {
 			Position: position,
 			LineNo:   uint32(position.Line),
 		},
-		Condition: condition,
-		Body:      body,
+		Condition:     condition,
+		Body:          body,
+		IsAlternative: isAlternative,
 	}
 }
 
@@ -248,9 +252,9 @@ func (p *PrattParser) parseForStatement() ast.Statement {
 	
 	// Parse condition expressions
 	p.nextToken()
-	var condition ast.Expression
+	var conditionExpressions []ast.Expression
 	if !p.currentTokenIs(lexer.TOKEN_SEMICOLON) {
-		condition = p.parseExpression(LOWEST)
+		conditionExpressions = p.parseExpressionList(lexer.TOKEN_SEMICOLON)
 	}
 	
 	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
@@ -272,8 +276,10 @@ func (p *PrattParser) parseForStatement() ast.Statement {
 	
 	// Check for alternative syntax (for: ... endfor;)
 	var body ast.Statement
+	var isAlternative bool
 	
 	if p.currentTokenIs(lexer.TOKEN_COLON) {
+		isAlternative = true
 		p.nextToken()
 		body = p.parseStatementList([]lexer.TokenType{lexer.T_ENDFOR})
 		
@@ -297,10 +303,11 @@ func (p *PrattParser) parseForStatement() ast.Statement {
 			Position: position,
 			LineNo:   uint32(position.Line),
 		},
-		Init:      initExpressions,
-		Condition: condition,
-		Update:    updateExpressions,
-		Body:      body,
+		Init:          initExpressions,
+		Condition:     conditionExpressions,
+		Update:        updateExpressions,
+		Body:          body,
+		IsAlternative: isAlternative,
 	}
 }
 
@@ -325,9 +332,11 @@ func (p *PrattParser) parseForeachStatement() ast.Statement {
 	
 	// Parse key => value or just value
 	var key, value ast.Expression
+	var isReference bool
 	
 	// Check for reference
 	if p.currentTokenIs(lexer.TOKEN_AMPERSAND) {
+		isReference = true
 		p.nextToken()
 	}
 	
@@ -344,6 +353,7 @@ func (p *PrattParser) parseForeachStatement() ast.Statement {
 		
 		// Check for reference on value
 		if p.currentTokenIs(lexer.TOKEN_AMPERSAND) {
+			isReference = true
 			p.nextToken()
 		}
 		
@@ -363,8 +373,10 @@ func (p *PrattParser) parseForeachStatement() ast.Statement {
 	
 	// Check for alternative syntax (foreach: ... endforeach;)
 	var body ast.Statement
+	var isAlternative bool
 	
 	if p.currentTokenIs(lexer.TOKEN_COLON) {
+		isAlternative = true
 		p.nextToken()
 		body = p.parseStatementList([]lexer.TokenType{lexer.T_ENDFOREACH})
 		
@@ -388,10 +400,12 @@ func (p *PrattParser) parseForeachStatement() ast.Statement {
 			Position: position,
 			LineNo:   uint32(position.Line),
 		},
-		Expression: iterable,
-		Key:        key,
-		Value:      value,
-		Body:       body,
+		Iterable:      iterable,
+		Key:           key,
+		Value:         value,
+		Body:          body,
+		IsReference:   isReference,
+		IsAlternative: isAlternative,
 	}
 }
 
@@ -457,7 +471,8 @@ func (p *PrattParser) parseSwitchStatement() ast.Statement {
 	p.nextToken()
 	
 	// Parse switch body - can be {...} or :...endswitch;
-	var cases []ast.Statement
+	var cases []*ast.CaseStatement
+	var isAlternative bool
 	
 	if p.currentTokenIs(lexer.TOKEN_LBRACE) {
 		p.nextToken()
@@ -473,6 +488,7 @@ func (p *PrattParser) parseSwitchStatement() ast.Statement {
 			return nil
 		}
 	} else if p.currentTokenIs(lexer.TOKEN_COLON) {
+		isAlternative = true
 		p.nextToken()
 		
 		// Skip optional semicolon after colon
@@ -499,8 +515,9 @@ func (p *PrattParser) parseSwitchStatement() ast.Statement {
 			Position: position,
 			LineNo:   uint32(position.Line),
 		},
-		Expression: expr,
-		Cases:      cases,
+		Expression:    expr,
+		Cases:         cases,
+		IsAlternative: isAlternative,
 	}
 }
 
@@ -689,7 +706,7 @@ func (p *PrattParser) parseTryStatement() ast.Statement {
 			BaseNode: ast.BaseNode{
 				Kind:     ast.ASTCatch,
 				Position: catchPos,
-				LineNo:   uint32(catchPos.Line),
+				LineNo:   catchPos.Line,
 			},
 			ExceptionTypes: exceptionTypes,
 			Variable:       variable,
@@ -719,7 +736,7 @@ func (p *PrattParser) parseTryStatement() ast.Statement {
 			BaseNode: ast.BaseNode{
 				Kind:     ast.ASTFinally,
 				Position: finallyPos,
-				LineNo:   uint32(finallyPos.Line),
+				LineNo:   finallyPos.Line,
 			},
 			Body: finallyBody,
 		}
@@ -790,8 +807,8 @@ func (p *PrattParser) parseExpressionList(stopToken lexer.TokenType) []ast.Expre
 }
 
 // parseCaseList parses a list of case statements
-func (p *PrattParser) parseCaseList(stopToken lexer.TokenType) []ast.Statement {
-	var cases []ast.Statement
+func (p *PrattParser) parseCaseList(stopToken lexer.TokenType) []*ast.CaseStatement {
+	var cases []*ast.CaseStatement
 	
 	for !p.currentTokenIs(lexer.T_EOF) && !p.currentTokenIs(stopToken) {
 		if p.currentTokenIs(lexer.T_CASE) {
@@ -831,9 +848,9 @@ func (p *PrattParser) parseCaseList(stopToken lexer.TokenType) []ast.Statement {
 				BaseNode: ast.BaseNode{
 					Kind:     ast.ASTSwitchCase,
 					Position: casePos,
-					LineNo:   uint32(casePos.Line),
+					LineNo:   casePos.Line,
 				},
-				Value:      condition,
+				Condition:  condition,
 				Statements: statements,
 			})
 			
@@ -868,9 +885,9 @@ func (p *PrattParser) parseCaseList(stopToken lexer.TokenType) []ast.Statement {
 				BaseNode: ast.BaseNode{
 					Kind:     ast.ASTSwitchCase,
 					Position: defaultPos,
-					LineNo:   uint32(defaultPos.Line),
+					LineNo:   defaultPos.Line,
 				},
-				Value:      nil, // nil indicates default case
+				Condition:  nil, // nil indicates default case
 				Statements: statements,
 			})
 			
@@ -1034,89 +1051,5 @@ func (p *PrattParser) parsePrintStatement() ast.Statement {
 			LineNo:   uint32(position.Line),
 		},
 		Expression: nil, // Placeholder
-	}
-}
-
-// parseDeclareStatement parses declare statements
-func (p *PrattParser) parseDeclareStatement() ast.Statement {
-	position := p.currentToken.Position
-	p.nextToken() // consume 'declare'
-	
-	if !p.expectPeek(lexer.TOKEN_LPAREN) {
-		return nil
-	}
-	p.nextToken()
-	
-	// Parse directives
-	var directives []ast.Expression
-	for p.currentToken.Type != lexer.TOKEN_RPAREN {
-		directive := p.parseExpression(LOWEST)
-		directives = append(directives, directive)
-		
-		if p.peekToken.Type == lexer.TOKEN_COMMA {
-			p.nextToken()
-			p.nextToken()
-		} else {
-			break
-		}
-	}
-	
-	if !p.expectPeek(lexer.TOKEN_RPAREN) {
-		return nil
-	}
-	p.nextToken()
-	
-	// Parse body
-	var body ast.Statement
-	if p.currentToken.Type == lexer.TOKEN_LBRACE {
-		body = p.parseBlockStatement()
-	} else {
-		body = p.parseStatement()
-	}
-	
-	return &ast.DeclareStatement{
-		BaseNode: ast.BaseNode{
-			Kind:     ast.ASTDeclare,
-			Position: position,
-			LineNo:   uint32(position.Line),
-		},
-		Directives: directives,
-		Body:       body,
-	}
-}
-
-// parseHaltCompilerStatement parses __halt_compiler() statements
-func (p *PrattParser) parseHaltCompilerStatement() ast.Statement {
-	position := p.currentToken.Position
-	p.nextToken() // consume '__halt_compiler'
-	
-	if !p.expectPeek(lexer.TOKEN_LPAREN) {
-		return nil
-	}
-	p.nextToken()
-	
-	if !p.expectPeek(lexer.TOKEN_RPAREN) {
-		return nil
-	}
-	p.nextToken()
-	
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
-		return nil
-	}
-	
-	// Store any remaining data
-	var data string
-	for p.peekToken.Type != lexer.T_EOF {
-		p.nextToken()
-		data += p.currentToken.Value
-	}
-	
-	return &ast.HaltCompilerStatement{
-		BaseNode: ast.BaseNode{
-			Kind:     ast.ASTHaltCompiler,
-			Position: position,
-			LineNo:   uint32(position.Line),
-		},
-		Data: data,
 	}
 }
