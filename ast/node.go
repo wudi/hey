@@ -336,7 +336,7 @@ type InterfaceMethod struct {
 func NewInterfaceDeclaration(pos lexer.Position, name *IdentifierNode) *InterfaceDeclaration {
 	return &InterfaceDeclaration{
 		BaseNode: BaseNode{
-			Kind:     ASTInterface,
+			Kind:     ASTClass, // PHP uses same AST node for interface/class/trait/enum
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -422,7 +422,7 @@ type TraitDeclaration struct {
 func NewTraitDeclaration(pos lexer.Position, name *IdentifierNode) *TraitDeclaration {
 	return &TraitDeclaration{
 		BaseNode: BaseNode{
-			Kind:     ASTTrait,
+			Kind:     ASTClass, // PHP uses same AST node for interface/class/trait/enum
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -751,7 +751,7 @@ type EnumCase struct {
 func NewEnumDeclaration(pos lexer.Position, name *IdentifierNode) *EnumDeclaration {
 	return &EnumDeclaration{
 		BaseNode: BaseNode{
-			Kind:     ASTEnum,
+			Kind:     ASTClass, // PHP uses same AST node for interface/class/trait/enum
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -2073,7 +2073,7 @@ type NamespaceNameExpression struct {
 func NewNamespaceNameExpression(pos lexer.Position, parts []string) *NamespaceNameExpression {
 	return &NamespaceNameExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTNamespaceName,
+			Kind:     ASTConst, // PHP uses CONST for namespace names
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -2111,7 +2111,7 @@ type PropertyDeclaration struct {
 func NewPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly bool, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
 	return &PropertyDeclaration{
 		BaseNode: BaseNode{
-			Kind:     ASTPropertyDecl,
+			Kind:     ASTPropElem, // PHP uses PROP_ELEM for individual properties
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -2245,7 +2245,7 @@ type HookedPropertyDeclaration struct {
 func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly bool, typeHint *TypeHint, hooks []*PropertyHook) *HookedPropertyDeclaration {
 	return &HookedPropertyDeclaration{
 		BaseNode: BaseNode{
-			Kind:     ASTHookedProperty,
+			Kind:     ASTPropElem, // PHP uses PROP_ELEM for hooked properties too
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -3008,7 +3008,7 @@ type ThrowExpression struct {
 func NewThrowExpression(pos lexer.Position, argument Expression) *ThrowExpression {
 	return &ThrowExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTThrowExpr,
+			Kind:     ASTThrow, // PHP uses same AST node for throw statement and expression
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -4123,7 +4123,7 @@ type ListExpression struct {
 func NewListExpression(pos lexer.Position, elements []Expression) *ListExpression {
 	return &ListExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTList,
+			Kind:     ASTArray, // PHP treats list() as special array syntax
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -4176,7 +4176,7 @@ type AnonymousFunctionExpression struct {
 func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression) *AnonymousFunctionExpression {
 	return &AnonymousFunctionExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTAnonymousFunction,
+			Kind:     ASTClosure, // PHP uses CLOSURE for anonymous functions
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -4345,7 +4345,7 @@ type CaseExpression struct {
 func NewCaseExpression(pos lexer.Position, test Expression) *CaseExpression {
 	return &CaseExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTCase,
+			Kind:     ASTSwitchCase, // PHP uses SWITCH_CASE for case clauses
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -4625,7 +4625,7 @@ type EvalExpression struct {
 func NewEvalExpression(pos lexer.Position, argument Expression) *EvalExpression {
 	return &EvalExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTEvalExpression,
+			Kind:     ASTIncludeOrEval, // PHP uses INCLUDE_OR_EVAL for eval
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -4724,7 +4724,7 @@ type VisibilityModifierExpression struct {
 func NewVisibilityModifierExpression(pos lexer.Position, modifier string) *VisibilityModifierExpression {
 	return &VisibilityModifierExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTVisibilityModifier,
+			Kind:     ASTConst, // PHP represents visibility modifiers as constants
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -4890,7 +4890,7 @@ type ElseIfClause struct {
 func NewAlternativeIfStatement(pos lexer.Position, condition Expression) *AlternativeIfStatement {
 	return &AlternativeIfStatement{
 		BaseNode: BaseNode{
-			Kind:     ASTAltIf,
+			Kind:     ASTIf, // PHP uses same AST node for regular and alternative if
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -4904,7 +4904,7 @@ func NewAlternativeIfStatement(pos lexer.Position, condition Expression) *Altern
 func NewElseIfClause(pos lexer.Position, condition Expression) *ElseIfClause {
 	return &ElseIfClause{
 		BaseNode: BaseNode{
-			Kind:     ASTElseIf,
+			Kind:     ASTIfElem, // PHP uses IF_ELEM for elseif clauses
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -5028,7 +5028,7 @@ type AlternativeWhileStatement struct {
 func NewAlternativeWhileStatement(pos lexer.Position, condition Expression) *AlternativeWhileStatement {
 	return &AlternativeWhileStatement{
 		BaseNode: BaseNode{
-			Kind:     ASTAltWhile,
+			Kind:     ASTWhile, // PHP uses same AST node for regular and alternative while
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -5086,7 +5086,7 @@ type AlternativeForStatement struct {
 func NewAlternativeForStatement(pos lexer.Position) *AlternativeForStatement {
 	return &AlternativeForStatement{
 		BaseNode: BaseNode{
-			Kind:     ASTAltFor,
+			Kind:     ASTFor, // PHP uses same AST node for regular and alternative for
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -5191,7 +5191,7 @@ type AlternativeForeachStatement struct {
 func NewAlternativeForeachStatement(pos lexer.Position, iterable, value Expression) *AlternativeForeachStatement {
 	return &AlternativeForeachStatement{
 		BaseNode: BaseNode{
-			Kind:     ASTAltForeach,
+			Kind:     ASTForeach, // PHP uses same AST node for regular and alternative foreach
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -5343,7 +5343,7 @@ type FirstClassCallable struct {
 func NewFirstClassCallable(pos lexer.Position, callable Expression) *FirstClassCallable {
 	return &FirstClassCallable{
 		BaseNode: BaseNode{
-			Kind:     ASTFirstClassCallable,
+			Kind:     ASTCallableConvert, // PHP uses CALLABLE_CONVERT for first-class callables
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
@@ -5388,7 +5388,7 @@ type AnonymousClass struct {
 func NewAnonymousClass(pos lexer.Position, attributes []*AttributeGroup, modifiers []string, args []Expression, extends Expression, implements []Expression, body []Statement) *AnonymousClass {
 	return &AnonymousClass{
 		BaseNode: BaseNode{
-			Kind:     ASTAnonymousClass,
+			Kind:     ASTClass, // PHP uses same AST node for regular and anonymous class
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
