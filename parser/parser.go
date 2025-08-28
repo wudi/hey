@@ -14,64 +14,63 @@ type Precedence int
 const (
 	_ Precedence = iota
 	LOWEST
-	ASSIGN           // = += -= *= /= .= %= &= |= ^= <<= >>= **= ??=
-	TERNARY         // ? :
-	COALESCE        // ??
-	LOGICAL_OR      // || or
-	LOGICAL_AND     // && and
-	BITWISE_OR      // |
-	BITWISE_XOR     // ^
-	BITWISE_AND     // &
-	EQUALS          // == != === !==
-	LESSGREATER     // < <= > >= <=> instanceof
-	PIPE            // |>
-	BITWISE_SHIFT   // << >>
-	SUM             // + - .
-	PRODUCT         // * / %
-	EXPONENT        // **
-	PREFIX          // ! ~ -X +X ++X --X (int) (float) (string) (array) (object) (bool) @
-	POSTFIX         // X++ X--
-	CALL            // myFunction(X) $obj->prop Class::$prop
-	INDEX           // array[index]
+	ASSIGN        // = += -= *= /= .= %= &= |= ^= <<= >>= **= ??=
+	TERNARY       // ? :
+	COALESCE      // ??
+	LOGICAL_OR    // || or
+	LOGICAL_AND   // && and
+	BITWISE_OR    // |
+	BITWISE_XOR   // ^
+	BITWISE_AND   // &
+	EQUALS        // == != === !==
+	LESSGREATER   // < <= > >= <=> instanceof
+	BITWISE_SHIFT // << >>
+	SUM           // + - .
+	PRODUCT       // * / %
+	EXPONENT      // **
+	PREFIX        // ! ~ -X +X ++X --X (int) (float) (string) (array) (object) (bool) @
+	POSTFIX       // X++ X--
+	CALL          // myFunction(X) $obj->prop Class::$prop
+	INDEX         // array[index]
 )
 
 // 操作符优先级映射
 var precedences = map[lexer.TokenType]Precedence{
 	// 赋值运算符
-	lexer.TOKEN_EQUAL:           ASSIGN,
-	lexer.T_PLUS_EQUAL:          ASSIGN,
-	lexer.T_MINUS_EQUAL:         ASSIGN,
-	lexer.T_MUL_EQUAL:           ASSIGN,
-	lexer.T_DIV_EQUAL:           ASSIGN,
-	lexer.T_CONCAT_EQUAL:        ASSIGN,
-	lexer.T_MOD_EQUAL:           ASSIGN,
-	lexer.T_AND_EQUAL:           ASSIGN,
-	lexer.T_OR_EQUAL:            ASSIGN,
-	lexer.T_XOR_EQUAL:           ASSIGN,
-	lexer.T_SL_EQUAL:            ASSIGN,
-	lexer.T_SR_EQUAL:            ASSIGN,
-	lexer.T_POW_EQUAL:           ASSIGN,
-	lexer.T_COALESCE_EQUAL:      ASSIGN,
-	
+	lexer.TOKEN_EQUAL:      ASSIGN,
+	lexer.T_PLUS_EQUAL:     ASSIGN,
+	lexer.T_MINUS_EQUAL:    ASSIGN,
+	lexer.T_MUL_EQUAL:      ASSIGN,
+	lexer.T_DIV_EQUAL:      ASSIGN,
+	lexer.T_CONCAT_EQUAL:   ASSIGN,
+	lexer.T_MOD_EQUAL:      ASSIGN,
+	lexer.T_AND_EQUAL:      ASSIGN,
+	lexer.T_OR_EQUAL:       ASSIGN,
+	lexer.T_XOR_EQUAL:      ASSIGN,
+	lexer.T_SL_EQUAL:       ASSIGN,
+	lexer.T_SR_EQUAL:       ASSIGN,
+	lexer.T_POW_EQUAL:      ASSIGN,
+	lexer.T_COALESCE_EQUAL: ASSIGN,
+
 	// 三元运算符
-	lexer.TOKEN_QUESTION:        TERNARY,
-	lexer.T_DOUBLE_ARROW:        TERNARY,
-	
+	lexer.TOKEN_QUESTION: TERNARY,
+	lexer.T_DOUBLE_ARROW: TERNARY,
+
 	// 空合并运算符
-	lexer.T_COALESCE:            COALESCE,
-	
+	lexer.T_COALESCE: COALESCE,
+
 	// 逻辑运算符
-	lexer.T_BOOLEAN_OR:          LOGICAL_OR,
-	lexer.T_LOGICAL_OR:          LOGICAL_OR,
-	lexer.T_BOOLEAN_AND:         LOGICAL_AND,
-	lexer.T_LOGICAL_AND:         LOGICAL_AND,
-	lexer.T_LOGICAL_XOR:         LOGICAL_AND, // xor has same precedence as and
-	
+	lexer.T_BOOLEAN_OR:  LOGICAL_OR,
+	lexer.T_LOGICAL_OR:  LOGICAL_OR,
+	lexer.T_BOOLEAN_AND: LOGICAL_AND,
+	lexer.T_LOGICAL_AND: LOGICAL_AND,
+	lexer.T_LOGICAL_XOR: LOGICAL_AND, // xor has same precedence as and
+
 	// 位运算符
-	lexer.TOKEN_PIPE:            BITWISE_OR,
-	lexer.TOKEN_CARET:           BITWISE_XOR,
-	lexer.TOKEN_AMPERSAND:       BITWISE_AND,
-	
+	lexer.TOKEN_PIPE:      BITWISE_OR,
+	lexer.TOKEN_CARET:     BITWISE_XOR,
+	lexer.TOKEN_AMPERSAND: BITWISE_AND,
+
 	// 比较运算符
 	lexer.T_IS_EQUAL:            EQUALS,
 	lexer.T_IS_NOT_EQUAL:        EQUALS,
@@ -83,39 +82,36 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.T_IS_GREATER_OR_EQUAL: LESSGREATER,
 	lexer.T_SPACESHIP:           LESSGREATER,
 	lexer.T_INSTANCEOF:          LESSGREATER,
-	
-	// 管道运算符
-	lexer.T_PIPE:                PIPE,
-	
+
 	// 位移运算符
-	lexer.T_SR:                  BITWISE_SHIFT,
-	lexer.T_SL:                  BITWISE_SHIFT,
-	
+	lexer.T_SR: BITWISE_SHIFT,
+	lexer.T_SL: BITWISE_SHIFT,
+
 	// 加减运算符
-	lexer.TOKEN_PLUS:            SUM,
-	lexer.TOKEN_MINUS:           SUM,
-	lexer.TOKEN_DOT:             SUM, // 字符串连接
-	
+	lexer.TOKEN_PLUS:  SUM,
+	lexer.TOKEN_MINUS: SUM,
+	lexer.TOKEN_DOT:   SUM, // 字符串连接
+
 	// 乘除运算符
-	lexer.TOKEN_DIVIDE:          PRODUCT,
-	lexer.TOKEN_MULTIPLY:        PRODUCT,
-	lexer.TOKEN_MODULO:          PRODUCT,
-	
+	lexer.TOKEN_DIVIDE:   PRODUCT,
+	lexer.TOKEN_MULTIPLY: PRODUCT,
+	lexer.TOKEN_MODULO:   PRODUCT,
+
 	// 幂运算符
-	lexer.T_POW:                 EXPONENT,
-	
+	lexer.T_POW: EXPONENT,
+
 	// 后缀运算符
-	lexer.T_INC:                 POSTFIX,
-	lexer.T_DEC:                 POSTFIX,
-	
+	lexer.T_INC: POSTFIX,
+	lexer.T_DEC: POSTFIX,
+
 	// 函数调用和属性访问
 	lexer.T_OBJECT_OPERATOR:          CALL,
 	lexer.T_NULLSAFE_OBJECT_OPERATOR: CALL,
 	lexer.T_PAAMAYIM_NEKUDOTAYIM:     CALL,
-	lexer.TOKEN_LPAREN:          CALL,
-	
+	lexer.TOKEN_LPAREN:               CALL,
+
 	// 数组访问
-	lexer.TOKEN_LBRACKET:        INDEX,
+	lexer.TOKEN_LBRACKET: INDEX,
 }
 
 var (
@@ -157,7 +153,6 @@ func init() {
 		lexer.T_LIST:                     parseListExpression,
 		lexer.T_FUNCTION:                 parseAnonymousFunctionExpression,
 		lexer.T_USE:                      parseUseExpression,
-		lexer.T_NOWDOC:                   parseNowdocExpression,
 		lexer.T_CURLY_OPEN:               parseCurlyOpenExpression,
 		lexer.TOKEN_QUOTE:                parseInterpolatedString,
 		lexer.T_INCLUDE:                  parseIncludeOrEvalExpression,
@@ -210,14 +205,14 @@ func init() {
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
 		// 二元运算符
-		lexer.TOKEN_PLUS:            parseInfixExpression,
-		lexer.TOKEN_MINUS:           parseInfixExpression,
-		lexer.TOKEN_DIVIDE:          parseInfixExpression,
-		lexer.TOKEN_MULTIPLY:        parseInfixExpression,
-		lexer.TOKEN_MODULO:          parseInfixExpression,
-		lexer.T_POW:                 parseInfixExpression,
-		lexer.TOKEN_DOT:             parseInfixExpression,
-		
+		lexer.TOKEN_PLUS:     parseInfixExpression,
+		lexer.TOKEN_MINUS:    parseInfixExpression,
+		lexer.TOKEN_DIVIDE:   parseInfixExpression,
+		lexer.TOKEN_MULTIPLY: parseInfixExpression,
+		lexer.TOKEN_MODULO:   parseInfixExpression,
+		lexer.T_POW:          parseInfixExpression,
+		lexer.TOKEN_DOT:      parseInfixExpression,
+
 		// 比较运算符
 		lexer.T_IS_EQUAL:            parseInfixExpression,
 		lexer.T_IS_NOT_EQUAL:        parseInfixExpression,
@@ -229,53 +224,52 @@ func init() {
 		lexer.T_IS_GREATER_OR_EQUAL: parseInfixExpression,
 		lexer.T_SPACESHIP:           parseInfixExpression,
 		lexer.T_INSTANCEOF:          parseInstanceofExpression,
-		
+
 		// 位运算符
-		lexer.T_SR:                  parseInfixExpression, // >> (right shift)
-		lexer.T_SL:                  parseInfixExpression, // << (left shift)
-		lexer.TOKEN_AMPERSAND:       parseInfixExpression, // & (bitwise AND)
-		lexer.TOKEN_PIPE:            parseInfixExpression, // | (bitwise OR)
-		lexer.TOKEN_CARET:           parseInfixExpression, // ^ (bitwise XOR)
-		
+		lexer.T_SR:            parseInfixExpression, // >> (right shift)
+		lexer.T_SL:            parseInfixExpression, // << (left shift)
+		lexer.TOKEN_AMPERSAND: parseInfixExpression, // & (bitwise AND)
+		lexer.TOKEN_PIPE:      parseInfixExpression, // | (bitwise OR)
+		lexer.TOKEN_CARET:     parseInfixExpression, // ^ (bitwise XOR)
+
 		// 逻辑运算符
-		lexer.T_BOOLEAN_AND:         parseBooleanExpression,
-		lexer.T_BOOLEAN_OR:          parseBooleanExpression,
-		lexer.T_LOGICAL_AND:         parseBooleanExpression,
-		lexer.T_LOGICAL_OR:          parseBooleanExpression,
-		lexer.T_LOGICAL_XOR:         parseBooleanExpression,
-		
+		lexer.T_BOOLEAN_AND: parseBooleanExpression,
+		lexer.T_BOOLEAN_OR:  parseBooleanExpression,
+		lexer.T_LOGICAL_AND: parseBooleanExpression,
+		lexer.T_LOGICAL_OR:  parseBooleanExpression,
+		lexer.T_LOGICAL_XOR: parseBooleanExpression,
+
 		// 赋值运算符
-		lexer.TOKEN_EQUAL:           parseAssignmentExpression,
-		lexer.T_PLUS_EQUAL:          parseAssignmentExpression,
-		lexer.T_MINUS_EQUAL:         parseAssignmentExpression,
-		lexer.T_MUL_EQUAL:           parseAssignmentExpression,
-		lexer.T_DIV_EQUAL:           parseAssignmentExpression,
-		lexer.T_CONCAT_EQUAL:        parseAssignmentExpression,
-		lexer.T_MOD_EQUAL:           parseAssignmentExpression,
-		lexer.T_AND_EQUAL:           parseAssignmentExpression,
-		lexer.T_OR_EQUAL:            parseAssignmentExpression,
-		lexer.T_XOR_EQUAL:           parseAssignmentExpression,
-		lexer.T_SL_EQUAL:            parseAssignmentExpression,
-		lexer.T_SR_EQUAL:            parseAssignmentExpression,
-		lexer.T_POW_EQUAL:           parseAssignmentExpression,
-		lexer.T_COALESCE_EQUAL:      parseAssignmentExpression,
-		
+		lexer.TOKEN_EQUAL:      parseAssignmentExpression,
+		lexer.T_PLUS_EQUAL:     parseAssignmentExpression,
+		lexer.T_MINUS_EQUAL:    parseAssignmentExpression,
+		lexer.T_MUL_EQUAL:      parseAssignmentExpression,
+		lexer.T_DIV_EQUAL:      parseAssignmentExpression,
+		lexer.T_CONCAT_EQUAL:   parseAssignmentExpression,
+		lexer.T_MOD_EQUAL:      parseAssignmentExpression,
+		lexer.T_AND_EQUAL:      parseAssignmentExpression,
+		lexer.T_OR_EQUAL:       parseAssignmentExpression,
+		lexer.T_XOR_EQUAL:      parseAssignmentExpression,
+		lexer.T_SL_EQUAL:       parseAssignmentExpression,
+		lexer.T_SR_EQUAL:       parseAssignmentExpression,
+		lexer.T_POW_EQUAL:      parseAssignmentExpression,
+		lexer.T_COALESCE_EQUAL: parseAssignmentExpression,
+
 		// 其他运算符
-		lexer.T_COALESCE:            parseCoalesceExpression,
-		lexer.TOKEN_QUESTION:        parseTernaryExpression,
-		lexer.T_DOUBLE_ARROW:        parseDoubleArrowExpression,
-		lexer.T_PIPE:                parsePipeExpression,
-		
+		lexer.T_COALESCE:     parseCoalesceExpression,
+		lexer.TOKEN_QUESTION: parseTernaryExpression,
+		lexer.T_DOUBLE_ARROW: parseDoubleArrowExpression,
+
 		// 后缀运算符
-		lexer.T_INC:                 parsePostfixExpression,
-		lexer.T_DEC:                 parsePostfixExpression,
-		
+		lexer.T_INC: parsePostfixExpression,
+		lexer.T_DEC: parsePostfixExpression,
+
 		// 访问运算符
 		lexer.T_OBJECT_OPERATOR:          parsePropertyAccess,
 		lexer.T_NULLSAFE_OBJECT_OPERATOR: parseNullsafePropertyAccess,
 		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccessExpression,
-		lexer.TOKEN_LPAREN:          parseCallExpression,
-		lexer.TOKEN_LBRACKET:        parseArrayAccess,
+		lexer.TOKEN_LPAREN:               parseCallExpression,
+		lexer.TOKEN_LBRACKET:             parseArrayAccess,
 	}
 }
 
@@ -286,7 +280,7 @@ type InfixParseFn func(*Parser, ast.Expression) ast.Expression
 func isNonSyntacticToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
 	case lexer.T_COMMENT,
-		 lexer.T_DOC_COMMENT:
+		lexer.T_DOC_COMMENT:
 		// 注释token在语法解析中无意义，但保留在token流中供工具使用
 		return true
 	default:
@@ -307,14 +301,14 @@ func New(l *lexer.Lexer) *Parser {
 		lexer:  l,
 		errors: []string{},
 	}
-	
+
 	// 初始化时也需要跳过非语法token
 	p.currentToken = l.NextToken()
 	for isNonSyntacticToken(p.currentToken.Type) {
 		p.currentToken = l.NextToken()
 	}
-	
-	p.peekToken = l.NextToken() 
+
+	p.peekToken = l.NextToken()
 	for isNonSyntacticToken(p.peekToken.Type) {
 		p.peekToken = l.NextToken()
 	}
@@ -326,7 +320,7 @@ func New(l *lexer.Lexer) *Parser {
 func (p *Parser) nextToken() {
 	p.currentToken = p.peekToken
 	p.peekToken = p.lexer.NextToken()
-	
+
 	// 自动跳过语法解析中无意义的token
 	for isNonSyntacticToken(p.peekToken.Type) {
 		p.peekToken = p.lexer.NextToken()
@@ -387,8 +381,8 @@ func (p *Parser) Errors() []string {
 // isTypeToken 检查token是否为有效的类型token
 func isTypeToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
-	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE, 
-		 lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED:
+	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE,
+		lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED:
 		return true
 	default:
 		return false
@@ -398,9 +392,9 @@ func isTypeToken(tokenType lexer.TokenType) bool {
 // isClassNameToken 检查token是否为有效的类名token（根据 class_name 语法规则）
 func isClassNameToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
-	case lexer.T_STATIC, lexer.T_STRING, 
-		 lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED,
-		 lexer.T_NS_SEPARATOR:
+	case lexer.T_STATIC, lexer.T_STRING,
+		lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED,
+		lexer.T_NS_SEPARATOR:
 		return true
 	default:
 		return false
@@ -415,31 +409,31 @@ func parseTypeHint(p *Parser) *ast.TypeHint {
 		nullable = true
 		p.nextToken() // 移动到类型token
 	}
-	
+
 	// 检查是否为带括号的复合类型 (Type1&Type2)|Type3
 	if p.currentToken.Type == lexer.TOKEN_LPAREN {
 		return parseParenthesizedTypeHint(p, nullable)
 	}
-	
+
 	// 解析基本类型
 	if !isTypeToken(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected type name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	// 创建基本类型提示
 	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
-	
+
 	// 检查是否为union类型 Type1|Type2
 	if p.peekToken.Type == lexer.TOKEN_PIPE {
 		return parseUnionType(p, baseType)
 	}
-	
+
 	// 检查是否为intersection类型 Type1&Type2
 	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
 		return parseIntersectionType(p, baseType)
 	}
-	
+
 	return baseType
 }
 
@@ -452,29 +446,29 @@ func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 		nullable = true
 		p.nextToken() // 移动到类型token
 	}
-	
+
 	// 检查是否为带括号的复合类型 (Type1&Type2)|Type3
 	if p.currentToken.Type == lexer.TOKEN_LPAREN {
 		return parseParenthesizedTypeHint(p, nullable)
 	}
-	
+
 	// 解析基本类型
 	if !isTypeToken(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected type name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	// 创建基本类型提示
 	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
-	
+
 	// 检查是否为union类型 Type1|Type2
 	if p.peekToken.Type == lexer.TOKEN_PIPE {
 		return parseUnionType(p, baseType)
 	}
-	
+
 	// 注意：在参数上下文中暂时不支持intersection类型
 	// 因为 & 在参数中更常见的是表示引用参数，需要更复杂的前瞻来区分
-	
+
 	return baseType
 }
 
@@ -482,20 +476,20 @@ func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 	pos := firstType.Position
 	types := []*ast.TypeHint{firstType}
-	
+
 	for p.peekToken.Type == lexer.TOKEN_PIPE {
 		p.nextToken() // 移动到 |
 		p.nextToken() // 移动到类型token
-		
+
 		var typeHint *ast.TypeHint
-		
+
 		// 检查nullable类型
 		nullable := false
 		if p.currentToken.Type == lexer.TOKEN_QUESTION {
 			nullable = true
 			p.nextToken() // 移动到实际类型token
 		}
-		
+
 		// 检查是否为括号表达式
 		if p.currentToken.Type == lexer.TOKEN_LPAREN {
 			typeHint = parseParenthesizedTypeHint(p, nullable)
@@ -505,12 +499,12 @@ func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 			p.errors = append(p.errors, fmt.Sprintf("expected type name in union type, got `%s` instead", p.currentToken.Value))
 			return nil
 		}
-		
+
 		if typeHint != nil {
 			types = append(types, typeHint)
 		}
 	}
-	
+
 	return ast.NewUnionTypeHint(pos, types)
 }
 
@@ -518,20 +512,20 @@ func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 func parseIntersectionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 	pos := firstType.Position
 	types := []*ast.TypeHint{firstType}
-	
+
 	for p.peekToken.Type == lexer.TOKEN_AMPERSAND {
 		p.nextToken() // 移动到 &
 		p.nextToken() // 移动到类型token
-		
+
 		if !isTypeToken(p.currentToken.Type) {
 			p.errors = append(p.errors, fmt.Sprintf("expected type name in intersection type, got `%s` instead", p.currentToken.Value))
 			return nil
 		}
-		
+
 		typeHint := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, false) // intersection types can't be nullable
 		types = append(types, typeHint)
 	}
-	
+
 	return ast.NewIntersectionTypeHint(pos, types)
 }
 
@@ -539,37 +533,37 @@ func parseIntersectionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 func parseParenthesizedTypeHint(p *Parser, nullable bool) *ast.TypeHint {
 	// 跳过开括号 (
 	p.nextToken() // 移动到括号内的第一个类型
-	
+
 	// 检查是否为空括号
 	if p.currentToken.Type == lexer.TOKEN_RPAREN {
 		p.errors = append(p.errors, "empty parentheses in type expression")
 		return nil
 	}
-	
+
 	// 递归解析括号内的类型
 	innerType := parseComplexTypeHint(p)
 	if innerType == nil {
 		return nil
 	}
-	
+
 	// 确保有结束括号
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		p.errors = append(p.errors, "expected closing parenthesis in type expression")
 		return nil
 	}
-	
+
 	// 应用nullable到括号内的类型
 	if nullable {
 		innerType.Nullable = true
 	}
-	
+
 	// 检查括号后是否有union/intersection操作符
 	if p.peekToken.Type == lexer.TOKEN_PIPE {
 		return parseUnionType(p, innerType)
 	} else if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
 		return parseIntersectionType(p, innerType)
 	}
-	
+
 	return innerType
 }
 
@@ -580,20 +574,20 @@ func parseComplexTypeHint(p *Parser) *ast.TypeHint {
 		p.errors = append(p.errors, fmt.Sprintf("expected type name in complex type, got `%s` instead", p.currentToken.Value))
 		return nil
 	}
-	
+
 	// 创建基本类型提示
 	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, false)
-	
+
 	// 检查是否为union类型 Type1|Type2
 	if p.peekToken.Type == lexer.TOKEN_PIPE {
 		return parseUnionType(p, baseType)
 	}
-	
+
 	// 检查是否为intersection类型 Type1&Type2
 	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
 		return parseIntersectionType(p, baseType)
 	}
-	
+
 	return baseType
 }
 
@@ -610,7 +604,7 @@ func (p *Parser) ParseProgram() *ast.Program {
 		if p.currentToken.Type == lexer.T_CLOSE_TAG {
 			break
 		}
-		
+
 		// Skip T_OPEN_TAG tokens in the middle of the program
 		if p.currentToken.Type == lexer.T_OPEN_TAG {
 			p.nextToken()
@@ -777,9 +771,9 @@ func parseIfStatement(p *Parser) ast.Statement {
 
 	// 普通语法 (if (...) { ... } 或 if (...) statement;)
 	p.nextToken() // 移动到下一个token
-	
+
 	ifStmt := ast.NewIfStatement(pos, condition)
-	
+
 	// 检查是否是块语句 ({})
 	if p.currentToken.Type == lexer.TOKEN_LBRACE {
 		ifStmt.Consequent = parseBlockStatements(p)
@@ -912,7 +906,7 @@ func parseAlternativeSwitchStatement(p *Parser, pos lexer.Position, discriminant
 	switchStmt := ast.NewSwitchStatement(pos, discriminant)
 
 	p.nextToken() // 跳过冒号，移到第一个语句/case
-	
+
 	// 解析switch体中的语句，直到遇到endswitch
 	for p.currentToken.Type != lexer.T_ENDSWITCH && p.currentToken.Type != lexer.T_EOF {
 		if p.currentToken.Type == lexer.T_CASE {
@@ -928,9 +922,9 @@ func parseAlternativeSwitchStatement(p *Parser, pos lexer.Position, discriminant
 			p.nextToken()
 
 			// 解析case体中的语句
-			for p.currentToken.Type != lexer.T_CASE && 
-				p.currentToken.Type != lexer.T_DEFAULT && 
-				p.currentToken.Type != lexer.T_ENDSWITCH && 
+			for p.currentToken.Type != lexer.T_CASE &&
+				p.currentToken.Type != lexer.T_DEFAULT &&
+				p.currentToken.Type != lexer.T_ENDSWITCH &&
 				p.currentToken.Type != lexer.T_EOF {
 				if stmt := parseStatement(p); stmt != nil {
 					switchCase.Body = append(switchCase.Body, stmt)
@@ -950,9 +944,9 @@ func parseAlternativeSwitchStatement(p *Parser, pos lexer.Position, discriminant
 			p.nextToken()
 
 			// 解析default体中的语句
-			for p.currentToken.Type != lexer.T_CASE && 
-				p.currentToken.Type != lexer.T_DEFAULT && 
-				p.currentToken.Type != lexer.T_ENDSWITCH && 
+			for p.currentToken.Type != lexer.T_CASE &&
+				p.currentToken.Type != lexer.T_DEFAULT &&
+				p.currentToken.Type != lexer.T_ENDSWITCH &&
 				p.currentToken.Type != lexer.T_EOF {
 				if stmt := parseStatement(p); stmt != nil {
 					defaultCase.Body = append(defaultCase.Body, stmt)
@@ -1003,9 +997,9 @@ func parseWhileStatement(p *Parser) ast.Statement {
 
 	// 普通语法 (while (...) { ... } 或 while (...) statement;)
 	p.nextToken() // 移动到下一个token
-	
+
 	whileStmt := ast.NewWhileStatement(pos, condition)
-	
+
 	// 检查是否是块语句 ({})
 	if p.currentToken.Type == lexer.TOKEN_LBRACE {
 		whileStmt.Body = parseBlockStatements(p)
@@ -1097,7 +1091,7 @@ func parseForStatement(p *Parser) ast.Statement {
 
 	// 普通语法 (for (...) { ... } 或 for (...) statement;)
 	p.nextToken() // 移动到下一个token
-	
+
 	forStmt := ast.NewForStatement(pos)
 	if len(initExprs) > 0 {
 		forStmt.Init = initExprs[0]
@@ -1108,7 +1102,7 @@ func parseForStatement(p *Parser) ast.Statement {
 	if len(updateExprs) > 0 {
 		forStmt.Update = updateExprs[0]
 	}
-	
+
 	// 检查是否是块语句 ({})
 	if p.currentToken.Type == lexer.TOKEN_LBRACE {
 		forStmt.Body = parseBlockStatements(p)
@@ -1192,7 +1186,7 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	// Expect method/function name (allow reserved keywords)
 	p.nextToken()
 	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
-		p.errors = append(p.errors, fmt.Sprintf("expected function name, got %s at line: %d col: %d", 
+		p.errors = append(p.errors, fmt.Sprintf("expected function name, got %s at line: %d col: %d",
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
@@ -1257,7 +1251,7 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 // parseParameter 解析函数参数（支持类型提示、引用、可变参数、可见性修饰符等）
 func parseParameter(p *Parser) *ast.Parameter {
 	var param ast.Parameter
-	
+
 	// 首先解析属性 (attributes) #[...]
 	// 根据PHP语法：attributed_parameter: attributes parameter | parameter
 	var attributes []*ast.AttributeGroup
@@ -1269,19 +1263,19 @@ func parseParameter(p *Parser) *ast.Parameter {
 		p.nextToken() // 移动到下一个token
 	}
 	param.Attributes = attributes
-	
+
 	// 检查可见性修饰符 (public, private, protected, readonly)
 	// 这些通常只在构造函数参数中使用
 	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
 		param.Visibility = p.currentToken.Value
 		p.nextToken()
 	}
-	
+
 	if p.currentToken.Type == lexer.T_READONLY {
 		param.ReadOnly = true
 		p.nextToken()
 	}
-	
+
 	// 检查是否有类型提示
 	if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION {
 		typeHint := parseParameterTypeHint(p)
@@ -1291,19 +1285,19 @@ func parseParameter(p *Parser) *ast.Parameter {
 		param.Type = typeHint
 		p.nextToken() // 移动到下一个token
 	}
-	
+
 	// 检查引用参数 &$param
 	if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
 		param.ByReference = true
 		p.nextToken()
 	}
-	
+
 	// 检查可变参数 ...$params
 	if p.currentToken.Type == lexer.T_ELLIPSIS {
 		param.Variadic = true
 		p.nextToken()
 	}
-	
+
 	// 解析参数名
 	if p.currentToken.Type == lexer.T_VARIABLE {
 		param.Name = p.currentToken.Value
@@ -1311,14 +1305,14 @@ func parseParameter(p *Parser) *ast.Parameter {
 		p.errors = append(p.errors, fmt.Sprintf("expected variable name, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	// 检查是否有默认值
 	if p.peekToken.Type == lexer.TOKEN_EQUAL {
 		p.nextToken() // 移动到 '='
 		p.nextToken() // 移动到默认值
 		param.DefaultValue = parseExpression(p, LOWEST)
 	}
-	
+
 	return &param
 }
 
@@ -1406,7 +1400,7 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 	}
 
 	namespaceName := ast.NewNamespaceNameExpression(pos, nameParts)
-	
+
 	// 检查是否有别名 (as Alias)
 	var alias string
 	if p.peekToken.Type == lexer.T_AS {
@@ -1444,7 +1438,7 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 		}
 
 		namespaceName := ast.NewNamespaceNameExpression(p.currentToken.Position, nameParts)
-		
+
 		// 检查是否有别名
 		alias := ""
 		if p.peekToken.Type == lexer.T_AS {
@@ -1741,7 +1735,7 @@ func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
 	if p.peekToken.Type == lexer.TOKEN_COLON {
 		p.nextToken() // 移动到 ':'
 		p.nextToken() // 移动到类型
-		
+
 		backingType := parseTypeHint(p)
 		if backingType != nil {
 			enumDecl.BackingType = backingType
@@ -1874,7 +1868,7 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	return ast.NewPropertyAccessExpression(pos, left, property)
 }
 
-// parseNullsafePropertyAccess 解析空安全属性访问表达式  
+// parseNullsafePropertyAccess 解析空安全属性访问表达式
 // Supports: $obj?->property, $obj?->$variable, $obj?->{expression}
 func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
@@ -1975,12 +1969,12 @@ func parseHaltCompilerStatement(p *Parser) ast.Statement {
 
 	// 创建 halt compiler 语句
 	haltStmt := ast.NewHaltCompilerStatement(pos)
-	
+
 	// 停止解析后续代码 - 设置当前token为EOF来终止解析
 	// 这样模拟PHP中__halt_compiler()的行为
 	p.currentToken = lexer.Token{Type: lexer.T_EOF, Position: pos}
 	p.peekToken = lexer.Token{Type: lexer.T_EOF, Position: pos}
-	
+
 	return haltStmt
 }
 
@@ -2094,32 +2088,10 @@ func isReservedNonModifier(tokenType lexer.TokenType) bool {
 
 // isSemiReserved 检查是否为半保留关键字
 func isSemiReserved(tokenType lexer.TokenType) bool {
-	return isReservedNonModifier(tokenType) || 
+	return isReservedNonModifier(tokenType) ||
 		tokenType == lexer.T_STATIC || tokenType == lexer.T_ABSTRACT || tokenType == lexer.T_FINAL ||
 		tokenType == lexer.T_PRIVATE || tokenType == lexer.T_PROTECTED || tokenType == lexer.T_PUBLIC ||
 		tokenType == lexer.T_READONLY
-}
-
-// parseIdentifierWithReserved 解析标识符，支持保留关键字作为标识符
-func parseIdentifierWithReserved(p *Parser) ast.Expression {
-	if p.currentToken.Type == lexer.T_STRING || isSemiReserved(p.currentToken.Type) {
-		return ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	}
-	
-	p.errors = append(p.errors, fmt.Sprintf("expected identifier, got %s at line: %d col: %d", 
-		p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
-	return nil
-}
-
-// parseIdentifierNameWithReserved 解析标识符名称，支持保留关键字作为标识符
-func parseIdentifierNameWithReserved(p *Parser) string {
-	if p.currentToken.Type == lexer.T_STRING || isSemiReserved(p.currentToken.Type) {
-		return p.currentToken.Value
-	}
-	
-	p.errors = append(p.errors, fmt.Sprintf("expected identifier, got %s at line: %d col: %d", 
-		p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
-	return ""
 }
 
 // parseIntegerLiteral 解析整数字面量
@@ -2189,7 +2161,7 @@ func parseArrayExpression(p *Parser) ast.Expression {
 	}
 
 	p.nextToken()
-	
+
 	// 解析第一个元素，可能是展开语法
 	if p.currentToken.Type == lexer.T_ELLIPSIS {
 		pos := p.currentToken.Position
@@ -2205,14 +2177,14 @@ func parseArrayExpression(p *Parser) ast.Expression {
 
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
-		
+
 		// 检查是否为尾随逗号：如果逗号后面是右括号，则不解析更多元素
 		if p.peekToken.Type == lexer.TOKEN_RPAREN {
 			break
 		}
-		
+
 		p.nextToken() // 移动到下一个元素
-		
+
 		// 检查展开语法
 		if p.currentToken.Type == lexer.T_ELLIPSIS {
 			pos := p.currentToken.Position
@@ -2270,8 +2242,8 @@ func parsePostfixExpression(p *Parser, left ast.Expression) ast.Expression {
 // parseCallExpression 解析函数调用表达式
 func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
-	
-	// 检查第一类可调用语法 function(...) 
+
+	// 检查第一类可调用语法 function(...)
 	if p.peekToken.Type == lexer.T_ELLIPSIS {
 		p.nextToken() // 移动到 ...
 		if p.peekToken.Type == lexer.TOKEN_RPAREN {
@@ -2284,7 +2256,7 @@ func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 	} else {
 		// 正常情况，当前token是(，需要前进到第一个参数或)
 	}
-	
+
 	call := ast.NewCallExpression(pos, fn)
 
 	// 解析参数列表
@@ -2313,7 +2285,6 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 		p.nextToken()
 	}
 
-	
 	// Check for different argument types
 	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
 		// Named argument (identifier: value)
@@ -2337,7 +2308,7 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken()
 		p.nextToken()
-		
+
 		// Check for different argument types
 		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
 			// Named argument (identifier: value)
@@ -2369,22 +2340,22 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 // parseNamedArgument 解析命名参数 (PHP 8.0+) - name: value
 func parseNamedArgument(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	// 解析参数名
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	
+
 	// 期望冒号
 	if !p.expectPeek(lexer.TOKEN_COLON) {
 		return nil
 	}
-	
+
 	// 解析参数值
 	p.nextToken()
 	value := parseExpression(p, LOWEST)
 	if value == nil {
 		return nil
 	}
-	
+
 	return ast.NewNamedArgument(pos, name, value)
 }
 
@@ -2720,7 +2691,7 @@ func parseDeclareStatement(p *Parser) ast.Statement {
 
 	// 解析声明列表 (例如: ticks=1, strict_types=1)
 	var declarations []ast.Expression
-	
+
 	p.nextToken()
 	for {
 		// 解析声明 (identifier = expression)
@@ -2728,20 +2699,20 @@ func parseDeclareStatement(p *Parser) ast.Statement {
 			p.errors = append(p.errors, "Expected identifier in declare statement")
 			return nil
 		}
-		
+
 		name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-		
+
 		if !p.expectPeek(lexer.TOKEN_EQUAL) {
 			return nil
 		}
-		
+
 		p.nextToken()
 		value := parseExpression(p, LOWEST)
-		
+
 		// 创建赋值表达式作为声明
 		declaration := ast.NewAssignmentExpression(name.GetPosition(), name, "=", value)
 		declarations = append(declarations, declaration)
-		
+
 		p.nextToken()
 		if p.currentToken.Type == lexer.TOKEN_RPAREN {
 			break
@@ -2964,11 +2935,11 @@ func parseTryStatement(p *Parser) ast.Statement {
 		}
 
 		tryStmt.CatchClauses = append(tryStmt.CatchClauses, catchClause)
-		
+
 		// Check what's next after the catch clause
 		// We're currently on the closing brace of the catch block
 		if p.peekToken.Type == lexer.T_CATCH {
-			p.nextToken() // Move past the closing brace  
+			p.nextToken() // Move past the closing brace
 			// Now currentToken should be the next T_CATCH
 		} else {
 			// No more catch clauses, we'll exit the loop
@@ -2981,7 +2952,7 @@ func parseTryStatement(p *Parser) ast.Statement {
 	if p.currentToken.Type != lexer.T_FINALLY && p.peekToken.Type == lexer.T_FINALLY {
 		p.nextToken() // Advance to the finally token
 	}
-	
+
 	// 解析finally块
 	if p.currentToken.Type == lexer.T_FINALLY {
 		if !p.expectPeek(lexer.TOKEN_LBRACE) {
@@ -3040,11 +3011,11 @@ func parseGotoStatement(p *Parser) ast.Statement {
 // isAnonymousClassPattern 检查是否是匿名类模式
 func isAnonymousClassPattern(p *Parser) bool {
 	// 简单检查：如果 peekToken 是 class、修饰符或属性，就认为是匿名类
-	return p.peekToken.Type == lexer.T_CLASS || 
-		   p.peekToken.Type == lexer.T_FINAL || 
-		   p.peekToken.Type == lexer.T_ABSTRACT || 
-		   p.peekToken.Type == lexer.T_READONLY ||
-		   p.peekToken.Type == lexer.T_ATTRIBUTE  // 支持属性 #[
+	return p.peekToken.Type == lexer.T_CLASS ||
+		p.peekToken.Type == lexer.T_FINAL ||
+		p.peekToken.Type == lexer.T_ABSTRACT ||
+		p.peekToken.Type == lexer.T_READONLY ||
+		p.peekToken.Type == lexer.T_ATTRIBUTE // 支持属性 #[
 }
 
 func parseNewExpression(p *Parser) ast.Expression {
@@ -3101,7 +3072,6 @@ func parseInstanceofExpression(p *Parser, left ast.Expression) ast.Expression {
 	return ast.NewInstanceofExpression(pos, left, right)
 }
 
-
 // parseErrorSuppression 解析错误抑制操作符 @
 func parseErrorSuppression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
@@ -3121,18 +3091,6 @@ func parseCoalesceExpression(p *Parser, left ast.Expression) ast.Expression {
 	right := parseExpression(p, precedence)
 
 	return ast.NewCoalesceExpression(pos, left, right)
-}
-
-// parsePipeExpression 解析管道操作符 |>
-func parsePipeExpression(p *Parser, left ast.Expression) ast.Expression {
-	pos := p.currentToken.Position
-
-	precedence := p.getCurrentPrecedence()
-	p.nextToken()
-	right := parseExpression(p, precedence)
-
-	// PHP 8.4 pipe operator creates a ZEND_AST_PIPE node
-	return ast.NewBinaryExpression(pos, left, "|>", right)
 }
 
 // parseBooleanExpression 解析布尔逻辑操作符 && ||
@@ -3223,7 +3181,7 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 			p.errors = append(p.errors, fmt.Sprintf("expected attribute name after comma, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			break
 		}
-		
+
 		attr := parseAttributeDecl(p)
 		if attr != nil {
 			attributes = append(attributes, attr)
@@ -3243,7 +3201,7 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 // name: T_STRING | T_NAME_QUALIFIED | T_NAME_FULLY_QUALIFIED | T_NAME_RELATIVE
 func parseClassName(p *Parser) (string, error) {
 	var className string
-	
+
 	switch p.currentToken.Type {
 	case lexer.T_STATIC:
 		return "static", nil
@@ -3255,19 +3213,19 @@ func parseClassName(p *Parser) (string, error) {
 		// 处理由多个token组成的完全限定名称: \ + 名称部分
 		className = p.currentToken.Value // 开始于 "\"
 		p.nextToken()
-		
+
 		// 解析完整的命名空间路径: Namespace\SubNamespace\ClassName
 		for {
 			if p.currentToken.Type != lexer.T_STRING {
 				return "", fmt.Errorf("expected class name after namespace separator, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column)
 			}
 			className += p.currentToken.Value
-			
+
 			// 检查是否还有更多的命名空间分隔符
 			if p.peekToken.Type == lexer.T_NS_SEPARATOR {
-				p.nextToken() // 移动到 \
+				p.nextToken()                     // 移动到 \
 				className += p.currentToken.Value // 添加 "\"
-				p.nextToken() // 移动到下一个名称部分
+				p.nextToken()                     // 移动到下一个名称部分
 			} else {
 				break
 			}
@@ -3281,26 +3239,26 @@ func parseClassName(p *Parser) (string, error) {
 // parseAttributeDecl 解析单个属性声明 AttributeName(args)
 func parseAttributeDecl(p *Parser) *ast.Attribute {
 	pos := p.currentToken.Position
-	
+
 	// 使用 class_name 语法规则解析属性名
 	attributeName, err := parseClassName(p)
 	if err != nil {
 		p.errors = append(p.errors, err.Error())
 		return nil
 	}
-	
+
 	name := ast.NewIdentifierNode(pos, attributeName)
-	
+
 	var arguments []ast.Expression
-	
+
 	// 检查是否有参数列表
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		p.nextToken() // 移动到 (
-		
+
 		// 解析参数列表
 		if p.peekToken.Type != lexer.TOKEN_RPAREN {
 			p.nextToken()
-			
+
 			// Check for named argument (identifier: value)
 			if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
 				arg := parseNamedArgument(p)
@@ -3310,11 +3268,11 @@ func parseAttributeDecl(p *Parser) *ast.Attribute {
 			} else {
 				arguments = append(arguments, parseExpression(p, LOWEST))
 			}
-			
+
 			for p.peekToken.Type == lexer.TOKEN_COMMA {
 				p.nextToken() // 移动到逗号
 				p.nextToken() // 移动到下一个参数
-				
+
 				// Check for named argument
 				if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
 					arg := parseNamedArgument(p)
@@ -3326,7 +3284,7 @@ func parseAttributeDecl(p *Parser) *ast.Attribute {
 				}
 			}
 		}
-		
+
 		if !p.expectPeek(lexer.TOKEN_RPAREN) {
 			return nil
 		}
@@ -3369,7 +3327,7 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 		if p.currentToken.Type == lexer.T_ELLIPSIS {
 			pos := p.currentToken.Position
 			p.nextToken() // 跳过 ...
-			
+
 			// 解析展开的表达式
 			expr := parseExpression(p, LOWEST)
 			if expr != nil {
@@ -3385,7 +3343,6 @@ func parseArrayLiteral(p *Parser) ast.Expression {
 		}
 
 		p.nextToken()
-
 
 		// 检查是否到达数组结尾
 		if p.currentToken.Type == lexer.TOKEN_RBRACKET {
@@ -3471,7 +3428,7 @@ func parseIssetExpression(p *Parser) ast.Expression {
 	}
 
 	p.nextToken()
-	
+
 	// 创建第一个 isset 检查
 	firstExpr := parseExpression(p, LOWEST)
 	var result ast.Expression = ast.NewIssetExpression(pos, []ast.Expression{firstExpr})
@@ -3479,16 +3436,16 @@ func parseIssetExpression(p *Parser) ast.Expression {
 	// 处理多个参数 - 用 AND 连接
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 跳过逗号
-		
+
 		// 检查是否有可选的尾随逗号 (possible_comma)
 		if p.peekToken.Type == lexer.TOKEN_RPAREN {
 			break
 		}
-		
+
 		p.nextToken() // 移动到下一个参数
 		nextExpr := parseExpression(p, LOWEST)
 		nextIsset := ast.NewIssetExpression(pos, []ast.Expression{nextExpr})
-		
+
 		// 用 AND 连接多个 isset 检查
 		result = ast.NewBinaryExpression(pos, result, "&&", nextIsset)
 	}
@@ -3643,31 +3600,6 @@ func parseUseExpression(p *Parser) ast.Expression {
 	return ast.NewIdentifierNode(pos, "use")
 }
 
-// parseNowdocExpression 解析 nowdoc 表达式
-func parseNowdocExpression(p *Parser) ast.Expression {
-	pos := p.currentToken.Position
-	var contentBuilder strings.Builder
-	
-	// 跳过 T_NOWDOC 开始标记，收集内容
-	p.nextToken()
-	
-	// 收集 T_ENCAPSED_AND_WHITESPACE 内容
-	for p.currentToken.Type == lexer.T_ENCAPSED_AND_WHITESPACE {
-		contentBuilder.WriteString(p.currentToken.Value)
-		p.nextToken()
-	}
-	
-	// 期望 T_END_HEREDOC 结束标记
-	if p.currentToken.Type == lexer.T_END_HEREDOC {
-		// 不需要添加结束标记到内容中，只是验证它存在
-	} else {
-		p.errors = append(p.errors, fmt.Sprintf("expected T_END_HEREDOC, got %s instead", p.currentToken.Type))
-	}
-	
-	content := contentBuilder.String()
-	return ast.NewStringLiteral(pos, content, content)
-}
-
 // parseCurlyOpenExpression 解析字符串插值开始标记
 func parseCurlyOpenExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
@@ -3776,7 +3708,7 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 		// 可以实现多个接口
 		implements := []ast.Expression{}
 		implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
-		
+
 		// 处理多个接口，用逗号分隔
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 跳过逗号
@@ -3809,12 +3741,12 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 // parseReadonlyClassDeclaration 解析 readonly class 声明语句
 func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
-	
+
 	// 跳过 'readonly' 关键字，移动到 'class'
 	if !p.expectPeek(lexer.T_CLASS) {
 		return nil
 	}
-	
+
 	// 跳过 'class' 关键字
 	if !p.expectPeek(lexer.T_STRING) {
 		return nil
@@ -3837,16 +3769,16 @@ func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 	// 检查是否有 implements 子句
 	if p.peekToken.Type == lexer.T_IMPLEMENTS {
 		p.nextToken() // 跳过当前token到implements
-		
+
 		// 解析接口列表
 		for {
 			if !p.expectPeek(lexer.T_STRING) {
 				return nil
 			}
-			
+
 			interfaceNode := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 			class.Implements = append(class.Implements, interfaceNode)
-			
+
 			// 检查是否有更多接口
 			if p.peekToken.Type == lexer.TOKEN_COMMA {
 				p.nextToken() // 跳到逗号
@@ -3877,31 +3809,31 @@ func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 // parseMatchExpression 解析 match 表达式 (PHP 8.0+)
 func parseMatchExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	// 跳过 'match'，期望左括号
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
 	}
-	
+
 	// 解析匹配主体表达式
 	p.nextToken()
 	subject := parseExpression(p, LOWEST)
 	if subject == nil {
 		return nil
 	}
-	
+
 	// 期望右括号
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		return nil
 	}
-	
+
 	// 期望左大括号开始 match arms
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
 		return nil
 	}
-	
+
 	matchExpr := ast.NewMatchExpression(pos, subject)
-	
+
 	// 解析 match arms
 	p.nextToken() // 进入大括号内
 	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
@@ -3909,7 +3841,7 @@ func parseMatchExpression(p *Parser) ast.Expression {
 		if arm != nil {
 			matchExpr.Arms = append(matchExpr.Arms, arm)
 		}
-		
+
 		// 期望逗号或右大括号
 		if p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 跳过逗号
@@ -3920,22 +3852,22 @@ func parseMatchExpression(p *Parser) ast.Expression {
 			break
 		}
 	}
-	
+
 	// 期望右大括号结束
 	if !p.expectPeek(lexer.TOKEN_RBRACE) {
 		return nil
 	}
-	
+
 	return matchExpr
 }
 
 // parseMatchArm 解析 match 表达式的一个分支
 func parseMatchArm(p *Parser) *ast.MatchArm {
 	pos := p.currentToken.Position
-	
+
 	var conditions []ast.Expression
 	isDefault := false
-	
+
 	// 检查是否为 default 分支
 	if p.currentToken.Type == lexer.T_DEFAULT {
 		isDefault = true
@@ -3947,7 +3879,7 @@ func parseMatchArm(p *Parser) *ast.MatchArm {
 				return nil
 			}
 			conditions = append(conditions, condition)
-			
+
 			// 检查下一个 token 是什么
 			if p.peekToken.Type == lexer.TOKEN_COMMA {
 				// 有更多条件
@@ -3962,19 +3894,19 @@ func parseMatchArm(p *Parser) *ast.MatchArm {
 			}
 		}
 	}
-	
+
 	// 期望 '=>'
 	if !p.expectPeek(lexer.T_DOUBLE_ARROW) {
 		return nil
 	}
-	
+
 	// 解析分支体
 	p.nextToken()
 	body := parseExpression(p, LOWEST)
 	if body == nil {
 		return nil
 	}
-	
+
 	return ast.NewMatchArm(pos, conditions, body, isDefault)
 }
 
@@ -3993,49 +3925,6 @@ func parseClassExpression(p *Parser) ast.Expression {
 	return ast.NewClassExpression(pos, name, nil, nil, false) // name, extends, implements
 }
 
-// isVisibilityStaticFunction 检查 visibility static 后是否为 function
-// 使用简单的状态保存和恢复进行前瞻
-func isVisibilityStaticFunction(p *Parser) bool {
-	// 保存当前状态
-	savedCurrent := p.currentToken
-	savedPeek := p.peekToken
-	
-	// 前进到 static
-	p.nextToken() // 现在 currentToken 是 static
-	// 检查下一个 token 是否为 function
-	isFunction := p.peekToken.Type == lexer.T_FUNCTION
-	
-	// 恢复状态
-	p.currentToken = savedCurrent
-	p.peekToken = savedPeek
-	
-	return isFunction
-}
-
-// parseVisibilityStaticMember 处理 visibility static 组合
-func parseVisibilityStaticMember(p *Parser) ast.Statement {
-	// 保存完整的 parser 状态
-	visibilityToken := p.currentToken
-	staticToken := p.peekToken
-	
-	p.nextToken() // 移动到 static
-	// 现在 current: static, peek: 下一个 token
-	
-	if p.peekToken.Type == lexer.T_FUNCTION {
-		// visibility static function
-		// 完全恢复状态
-		p.currentToken = visibilityToken
-		p.peekToken = staticToken
-		return parseFunctionDeclaration(p)
-	} else {
-		// visibility static property
-		// 完全恢复状态
-		p.currentToken = visibilityToken
-		p.peekToken = staticToken
-		return parsePropertyDeclaration(p)
-	}
-}
-
 // parseVisibilityStaticFunction 解析 visibility static function 声明
 // 在调用时，currentToken 是 static，peekToken 是 function
 func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Position) ast.Statement {
@@ -4043,16 +3932,16 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 	if !p.expectPeek(lexer.T_FUNCTION) {
 		return nil
 	}
-	
+
 	// 现在开始解析函数，类似 parseFunctionDeclaration 但已知是 visibility + static
-	
+
 	// 检查是否为引用返回函数 function &foo()
 	byReference := false
 	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
 		byReference = true
 		p.nextToken() // 移动到 &
 	}
-	
+
 	// Expect method/function name (allow reserved keywords)
 	if !p.expectPeek(lexer.T_STRING) {
 		return nil
@@ -4173,82 +4062,82 @@ func parseClassStatement(p *Parser) ast.Statement {
 // parseClassConstantDeclaration 解析类常量声明
 func parseClassConstantDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
-	
+
 	// Parse visibility modifier (if present)
 	visibility := "public" // Default visibility
 	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
 		visibility = p.currentToken.Value
 		p.nextToken() // Move to 'const'
 	}
-	
+
 	// Expect 'const' keyword
 	if p.currentToken.Type != lexer.T_CONST {
 		p.errors = append(p.errors, fmt.Sprintf("expected 'const', got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	p.nextToken() // Move to first constant name
-	
+
 	// Parse constant list (can have multiple constants in one declaration)
 	var constants []ast.ConstantDeclarator
-	
+
 	for {
 		// Parse constant name (allow reserved keywords)
 		if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 			p.errors = append(p.errors, fmt.Sprintf("expected constant name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			return nil
 		}
-		
+
 		constPos := p.currentToken.Position
 		name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-		
+
 		// Expect '='
 		if !p.expectPeek(lexer.TOKEN_EQUAL) {
 			return nil
 		}
-		
+
 		p.nextToken() // Move to value
 		value := parseExpression(p, LOWEST)
-		
+
 		// Create constant declarator
 		constants = append(constants, *ast.NewConstantDeclarator(constPos, name, value))
-		
+
 		// Check for comma (multiple constants) using peekToken
 		if p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // Move to comma
 			p.nextToken() // Skip comma and continue
 			continue
 		}
-		
+
 		// Should end with semicolon
 		if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
 			break
 		}
-		
+
 		// If not comma or semicolon, we're done
 		break
 	}
-	
+
 	return ast.NewClassConstantDeclaration(pos, visibility, constants)
 }
 
 // parsePropertyDeclaration 解析属性声明
 func parsePropertyDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
-	
+
 	var visibility string
 	var static bool
 	var readOnly bool
-	
+
 	// Parse modifiers in order: visibility, static, readonly
 	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
 		visibility = p.currentToken.Value
-		
+
 		// Check for static modifier
 		if p.peekToken.Type == lexer.T_STATIC {
 			static = true
 			p.nextToken() // Move to static
-			
+
 			// 检查 static 后面是否为 function
 			if p.peekToken.Type == lexer.T_FUNCTION {
 				// 这是静态方法：visibility static function
@@ -4256,7 +4145,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 				return parseVisibilityStaticFunction(p, visibility, pos)
 			}
 		}
-		
+
 		// Check for readonly modifier
 		if p.peekToken.Type == lexer.T_READONLY {
 			readOnly = true
@@ -4274,7 +4163,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		// Default visibility
 		visibility = "public"
 	}
-	
+
 	// 检查下一个token是否为类型提示
 	var typeHint *ast.TypeHint
 	if p.peekToken.Type != lexer.T_VARIABLE {
@@ -4284,18 +4173,18 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 			typeHint = parseTypeHint(p)
 		}
 	}
-	
+
 	// 移动到变量名
 	if !p.expectPeek(lexer.T_VARIABLE) {
 		return nil
 	}
-	
+
 	// 解析属性名（去掉$）
 	propertyName := p.currentToken.Value
 	if strings.HasPrefix(propertyName, "$") {
 		propertyName = propertyName[1:]
 	}
-	
+
 	// 检查是否为property hooks (用 { 而不是 ; 或 =)
 	if p.peekToken.Type == lexer.TOKEN_LBRACE {
 		// 解析property hooks
@@ -4303,30 +4192,30 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		hooks := parsePropertyHookList(p)
 		return ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, static, readOnly, typeHint, hooks)
 	}
-	
+
 	var defaultValue ast.Expression
-	
+
 	// 检查是否有默认值
 	if p.peekToken.Type == lexer.TOKEN_EQUAL {
 		p.nextToken() // 跳到 =
 		p.nextToken() // 移动到值
 		defaultValue = parseExpression(p, LOWEST)
 	}
-	
+
 	// 期望分号
 	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
 		p.nextToken()
 	}
-	
+
 	return ast.NewPropertyDeclaration(pos, visibility, propertyName, static, readOnly, typeHint, defaultValue)
 }
 
 // parsePropertyHookList 解析属性钩子列表
 func parsePropertyHookList(p *Parser) []*ast.PropertyHook {
 	var hooks []*ast.PropertyHook
-	
+
 	p.nextToken() // 移动到第一个hook或结束符
-	
+
 	// 解析hook列表，直到遇到 }
 	for p.currentToken.Type != lexer.TOKEN_RBRACE && !p.isAtEnd() {
 		if (p.currentToken.Type == lexer.T_STRING && (p.currentToken.Value == "get" || p.currentToken.Value == "set")) || p.currentToken.Type == lexer.TOKEN_AMPERSAND {
@@ -4335,7 +4224,7 @@ func parsePropertyHookList(p *Parser) []*ast.PropertyHook {
 				hooks = append(hooks, hook)
 			}
 		}
-		
+
 		// 检查是否有分号分隔符
 		if p.currentToken.Type == lexer.TOKEN_SEMICOLON {
 			p.nextToken()
@@ -4344,30 +4233,30 @@ func parsePropertyHookList(p *Parser) []*ast.PropertyHook {
 			p.nextToken()
 		}
 	}
-	
+
 	return hooks
 }
 
 // parsePropertyHook 解析单个属性钩子 (get 或 set)
 func parsePropertyHook(p *Parser) *ast.PropertyHook {
 	pos := p.currentToken.Position
-	
+
 	// 检查是否为引用钩子 (&get)
 	byRef := false
 	if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
 		byRef = true
 		p.nextToken()
 	}
-	
+
 	// 必须是 get 或 set
 	if p.currentToken.Type != lexer.T_STRING || (p.currentToken.Value != "get" && p.currentToken.Value != "set") {
-		p.errors = append(p.errors, fmt.Sprintf("expected 'get' or 'set', got %s at line: %d col: %d", 
+		p.errors = append(p.errors, fmt.Sprintf("expected 'get' or 'set', got %s at line: %d col: %d",
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	hookType := p.currentToken.Value
-	
+
 	// 对于set hook，检查是否有参数
 	var parameter *ast.Parameter
 	if hookType == "set" && p.peekToken.Type == lexer.TOKEN_LPAREN {
@@ -4377,9 +4266,9 @@ func parsePropertyHook(p *Parser) *ast.PropertyHook {
 			return nil
 		}
 	}
-	
+
 	p.nextToken() // 移动到下一个token
-	
+
 	// 检查是arrow syntax (=>) 还是 block syntax ({})
 	if p.currentToken.Type == lexer.T_DOUBLE_ARROW {
 		// Arrow syntax: get => expression;
@@ -4391,7 +4280,7 @@ func parsePropertyHook(p *Parser) *ast.PropertyHook {
 		statements := parseBlockStatement(p).Body
 		return ast.NewPropertyHook(pos, hookType, parameter, nil, statements, byRef)
 	} else {
-		p.errors = append(p.errors, fmt.Sprintf("expected '=>' or '{' after hook, got %s at line: %d col: %d", 
+		p.errors = append(p.errors, fmt.Sprintf("expected '=>' or '{' after hook, got %s at line: %d col: %d",
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
@@ -4400,23 +4289,23 @@ func parsePropertyHook(p *Parser) *ast.PropertyHook {
 // parsePropertyHookParameter 解析set hook的参数
 func parsePropertyHookParameter(p *Parser) *ast.Parameter {
 	p.nextToken() // 移动到参数
-	
+
 	// 可能有类型提示
 	var typeHint *ast.TypeHint
 	if isTypeToken(p.currentToken.Type) {
 		typeHint = parseTypeHint(p)
 		p.nextToken() // 移动到变量名
 	}
-	
+
 	// 必须是变量
 	if p.currentToken.Type != lexer.T_VARIABLE {
-		p.errors = append(p.errors, fmt.Sprintf("expected variable in set hook parameter, got %s at line: %d col: %d", 
+		p.errors = append(p.errors, fmt.Sprintf("expected variable in set hook parameter, got %s at line: %d col: %d",
 			p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	paramName := p.currentToken.Value
-	
+
 	return &ast.Parameter{
 		Name: paramName,
 		Type: typeHint,
@@ -4555,9 +4444,9 @@ func parseVisibilityModifier(p *Parser) ast.Expression {
 func parseIncludeOrEvalExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 	tokenType := p.currentToken.Type
-	
+
 	p.nextToken() // 跳过 include/require/eval 关键字
-	
+
 	var expr ast.Node
 	if tokenType == lexer.T_EVAL {
 		// eval 需要括号
@@ -4573,14 +4462,14 @@ func parseIncludeOrEvalExpression(p *Parser) ast.Expression {
 		// include/require 后面跟表达式
 		expr = parseExpression(p, LOWEST)
 	}
-	
+
 	return ast.NewIncludeOrEvalExpression(pos, tokenType, expr)
 }
 
 // parseStaticExpression 解析 static 关键字表达式
 func parseStaticExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	// 检查下一个token来决定如何解析
 	switch p.peekToken.Type {
 	case lexer.T_VARIABLE:
@@ -4593,7 +4482,7 @@ func parseStaticExpression(p *Parser) ast.Expression {
 		p.nextToken() // 跳过 static
 		return parseAnonymousFunctionExpression(p)
 	case lexer.T_PAAMAYIM_NEKUDOTAYIM:
-		// static::method() 静态类引用  
+		// static::method() 静态类引用
 		name := ast.NewIdentifierNode(pos, "static")
 		return name
 	default:
@@ -4603,11 +4492,10 @@ func parseStaticExpression(p *Parser) ast.Expression {
 	}
 }
 
-
 // parseAbstractExpression 解析 abstract 关键字
 func parseAbstractExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	// abstract 通常用作类或方法修饰符
 	// 在这里作为标识符返回，实际的类声明解析会在其他地方处理
 	return ast.NewIdentifierNode(pos, "abstract")
@@ -4616,25 +4504,25 @@ func parseAbstractExpression(p *Parser) ast.Expression {
 // parseYieldExpression 解析 yield 表达式
 func parseYieldExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	p.nextToken() // 跳过 yield 关键字
-	
+
 	// yield 可能有三种形式：
 	// 1. yield;               (无值)
 	// 2. yield $value;        (只有值)
 	// 3. yield $key => $value; (键值对)
-	
+
 	// 检查是否是空的 yield
 	if p.currentToken.Type == lexer.TOKEN_SEMICOLON || p.currentToken.Type == lexer.T_EOF {
 		return ast.NewYieldExpression(pos, nil, nil)
 	}
-	
+
 	// 解析第一个表达式，使用较高的优先级以防止 => 被作为中缀操作符解析
 	firstExpr := parseExpression(p, LOGICAL_OR)
 	if firstExpr == nil {
 		return ast.NewYieldExpression(pos, nil, nil)
 	}
-	
+
 	// 检查是否有 =>，表示这是键值对形式
 	if p.peekToken.Type == lexer.T_DOUBLE_ARROW {
 		p.nextToken() // 跳过 =>
@@ -4642,7 +4530,7 @@ func parseYieldExpression(p *Parser) ast.Expression {
 		valueExpr := parseExpression(p, LOWEST)
 		return ast.NewYieldExpression(pos, firstExpr, valueExpr)
 	}
-	
+
 	// 只有值的形式
 	return ast.NewYieldExpression(pos, nil, firstExpr)
 }
@@ -4650,43 +4538,43 @@ func parseYieldExpression(p *Parser) ast.Expression {
 // parseYieldFromExpression 解析 yield from 表达式
 func parseYieldFromExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	p.nextToken() // 跳过 "yield from" token
-	
+
 	// yield from 后面必须跟一个表达式
 	if p.currentToken.Type == lexer.TOKEN_SEMICOLON || p.currentToken.Type == lexer.T_EOF {
 		p.errors = append(p.errors, "yield from requires an expression")
 		return nil
 	}
-	
+
 	expr := parseExpression(p, LOWEST)
 	if expr == nil {
 		p.errors = append(p.errors, "invalid expression after yield from")
 		return nil
 	}
-	
+
 	return ast.NewYieldFromExpression(pos, expr)
 }
 
 // parseThrowExpression 解析 throw 表达式 (PHP 8.0+)
 func parseThrowExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	p.nextToken() // 跳过 throw 关键字
-	
+
 	// throw 后面必须跟一个表达式
 	if p.currentToken.Type == lexer.TOKEN_SEMICOLON || p.currentToken.Type == lexer.T_EOF {
 		p.errors = append(p.errors, "throw requires an expression")
 		return nil
 	}
-	
+
 	// 解析异常表达式，使用较高的优先级以防止 ?: 等操作符干扰
 	expr := parseExpression(p, PREFIX)
 	if expr == nil {
 		p.errors = append(p.errors, "invalid expression after throw")
 		return nil
 	}
-	
+
 	return ast.NewThrowExpression(pos, expr)
 }
 
@@ -4694,7 +4582,7 @@ func parseThrowExpression(p *Parser) ast.Expression {
 func parseCloseTagExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 	content := p.currentToken.Value
-	
+
 	// 结束标签后可能有HTML内容
 	return ast.NewCloseTagExpression(pos, content)
 }
@@ -4702,13 +4590,13 @@ func parseCloseTagExpression(p *Parser) ast.Expression {
 // parseNamespaceExpression 解析命名空间表达式（以 \ 开始）
 func parseNamespaceExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	p.nextToken() // 跳过 \
-	
+
 	if p.currentToken.Type == lexer.T_STRING {
 		// \Namespace\Class 形式
 		nameStr := p.currentToken.Value
-		
+
 		// 继续解析后续的命名空间部分，构建完整的命名空间字符串
 		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
 			p.nextToken() // 跳到 \
@@ -4717,29 +4605,29 @@ func parseNamespaceExpression(p *Parser) ast.Expression {
 				nameStr += "\\" + p.currentToken.Value
 			}
 		}
-		
+
 		// 创建完整的命名空间标识符
 		name := ast.NewIdentifierNode(pos, nameStr)
 		return ast.NewNamespaceExpression(pos, name)
 	}
-	
-	// 单独的 \ 
+
+	// 单独的 \
 	return ast.NewNamespaceExpression(pos, nil)
 }
 
 // parseQualifiedName 解析限定名称，支持命名空间（如 Foo\Bar\Baz）
 func parseQualifiedName(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
-	
+
 	// 处理以 \ 开头的绝对命名空间
 	if p.currentToken.Type == lexer.T_NS_SEPARATOR {
 		return parseNamespaceExpression(p)
 	}
-	
+
 	// 处理以标识符开头的相对命名空间
 	if p.currentToken.Type == lexer.T_STRING {
 		nameStr := p.currentToken.Value
-		
+
 		// 继续解析后续的命名空间部分
 		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
 			p.nextToken() // 跳到 \
@@ -4750,11 +4638,11 @@ func parseQualifiedName(p *Parser) ast.Expression {
 				break
 			}
 		}
-		
+
 		// 创建标识符节点
 		return ast.NewIdentifierNode(pos, nameStr)
 	}
-	
+
 	// 回退到普通表达式解析
 	return parseExpression(p, LESSGREATER)
 }
@@ -4763,7 +4651,7 @@ func parseQualifiedName(p *Parser) ast.Expression {
 func parseArrowFunctionExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 	var static bool
-	
+
 	// 检查是否是静态箭头函数
 	if p.currentToken.Type == lexer.T_STATIC {
 		static = true
@@ -4771,15 +4659,15 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 			return nil
 		}
 	}
-	
+
 	// 跳过 'fn'，期望左括号
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
 	}
-	
+
 	// 解析参数列表
 	var parameters []ast.Parameter
-	
+
 	// 解析参数列表
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
@@ -4800,12 +4688,12 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 			}
 		}
 	}
-	
+
 	// 期望右括号
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		return nil
 	}
-	
+
 	// 可选的返回类型
 	var returnType *ast.TypeHint
 	if p.peekToken.Type == lexer.TOKEN_COLON {
@@ -4813,19 +4701,19 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 		p.nextToken() // 进入返回类型
 		returnType = parseTypeHint(p)
 	}
-	
+
 	// 期望双箭头 =>
 	if !p.expectPeek(lexer.T_DOUBLE_ARROW) {
 		return nil
 	}
-	
+
 	// 解析函数体表达式
 	p.nextToken()
 	body := parseExpression(p, LOWEST)
 	if body == nil {
 		return nil
 	}
-	
+
 	return ast.NewArrowFunctionExpression(pos, parameters, returnType, body, static)
 }
 
@@ -4836,7 +4724,7 @@ func parseStaticOrArrowFunctionExpression(p *Parser) ast.Expression {
 		// 这是静态箭头函数，委托给箭头函数解析器
 		return parseArrowFunctionExpression(p)
 	}
-	
+
 	// 否则使用原来的静态表达式解析
 	return parseStaticExpression(p)
 }
@@ -4845,7 +4733,7 @@ func parseStaticOrArrowFunctionExpression(p *Parser) ast.Expression {
 func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 	// 跳过 'new' 关键字
 	p.nextToken()
-	
+
 	// 解析属性 (如果存在)
 	var attributes []*ast.AttributeGroup
 	for p.currentToken.Type == lexer.T_ATTRIBUTE {
@@ -4855,42 +4743,42 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 		}
 		p.nextToken() // 移动到下一个token
 	}
-	
+
 	// 解析类修饰符
 	var modifiers []string
 	for p.currentToken.Type == lexer.T_FINAL || p.currentToken.Type == lexer.T_ABSTRACT || p.currentToken.Type == lexer.T_READONLY {
 		modifiers = append(modifiers, p.currentToken.Value)
 		p.nextToken()
 	}
-	
+
 	// 期望 'class' 关键字
 	if p.currentToken.Type != lexer.T_CLASS {
 		return nil
 	}
-	
+
 	var arguments []ast.Expression
-	
+
 	// 检查构造函数参数
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		p.nextToken() // 移动到 (
-		
+
 		// 解析参数列表
 		if p.peekToken.Type != lexer.TOKEN_RPAREN {
 			p.nextToken()
 			arguments = append(arguments, parseExpression(p, LOWEST))
-			
+
 			for p.peekToken.Type == lexer.TOKEN_COMMA {
 				p.nextToken() // 移动到逗号
 				p.nextToken() // 移动到下一个参数
 				arguments = append(arguments, parseExpression(p, LOWEST))
 			}
 		}
-		
+
 		if !p.expectPeek(lexer.TOKEN_RPAREN) {
 			return nil
 		}
 	}
-	
+
 	// 检查 extends 子句
 	var extends ast.Expression
 	if p.peekToken.Type == lexer.T_EXTENDS {
@@ -4898,14 +4786,14 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 		p.nextToken() // 移动到类名
 		extends = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	}
-	
+
 	// 检查 implements 子句
 	var implements []ast.Expression
 	if p.peekToken.Type == lexer.T_IMPLEMENTS {
 		p.nextToken() // 移动到 implements
 		p.nextToken() // 移动到第一个接口名
 		implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
-		
+
 		// 处理多个接口
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 移动到逗号
@@ -4913,24 +4801,24 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 			implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
 		}
 	}
-	
+
 	// 期望类体开始
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
 		return nil
 	}
-	
+
 	// 解析类体
 	body := parseClassBody(p)
-	
+
 	return ast.NewAnonymousClass(pos, attributes, modifiers, arguments, extends, implements, body)
 }
 
 // parseClassBody 解析类体
 func parseClassBody(p *Parser) []ast.Statement {
 	var statements []ast.Statement
-	
+
 	p.nextToken() // 进入类体
-	
+
 	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
 		stmt := parseClassStatement(p)
 		if stmt != nil {
@@ -4938,46 +4826,46 @@ func parseClassBody(p *Parser) []ast.Statement {
 		}
 		p.nextToken()
 	}
-	
+
 	return statements
 }
 
 // parseUseTraitStatement 解析 trait 使用语句 (use TraitA, TraitB { ... })
 func parseUseTraitStatement(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
-	
+
 	// 期望 trait 名称列表
 	p.nextToken() // 跳过 'use'
-	
+
 	var traits []*ast.IdentifierNode
-	
+
 	// 解析第一个 trait 名称
 	if p.currentToken.Type != lexer.T_STRING {
 		p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	traits = append(traits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
-	
+
 	// 解析多个 trait（用逗号分隔）
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 跳过逗号
 		p.nextToken() // 移动到下一个 trait 名称
-		
+
 		if p.currentToken.Type != lexer.T_STRING {
 			p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			return nil
 		}
-		
+
 		traits = append(traits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
 	}
-	
+
 	// 检查是否有适配规则
 	var adaptations []ast.TraitAdaptation
-	
+
 	if p.peekToken.Type == lexer.TOKEN_LBRACE {
 		p.nextToken() // 跳过 '{'
-		
+
 		// 解析适配规则
 		for p.peekToken.Type != lexer.TOKEN_RBRACE && p.peekToken.Type != lexer.T_EOF {
 			p.nextToken()
@@ -4985,13 +4873,13 @@ func parseUseTraitStatement(p *Parser) ast.Statement {
 			if adaptation != nil {
 				adaptations = append(adaptations, adaptation)
 			}
-			
+
 			// 期望分号
 			if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
 				p.nextToken() // 跳过分号
 			}
 		}
-		
+
 		// 期望右大括号
 		if !p.expectPeek(lexer.TOKEN_RBRACE) {
 			return nil
@@ -4999,7 +4887,7 @@ func parseUseTraitStatement(p *Parser) ast.Statement {
 	} else if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
 		p.nextToken() // 跳过分号
 	}
-	
+
 	return ast.NewUseTraitStatement(pos, traits, adaptations)
 }
 
@@ -5010,14 +4898,14 @@ func parseTraitAdaptation(p *Parser) ast.TraitAdaptation {
 	if methodRef == nil {
 		return nil
 	}
-	
+
 	// 检查是 precedence 还是 alias
 	if p.peekToken.Type == lexer.T_INSTEADOF {
 		return parseTraitPrecedence(p, methodRef)
 	} else if p.peekToken.Type == lexer.T_AS {
 		return parseTraitAlias(p, methodRef)
 	}
-	
+
 	p.errors = append(p.errors, fmt.Sprintf("expected 'insteadof' or 'as', got %s at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
 	return nil
 }
@@ -5025,35 +4913,35 @@ func parseTraitAdaptation(p *Parser) ast.TraitAdaptation {
 // parseTraitMethodReference 解析 trait 方法引用 (TraitName::methodName or methodName)
 func parseTraitMethodReference(p *Parser) *ast.TraitMethodReference {
 	pos := p.currentToken.Position
-	
+
 	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected method or trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	firstPart := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	
+
 	// 检查是否是完全限定的方法引用 (TraitName::methodName)
 	if p.peekToken.Type == lexer.T_PAAMAYIM_NEKUDOTAYIM {
 		p.nextToken() // 跳过 '::'
-		
+
 		// 在trait适配上下文中，'as' 和 'insteadof' 应该被视为关键字，而不是方法名
 		if p.peekToken.Type == lexer.T_AS || p.peekToken.Type == lexer.T_INSTEADOF {
 			p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
 			return nil
 		}
-		
+
 		// 检查下一个token是否是有效的方法名
 		if p.peekToken.Type != lexer.T_STRING && !isSemiReserved(p.peekToken.Type) {
 			p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at line: %d col: %d", p.peekToken.Value, p.peekToken.Position.Line, p.peekToken.Position.Column))
 			return nil
 		}
-		
+
 		p.nextToken() // 移动到方法名
 		methodName := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 		return ast.NewTraitMethodReference(pos, firstPart, methodName)
 	}
-	
+
 	// 简单的方法名引用
 	return ast.NewTraitMethodReference(pos, nil, firstPart)
 }
@@ -5061,58 +4949,58 @@ func parseTraitMethodReference(p *Parser) *ast.TraitMethodReference {
 // parseTraitPrecedence 解析 trait 优先级声明 (A::method insteadof B, C)
 func parseTraitPrecedence(p *Parser, methodRef *ast.TraitMethodReference) ast.TraitAdaptation {
 	pos := methodRef.Position
-	
+
 	// 期望 'insteadof'
 	if !p.expectPeek(lexer.T_INSTEADOF) {
 		return nil
 	}
-	
+
 	// 解析替代的 trait 列表
 	p.nextToken() // 移动到第一个 trait 名称
-	
+
 	var insteadOfTraits []*ast.IdentifierNode
-	
+
 	if p.currentToken.Type != lexer.T_STRING {
 		p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	insteadOfTraits = append(insteadOfTraits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
-	
+
 	// 解析多个 trait（用逗号分隔）
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 跳过逗号
 		p.nextToken() // 移动到下一个 trait 名称
-		
+
 		if p.currentToken.Type != lexer.T_STRING {
 			p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			return nil
 		}
-		
+
 		insteadOfTraits = append(insteadOfTraits, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
 	}
-	
+
 	return ast.NewTraitPrecedenceStatement(pos, methodRef, insteadOfTraits)
 }
 
 // parseTraitAlias 解析 trait 别名声明 (A::method as newName; A::method as public newName)
 func parseTraitAlias(p *Parser, methodRef *ast.TraitMethodReference) ast.TraitAdaptation {
 	pos := methodRef.Position
-	
+
 	// 期望 'as'
 	if !p.expectPeek(lexer.T_AS) {
 		return nil
 	}
-	
+
 	p.nextToken() // 移动到别名或可见性修饰符
-	
+
 	var visibility string
 	var alias *ast.IdentifierNode
-	
+
 	// 检查是否是可见性修饰符
 	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
 		visibility = p.currentToken.Value
-		
+
 		// 可选的新方法名 (allow reserved keywords)
 		if p.peekToken.Type == lexer.T_STRING || isReservedNonModifier(p.peekToken.Type) {
 			p.nextToken() // 移动到方法名
@@ -5125,7 +5013,6 @@ func parseTraitAlias(p *Parser, methodRef *ast.TraitMethodReference) ast.TraitAd
 		p.errors = append(p.errors, fmt.Sprintf("expected visibility modifier or method name, got %s at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 		return nil
 	}
-	
+
 	return ast.NewTraitAliasStatement(pos, methodRef, alias, visibility)
 }
-

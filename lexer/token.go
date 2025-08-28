@@ -178,6 +178,9 @@ const (
 	T_BAD_CHARACTER                           /* "invalid character (T_BAD_CHARACTER)"  */
 	T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG     /* "&$ or &... (T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG)"  */
 	T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG /* "& not followed by $ or ... (T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG)"  */
+	T_NAME_FULLY_QUALIFIED                    /* "name fully qualified (T_NAME_FULLY_QUALIFIED)"  */
+	T_NAME_RELATIVE                           /* "namespace-relative name (T_NAME_RELATIVE)"  */
+	T_NAME_QUALIFIED                          /* "namespaced name (T_NAME_QUALIFIED)"  */
 
 	// 单个字符 token（为了完整性）
 	TOKEN_SEMICOLON   TokenType = ';'  // ;
