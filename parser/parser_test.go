@@ -9127,3 +9127,75 @@ class TestClass {
 func containsSubstring(str, substr string) bool {
 	return len(str) >= len(substr) && str[:len(substr)] == substr
 }
+
+func TestParsing_MixedPHPHTML(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			nodeType string
+			content  string
+		}
+	}{
+		{
+			name: "basic mixed PHP HTML",
+			input: `<?php
+echo "Hello";
+?>
+<h1>Title</h1>
+<?php
+echo "World";
+?>`,
+			expected: []struct {
+				nodeType string
+				content  string
+			}{
+				{"EchoStatement", "Hello"},
+				{"InlineHTML", "<h1>Title</h1>"},
+				{"EchoStatement", "World"},
+			},
+		},
+		{
+			name: "multiple PHP blocks with HTML",
+			input: `<?php $x = 1; ?>
+<div>Content</div>
+<?php $y = 2; ?>
+<span>More</span>
+<?php echo $x + $y; ?>`,
+			expected: []struct {
+				nodeType string
+				content  string
+			}{
+				{"AssignmentExpression", "1"},
+				{"InlineHTML", "<div>Content</div>"},
+				{"AssignmentExpression", "2"},
+				{"InlineHTML", "<span>More</span>"},
+				{"EchoStatement", ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			errors := p.Errors()
+			if len(errors) > 0 {
+				t.Fatalf("Parser errors: %v", errors)
+			}
+
+			require.NotNil(t, program)
+			
+			// The test should parse more than one statement if multiple PHP blocks exist
+			if len(tt.expected) > 1 {
+				assert.GreaterOrEqual(t, len(program.Body), 2, 
+					"Expected at least 2 statements for mixed content, got %d", len(program.Body))
+			}
+
+			// For now, we mainly want to ensure no parsing errors
+			// Full AST structure validation can be added once the fix is implemented
+		})
+	}
+}

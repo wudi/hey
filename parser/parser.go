@@ -601,8 +601,22 @@ func (p *Parser) ParseProgram() *ast.Program {
 	}
 
 	for !p.isAtEnd() {
+		// Handle T_CLOSE_TAG: just skip it and continue parsing
 		if p.currentToken.Type == lexer.T_CLOSE_TAG {
-			break
+			p.nextToken()
+			continue
+		}
+
+		// Handle T_INLINE_HTML as a statement (like echo)
+		if p.currentToken.Type == lexer.T_INLINE_HTML {
+			// Create a statement from the inline HTML content
+			htmlExpr := parseInlineHTML(p)
+			if htmlExpr != nil {
+				// Wrap inline HTML as an expression statement
+				program.Body = append(program.Body, ast.NewExpressionStatement(htmlExpr.(*ast.StringLiteral).Position, htmlExpr))
+			}
+			p.nextToken()
+			continue
 		}
 
 		// Skip T_OPEN_TAG tokens in the middle of the program
@@ -708,6 +722,8 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseBreakStatement(p)
 	case lexer.T_CONTINUE:
 		return parseContinueStatement(p)
+	case lexer.T_ENDIF:
+		return parseEndifStatement(p)
 	case lexer.T_HALT_COMPILER:
 		return parseHaltCompilerStatement(p)
 	case lexer.TOKEN_LBRACE:
@@ -1946,6 +1962,18 @@ func parseContinueStatement(p *Parser) *ast.ContinueStatement {
 	}
 
 	return ast.NewContinueStatement(pos)
+}
+
+// parseEndifStatement 解析 endif 语句
+func parseEndifStatement(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+	}
+
+	// Create a simple statement to represent the endif
+	return ast.NewExpressionStatement(pos, ast.NewIdentifierNode(pos, "endif"))
 }
 
 // parseHaltCompilerStatement 解析 __halt_compiler() 语句

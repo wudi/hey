@@ -259,7 +259,11 @@ func (l *Lexer) readString(delimiter byte) (string, error) {
 // readLineComment 读取单行注释
 func (l *Lexer) readLineComment() string {
 	position := l.position
-	for l.ch != '\n' && l.ch != 0 {
+	for l.ch != '\n' && l.ch != '\r' && l.ch != 0 {
+		// Check for PHP closing tag ?> which terminates line comments
+		if l.ch == '?' && l.peekChar() == '>' {
+			break
+		}
 		l.readChar()
 	}
 	return l.input[position:l.position]

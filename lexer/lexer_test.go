@@ -554,3 +554,64 @@ SH;`
 		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
 	}
 }
+
+func TestCommentWithClosingTag(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name: "line comment terminated by ?>",
+			input: `<?php // comment text ?><h1>HTML</h1><?php echo "test"; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "// comment text "},
+				{T_CLOSE_TAG, "?>"},
+				{T_INLINE_HTML, "<h1>HTML</h1>"},
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{T_CONSTANT_ENCAPSED_STRING, "\"test\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name: "hash comment terminated by ?>",
+			input: `<?php # hash comment ?><div>Content</div>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "# hash comment "},
+				{T_CLOSE_TAG, "?>"},
+				{T_INLINE_HTML, "<div>Content</div>"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type, 
+					"test[%d] - tokentype wrong. expected=%q, got=%q", 
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value, 
+					"test[%d] - value wrong. expected=%q, got=%q", 
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
