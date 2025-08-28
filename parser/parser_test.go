@@ -9183,6 +9183,55 @@ if ($inner1) {
 	}
 }
 
+func TestParsing_ForLoopMultipleExpressions(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name: "for loop with multiple initialization expressions",
+			input: `<?php for ($i=0, $count=0; $i < 10; $i++, $count+=2) { echo $i; } ?>`,
+		},
+		{
+			name: "for loop with multiple update expressions", 
+			input: `<?php for ($i=0; $i < 10; $i++, $j--, $k*=2) { echo $i; } ?>`,
+		},
+		{
+			name: "for loop with multiple expressions in all parts",
+			input: `<?php for ($i=0, $j=10, $k=1; $i < 10, $j > 0; $i++, $j--, $k*=2) { 
+				echo "$i $j $k"; 
+			} ?>`,
+		},
+		{
+			name: "empty for loop parts",
+			input: `<?php for (;;) { break; } ?>`,
+		},
+		{
+			name: "mixed empty and multiple expressions",
+			input: `<?php for ($i=0, $j=5; ; $i++, $j--) { 
+				if ($i > 5) break; 
+			} ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			errors := p.Errors()
+			if len(errors) > 0 {
+				t.Fatalf("Parser errors: %v", errors)
+			}
+
+			require.NotNil(t, program)
+			assert.GreaterOrEqual(t, len(program.Body), 1, 
+				"Expected at least 1 statement, got %d", len(program.Body))
+		})
+	}
+}
+
 func TestParsing_MixedPHPHTML(t *testing.T) {
 	tests := []struct {
 		name     string

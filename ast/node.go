@@ -1070,6 +1070,44 @@ func (be *BinaryExpression) String() string {
 	return "(" + be.Left.String() + " " + be.Operator + " " + be.Right.String() + ")"
 }
 
+// CommaExpression 逗号表达式 (多个表达式用逗号分隔)
+type CommaExpression struct {
+	BaseNode
+	Expressions []Expression `json:"expressions"`
+}
+
+func NewCommaExpression(pos lexer.Position, expressions []Expression) *CommaExpression {
+	return &CommaExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTExprList,
+			Position: pos,
+		},
+		Expressions: expressions,
+	}
+}
+
+func (ce *CommaExpression) GetChildren() []Node {
+	children := make([]Node, len(ce.Expressions))
+	for i, expr := range ce.Expressions {
+		children[i] = expr
+	}
+	return children
+}
+
+func (ce *CommaExpression) Accept(visitor Visitor) {
+	visitor.Visit(ce)
+}
+
+func (ce *CommaExpression) expressionNode() {}
+
+func (ce *CommaExpression) String() string {
+	var parts []string
+	for _, expr := range ce.Expressions {
+		parts = append(parts, expr.String())
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
 // UnaryExpression 一元表达式
 type UnaryExpression struct {
 	BaseNode

@@ -1091,6 +1091,116 @@ func parseAlternativeWhileStatement(p *Parser, pos lexer.Position, condition ast
 	return altWhileStmt
 }
 
+// parseCommaSeparatedExpressions parses comma-separated expression list for for loops
+func parseCommaSeparatedExpressions(p *Parser, endTokenTypes ...lexer.TokenType) []ast.Expression {
+	var expressions []ast.Expression
+	
+	// Check if we should stop (empty expression list)
+	for _, tokenType := range endTokenTypes {
+		if p.currentToken.Type == tokenType {
+			return expressions
+		}
+	}
+	
+	// Parse first expression
+	expressions = append(expressions, parseExpression(p, LOWEST))
+	
+	// Parse remaining comma-separated expressions
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // move to comma
+		p.nextToken() // move to next expression
+		expressions = append(expressions, parseExpression(p, LOWEST))
+	}
+	
+	return expressions
+}
+
+// createSingleExpression converts a slice of expressions to a single expression
+// If there's only one expression, returns it directly
+// If there are multiple expressions, returns a CommaExpression
+func createSingleExpression(expressions []ast.Expression) ast.Expression {
+	if len(expressions) == 0 {
+		return nil
+	}
+	if len(expressions) == 1 {
+		return expressions[0]
+	}
+	// Multiple expressions - create a comma expression
+	return ast.NewCommaExpression(expressions[0].GetPosition(), expressions)
+}
+
+// parseExpressionList 解析表达式列表（用于函数调用参数等），支持命名参数
+func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
+	var args []ast.Expression
+
+	// 检查当前是否已经在end token
+	if p.currentToken.Type == end {
+		return args
+	}
+
+	// 如果没有在end token，但peek是end，则前进
+	if p.peekToken.Type == end {
+		p.nextToken()
+		return args
+	}
+
+	// 如果当前不是T_ELLIPSIS，则需要前进到第一个参数
+	if p.currentToken.Type != lexer.T_ELLIPSIS {
+		p.nextToken()
+	}
+
+	// Check for different argument types
+	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+		// Named argument (identifier: value)
+		arg := parseNamedArgument(p)
+		if arg != nil {
+			args = append(args, arg)
+		}
+	} else if p.currentToken.Type == lexer.T_ELLIPSIS {
+		// Spread argument (...expr)
+		pos := p.currentToken.Position
+		p.nextToken() // 跳过 ...
+		expr := parseExpression(p, LOWEST)
+		if expr != nil {
+			spreadExpr := ast.NewSpreadExpression(pos, expr)
+			args = append(args, spreadExpr)
+		}
+	} else {
+		args = append(args, parseExpression(p, LOWEST))
+	}
+
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken()
+		p.nextToken()
+
+		// Check for different argument types
+		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+			// Named argument (identifier: value)
+			arg := parseNamedArgument(p)
+			if arg != nil {
+				args = append(args, arg)
+			}
+		} else if p.currentToken.Type == lexer.T_ELLIPSIS {
+			// Spread argument (...expr)
+			pos := p.currentToken.Position
+			p.nextToken() // 跳过 ...
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				spreadExpr := ast.NewSpreadExpression(pos, expr)
+				args = append(args, spreadExpr)
+			}
+		} else {
+			args = append(args, parseExpression(p, LOWEST))
+		}
+	}
+
+	if !p.expectPeek(end) {
+		return nil
+	}
+
+	return args
+}
+
 // parseForStatement 解析 for 语句，支持普通语法和Alternative语法
 func parseForStatement(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
@@ -1101,30 +1211,30 @@ func parseForStatement(p *Parser) ast.Statement {
 
 	var initExprs, conditionExprs, updateExprs []ast.Expression
 
-	// 解析初始化表达式
+	// 解析初始化表达式 (可以有多个，用逗号分隔)
 	if p.peekToken.Type != lexer.TOKEN_SEMICOLON {
 		p.nextToken()
-		initExprs = append(initExprs, parseExpression(p, LOWEST))
+		initExprs = parseCommaSeparatedExpressions(p, lexer.TOKEN_SEMICOLON)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
 		return nil
 	}
 
-	// 解析条件表达式
+	// 解析条件表达式 (可以有多个，用逗号分隔)
 	if p.peekToken.Type != lexer.TOKEN_SEMICOLON {
 		p.nextToken()
-		conditionExprs = append(conditionExprs, parseExpression(p, LOWEST))
+		conditionExprs = parseCommaSeparatedExpressions(p, lexer.TOKEN_SEMICOLON)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
 		return nil
 	}
 
-	// 解析更新表达式
+	// 解析更新表达式 (可以有多个，用逗号分隔)
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
-		updateExprs = append(updateExprs, parseExpression(p, LOWEST))
+		updateExprs = parseCommaSeparatedExpressions(p, lexer.TOKEN_RPAREN)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
@@ -1141,15 +1251,9 @@ func parseForStatement(p *Parser) ast.Statement {
 	p.nextToken() // 移动到下一个token
 
 	forStmt := ast.NewForStatement(pos)
-	if len(initExprs) > 0 {
-		forStmt.Init = initExprs[0]
-	}
-	if len(conditionExprs) > 0 {
-		forStmt.Test = conditionExprs[0]
-	}
-	if len(updateExprs) > 0 {
-		forStmt.Update = updateExprs[0]
-	}
+	forStmt.Init = createSingleExpression(initExprs)
+	forStmt.Test = createSingleExpression(conditionExprs)
+	forStmt.Update = createSingleExpression(updateExprs)
 
 	// 检查是否是块语句 ({})
 	if p.currentToken.Type == lexer.TOKEN_LBRACE {
@@ -2325,77 +2429,6 @@ func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 	return call
 }
 
-// parseExpressionList 解析表达式列表（用于函数调用参数等），支持命名参数
-func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
-	var args []ast.Expression
-
-	// 检查当前是否已经在end token
-	if p.currentToken.Type == end {
-		return args
-	}
-
-	// 如果没有在end token，但peek是end，则前进
-	if p.peekToken.Type == end {
-		p.nextToken()
-		return args
-	}
-
-	// 如果当前不是T_ELLIPSIS，则需要前进到第一个参数
-	if p.currentToken.Type != lexer.T_ELLIPSIS {
-		p.nextToken()
-	}
-
-	// Check for different argument types
-	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
-		// Named argument (identifier: value)
-		arg := parseNamedArgument(p)
-		if arg != nil {
-			args = append(args, arg)
-		}
-	} else if p.currentToken.Type == lexer.T_ELLIPSIS {
-		// Spread argument (...expr)
-		pos := p.currentToken.Position
-		p.nextToken() // 跳过 ...
-		expr := parseExpression(p, LOWEST)
-		if expr != nil {
-			spreadExpr := ast.NewSpreadExpression(pos, expr)
-			args = append(args, spreadExpr)
-		}
-	} else {
-		args = append(args, parseExpression(p, LOWEST))
-	}
-
-	for p.peekToken.Type == lexer.TOKEN_COMMA {
-		p.nextToken()
-		p.nextToken()
-
-		// Check for different argument types
-		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
-			// Named argument (identifier: value)
-			arg := parseNamedArgument(p)
-			if arg != nil {
-				args = append(args, arg)
-			}
-		} else if p.currentToken.Type == lexer.T_ELLIPSIS {
-			// Spread argument (...expr)
-			pos := p.currentToken.Position
-			p.nextToken() // 跳过 ...
-			expr := parseExpression(p, LOWEST)
-			if expr != nil {
-				spreadExpr := ast.NewSpreadExpression(pos, expr)
-				args = append(args, spreadExpr)
-			}
-		} else {
-			args = append(args, parseExpression(p, LOWEST))
-		}
-	}
-
-	if !p.expectPeek(end) {
-		return nil
-	}
-
-	return args
-}
 
 // parseNamedArgument 解析命名参数 (PHP 8.0+) - name: value
 func parseNamedArgument(p *Parser) ast.Expression {
