@@ -1130,4 +1130,494 @@ func (l *LabelStatement) String() string {
 
 func (l *LabelStatement) statementNode() {}
 
-// Additional essential nodes would continue here...
+// WhileStatement while循环语句
+type WhileStatement struct {
+	BaseNode
+	Condition Expression `json:"condition"`
+	Body      Statement  `json:"body"`
+}
+
+func (s *WhileStatement) GetChildren() []Node {
+	children := []Node{}
+	if s.Condition != nil {
+		children = append(children, s.Condition)
+	}
+	if s.Body != nil {
+		children = append(children, s.Body)
+	}
+	return children
+}
+
+func (s *WhileStatement) String() string {
+	return fmt.Sprintf("while (%s) %s", s.Condition.String(), s.Body.String())
+}
+
+func (s *WhileStatement) statementNode() {}
+
+// ForStatement for循环语句
+type ForStatement struct {
+	BaseNode
+	Init      []Expression `json:"init"`
+	Condition Expression   `json:"condition"`
+	Update    []Expression `json:"update"`
+	Body      Statement    `json:"body"`
+}
+
+func (s *ForStatement) GetChildren() []Node {
+	children := []Node{}
+	for _, init := range s.Init {
+		if init != nil {
+			children = append(children, init)
+		}
+	}
+	if s.Condition != nil {
+		children = append(children, s.Condition)
+	}
+	for _, update := range s.Update {
+		if update != nil {
+			children = append(children, update)
+		}
+	}
+	if s.Body != nil {
+		children = append(children, s.Body)
+	}
+	return children
+}
+
+func (s *ForStatement) String() string {
+	return "for"
+}
+
+func (s *ForStatement) statementNode() {}
+
+// ForeachStatement foreach循环语句
+type ForeachStatement struct {
+	BaseNode
+	Expression Expression `json:"expression"`
+	Key        Expression `json:"key"`
+	Value      Expression `json:"value"`
+	Body       Statement  `json:"body"`
+}
+
+func (s *ForeachStatement) GetChildren() []Node {
+	children := []Node{}
+	if s.Expression != nil {
+		children = append(children, s.Expression)
+	}
+	if s.Key != nil {
+		children = append(children, s.Key)
+	}
+	if s.Value != nil {
+		children = append(children, s.Value)
+	}
+	if s.Body != nil {
+		children = append(children, s.Body)
+	}
+	return children
+}
+
+func (s *ForeachStatement) String() string {
+	return "foreach"
+}
+
+func (s *ForeachStatement) statementNode() {}
+
+// DoWhileStatement do-while循环语句
+type DoWhileStatement struct {
+	BaseNode
+	Body      Statement  `json:"body"`
+	Condition Expression `json:"condition"`
+}
+
+func (s *DoWhileStatement) GetChildren() []Node {
+	children := []Node{}
+	if s.Body != nil {
+		children = append(children, s.Body)
+	}
+	if s.Condition != nil {
+		children = append(children, s.Condition)
+	}
+	return children
+}
+
+func (s *DoWhileStatement) String() string {
+	return "do-while"
+}
+
+func (s *DoWhileStatement) statementNode() {}
+
+// SwitchStatement switch语句
+type SwitchStatement struct {
+	BaseNode
+	Expression Expression  `json:"expression"`
+	Cases      []Statement `json:"cases"`
+}
+
+func (s *SwitchStatement) GetChildren() []Node {
+	children := []Node{}
+	if s.Expression != nil {
+		children = append(children, s.Expression)
+	}
+	for _, c := range s.Cases {
+		if c != nil {
+			children = append(children, c)
+		}
+	}
+	return children
+}
+
+func (s *SwitchStatement) String() string {
+	return "switch"
+}
+
+func (s *SwitchStatement) statementNode() {}
+
+// BreakStatement break语句
+type BreakStatement struct {
+	BaseNode
+	Level Expression `json:"level"`
+}
+
+func (s *BreakStatement) GetChildren() []Node {
+	if s.Level != nil {
+		return []Node{s.Level}
+	}
+	return []Node{}
+}
+
+func (s *BreakStatement) String() string {
+	if s.Level != nil {
+		return fmt.Sprintf("break %s", s.Level.String())
+	}
+	return "break"
+}
+
+func (s *BreakStatement) statementNode() {}
+
+// Constructor functions for AST nodes
+
+// NewVariable creates a new variable node
+func NewVariable(pos lexer.Position, name string) *Variable {
+	return &Variable{
+		BaseNode: BaseNode{Position: pos},
+		Name:     name,
+	}
+}
+
+// NewStringLiteral creates a new string literal node
+func NewStringLiteral(pos lexer.Position, value, raw string) *StringLiteral {
+	return &StringLiteral{
+		BaseNode: BaseNode{Position: pos},
+		Value:    value,
+	}
+}
+
+// NewBinaryExpression creates a new binary expression node
+func NewBinaryExpression(pos lexer.Position, left Expression, operator string, right Expression) *BinaryExpression {
+	return &BinaryExpression{
+		BaseNode: BaseNode{Position: pos},
+		Left:     left,
+		Operator: operator,
+		Right:    right,
+	}
+}
+
+// NewIntegerLiteral creates a new integer literal node
+func NewIntegerLiteral(pos lexer.Position, value int64) *IntegerLiteral {
+	return &IntegerLiteral{
+		BaseNode: BaseNode{Position: pos},
+		Value:    value,
+	}
+}
+
+// NewFloatLiteral creates a new float literal node
+func NewFloatLiteral(pos lexer.Position, value float64) *FloatLiteral {
+	return &FloatLiteral{
+		BaseNode: BaseNode{Position: pos},
+		Value:    value,
+	}
+}
+
+// NewBooleanLiteral creates a new boolean literal node
+func NewBooleanLiteral(pos lexer.Position, value bool) *BooleanLiteral {
+	return &BooleanLiteral{
+		BaseNode: BaseNode{Position: pos},
+		Value:    value,
+	}
+}
+
+// NewNullLiteral creates a new null literal node
+func NewNullLiteral(pos lexer.Position) *NullLiteral {
+	return &NullLiteral{
+		BaseNode: BaseNode{Position: pos},
+	}
+}
+
+// NewEchoStatement creates a new echo statement node
+func NewEchoStatement(pos lexer.Position, exprs []Expression) *EchoStatement {
+	return &EchoStatement{
+		BaseNode:    BaseNode{Position: pos},
+		Expressions: exprs,
+	}
+}
+
+// EchoStatement echo语句
+type EchoStatement struct {
+	BaseNode
+	Expressions []Expression `json:"expressions"`
+}
+
+func (s *EchoStatement) GetChildren() []Node {
+	children := []Node{}
+	for _, expr := range s.Expressions {
+		if expr != nil {
+			children = append(children, expr)
+		}
+	}
+	return children
+}
+
+func (s *EchoStatement) String() string {
+	return "echo"
+}
+
+func (s *EchoStatement) statementNode() {}
+
+// ASTBuilder AST构建器，用于创建符合PHP官方结构的AST节点
+type ASTBuilder struct {
+	// 可以在这里添加构建器的状态和配置
+}
+
+// NewASTBuilder 创建新的AST构建器
+func NewASTBuilder() *ASTBuilder {
+	return &ASTBuilder{}
+}
+
+// CreateVar 创建变量节点
+func (b *ASTBuilder) CreateVar(pos lexer.Position, name string) Node {
+	return NewVariable(pos, name)
+}
+
+// CreateZval 创建字面量节点
+func (b *ASTBuilder) CreateZval(pos lexer.Position, value interface{}) Node {
+	switch v := value.(type) {
+	case string:
+		return NewStringLiteral(pos, v, "")
+	case int:
+		return NewIntegerLiteral(pos, int64(v))
+	case int64:
+		return NewIntegerLiteral(pos, v)
+	case float32:
+		return NewFloatLiteral(pos, float64(v))
+	case float64:
+		return NewFloatLiteral(pos, v)
+	case bool:
+		return NewBooleanLiteral(pos, v)
+	case nil:
+		return NewNullLiteral(pos)
+	default:
+		return NewNullLiteral(pos)
+	}
+}
+
+// CreateBinaryOp 创建二元操作节点
+func (b *ASTBuilder) CreateBinaryOp(pos lexer.Position, left, right Node, operator string) Node {
+	leftExpr, ok1 := left.(Expression)
+	rightExpr, ok2 := right.(Expression)
+	if !ok1 || !ok2 {
+		return nil
+	}
+	return NewBinaryExpression(pos, leftExpr, operator, rightExpr)
+}
+
+// CreateArray 创建数组节点
+func (b *ASTBuilder) CreateArray(pos lexer.Position, elements []Node) Node {
+	var arrayElements []*ArrayElement
+	for _, elem := range elements {
+		if expr, ok := elem.(Expression); ok {
+			arrayElement := &ArrayElement{
+				BaseNode: BaseNode{Position: pos, Kind: ASTArrayElem},
+				Value:    expr,
+			}
+			arrayElements = append(arrayElements, arrayElement)
+		}
+	}
+	return &ArrayExpression{
+		BaseNode: BaseNode{Position: pos, Kind: ASTArray},
+		Elements: arrayElements,
+	}
+}
+
+// DeclareStatement declare语句
+type DeclareStatement struct {
+	BaseNode
+	Directives []Expression `json:"directives"`
+	Body       Statement    `json:"body"`
+}
+
+func (s *DeclareStatement) GetChildren() []Node {
+	children := []Node{}
+	for _, directive := range s.Directives {
+		if directive != nil {
+			children = append(children, directive)
+		}
+	}
+	if s.Body != nil {
+		children = append(children, s.Body)
+	}
+	return children
+}
+
+func (s *DeclareStatement) String() string {
+	return "declare"
+}
+
+func (s *DeclareStatement) statementNode() {}
+
+// HaltCompilerStatement __halt_compiler语句
+type HaltCompilerStatement struct {
+	BaseNode
+	Data string `json:"data"`
+}
+
+func (s *HaltCompilerStatement) GetChildren() []Node {
+	return []Node{}
+}
+
+func (s *HaltCompilerStatement) String() string {
+	return "__halt_compiler()"
+}
+
+func (s *HaltCompilerStatement) statementNode() {}
+
+// ContinueStatement continue语句
+type ContinueStatement struct {
+	BaseNode
+	Level Expression `json:"level"`
+}
+
+func (s *ContinueStatement) GetChildren() []Node {
+	if s.Level != nil {
+		return []Node{s.Level}
+	}
+	return []Node{}
+}
+
+func (s *ContinueStatement) String() string {
+	if s.Level != nil {
+		return fmt.Sprintf("continue %s", s.Level.String())
+	}
+	return "continue"
+}
+
+func (s *ContinueStatement) statementNode() {}
+
+// GotoStatement goto语句
+type GotoStatement struct {
+	BaseNode
+	Label string `json:"label"`
+}
+
+func (s *GotoStatement) GetChildren() []Node {
+	return []Node{}
+}
+
+func (s *GotoStatement) String() string {
+	return fmt.Sprintf("goto %s", s.Label)
+}
+
+func (s *GotoStatement) statementNode() {}
+
+// ThrowStatement throw语句
+type ThrowStatement struct {
+	BaseNode
+	Expression Expression `json:"expression"`
+}
+
+func (s *ThrowStatement) GetChildren() []Node {
+	if s.Expression != nil {
+		return []Node{s.Expression}
+	}
+	return []Node{}
+}
+
+func (s *ThrowStatement) String() string {
+	return "throw"
+}
+
+func (s *ThrowStatement) statementNode() {}
+
+// TryStatement try-catch-finally语句
+type TryStatement struct {
+	BaseNode
+	TryBlock      Statement       `json:"try_block"`
+	CatchClauses  []*CatchClause  `json:"catch_clauses"`
+	FinallyClause *FinallyClause  `json:"finally_clause"`
+}
+
+func (s *TryStatement) GetChildren() []Node {
+	children := []Node{}
+	if s.TryBlock != nil {
+		children = append(children, s.TryBlock)
+	}
+	for _, catch := range s.CatchClauses {
+		if catch != nil {
+			children = append(children, catch)
+		}
+	}
+	if s.FinallyClause != nil {
+		children = append(children, s.FinallyClause)
+	}
+	return children
+}
+
+func (s *TryStatement) String() string {
+	return "try"
+}
+
+func (s *TryStatement) statementNode() {}
+
+// CatchClause catch子句
+type CatchClause struct {
+	BaseNode
+	ExceptionTypes []Expression `json:"exception_types"`
+	Variable       Expression   `json:"variable"`
+	Body          Statement    `json:"body"`
+}
+
+func (c *CatchClause) GetChildren() []Node {
+	children := []Node{}
+	for _, t := range c.ExceptionTypes {
+		if t != nil {
+			children = append(children, t)
+		}
+	}
+	if c.Variable != nil {
+		children = append(children, c.Variable)
+	}
+	if c.Body != nil {
+		children = append(children, c.Body)
+	}
+	return children
+}
+
+func (c *CatchClause) String() string {
+	return "catch"
+}
+
+// FinallyClause finally子句
+type FinallyClause struct {
+	BaseNode
+	Body Statement `json:"body"`
+}
+
+func (c *FinallyClause) GetChildren() []Node {
+	if c.Body != nil {
+		return []Node{c.Body}
+	}
+	return []Node{}
+}
+
+func (c *FinallyClause) String() string {
+	return "finally"
+}

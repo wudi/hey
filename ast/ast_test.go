@@ -146,18 +146,19 @@ func TestVisitorPattern(t *testing.T) {
 	variable := NewVariable(pos, "$test")
 	str := NewStringLiteral(pos, "hello", "\"hello\"")
 	binExpr := NewBinaryExpression(pos, variable, "+", str)
-	echo := NewEchoStatement(pos)
-	echo.Arguments = append(echo.Arguments, binExpr)
+	echo := NewEchoStatement(pos, []Expression{binExpr})
 
-	program := NewProgram(pos)
-	program.Body = append(program.Body, echo)
+	program := &Program{
+		BaseNode: BaseNode{Position: pos, Kind: ASTProgram},
+		Statements: []Statement{echo},
+	}
 
 	// 测试访问者模式 - 计数节点
 	nodeCount := 0
-	Walk(VisitorFunc(func(node Node) bool {
+	WalkTree(program, func(node Node) bool {
 		nodeCount++
 		return true
-	}), program)
+	})
 
 	expectedCount := 5 // Program, EchoStatement, BinaryExpression, Variable, StringLiteral
 	if nodeCount != expectedCount {

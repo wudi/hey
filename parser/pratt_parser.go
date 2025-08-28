@@ -2,7 +2,6 @@ package parser
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/lexer"

@@ -868,7 +868,7 @@ func (p *PrattParser) parseShellExecExpression() ast.Expression {
 
 func (p *PrattParser) parseMagicConstant() ast.Expression {
 	position := p.currentToken.Position
-	constantType := p.currentToken.Type
+	constantName := p.currentToken.Value
 	
 	return &ast.MagicConstantExpression{
 		BaseNode: ast.BaseNode{
@@ -876,7 +876,7 @@ func (p *PrattParser) parseMagicConstant() ast.Expression {
 			Position: position,
 			LineNo:   uint32(position.Line),
 		},
-		Name: constantType,
+		Name: constantName,
 	}
 }
 
