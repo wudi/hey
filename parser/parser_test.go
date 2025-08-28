@@ -9303,3 +9303,53 @@ echo "World";
 		})
 	}
 }
+
+// Test for parsing list() construct with empty elements  
+func TestParsing_ListWithEmptyElements(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "list with one empty element at end",
+			input:    "<?php list($a, $b, ) = $array;",
+			expected: "list($a, $b, ) = $array",
+		},
+		{
+			name:     "list with empty element in middle",
+			input:    "<?php list($a, , $c) = $array;", 
+			expected: "list($a, , $c) = $array",
+		},
+		{
+			name:     "list with multiple empty elements",
+			input:    "<?php list($a, , , $d) = $array;",
+			expected: "list($a, , , $d) = $array",
+		},
+		{
+			name:     "list with empty element at start",
+			input:    "<?php list(, $b, $c) = $array;",
+			expected: "list(, $b, $c) = $array",
+		},
+		{
+			name:     "complex list assignment like WordPress",
+			input:    "<?php list( $columns, $hidden, , $primary ) = $this->get_column_info();",
+			expected: "list($columns, $hidden, , $primary) = $this->get_column_info()",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// Check for parsing errors
+			checkParserErrors(t, p)
+			
+			// Verify we have statements
+			assert.NotNil(t, program, "program should not be nil")
+			assert.NotEmpty(t, program.Body, "%q should have 1 item(s), but has %d", program.String(), len(program.Body))
+		})
+	}
+}

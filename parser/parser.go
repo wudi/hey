@@ -3554,42 +3554,65 @@ func parseIssetExpression(p *Parser) ast.Expression {
 func parseListExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
-	if !p.expectToken(lexer.TOKEN_LPAREN) {
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
 	}
 
-	var elements []ast.Expression
+	elements := make([]ast.Expression, 0)
 
-	// 解析 list 元素
-	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+	// Check for empty list: list()
+	if p.peekToken.Type == lexer.TOKEN_RPAREN {
 		p.nextToken()
+		listExpr := ast.NewArrayExpression(pos)
+		listExpr.Elements = elements
+		return listExpr
+	}
 
-		for {
-			if p.currentToken.Type == lexer.TOKEN_COMMA {
-				// 空元素（如 list(, $b) ）
-				elements = append(elements, nil)
-			} else {
-				elements = append(elements, parseExpression(p, LOWEST))
-			}
+	// Parse first element
+	p.nextToken() // move to first element or comma
+	
+	// Handle first element (which might be empty)
+	if p.currentToken.Type == lexer.TOKEN_COMMA {
+		// First element is empty: list(, ...)
+		elements = append(elements, nil)
+	} else {
+		// First element exists
+		elements = append(elements, parseExpression(p, LOWEST))
+	}
 
-			if p.peekToken.Type == lexer.TOKEN_RPAREN {
-				break
-			}
-
-			if p.peekToken.Type != lexer.TOKEN_COMMA {
-				break
-			}
-
-			p.nextToken() // 跳过逗号
-			p.nextToken() // 移动到下一个元素
+	// Parse remaining elements  
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // move to comma
+		p.nextToken() // move past comma
+		
+		// Check if element after comma is empty 
+		if p.currentToken.Type == lexer.TOKEN_COMMA {
+			// Empty element: consecutive commas
+			elements = append(elements, nil)
+			// Step back one token so the loop can handle this comma
+			// Actually, let's handle this differently - don't step back
+			// Instead, add the nil and let the loop detect the comma again
+		} else if p.currentToken.Type == lexer.TOKEN_RPAREN {
+			// Trailing comma: list($a, )
+			elements = append(elements, nil)
+			// Don't advance further, let expectPeek handle the )
+			p.currentToken = p.peekToken // manually set current to )
+			p.peekToken = lexer.Token{} // clear peek
+			break
+		} else {
+			// Normal element
+			elements = append(elements, parseExpression(p, LOWEST))
 		}
 	}
 
-	if !p.expectToken(lexer.TOKEN_RPAREN) {
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
 		return nil
 	}
 
-	return ast.NewListExpression(pos, elements)
+	// Create ArrayExpression for list() - PHP uses same AST structure 
+	listExpr := ast.NewArrayExpression(pos)
+	listExpr.Elements = elements
+	return listExpr
 }
 
 // parseAnonymousFunctionExpression 解析匿名函数表达式
