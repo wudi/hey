@@ -554,3 +554,110 @@ SH;`
 		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
 	}
 }
+
+func TestLexer_PipeOperator(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		expectedTokens []struct {
+			Type  TokenType
+			Value string
+		}
+	}{
+		{
+			name:  "Simple pipe operator",
+			input: `<?php $result = $input |> trim;`,
+			expectedTokens: []struct {
+				Type  TokenType
+				Value string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$result"},
+				{TOKEN_EQUAL, "="},
+				{T_VARIABLE, "$input"},
+				{T_PIPE, "|>"},
+				{T_STRING, "trim"},
+				{TOKEN_SEMICOLON, ";"},
+			},
+		},
+		{
+			name:  "Chained pipe operators",
+			input: `<?php $output = $data |> filter |> map;`,
+			expectedTokens: []struct {
+				Type  TokenType
+				Value string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$output"},
+				{TOKEN_EQUAL, "="},
+				{T_VARIABLE, "$data"},
+				{T_PIPE, "|>"},
+				{T_STRING, "filter"},
+				{T_PIPE, "|>"},
+				{T_STRING, "map"},
+				{TOKEN_SEMICOLON, ";"},
+			},
+		},
+		{
+			name:  "Pipe operator with function calls",
+			input: `<?php $res = $val |> fn($x) => $x * 2;`,
+			expectedTokens: []struct {
+				Type  TokenType
+				Value string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$res"},
+				{TOKEN_EQUAL, "="},
+				{T_VARIABLE, "$val"},
+				{T_PIPE, "|>"},
+				{T_FN, "fn"},
+				{TOKEN_LPAREN, "("},
+				{T_VARIABLE, "$x"},
+				{TOKEN_RPAREN, ")"},
+				{T_DOUBLE_ARROW, "=>"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_MULTIPLY, "*"},
+				{T_LNUMBER, "2"},
+				{TOKEN_SEMICOLON, ";"},
+			},
+		},
+		{
+			name:  "Pipe operator vs bitwise or",
+			input: `<?php $a = $b | $c; $d = $e |> $f;`,
+			expectedTokens: []struct {
+				Type  TokenType
+				Value string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$a"},
+				{TOKEN_EQUAL, "="},
+				{T_VARIABLE, "$b"},
+				{TOKEN_PIPE, "|"},  // Bitwise OR
+				{T_VARIABLE, "$c"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_VARIABLE, "$d"},
+				{TOKEN_EQUAL, "="},
+				{T_VARIABLE, "$e"},
+				{T_PIPE, "|>"},  // Pipe operator
+				{T_VARIABLE, "$f"},
+				{TOKEN_SEMICOLON, ";"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+			
+			for i, expected := range tt.expectedTokens {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.Type, tok.Type, 
+					"test[%s] token[%d] - tokentype wrong. expected=%q, got=%q", 
+					tt.name, i, TokenNames[expected.Type], TokenNames[tok.Type])
+				assert.Equal(t, expected.Value, tok.Value, 
+					"test[%s] token[%d] - value wrong. expected=%q, got=%q", 
+					tt.name, i, expected.Value, tok.Value)
+			}
+		})
+	}
+}

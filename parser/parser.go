@@ -24,6 +24,7 @@ const (
 	BITWISE_AND     // &
 	EQUALS          // == != === !==
 	LESSGREATER     // < <= > >= <=> instanceof
+	PIPE            // |>
 	BITWISE_SHIFT   // << >>
 	SUM             // + - .
 	PRODUCT         // * / %
@@ -82,6 +83,9 @@ var precedences = map[lexer.TokenType]Precedence{
 	lexer.T_IS_GREATER_OR_EQUAL: LESSGREATER,
 	lexer.T_SPACESHIP:           LESSGREATER,
 	lexer.T_INSTANCEOF:          LESSGREATER,
+	
+	// 管道运算符
+	lexer.T_PIPE:                PIPE,
 	
 	// 位移运算符
 	lexer.T_SR:                  BITWISE_SHIFT,
@@ -260,6 +264,7 @@ func init() {
 		lexer.T_COALESCE:            parseCoalesceExpression,
 		lexer.TOKEN_QUESTION:        parseTernaryExpression,
 		lexer.T_DOUBLE_ARROW:        parseDoubleArrowExpression,
+		lexer.T_PIPE:                parsePipeExpression,
 		
 		// 后缀运算符
 		lexer.T_INC:                 parsePostfixExpression,
@@ -3116,6 +3121,18 @@ func parseCoalesceExpression(p *Parser, left ast.Expression) ast.Expression {
 	right := parseExpression(p, precedence)
 
 	return ast.NewCoalesceExpression(pos, left, right)
+}
+
+// parsePipeExpression 解析管道操作符 |>
+func parsePipeExpression(p *Parser, left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+
+	precedence := p.getCurrentPrecedence()
+	p.nextToken()
+	right := parseExpression(p, precedence)
+
+	// PHP 8.4 pipe operator creates a ZEND_AST_PIPE node
+	return ast.NewBinaryExpression(pos, left, "|>", right)
 }
 
 // parseBooleanExpression 解析布尔逻辑操作符 && ||
