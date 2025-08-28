@@ -3560,7 +3560,7 @@ func parseListExpression(p *Parser) ast.Expression {
 
 	elements := make([]ast.Expression, 0)
 
-	// Check for empty list: list()
+	// Handle empty list: list()
 	if p.peekToken.Type == lexer.TOKEN_RPAREN {
 		p.nextToken()
 		listExpr := ast.NewArrayExpression(pos)
@@ -3568,40 +3568,26 @@ func parseListExpression(p *Parser) ast.Expression {
 		return listExpr
 	}
 
-	// Parse first element
-	p.nextToken() // move to first element or comma
+	// Use a completely different approach: parse comma-separated elements
+	// where elements can be empty (consecutive commas or leading comma)
 	
-	// Handle first element (which might be empty)
-	if p.currentToken.Type == lexer.TOKEN_COMMA {
-		// First element is empty: list(, ...)
-		elements = append(elements, nil)
-	} else {
-		// First element exists
-		elements = append(elements, parseExpression(p, LOWEST))
-	}
-
-	// Parse remaining elements  
-	for p.peekToken.Type == lexer.TOKEN_COMMA {
-		p.nextToken() // move to comma
-		p.nextToken() // move past comma
-		
-		// Check if element after comma is empty 
-		if p.currentToken.Type == lexer.TOKEN_COMMA {
-			// Empty element: consecutive commas
+	for p.peekToken.Type != lexer.TOKEN_RPAREN {
+		// Parse one element (which may be empty)
+		if p.peekToken.Type == lexer.TOKEN_COMMA {
+			// Empty element
 			elements = append(elements, nil)
-			// Step back one token so the loop can handle this comma
-			// Actually, let's handle this differently - don't step back
-			// Instead, add the nil and let the loop detect the comma again
-		} else if p.currentToken.Type == lexer.TOKEN_RPAREN {
-			// Trailing comma: list($a, )
-			elements = append(elements, nil)
-			// Don't advance further, let expectPeek handle the )
-			p.currentToken = p.peekToken // manually set current to )
-			p.peekToken = lexer.Token{} // clear peek
-			break
 		} else {
-			// Normal element
+			// Non-empty element
+			p.nextToken()
 			elements = append(elements, parseExpression(p, LOWEST))
+		}
+		
+		// Check if there are more elements
+		if p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // consume comma and continue
+		} else {
+			// No more elements
+			break
 		}
 	}
 
