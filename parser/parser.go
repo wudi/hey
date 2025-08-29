@@ -713,6 +713,12 @@ func parseStatement(p *Parser) ast.Statement {
 	case lexer.T_GLOBAL:
 		return parseGlobalStatement(p)
 	case lexer.T_STATIC:
+		// Check if this is late static binding (static::method or static::$property)
+		if p.peekToken.Type == lexer.T_PAAMAYIM_NEKUDOTAYIM {
+			// This is static::something - treat as expression statement
+			return parseExpressionStatement(p)
+		}
+		// Otherwise it's a static variable declaration
 		return parseStaticStatement(p)
 	case lexer.T_UNSET:
 		return parseUnsetStatement(p)
@@ -2656,7 +2662,7 @@ func parseStaticStatement(p *Parser) ast.Statement {
 			}
 			break
 		} else {
-			p.errors = append(p.errors, "expected variable in static statement")
+			p.errors = append(p.errors, fmt.Sprintf("expected variable in static statement, got %s at line %d col %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column))
 			break
 		}
 	}
@@ -4546,7 +4552,10 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 	p.nextToken()
 
 	var property ast.Expression
-	if p.currentToken.Type != lexer.T_EOF {
+	if p.currentToken.Type == lexer.T_CLASS {
+		// Special handling for ::class magic constant
+		property = ast.NewIdentifierNode(p.currentToken.Position, "class")
+	} else if p.currentToken.Type != lexer.T_EOF {
 		property = parseExpression(p, CALL)
 	}
 
