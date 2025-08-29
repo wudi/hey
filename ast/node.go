@@ -464,6 +464,7 @@ type TraitDeclaration struct {
 	Name       *IdentifierNode       `json:"name"`       // trait 名称
 	Properties []*PropertyDeclaration `json:"properties"` // trait 属性
 	Methods    []*FunctionDeclaration `json:"methods"`    // trait 方法
+	Body       []Statement           `json:"body"`       // trait 体的其他语句（如 use 语句、常量等）
 }
 
 func NewTraitDeclaration(pos lexer.Position, name *IdentifierNode) *TraitDeclaration {
@@ -476,6 +477,7 @@ func NewTraitDeclaration(pos lexer.Position, name *IdentifierNode) *TraitDeclara
 		Name:       name,
 		Properties: make([]*PropertyDeclaration, 0),
 		Methods:    make([]*FunctionDeclaration, 0),
+		Body:       make([]Statement, 0),
 	}
 }
 
@@ -491,6 +493,9 @@ func (t *TraitDeclaration) GetChildren() []Node {
 	for _, method := range t.Methods {
 		children = append(children, method)
 	}
+	for _, stmt := range t.Body {
+		children = append(children, stmt)
+	}
 	return children
 }
 
@@ -505,6 +510,9 @@ func (t *TraitDeclaration) Accept(visitor Visitor) {
 		}
 		for _, method := range t.Methods {
 			method.Accept(visitor)
+		}
+		for _, stmt := range t.Body {
+			stmt.Accept(visitor)
 		}
 	}
 }
@@ -522,6 +530,11 @@ func (t *TraitDeclaration) String() string {
 	// 添加方法
 	for _, method := range t.Methods {
 		result += "  " + method.String() + "\n"
+	}
+	
+	// 添加其他语句
+	for _, stmt := range t.Body {
+		result += "  " + stmt.String() + "\n"
 	}
 	
 	result += "}"

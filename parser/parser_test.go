@@ -9269,6 +9269,134 @@ class TestClass {
 	}
 }
 
+func TestParsing_TraitsWithUseStatements(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, traitDecl *ast.TraitDeclaration)
+	}{
+		{
+			name: "Trait using single trait",
+			input: `<?php
+trait NonPrunableTrait {
+    use Prunable;
+}`,
+			expected: func(t *testing.T, traitDecl *ast.TraitDeclaration) {
+				assert.Equal(t, "NonPrunableTrait", traitDecl.Name.Name)
+				assert.Len(t, traitDecl.Body, 1, "Expected 1 use statement in trait body")
+				
+				useStmt, ok := traitDecl.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok, "Expected UseTraitStatement in trait body")
+				require.Len(t, useStmt.Traits, 1, "Expected 1 trait in use statement")
+				assert.Equal(t, "Prunable", useStmt.Traits[0].Name)
+				assert.Nil(t, useStmt.Adaptations, "Expected no adaptations")
+			},
+		},
+		{
+			name: "Trait using multiple traits",
+			input: `<?php
+trait CompositeTrait {
+    use TraitA, TraitB, TraitC;
+}`,
+			expected: func(t *testing.T, traitDecl *ast.TraitDeclaration) {
+				assert.Equal(t, "CompositeTrait", traitDecl.Name.Name)
+				assert.Len(t, traitDecl.Body, 1, "Expected 1 use statement in trait body")
+				
+				useStmt, ok := traitDecl.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok, "Expected UseTraitStatement in trait body")
+				require.Len(t, useStmt.Traits, 3, "Expected 3 traits in use statement")
+				assert.Equal(t, "TraitA", useStmt.Traits[0].Name)
+				assert.Equal(t, "TraitB", useStmt.Traits[1].Name)
+				assert.Equal(t, "TraitC", useStmt.Traits[2].Name)
+			},
+		},
+		{
+			name: "Trait using traits with adaptations",
+			input: `<?php
+trait AdaptedTrait {
+    use TraitA, TraitB {
+        TraitA::foo insteadof TraitB;
+        TraitB::bar as baz;
+    }
+}`,
+			expected: func(t *testing.T, traitDecl *ast.TraitDeclaration) {
+				assert.Equal(t, "AdaptedTrait", traitDecl.Name.Name)
+				assert.Len(t, traitDecl.Body, 1, "Expected 1 use statement in trait body")
+				
+				useStmt, ok := traitDecl.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok, "Expected UseTraitStatement in trait body")
+				require.Len(t, useStmt.Traits, 2, "Expected 2 traits in use statement")
+				require.Len(t, useStmt.Adaptations, 2, "Expected 2 adaptations")
+			},
+		},
+		{
+			name: "Trait with multiple use statements and methods",
+			input: `<?php
+trait MixedTrait {
+    use TraitA;
+    use TraitB, TraitC;
+    
+    private $property;
+    
+    public function method() {
+        return "test";
+    }
+}`,
+			expected: func(t *testing.T, traitDecl *ast.TraitDeclaration) {
+				assert.Equal(t, "MixedTrait", traitDecl.Name.Name)
+				assert.Len(t, traitDecl.Body, 2, "Expected 2 use statements in trait body")
+				assert.Len(t, traitDecl.Properties, 1, "Expected 1 property")
+				assert.Len(t, traitDecl.Methods, 1, "Expected 1 method")
+				
+				// Check first use statement
+				useStmt1, ok := traitDecl.Body[0].(*ast.UseTraitStatement)
+				require.True(t, ok, "Expected first UseTraitStatement")
+				require.Len(t, useStmt1.Traits, 1)
+				assert.Equal(t, "TraitA", useStmt1.Traits[0].Name)
+				
+				// Check second use statement
+				useStmt2, ok := traitDecl.Body[1].(*ast.UseTraitStatement)
+				require.True(t, ok, "Expected second UseTraitStatement")
+				require.Len(t, useStmt2.Traits, 2)
+				assert.Equal(t, "TraitB", useStmt2.Traits[0].Name)
+				assert.Equal(t, "TraitC", useStmt2.Traits[1].Name)
+			},
+		},
+		{
+			name: "Trait with constants and use statements",
+			input: `<?php
+trait ConstantTrait {
+    const CONSTANT = "value";
+    use HelperTrait;
+    
+    protected const ANOTHER_CONSTANT = 42;
+}`,
+			expected: func(t *testing.T, traitDecl *ast.TraitDeclaration) {
+				assert.Equal(t, "ConstantTrait", traitDecl.Name.Name)
+				assert.Len(t, traitDecl.Body, 3, "Expected 3 statements in trait body")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			require.Len(t, program.Body, 1, "Expected 1 statement")
+
+			stmt := program.Body[0]
+			traitDecl, ok := stmt.(*ast.TraitDeclaration)
+			require.True(t, ok, "Expected TraitDeclaration, got %T", stmt)
+			
+			tt.expected(t, traitDecl)
+		})
+	}
+}
+
 func TestParsing_TraitAdaptations_ErrorCases(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -1910,52 +1910,29 @@ func parseTraitDeclaration(p *Parser) *ast.TraitDeclaration {
 		return nil
 	}
 
-	// 解析 trait 体（属性和方法）
-	for p.peekToken.Type != lexer.TOKEN_RBRACE && p.peekToken.Type != lexer.T_EOF {
+	// 解析 trait 体 - 使用与类相同的解析逻辑
+	p.nextToken() // 进入类体
+	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		stmt := parseClassStatement(p)
+		if stmt != nil {
+			// 根据语句类型添加到相应的列表
+			switch s := stmt.(type) {
+			case *ast.FunctionDeclaration:
+				traitDecl.Methods = append(traitDecl.Methods, s)
+			case *ast.PropertyDeclaration:
+				traitDecl.Properties = append(traitDecl.Properties, s)
+			case *ast.UseTraitStatement:
+				// trait 使用其他 trait 的语句，添加到 Body
+				traitDecl.Body = append(traitDecl.Body, s)
+			case *ast.ClassConstantDeclaration:
+				// trait 常量声明，添加到 Body
+				traitDecl.Body = append(traitDecl.Body, s)
+			default:
+				// 其他语句类型
+				traitDecl.Body = append(traitDecl.Body, s)
+			}
+		}
 		p.nextToken()
-
-		// 跳过空行和注释
-		if p.currentToken.Type == lexer.T_WHITESPACE {
-			continue
-		}
-
-		// 解析可见性修饰符或直接解析成员
-		if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
-			visibility := p.currentToken.Value
-
-			// 检查下一个 token 是什么
-			if p.peekToken.Type == lexer.T_FUNCTION {
-				// 这是一个方法
-				method := parseFunctionDeclaration(p)
-				if method != nil {
-					method.Visibility = visibility
-					traitDecl.Methods = append(traitDecl.Methods, method)
-				}
-			} else {
-				// 这是一个属性声明，先移动到下一个 token
-				p.nextToken()
-				property := parseTraitProperty(p, visibility)
-				if property != nil {
-					traitDecl.Properties = append(traitDecl.Properties, property)
-				}
-			}
-		} else if p.currentToken.Type == lexer.T_FUNCTION {
-			// 无可见性修饰符的方法（默认 public）
-			method := parseFunctionDeclaration(p)
-			if method != nil {
-				traitDecl.Methods = append(traitDecl.Methods, method)
-			}
-		} else {
-			// 可能是无可见性修饰符的属性或其他语句
-			property := parseTraitProperty(p, "public")
-			if property != nil {
-				traitDecl.Properties = append(traitDecl.Properties, property)
-			}
-		}
-	}
-
-	if !p.expectPeek(lexer.TOKEN_RBRACE) {
-		return nil
 	}
 
 	return traitDecl
