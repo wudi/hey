@@ -9353,3 +9353,163 @@ func TestParsing_ListWithEmptyElements(t *testing.T) {
 		})
 	}
 }
+
+// TestParsing_ComplexVariableProperties tests parsing of complex variable property syntax
+// including ${$var} and $$var patterns, both in static and regular contexts
+func TestParsing_ComplexVariableProperties(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Static complex variable property with braces",
+			input: `<?php wp_set_current_user( static::${$user_property} );`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				assert.Equal(t, "wp_set_current_user", callExpr.Callee.(*ast.IdentifierNode).Name)
+				
+				require.Len(t, callExpr.Arguments, 1)
+				staticAccess, ok := callExpr.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				
+				assert.Equal(t, "static", staticAccess.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "${$user_property}", staticAccess.Property.(*ast.Variable).Name)
+			},
+		},
+		{
+			name:  "Static variable variable property",
+			input: `<?php echo static::$$prop;`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				echoStmt, ok := program.Body[0].(*ast.EchoStatement)
+				require.True(t, ok)
+				
+				require.Len(t, echoStmt.Arguments, 1)
+				staticAccess, ok := echoStmt.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				
+				assert.Equal(t, "static", staticAccess.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "$$prop", staticAccess.Property.(*ast.Variable).Name)
+			},
+		},
+		{
+			name:  "Complex variable syntax in echo",
+			input: `<?php echo ${$var};`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				echoStmt, ok := program.Body[0].(*ast.EchoStatement)
+				require.True(t, ok)
+				
+				require.Len(t, echoStmt.Arguments, 1)
+				variable, ok := echoStmt.Arguments[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "${$var}", variable.Name)
+			},
+		},
+		{
+			name:  "Variable variable in assignment",
+			input: `<?php $$name = "value";`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				variable, ok := assign.Left.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$$name", variable.Name)
+				
+				str, ok := assign.Right.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "value", str.Value)
+			},
+		},
+		{
+			name:  "Class with complex variable property",
+			input: `<?php MyClass::${$method}();`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				
+				staticAccess, ok := callExpr.Callee.(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				
+				assert.Equal(t, "MyClass", staticAccess.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "${$method}", staticAccess.Property.(*ast.Variable).Name)
+			},
+		},
+		{
+			name:  "Multiple complex variable patterns",
+			input: `<?php 
+				echo static::$property;
+				echo static::${$prop};
+				echo static::$$prop;
+				echo static::CONSTANT;
+			`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 4)
+				
+				// First: static::$property
+				echo1, ok := program.Body[0].(*ast.EchoStatement)
+				require.True(t, ok)
+				static1, ok := echo1.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "$property", static1.Property.(*ast.Variable).Name)
+				
+				// Second: static::${$prop}
+				echo2, ok := program.Body[1].(*ast.EchoStatement)
+				require.True(t, ok)
+				static2, ok := echo2.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "${$prop}", static2.Property.(*ast.Variable).Name)
+				
+				// Third: static::$$prop
+				echo3, ok := program.Body[2].(*ast.EchoStatement)
+				require.True(t, ok)
+				static3, ok := echo3.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "$$prop", static3.Property.(*ast.Variable).Name)
+				
+				// Fourth: static::CONSTANT
+				echo4, ok := program.Body[3].(*ast.EchoStatement)
+				require.True(t, ok)
+				static4, ok := echo4.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				assert.Equal(t, "CONSTANT", static4.Property.(*ast.IdentifierNode).Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// Check for parsing errors
+			checkParserErrors(t, p)
+			
+			// Run specific test expectations
+			if tt.expected != nil {
+				tt.expected(t, program)
+			}
+		})
+	}
+}

@@ -131,6 +131,7 @@ func init() {
 		lexer.TOKEN_EXCLAMATION:          parsePrefixExpression,
 		lexer.TOKEN_PLUS:                 parsePrefixExpression, // 一元正号操作符 +
 		lexer.TOKEN_MINUS:                parsePrefixExpression,
+		lexer.TOKEN_DOLLAR:                parseDollarBraceExpression, // ${...} syntax
 		lexer.TOKEN_TILDE:                parsePrefixExpression, // 位运算NOT操作符 ~
 		lexer.T_INC:                      parsePrefixExpression,
 		lexer.T_DEC:                      parsePrefixExpression,
@@ -4623,6 +4624,56 @@ func parseStaticAccess(p *Parser) ast.Expression {
 	return ast.NewStaticAccessExpression(pos, nil, property)
 }
 
+// parseDollarBraceExpression 解析 ${...} 或 $$var 语法的变量表达式
+func parseDollarBraceExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 当前是 $, 检查下一个 token
+	if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		// ${...} 语法
+		// 跳过 $ 和 {
+		p.nextToken() // 移动到 {
+		p.nextToken() // 移动到表达式
+		
+		// 解析内部表达式
+		expr := parseExpression(p, LOWEST)
+		
+		// 期望 }
+		if !p.expectPeek(lexer.TOKEN_RBRACE) {
+			return nil
+		}
+		
+		// 创建一个表示动态变量名的表达式
+		// 使用 Variable 节点，但名称为特殊格式
+		return &ast.Variable{
+			BaseNode: ast.BaseNode{
+				Kind:     ast.ASTVar,
+				Position: pos,
+				LineNo:   uint32(pos.Line),
+			},
+			Name: fmt.Sprintf("${%s}", expr.String()),
+		}
+	} else if p.peekToken.Type == lexer.T_VARIABLE {
+		// $$var 语法 - variable variable
+		p.nextToken() // 移动到 $var
+		varName := p.currentToken.Value
+		
+		// 创建一个表示 variable variable 的表达式
+		return &ast.Variable{
+			BaseNode: ast.BaseNode{
+				Kind:     ast.ASTVar,
+				Position: pos,
+				LineNo:   uint32(pos.Line),
+			},
+			Name: fmt.Sprintf("$%s", varName),
+		}
+	} else {
+		// 不支持的语法
+		p.errors = append(p.errors, fmt.Sprintf("unexpected token after $ at position %v", pos))
+		return nil
+	}
+}
+
 // parseStaticAccessExpression 解析静态访问表达式 Class::method 或 Class::$property （中缀版本）
 func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression {
 	pos := p.currentToken.Position
@@ -4634,6 +4685,13 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 	if p.currentToken.Type == lexer.T_CLASS {
 		// Special handling for ::class magic constant
 		property = ast.NewIdentifierNode(p.currentToken.Position, "class")
+	} else if p.currentToken.Type == lexer.TOKEN_DOLLAR && p.peekToken.Type == lexer.TOKEN_LBRACE {
+		// Handle complex variable property syntax: static::${$var}
+		// Use the parseDollarBraceExpression function we just created
+		property = parseDollarBraceExpression(p)
+	} else if p.currentToken.Type == lexer.TOKEN_DOLLAR && p.peekToken.Type == lexer.T_VARIABLE {
+		// Handle variable variable property: static::$$var
+		property = parseDollarBraceExpression(p)
 	} else if p.currentToken.Type != lexer.T_EOF {
 		property = parseExpression(p, CALL)
 	}
