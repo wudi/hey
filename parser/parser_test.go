@@ -844,6 +844,15 @@ func TestParsing_FunctionReturnTypes(t *testing.T) {
 			},
 			expectedReturnType: "void",
 		},
+		{
+			name:  "Function with static return type",
+			input: `<?php function foo(): static { } ?>`,
+			expectedParams: []struct {
+				name string
+				typ  string
+			}{},
+			expectedReturnType: "static",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2078,6 +2087,11 @@ func TestParsing_TrailingCommaInFunctionCalls(t *testing.T) {
 			name:     "Static method call with trailing comma",
 			input:    `<?php Class::method(1, 2,); ?>`,
 			expected: "static method call",
+		},
+		{
+			name:     "Static method call with 'new' as method name",
+			input:    `<?php UserFactory::new(); ?>`,
+			expected: "static method call with new",
 		},
 	}
 
@@ -9699,6 +9713,68 @@ func TestParsing_ClosureWithUseClause(t *testing.T) {
 		{
 			name:  "original WordPress failing case",
 			input: `<?php add_filter("hook", static function(array $statuses, WP_Taxonomy $taxonomy) use ($custom_taxonomy): array { return $statuses; }, 10, 2);`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// 确保没有解析错误
+			assert.Empty(t, p.errors, "Unexpected parsing errors: %v", p.errors)
+			assert.NotNil(t, program)
+			assert.NotEmpty(t, program.Body)
+		})
+	}
+}
+
+// TestParsing_MatchExpressions tests match expression parsing with various scenarios
+func TestParsing_MatchExpressions(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "simple match expression",
+			input: `<?php match (1) { 1 => 'one', default => 'other' }; ?>`,
+		},
+		{
+			name:  "multi-line match expression with trailing comma",
+			input: `<?php match (1) {
+				1 => 'one',
+				2 => 'two',
+				default => 'other',
+			}; ?>`,
+		},
+		{
+			name:  "match expression with instanceof",
+			input: `<?php match (true) {
+				$factory instanceof UserFactory => User::class,
+				default => 'other',
+			}; ?>`,
+		},
+		{
+			name:  "match expression with throw in closure",
+			input: `<?php Factory::guessModelNamesUsing(function (Factory $factory) {
+				return match (true) {
+					$factory instanceof UserFactory => User::class,
+					default => throw new LogicException('Unknown factory'),
+				};
+			}); ?>`,
+		},
+		{
+			name:  "assignment within function argument",
+			input: `<?php assertType('UserFactory', $factory = UserFactory::new()); ?>`,
+		},
+		{
+			name:  "static return type in class method",
+			input: `<?php class CommonBuilder {
+				public function foo(): static {
+					return $this;
+				}
+			} ?>`,
 		},
 	}
 

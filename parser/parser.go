@@ -395,7 +395,7 @@ func (p *Parser) Errors() []string {
 // isTypeToken 检查token是否为有效的类型token
 func isTypeToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
-	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE,
+	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE, lexer.T_STATIC,
 		lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED,
 		lexer.T_NS_SEPARATOR:
 		return true
@@ -4130,6 +4130,10 @@ func parseMatchExpression(p *Parser) ast.Expression {
 		// 期望逗号或右大括号
 		if p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 跳过逗号
+			// 检查是否为trailing comma（逗号后直接是右大括号）
+			if p.peekToken.Type == lexer.TOKEN_RBRACE {
+				break
+			}
 			p.nextToken() // 移动到下一个 arm
 		} else if p.peekToken.Type == lexer.TOKEN_RBRACE {
 			break
@@ -4728,6 +4732,9 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 	if p.currentToken.Type == lexer.T_CLASS {
 		// Special handling for ::class magic constant
 		property = ast.NewIdentifierNode(p.currentToken.Position, "class")
+	} else if p.currentToken.Type == lexer.T_NEW {
+		// Special handling for ::new as a method name (not the new keyword)
+		property = ast.NewIdentifierNode(p.currentToken.Position, "new")
 	} else if p.currentToken.Type == lexer.TOKEN_DOLLAR && p.peekToken.Type == lexer.TOKEN_LBRACE {
 		// Handle complex variable property syntax: static::${$var}
 		// Use the parseDollarBraceExpression function we just created
