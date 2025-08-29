@@ -190,6 +190,53 @@ func (e *EchoStatement) String() string {
 	return "echo " + strings.Join(args, ", ") + ";"
 }
 
+// PrintStatement 表示print语句
+type PrintStatement struct {
+	BaseNode
+	Arguments []Expression `json:"arguments"`
+}
+
+func NewPrintStatement(pos lexer.Position) *PrintStatement {
+	return &PrintStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTPrint,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Arguments: make([]Expression, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (p *PrintStatement) GetChildren() []Node {
+	children := make([]Node, len(p.Arguments))
+	for i, arg := range p.Arguments {
+		children[i] = arg
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (p *PrintStatement) Accept(visitor Visitor) {
+	if visitor.Visit(p) {
+		for _, arg := range p.Arguments {
+			arg.Accept(visitor)
+		}
+	}
+}
+
+func (p *PrintStatement) statementNode() {}
+
+func (p *PrintStatement) String() string {
+	var args []string
+	for _, arg := range p.Arguments {
+		if arg != nil {
+			args = append(args, arg.String())
+		}
+	}
+	return "print " + strings.Join(args, ", ") + ";"
+}
+
 // NamespaceStatement 表示命名空间声明语句
 type NamespaceStatement struct {
 	BaseNode

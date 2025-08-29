@@ -129,6 +129,7 @@ func init() {
 		lexer.T_CONSTANT_ENCAPSED_STRING: parseStringLiteral,
 		lexer.T_STRING:                   parseIdentifier,
 		lexer.TOKEN_EXCLAMATION:          parsePrefixExpression,
+		lexer.TOKEN_PLUS:                 parsePrefixExpression, // 一元正号操作符 +
 		lexer.TOKEN_MINUS:                parsePrefixExpression,
 		lexer.TOKEN_TILDE:                parsePrefixExpression, // 位运算NOT操作符 ~
 		lexer.T_INC:                      parsePrefixExpression,
@@ -697,6 +698,8 @@ func parseStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
 	case lexer.T_ECHO:
 		return parseEchoStatement(p)
+	case lexer.T_PRINT:
+		return parsePrintStatement(p)
 	case lexer.T_IF:
 		return parseIfStatement(p)
 	case lexer.T_WHILE:
@@ -781,6 +784,28 @@ func parseEchoStatement(p *Parser) *ast.EchoStatement {
 	stmt := ast.NewEchoStatement(p.currentToken.Position)
 
 	// 解析 echo 的参数
+	p.nextToken()
+	stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+
+	// 处理多个参数（用逗号分隔）
+	for p.peekToken.Type == lexer.TOKEN_COMMA {
+		p.nextToken() // 移动到逗号
+		p.nextToken() // 移动到下一个表达式
+		stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+	}
+
+	if !p.expectSemicolon() {
+		return nil
+	}
+
+	return stmt
+}
+
+// parsePrintStatement 解析 print 语句
+func parsePrintStatement(p *Parser) *ast.PrintStatement {
+	stmt := ast.NewPrintStatement(p.currentToken.Position)
+
+	// 解析 print 的参数
 	p.nextToken()
 	stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
 
@@ -2284,7 +2309,21 @@ func parseVariable(p *Parser) ast.Expression {
 
 // parseIdentifier 解析标识符
 func parseIdentifier(p *Parser) ast.Expression {
-	return ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	pos := p.currentToken.Position
+	
+	// Check if this is part of a qualified namespace (Parse\Date)
+	if p.peekToken.Type == lexer.T_NS_SEPARATOR {
+		// Parse as qualified name using parseClassName
+		className, err := parseClassName(p)
+		if err != nil {
+			// Fallback to simple identifier if parsing fails
+			return ast.NewIdentifierNode(pos, p.currentToken.Value)
+		}
+		return ast.NewIdentifierNode(pos, className)
+	}
+	
+	// Simple identifier
+	return ast.NewIdentifierNode(pos, p.currentToken.Value)
 }
 
 // isReservedNonModifier 检查是否为保留非修饰符关键字
@@ -3355,12 +3394,25 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 // name: T_STRING | T_NAME_QUALIFIED | T_NAME_FULLY_QUALIFIED | T_NAME_RELATIVE
 func parseClassName(p *Parser) (string, error) {
 	var className string
+	
 
 	switch p.currentToken.Type {
 	case lexer.T_STATIC:
 		return "static", nil
 	case lexer.T_STRING:
-		return p.currentToken.Value, nil
+		className = p.currentToken.Value
+		
+		// 检查是否是相对限定名 (WpOrg\Requests\Requests)
+		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+			p.nextToken()                     // 移动到 \
+			className += p.currentToken.Value // 添加 "\"
+			p.nextToken()                     // 移动到下一个名称部分
+			if p.currentToken.Type != lexer.T_STRING {
+				return "", fmt.Errorf("expected class name after namespace separator, got `%s` instead at line: %d col: %d", p.currentToken.Value, p.currentToken.Position.Line, p.currentToken.Position.Column)
+			}
+			className += p.currentToken.Value
+		}
+		return className, nil
 	case lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_QUALIFIED, lexer.T_NAME_RELATIVE:
 		return p.currentToken.Value, nil
 	case lexer.T_NS_SEPARATOR:
@@ -3882,23 +3934,29 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 
 	// 检查是否有 implements 子句
 	if p.peekToken.Type == lexer.T_IMPLEMENTS {
-		p.nextToken() // 跳过当前token移动到implements
-		if !p.expectPeek(lexer.T_STRING) {
+		p.nextToken() // 移动到 implements
+		p.nextToken() // 移动到第一个接口名
+		
+		interfaceName, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
 			return nil
 		}
-		// 可以实现多个接口
-		implements := []ast.Expression{}
-		implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+		interfaceNode := ast.NewIdentifierNode(p.currentToken.Position, interfaceName)
+		class.Implements = append(class.Implements, interfaceNode)
 
 		// 处理多个接口，用逗号分隔
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
-			p.nextToken() // 跳过逗号
-			if !p.expectPeek(lexer.T_STRING) {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个接口名
+			interfaceName, err := parseClassName(p)
+			if err != nil {
+				p.errors = append(p.errors, err.Error())
 				break
 			}
-			implements = append(implements, ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value))
+			interfaceNode := ast.NewIdentifierNode(p.currentToken.Position, interfaceName)
+			class.Implements = append(class.Implements, interfaceNode)
 		}
-		class.Implements = implements
 	}
 
 	// 期望类体开始
@@ -3952,23 +4010,28 @@ func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 
 	// 检查是否有 implements 子句
 	if p.peekToken.Type == lexer.T_IMPLEMENTS {
-		p.nextToken() // 跳过当前token到implements
+		p.nextToken() // 移动到 implements
+		p.nextToken() // 移动到第一个接口名
+		
+		interfaceName, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		interfaceNode := ast.NewIdentifierNode(p.currentToken.Position, interfaceName)
+		class.Implements = append(class.Implements, interfaceNode)
 
-		// 解析接口列表
-		for {
-			if !p.expectPeek(lexer.T_STRING) {
-				return nil
+		// 处理多个接口，用逗号分隔
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个接口名
+			interfaceName, err := parseClassName(p)
+			if err != nil {
+				p.errors = append(p.errors, err.Error())
+				break
 			}
-
-			interfaceNode := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+			interfaceNode := ast.NewIdentifierNode(p.currentToken.Position, interfaceName)
 			class.Implements = append(class.Implements, interfaceNode)
-
-			// 检查是否有更多接口
-			if p.peekToken.Type == lexer.TOKEN_COMMA {
-				p.nextToken() // 跳到逗号
-				continue
-			}
-			break
 		}
 	}
 
@@ -4577,6 +4640,40 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 
 	// 创建一个静态访问表达式
 	return ast.NewStaticAccessExpression(pos, left, property)
+}
+
+// parseQualifiedNameExpression 解析限定名表达式 (例如 Parse\Date)
+func parseQualifiedNameExpression(p *Parser, left ast.Expression) ast.Expression {
+	pos := p.currentToken.Position
+	
+	// 确保左边是一个标识符
+	leftIdent, ok := left.(*ast.IdentifierNode)
+	if !ok {
+		p.errors = append(p.errors, fmt.Sprintf("expected identifier before namespace separator at position %v", pos))
+		return left
+	}
+	
+	// 跳过 \ (namespace separator)
+	p.nextToken()
+	
+	// 继续构建完整的限定名
+	nameStr := leftIdent.Name
+	
+	if p.currentToken.Type == lexer.T_STRING {
+		nameStr += "\\" + p.currentToken.Value
+		
+		// 继续解析后续的命名空间部分
+		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+			p.nextToken() // 跳到 \
+			p.nextToken() // 跳过 \
+			if p.currentToken.Type == lexer.T_STRING {
+				nameStr += "\\" + p.currentToken.Value
+			}
+		}
+	}
+	
+	// 创建新的标识符表达式包含完整的限定名
+	return ast.NewIdentifierNode(pos, nameStr)
 }
 
 // parseInterpolatedString 解析包含变量插值的双引号字符串

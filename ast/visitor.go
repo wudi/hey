@@ -34,6 +34,10 @@ func Walk(visitor Visitor, node Node) {
 		for _, arg := range n.Arguments {
 			Walk(visitor, arg)
 		}
+	case *PrintStatement:
+		for _, arg := range n.Arguments {
+			Walk(visitor, arg)
+		}
 	case *ExpressionStatement:
 		Walk(visitor, n.Expression)
 	case *AssignmentExpression:
@@ -145,6 +149,10 @@ func Transform(node Node, transformer Transformer) Node {
 			n.Body[i] = Transform(stmt, transformer).(Statement)
 		}
 	case *EchoStatement:
+		for i, arg := range n.Arguments {
+			n.Arguments[i] = Transform(arg, transformer).(Expression)
+		}
+	case *PrintStatement:
 		for i, arg := range n.Arguments {
 			n.Arguments[i] = Transform(arg, transformer).(Expression)
 		}
