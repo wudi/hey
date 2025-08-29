@@ -292,6 +292,42 @@ func isNonSyntacticToken(tokenType lexer.TokenType) bool {
 	}
 }
 
+// isValidIdentifier 判断token是否可以作为标识符（如命名参数）
+// 基于PHP语法中的identifier规则，支持T_STRING和semi_reserved tokens
+func isValidIdentifier(tokenType lexer.TokenType) bool {
+	switch tokenType {
+	// T_STRING - regular identifiers
+	case lexer.T_STRING:
+		return true
+	// reserved_non_modifiers (from PHP grammar)
+	case lexer.T_INCLUDE, lexer.T_INCLUDE_ONCE, lexer.T_EVAL, lexer.T_REQUIRE, lexer.T_REQUIRE_ONCE,
+		lexer.T_LOGICAL_OR, lexer.T_LOGICAL_XOR, lexer.T_LOGICAL_AND,
+		lexer.T_INSTANCEOF, lexer.T_NEW, lexer.T_CLONE, lexer.T_EXIT, lexer.T_IF, lexer.T_ELSEIF,
+		lexer.T_ELSE, lexer.T_ENDIF, lexer.T_ECHO, lexer.T_DO, lexer.T_WHILE, lexer.T_ENDWHILE,
+		lexer.T_FOR, lexer.T_ENDFOR, lexer.T_FOREACH, lexer.T_ENDFOREACH, lexer.T_DECLARE,
+		lexer.T_ENDDECLARE, lexer.T_AS, lexer.T_TRY, lexer.T_CATCH, lexer.T_FINALLY,
+		lexer.T_THROW, lexer.T_USE, lexer.T_INSTEADOF, lexer.T_GLOBAL, lexer.T_VAR, lexer.T_UNSET,
+		lexer.T_ISSET, lexer.T_EMPTY, lexer.T_CONTINUE, lexer.T_GOTO,
+		lexer.T_FUNCTION, lexer.T_CONST, lexer.T_RETURN, lexer.T_PRINT, lexer.T_YIELD, lexer.T_LIST,
+		lexer.T_SWITCH, lexer.T_ENDSWITCH, lexer.T_CASE, lexer.T_DEFAULT, lexer.T_BREAK,
+		lexer.T_ARRAY, lexer.T_CALLABLE, lexer.T_EXTENDS, lexer.T_IMPLEMENTS, lexer.T_NAMESPACE,
+		lexer.T_TRAIT, lexer.T_INTERFACE, lexer.T_CLASS,
+		lexer.T_CLASS_C, lexer.T_TRAIT_C, lexer.T_FUNC_C, lexer.T_METHOD_C, lexer.T_LINE,
+		lexer.T_FILE, lexer.T_DIR, lexer.T_NS_C, lexer.T_FN, lexer.T_MATCH, lexer.T_ENUM:
+		return true
+	// Modifiers (also part of semi_reserved)
+	case lexer.T_STATIC, lexer.T_ABSTRACT, lexer.T_FINAL, lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC, lexer.T_READONLY:
+		return true
+	default:
+		return false
+	}
+}
+
+// isNamedArgumentStart 检查当前是否为命名参数的开始 (identifier: value)
+func (p *Parser) isNamedArgumentStart() bool {
+	return isValidIdentifier(p.currentToken.Type) && p.peekToken.Type == lexer.TOKEN_COLON
+}
+
 // Parser 解析器结构体
 type Parser struct {
 	lexer        *lexer.Lexer
@@ -1210,7 +1246,7 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	}
 
 	// Check for different argument types
-	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+	if p.isNamedArgumentStart() {
 		// Named argument (identifier: value)
 		arg := parseNamedArgument(p)
 		if arg != nil {
@@ -1240,7 +1276,7 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 		p.nextToken() // 移动到逗号后的token
 
 		// Check for different argument types
-		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+		if p.isNamedArgumentStart() {
 			// Named argument (identifier: value)
 			arg := parseNamedArgument(p)
 			if arg != nil {
@@ -3483,7 +3519,7 @@ func parseAttributeDecl(p *Parser) *ast.Attribute {
 			p.nextToken()
 
 			// Check for named argument (identifier: value)
-			if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+			if p.isNamedArgumentStart() {
 				arg := parseNamedArgument(p)
 				if arg != nil {
 					arguments = append(arguments, arg)
@@ -3497,7 +3533,7 @@ func parseAttributeDecl(p *Parser) *ast.Attribute {
 				p.nextToken() // 移动到下一个参数
 
 				// Check for named argument
-				if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
+				if p.isNamedArgumentStart() {
 					arg := parseNamedArgument(p)
 					if arg != nil {
 						arguments = append(arguments, arg)

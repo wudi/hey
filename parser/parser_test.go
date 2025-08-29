@@ -8290,6 +8290,53 @@ func TestParsing_NamedArguments(t *testing.T) {
 				assert.Equal(t, "+", binaryExpr.Operator)
 			},
 		},
+		{
+			name:  "named arguments with reserved keywords",
+			input: `<?php assertJobHandled(class: $class, function: $callback, new: true, array: $data);`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				call, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 4)
+
+				// First argument: class: $class
+				namedArg1, ok := call.Arguments[0].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "class", namedArg1.Name.Name)
+
+				var1, ok := namedArg1.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$class", var1.Name)
+
+				// Second argument: function: $callback
+				namedArg2, ok := call.Arguments[1].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "function", namedArg2.Name.Name)
+
+				var2, ok := namedArg2.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$callback", var2.Name)
+
+				// Third argument: new: true
+				namedArg3, ok := call.Arguments[2].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "new", namedArg3.Name.Name)
+
+				// Fourth argument: array: $data  
+				namedArg4, ok := call.Arguments[3].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "array", namedArg4.Name.Name)
+
+				var3, ok := namedArg4.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$data", var3.Name)
+			},
+		},
 	}
 
 	for _, tt := range tests {
