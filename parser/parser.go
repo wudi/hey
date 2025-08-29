@@ -394,7 +394,8 @@ func (p *Parser) Errors() []string {
 func isTypeToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
 	case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE,
-		lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED:
+		lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED,
+		lexer.T_NS_SEPARATOR:
 		return true
 	default:
 		return false
@@ -470,8 +471,23 @@ func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 		return nil
 	}
 
+	// 解析完整的类型名（可能包含命名空间）
+	var typeName string
+	if p.currentToken.Type == lexer.T_NS_SEPARATOR || p.currentToken.Type == lexer.T_STRING {
+		// 使用 parseClassName 来处理完整的命名空间名称
+		className, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		typeName = className
+	} else {
+		// 简单类型名
+		typeName = p.currentToken.Value
+	}
+
 	// 创建基本类型提示
-	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
+	baseType := ast.NewSimpleTypeHint(p.currentToken.Position, typeName, nullable)
 
 	// 检查是否为union类型 Type1|Type2
 	if p.peekToken.Type == lexer.TOKEN_PIPE {
