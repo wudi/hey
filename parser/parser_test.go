@@ -9513,3 +9513,53 @@ func TestParsing_ComplexVariableProperties(t *testing.T) {
 		})
 	}
 }
+
+
+func TestParsing_ClosureWithUseClause(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "simple closure with use clause",
+			input: `<?php $closure = function() use ($var1) { return $var1; };`,
+		},
+		{
+			name:  "closure with multiple use variables",
+			input: `<?php $closure = function($x) use ($var1, $var2) { return $x + $var2; };`,
+		},
+		{
+			name:  "closure with use clause and return type",
+			input: `<?php $closure = function() use ($var1): string { return $var1; };`,
+		},
+		{
+			name:  "static closure with use clause and return type", 
+			input: `<?php $closure = static function($a, $b) use ($var2): int { return $a + $b + $var2; };`,
+		},
+		{
+			name:  "closure with typed parameters and use clause",
+			input: `<?php $closure = static function(array $items, ?string $prefix) use ($var1): array { return $items; };`,
+		},
+		{
+			name:  "closure with reference in use clause",
+			input: `<?php $closure = function() use (&$counter) { $counter++; };`,
+		},
+		{
+			name:  "original WordPress failing case",
+			input: `<?php add_filter("hook", static function(array $statuses, WP_Taxonomy $taxonomy) use ($custom_taxonomy): array { return $statuses; }, 10, 2);`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// 确保没有解析错误
+			assert.Empty(t, p.errors, "Unexpected parsing errors: %v", p.errors)
+			assert.NotNil(t, program)
+			assert.NotEmpty(t, program.Body)
+		})
+	}
+}

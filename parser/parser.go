@@ -3804,13 +3804,28 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 		}
 	}
 
-	// 检查并跳过返回类型声明（目前AST不存储返回类型信息）
+	// 检查返回类型声明 - 支持多种类型格式
 	if p.peekToken.Type == lexer.TOKEN_COLON {
 		p.nextToken() // 跳过 ':'
-		if !p.expectToken(lexer.T_STRING) {
-			return nil
+		p.nextToken() // 移动到类型
+		
+		// 处理可空类型 ?Type
+		if p.currentToken.Type == lexer.TOKEN_QUESTION {
+			p.nextToken() // 移动到实际类型
 		}
-		// 返回类型已解析但暂不存储（未来可扩展AST支持）
+		
+		// 解析类型（可以是 T_STRING, T_ARRAY 等）
+		if p.currentToken.Type != lexer.T_STRING && 
+		   p.currentToken.Type != lexer.T_ARRAY && 
+		   p.currentToken.Type != lexer.T_CALLABLE {
+			// 对于其他类型，尝试继续解析
+		}
+		
+		// 处理联合类型和交叉类型
+		for p.peekToken.Type == lexer.TOKEN_PIPE || p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+			p.nextToken() // 跳过 | 或 &
+			p.nextToken() // 移动到下一个类型
+		}
 	}
 
 	// 解析函数体
