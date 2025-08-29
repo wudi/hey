@@ -12,6 +12,7 @@ go test ./parser -v              # Run parser tests with verbose output
 go test ./ast -v                 # Run AST tests with verbose output
 go test ./parser -bench=.        # Run performance benchmarks
 go test ./parser -bench=. -run=^$  # Run only benchmarks (no unit tests)
+go test ./parser -bench=. -benchmem # Run benchmarks with memory allocation stats
 go test ./parser -run=TestParsing_NowdocStrings  # Run specific test
 go test ./parser -run=TestParsing_ClassMethodsWithVisibility  # Run class methods test
 go test ./parser -run=TestParsing_TryCatchWithStatements  # Run try-catch parsing tests
@@ -28,22 +29,29 @@ go build -o php-parser ./cmd/php-parser  # Build command-line tool
 echo '<?php echo "Hello"; ?>' | ./php-parser  # Parse from stdin
 ```
 
+**WordPress Compatibility Testing:**
+```bash
+go run test_wordpress.go                 # Run WordPress parsing test suite (1,648 files)
+```
+
 # Code style
 - Follow Go conventions (gofmt, effective Go)
 - Use interfaces and structs for abstraction
 - Lexer test case write into `lexer/lexer_test.go` 
 - Parser test case write into `parser/parser_test.go`
 - AST test case write into `ast/ast_test.go`
+- Use testify framework for assertions in tests
 
 **Workflow**
 - Plan todo list before coding using TodoWrite tool and update frequently
 - Before implementing new syntax, analyze PHP grammar from `/home/ubuntu/php-src/Zend/zend_language_parser.y` 
 - Always add test cases first, then implement functionality (TDD approach)
-- After adding new syntax support, create test files (test_*.php) to verify functionality
+- After adding new syntax support, create test files in `/tmp/test_*.php` to verify functionality
 - Use CLI tool to verify parsing: `./php-parser test_file.php`
 - Run targeted tests: `go test ./parser -run=TestSpecificFeature -v`
 - After fixing a bug, run all tests to ensure no regressions: `go test ./...`
 - For major changes, run benchmarks: `go test ./parser -bench=. -run=^$`
+- Test WordPress compatibility after major changes: `go run test_wordpress.go`
 - Create descriptive commit messages with detailed changelog
 
 **PHP Compatibility Testing:**
@@ -68,16 +76,21 @@ This is a PHP parser implementation in Go with the following structure:
   - `token.go`: PHP token definitions (150+ tokens matching PHP 8.4)
   - `states.go`: Lexer state management (11 states including ST_IN_SCRIPTING, ST_DOUBLE_QUOTES)
   - `lexer.go`: Main lexer implementation with shebang support and PHP tag recognition
+  - `lexer_test.go`: Comprehensive token generation tests
 
 - **`parser/`**: Recursive descent parser with Pratt parsing
-  - `parser.go`: 2800+ lines implementing 50+ parse expression functions
+  - `parser.go`: 4000+ lines implementing 50+ parse expression functions
+  - `parser_test.go`: 180+ test cases covering all PHP syntax
+  - `benchmark_test.go`: Performance benchmarks for parser optimization
+  - `pool.go`: Parser pool for concurrent parsing scenarios
   - Comprehensive PHP 8.4 syntax support (variables, functions, classes, control flow)
-  - Complete operator support including assignment operators (??=, **=, &=, |=, ^=, <<=, >>=), power (**), spaceship (<=>)
+  - Complete operator support including assignment operators (??=, **=, &=, |=, ^=, <<=, >>=), power (**), spaceship (<=>), unary plus (+)
   - Alternative syntax support for all control structures (if/endif, while/endwhile, for/endfor, foreach/endforeach, switch/endswitch)
   - Special statement handling (__halt_compiler()) with proper parsing termination
   - Class method visibility parsing with public/private/protected modifiers
   - Enhanced operator precedence with 14 levels matching PHP 8.4 specification
   - Expression parsing: binary ops, unary ops, method calls, array access, match expressions
+  - Namespaced class support: `class A implements B\C\D`, `class A extends B\C\D`
 
 - **`ast/`**: Abstract Syntax Tree nodes
   - `node.go`: Interface-based AST node system with visitor pattern
@@ -150,13 +163,15 @@ This is a PHP parser implementation in Go with the following structure:
 
 **When Adding New PHP Syntax Support:**
 1. Add new token types to `lexer/token.go` if needed (maintain PHP compatibility) - check Keywords map for reserved words
-2. Add prefix/infix parse functions in `parser/parser.go` (globalPrefixParseFns/globalInfixParseFns maps)
+2. Add prefix/infix parse functions in `parser/parser.go` (globalPrefixParseFns/globalInfixParseFns maps at lines 87-272)
 3. Set correct operator precedence in precedences map (follow PHP 8.4 precedence levels)
 4. Create corresponding AST node types in `ast/node.go` with full interface implementation
 5. Add AST kind constants to `ast/kind.go` (follow PHP's zend_ast.h numbering)
 6. Update the String() method in `ast/kind.go` for new node types
 7. Add constructor functions (NewXXXExpression) following existing patterns
-8. Add comprehensive test cases covering all syntax variations and edge cases
+8. Update `ast/visitor.go` Walk function to handle new node types (lines 28-95)
+9. Add comprehensive test cases covering all syntax variations and edge cases
+10. Test with WordPress codebase using `go run test_wordpress.go`
 
 **When Adding New Class Member Types:**
 1. Analyze PHP grammar rules in `/home/ubuntu/php-src/Zend/zend_language_parser.y`
@@ -177,6 +192,8 @@ This is a PHP parser implementation in Go with the following structure:
 - Nowdoc/Heredoc parsing issues → check `parseNowdocExpression` and `parseHeredoc` functions
 - String interpolation problems → verify `InterpolatedStringExpression` handling
 - Class constant parsing errors → verify `parseClassConstantDeclaration` function at `parser.go:2139`
+- Namespace parsing in class declarations → check `parseClassName` function for qualified name support
+- Duplicate class declaration functions → both `parseClassDeclaration` and `parseReadonlyClassDeclaration` need updates
 
 **PHP Compatibility Requirements:**
 - Token IDs must match PHP 8.4 official implementation exactly
@@ -188,9 +205,32 @@ This is a PHP parser implementation in Go with the following structure:
 - Reference `/home/ubuntu/php-src/Zend/zend_language_scanner.l` for lexer and lexer states and tokenization
 - Before performing any fixes or refactoring, analyze the original PHP code's lexical and syntactic structure first.
 
+## Critical Parser Functions
+
+**Qualified Name Parsing:**
+- `parseClassName()` at `parser.go:3914` - handles namespaced class names (A\B\C)
+- Used by both `parseClassDeclaration` and `parseReadonlyClassDeclaration`
+- Essential for extends and implements clauses with namespaces
+
+**Class Declaration Functions:**
+- `parseClassDeclaration()` at `parser.go:3858` - regular class declarations
+- `parseReadonlyClassDeclaration()` at `parser.go:4004` - readonly class declarations
+- Both must be updated in sync when fixing class-related parsing issues
+
+**Operator Parsing:**
+- Prefix operators registered in `globalPrefixParseFns` (lines 87-204)
+- Infix operators registered in `globalInfixParseFns` (lines 205-272)
+- Precedence levels defined in `precedences` map (lines 273-340)
+
 ## Recent Improvements
 
-**PHP 8.4 Grammar Enhancements (Latest - 2024-12-19):**
+**100% WordPress Compatibility (Latest - 2024-12-28):**
+- Fixed namespace parsing in implements clauses (`class A implements B\C\D`)
+- Added unary plus operator support (`+(expression)`)
+- Successfully parses all 1,648 PHP files in WordPress 6.7.1
+- Both `parseClassDeclaration` and `parseReadonlyClassDeclaration` updated
+
+**PHP 8.4 Grammar Enhancements (2024-12-19):**
 - **Complete Operator Support**: Added all missing assignment operators (??=, **=, &=, |=, ^=, <<=, >>=), power operator (**), spaceship operator (<=>), logical XOR (xor)
 - **Alternative Syntax**: Full support for alternative switch syntax (switch: ... endswitch;) alongside existing if/endif, while/endwhile, for/endfor, foreach/endforeach
 - **Special Statements**: __halt_compiler() statement with proper parsing termination behavior
