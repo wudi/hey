@@ -351,6 +351,16 @@ func (p *Parser) expectPeek(t lexer.TokenType) bool {
 	}
 }
 
+// expectSemicolon 期望分号，但在关闭标签之前分号是可选的
+func (p *Parser) expectSemicolon() bool {
+	// PHP规范：语句末尾的分号在?>之前是可选的
+	if p.peekToken.Type == lexer.T_CLOSE_TAG {
+		// 不前进到关闭标签，让主解析循环处理它
+		return true
+	}
+	return p.expectPeek(lexer.TOKEN_SEMICOLON)
+}
+
 // peekPrecedence 获取下一个 token 的优先级
 func (p *Parser) peekPrecedence() Precedence {
 	if p, ok := precedences[p.peekToken.Type]; ok {
@@ -758,7 +768,7 @@ func parseEchoStatement(p *Parser) *ast.EchoStatement {
 		stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
 	}
 
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -943,7 +953,7 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 	}
 
 	// 期望分号
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -1016,7 +1026,7 @@ func parseAlternativeSwitchStatement(p *Parser, pos lexer.Position, discriminant
 	}
 
 	// 期望分号
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -1085,7 +1095,7 @@ func parseAlternativeWhileStatement(p *Parser, pos lexer.Position, condition ast
 	}
 
 	// 期望分号
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -1218,7 +1228,7 @@ func parseForStatement(p *Parser) ast.Statement {
 		initExprs = parseCommaSeparatedExpressions(p, lexer.TOKEN_SEMICOLON)
 	}
 
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -1228,7 +1238,7 @@ func parseForStatement(p *Parser) ast.Statement {
 		conditionExprs = parseCommaSeparatedExpressions(p, lexer.TOKEN_SEMICOLON)
 	}
 
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -1295,7 +1305,7 @@ func parseAlternativeForStatement(p *Parser, pos lexer.Position, initExprs, cond
 	}
 
 	// 期望分号
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -2128,7 +2138,7 @@ func parseHaltCompilerStatement(p *Parser) ast.Statement {
 	}
 
 	// 期望 ;
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -2187,8 +2197,12 @@ func parseExpressionStatement(p *Parser) *ast.ExpressionStatement {
 		return nil
 	}
 
+	// 分号是可选的，特别是在关闭标签之前
 	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
 		p.nextToken()
+	} else if p.peekToken.Type == lexer.T_CLOSE_TAG {
+		// 在关闭标签之前分号是可选的，按PHP规范
+		// 不消耗关闭标签，让主循环处理
 	}
 
 	return ast.NewExpressionStatement(pos, expr)
@@ -2649,7 +2663,7 @@ func parseUnsetStatement(p *Parser) ast.Statement {
 		}
 	}
 
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -2685,7 +2699,7 @@ func parseDoWhileStatement(p *Parser) ast.Statement {
 	}
 
 	// 期望 ';'
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -2768,7 +2782,7 @@ func parseAlternativeForeachStatement(p *Parser, pos lexer.Position, iterable, k
 	}
 
 	// 期望分号
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -2862,7 +2876,7 @@ func parseAlternativeDeclareStatement(p *Parser, pos lexer.Position, declaration
 	}
 
 	// 期望分号
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -3075,7 +3089,7 @@ func parseThrowStatement(p *Parser) ast.Statement {
 	p.nextToken()
 	argument := parseExpression(p, LOWEST)
 
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
@@ -3094,7 +3108,7 @@ func parseGotoStatement(p *Parser) ast.Statement {
 
 	label := parseIdentifier(p)
 
-	if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+	if !p.expectSemicolon() {
 		return nil
 	}
 
