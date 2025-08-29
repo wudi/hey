@@ -161,6 +161,7 @@ func init() {
 		lexer.T_REQUIRE_ONCE:             parseIncludeOrEvalExpression,
 		lexer.T_STATIC:                   parseStaticOrArrowFunctionExpression,
 		lexer.T_ABSTRACT:                 parseAbstractExpression,
+		lexer.T_FINAL:                    parseFinalExpression,
 		lexer.T_CLOSE_TAG:                parseCloseTagExpression,
 		lexer.T_NS_SEPARATOR:             parseNamespaceExpression,
 		lexer.T_ELSEIF:                   parseFallback,
@@ -3568,26 +3569,41 @@ func parseListExpression(p *Parser) ast.Expression {
 		return listExpr
 	}
 
-	// Use a completely different approach: parse comma-separated elements
-	// where elements can be empty (consecutive commas or leading comma)
+	// Parse list elements with support for empty elements (consecutive commas)
+	// The key insight: we need to handle the token stream correctly
 	
 	for p.peekToken.Type != lexer.TOKEN_RPAREN {
-		// Parse one element (which may be empty)
+		// Check if the current position represents an empty element
 		if p.peekToken.Type == lexer.TOKEN_COMMA {
-			// Empty element
+			// Empty element (we're right before a comma)
 			elements = append(elements, nil)
+			p.nextToken() // move to the comma
+			
+			// After consuming the comma representing empty element,
+			// check what's next
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				// This was a trailing comma after empty element
+				break
+			}
+			// Continue to parse the next element
 		} else {
-			// Non-empty element
-			p.nextToken()
+			// Non-empty element: parse it
+			p.nextToken() // move to the element
 			elements = append(elements, parseExpression(p, LOWEST))
-		}
-		
-		// Check if there are more elements
-		if p.peekToken.Type == lexer.TOKEN_COMMA {
-			p.nextToken() // consume comma and continue
-		} else {
-			// No more elements
-			break
+			
+			// After parsing the element, check if there's more
+			if p.peekToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // consume the comma
+				
+				// Check for trailing comma
+				if p.peekToken.Type == lexer.TOKEN_RPAREN {
+					break
+				}
+				// Otherwise continue to next element
+			} else if p.peekToken.Type != lexer.TOKEN_RPAREN {
+				// Unexpected token after element
+				break
+			}
 		}
 	}
 
@@ -4601,6 +4617,15 @@ func parseAbstractExpression(p *Parser) ast.Expression {
 	// abstract 通常用作类或方法修饰符
 	// 在这里作为标识符返回，实际的类声明解析会在其他地方处理
 	return ast.NewIdentifierNode(pos, "abstract")
+}
+
+// parseFinalExpression 解析 final 关键字
+func parseFinalExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+
+	// final 通常用作类修饰符，防止类被继承
+	// 在这里作为标识符返回，实际的类声明解析会在其他地方处理
+	return ast.NewIdentifierNode(pos, "final")
 }
 
 // parseYieldExpression 解析 yield 表达式
