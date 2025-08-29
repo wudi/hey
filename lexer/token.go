@@ -487,3 +487,8 @@ func (t TokenType) String() string {
 	}
 	return fmt.Sprintf("UNKNOWN(%d)", t)
 }
+
+// String 返回 Position 的字符串表示
+func (p Position) String() string {
+	return fmt.Sprintf("Line %d, Column %d, Offset %d", p.Line, p.Column, p.Offset)
+}
