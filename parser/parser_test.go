@@ -4265,14 +4265,10 @@ func TestParsing_NamespaceSeparator(t *testing.T) {
 				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
 				assert.True(t, ok, "Expression should be CallExpression")
 
-				// The callee should be a namespace expression
-				namespaceExpr, ok := callExpr.Callee.(*ast.NamespaceExpression)
-				assert.True(t, ok, "Callee should be NamespaceExpression")
-
-				// Check the namespace name contains the full path
-				nameIdent, ok := namespaceExpr.Name.(*ast.IdentifierNode)
-				assert.True(t, ok, "Name should be IdentifierNode")
-				assert.Equal(t, "DateTime\\createFromFormat", nameIdent.Name)
+				// The callee should be an identifier node with the fully qualified name
+				identifierNode, ok := callExpr.Callee.(*ast.IdentifierNode)
+				assert.True(t, ok, "Callee should be IdentifierNode")
+				assert.Equal(t, "\\DateTime\\createFromFormat", identifierNode.Name)
 			},
 		},
 		{
@@ -4287,12 +4283,10 @@ func TestParsing_NamespaceSeparator(t *testing.T) {
 				callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
 				assert.True(t, ok, "Expression should be CallExpression")
 
-				namespaceExpr, ok := callExpr.Callee.(*ast.NamespaceExpression)
-				assert.True(t, ok, "Callee should be NamespaceExpression")
-
-				nameIdent, ok := namespaceExpr.Name.(*ast.IdentifierNode)
-				assert.True(t, ok, "Name should be IdentifierNode")
-				assert.Equal(t, "test", nameIdent.Name)
+				// The callee should be an identifier node with the fully qualified name
+				identifierNode, ok := callExpr.Callee.(*ast.IdentifierNode)
+				assert.True(t, ok, "Callee should be IdentifierNode")
+				assert.Equal(t, "\\test", identifierNode.Name)
 			},
 		},
 		{
@@ -10008,6 +10002,199 @@ func TestParsing_MatchExpressions(t *testing.T) {
 			assert.Empty(t, p.errors, "Unexpected parsing errors: %v", p.errors)
 			assert.NotNil(t, program)
 			assert.NotEmpty(t, program.Body)
+		})
+	}
+}
+
+// TestParsing_QualifiedNameUseStatements tests the fix for T_NAME_QUALIFIED tokens in use statements
+// This addresses the bug where use statements with qualified names (generated as single tokens by the lexer)
+// were failing to parse because the parser was expecting only T_STRING tokens
+func TestParsing_QualifiedNameUseStatements(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+		expectedUses   []struct {
+			nameParts []string
+			alias     string
+			useType   string
+		}
+	}{
+		{
+			name: "Original failing case - Laravel use statements",
+			input: `<?php
+
+namespace Illuminate\Tests\Mail;
+
+use Illuminate\Contracts\Mail\Attachable;
+use Illuminate\Http\Testing\File;
+?>`,
+			expectedErrors: 0,
+			expectedUses: []struct {
+				nameParts []string
+				alias     string
+				useType   string
+			}{
+				{
+					nameParts: []string{"Illuminate", "Contracts", "Mail", "Attachable"},
+					alias:     "",
+					useType:   "",
+				},
+				{
+					nameParts: []string{"Illuminate", "Http", "Testing", "File"},
+					alias:     "",
+					useType:   "",
+				},
+			},
+		},
+		{
+			name: "Mixed qualified and simple names",
+			input: `<?php
+use SomeClass;
+use Namespace\SubNamespace\AnotherClass;
+use Fully\Qualified\Name as Alias;
+?>`,
+			expectedErrors: 0,
+			expectedUses: []struct {
+				nameParts []string
+				alias     string
+				useType   string
+			}{
+				{
+					nameParts: []string{"SomeClass"},
+					alias:     "",
+					useType:   "",
+				},
+				{
+					nameParts: []string{"Namespace", "SubNamespace", "AnotherClass"},
+					alias:     "",
+					useType:   "",
+				},
+				{
+					nameParts: []string{"Fully", "Qualified", "Name"},
+					alias:     "Alias",
+					useType:   "",
+				},
+			},
+		},
+		{
+			name: "Qualified names with function and const",
+			input: `<?php
+use function My\Namespace\someFunction;
+use const My\Namespace\SOME_CONSTANT;
+?>`,
+			expectedErrors: 0,
+			expectedUses: []struct {
+				nameParts []string
+				alias     string
+				useType   string
+			}{
+				{
+					nameParts: []string{"My", "Namespace", "someFunction"},
+					alias:     "",
+					useType:   "function",
+				},
+				{
+					nameParts: []string{"My", "Namespace", "SOME_CONSTANT"},
+					alias:     "",
+					useType:   "const",
+				},
+			},
+		},
+		{
+			name: "Multiple qualified use statements on same line",
+			input: `<?php
+use A\B\C, D\E\F as G, H\I\J;
+?>`,
+			expectedErrors: 0,
+			expectedUses: []struct {
+				nameParts []string
+				alias     string
+				useType   string
+			}{
+				{
+					nameParts: []string{"A", "B", "C"},
+					alias:     "",
+					useType:   "",
+				},
+				{
+					nameParts: []string{"D", "E", "F"},
+					alias:     "G",
+					useType:   "",
+				},
+				{
+					nameParts: []string{"H", "I", "J"},
+					alias:     "",
+					useType:   "",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// Check for parsing errors
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			
+			// Find all UseStatement nodes in the program
+			var useStatements []*ast.UseStatement
+			for _, stmt := range program.Body {
+				if useStmt, ok := stmt.(*ast.UseStatement); ok {
+					useStatements = append(useStatements, useStmt)
+				}
+			}
+			
+			// Verify we found the expected number of use statements
+			totalExpectedUses := 0
+			for _, expected := range tt.expectedUses {
+				_ = expected // Count each expected use
+				totalExpectedUses++
+			}
+			
+			// Count actual uses across all statements
+			totalActualUses := 0
+			for _, useStmt := range useStatements {
+				totalActualUses += len(useStmt.Uses)
+			}
+			
+			assert.Equal(t, totalExpectedUses, totalActualUses, 
+				"Expected %d use clauses but found %d", totalExpectedUses, totalActualUses)
+			
+			// Validate each expected use clause
+			useIndex := 0
+			for _, expected := range tt.expectedUses {
+				found := false
+				for _, useStmt := range useStatements {
+					for _, useClause := range useStmt.Uses {
+						if useIndex < totalExpectedUses {
+							currentExpected := tt.expectedUses[useIndex]
+							if len(useClause.Name.Parts) == len(currentExpected.nameParts) {
+								match := true
+								for i, part := range useClause.Name.Parts {
+									if part != currentExpected.nameParts[i] {
+										match = false
+										break
+									}
+								}
+								if match && useClause.Alias == currentExpected.alias && useClause.Type == currentExpected.useType {
+									found = true
+									useIndex++
+									break
+								}
+							}
+						}
+					}
+					if found {
+						break
+					}
+				}
+				assert.True(t, found, "Could not find expected use clause: %v", expected)
+			}
 		})
 	}
 }

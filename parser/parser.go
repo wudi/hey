@@ -393,6 +393,23 @@ func (p *Parser) expectPeek(t lexer.TokenType) bool {
 	}
 }
 
+// expectPeekAny expects any one of the provided token types
+func (p *Parser) expectPeekAny(tokens ...lexer.TokenType) bool {
+	for _, t := range tokens {
+		if p.peekTokenIs(t) {
+			p.nextToken()
+			return true
+		}
+	}
+	// Create error message with all expected tokens
+	var expected []string
+	for _, t := range tokens {
+		expected = append(expected, lexer.TokenNames[t])
+	}
+	p.errors = append(p.errors, fmt.Sprintf("expected one of %v, got `%s` at %s", expected, lexer.TokenNames[p.peekToken.Type], p.peekToken.Position))
+	return false
+}
+
 // expectSemicolon 期望分号，但在关闭标签之前分号是可选的
 func (p *Parser) expectSemicolon() bool {
 	// PHP规范：语句末尾的分号在?>之前是可选的
@@ -1663,6 +1680,44 @@ func parseNamespaceStatement(p *Parser) *ast.NamespaceStatement {
 	return stmt
 }
 
+// parseUseNamespaceName parses a namespace name that can be a single qualified token or multiple string tokens
+func parseUseNamespaceName(p *Parser) (*ast.NamespaceNameExpression, error) {
+	pos := p.currentToken.Position
+	
+	// Handle single qualified tokens (T_NAME_QUALIFIED, T_NAME_FULLY_QUALIFIED, T_NAME_RELATIVE)
+	if p.currentToken.Type == lexer.T_NAME_QUALIFIED || 
+		p.currentToken.Type == lexer.T_NAME_FULLY_QUALIFIED || 
+		p.currentToken.Type == lexer.T_NAME_RELATIVE {
+		// Split the qualified name into parts
+		qualifiedName := p.currentToken.Value
+		var nameParts []string
+		if strings.HasPrefix(qualifiedName, "\\") {
+			// Remove leading backslash and split
+			qualifiedName = strings.TrimPrefix(qualifiedName, "\\")
+		}
+		nameParts = strings.Split(qualifiedName, "\\")
+		return ast.NewNamespaceNameExpression(pos, nameParts), nil
+	}
+
+	// Handle traditional T_STRING tokens separated by T_NS_SEPARATOR
+	if p.currentToken.Type == lexer.T_STRING {
+		nameParts := []string{p.currentToken.Value}
+
+		// 处理多级命名空间 (Foo\Bar\Baz)
+		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+			p.nextToken() // 移动到 \
+			if !p.expectPeek(lexer.T_STRING) {
+				return nil, fmt.Errorf("expected string after namespace separator")
+			}
+			nameParts = append(nameParts, p.currentToken.Value)
+		}
+
+		return ast.NewNamespaceNameExpression(pos, nameParts), nil
+	}
+
+	return nil, fmt.Errorf("expected namespace name, got %s", p.currentToken.Type)
+}
+
 // parseUseStatement 解析 use 语句
 func parseUseStatement(p *Parser) *ast.UseStatement {
 	pos := p.currentToken.Position
@@ -1675,24 +1730,17 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 		useType = p.currentToken.Value
 	}
 
-	// 解析第一个 use 子句
-	if !p.expectPeek(lexer.T_STRING) {
+	// 解析第一个 use 子句 - 接受多种名称类型
+	if !p.expectPeekAny(lexer.T_STRING, lexer.T_NAME_QUALIFIED, lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE) {
 		return nil
 	}
 
-	// 构建第一个命名空间名称
-	nameParts := []string{p.currentToken.Value}
-
-	// 处理多级命名空间 (Foo\Bar\Baz)
-	for p.peekToken.Type == lexer.T_NS_SEPARATOR {
-		p.nextToken() // 移动到 \
-		if !p.expectPeek(lexer.T_STRING) {
-			return nil
-		}
-		nameParts = append(nameParts, p.currentToken.Value)
+	// 解析命名空间名称
+	namespaceName, err := parseUseNamespaceName(p)
+	if err != nil {
+		p.errors = append(p.errors, err.Error())
+		return nil
 	}
-
-	namespaceName := ast.NewNamespaceNameExpression(pos, nameParts)
 
 	// 检查是否有别名 (as Alias)
 	var alias string
@@ -1714,23 +1762,16 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 	// 处理更多 use 子句 (use A, B, C;)
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
-		if !p.expectPeek(lexer.T_STRING) {
+		if !p.expectPeekAny(lexer.T_STRING, lexer.T_NAME_QUALIFIED, lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE) {
 			return nil
 		}
 
-		// 构建命名空间名称
-		nameParts := []string{p.currentToken.Value}
-
-		// 处理多级命名空间
-		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
-			p.nextToken() // 移动到 \
-			if !p.expectPeek(lexer.T_STRING) {
-				return nil
-			}
-			nameParts = append(nameParts, p.currentToken.Value)
+		// 解析命名空间名称
+		namespaceName, err := parseUseNamespaceName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
 		}
-
-		namespaceName := ast.NewNamespaceNameExpression(p.currentToken.Position, nameParts)
 
 		// 检查是否有别名
 		alias := ""
