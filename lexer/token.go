@@ -211,6 +211,7 @@ const (
 	TOKEN_DOLLAR      TokenType = '$'  // $
 	TOKEN_BACKSLASH   TokenType = '\\' // \
 	TOKEN_QUOTE       TokenType = '"'  // "
+	TOKEN_BACKTICK    TokenType = '`'  // `
 )
 
 // TokenNames 提供 Token 类型到名称的映射
@@ -394,6 +395,7 @@ var TokenNames = map[TokenType]string{
 	TOKEN_DOLLAR:      "$",
 	TOKEN_BACKSLASH:   "\\",
 	TOKEN_QUOTE:       "\"",
+	TOKEN_BACKTICK:    "`",
 }
 
 // Keywords 定义 PHP 关键字到 Token 类型的映射

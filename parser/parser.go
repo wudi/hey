@@ -143,6 +143,7 @@ func init() {
 		lexer.T_ENCAPSED_AND_WHITESPACE:  parseStringLiteral,
 		lexer.T_END_HEREDOC:              parseEndHeredoc,
 		lexer.TOKEN_COMMA:                parseComma,
+		lexer.TOKEN_BACKTICK:             parseShellExecExpression,
 		lexer.T_NEW:                      parseNewExpression,
 		lexer.T_CLONE:                    parseCloneExpression,
 		lexer.TOKEN_AT:                   parseErrorSuppression,
@@ -1316,6 +1317,13 @@ func parseAlternativeForStatement(p *Parser, pos lexer.Position, initExprs, cond
 func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	pos := p.currentToken.Position
 
+	// 检查是否有 abstract 修饰符
+	var isAbstract bool
+	if p.currentToken.Type == lexer.T_ABSTRACT {
+		isAbstract = true
+		p.nextToken() // 移动到下一个token (可能是visibility或function)
+	}
+
 	// 检查是否有可见性修饰符 (public, private, protected)
 	var visibility string
 	var isStatic bool
@@ -1402,11 +1410,19 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 		funcDecl.ReturnType = returnType
 	}
 
-	if !p.expectPeek(lexer.TOKEN_LBRACE) {
-		return nil
+	// For abstract methods, expect semicolon instead of function body
+	if isAbstract {
+		if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+			return nil
+		}
+		// Abstract methods have no body
+		funcDecl.Body = nil
+	} else {
+		if !p.expectPeek(lexer.TOKEN_LBRACE) {
+			return nil
+		}
+		funcDecl.Body = parseBlockStatements(p)
 	}
-
-	funcDecl.Body = parseBlockStatements(p)
 
 	return funcDecl
 }
@@ -1645,19 +1661,25 @@ func parseInterfaceDeclaration(p *Parser) *ast.InterfaceDeclaration {
 		p.nextToken() // 移动到 extends
 
 		// 解析第一个父接口
-		if !p.expectPeek(lexer.T_STRING) {
+		p.nextToken() // 移动到类名
+		className, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
 			return nil
 		}
-		parentInterface := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		parentInterface := ast.NewIdentifierNode(p.currentToken.Position, className)
 		interfaceDecl.Extends = append(interfaceDecl.Extends, parentInterface)
 
 		// 处理多个父接口 (interface Child extends Parent1, Parent2)
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 移动到逗号
-			if !p.expectPeek(lexer.T_STRING) {
+			p.nextToken() // 移动到类名
+			className, err := parseClassName(p)
+			if err != nil {
+				p.errors = append(p.errors, err.Error())
 				return nil
 			}
-			parentInterface := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+			parentInterface := ast.NewIdentifierNode(p.currentToken.Position, className)
 			interfaceDecl.Extends = append(interfaceDecl.Extends, parentInterface)
 		}
 	}
@@ -2509,18 +2531,20 @@ func parseHeredoc(p *Parser) ast.Expression {
 			variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
 			parts = append(parts, variable)
 		case lexer.T_CURLY_OPEN:
-			// 复杂变量插值 {$var}
+			// 复杂变量插值 {$var} 或 {$var['key']} 或 {$var->prop}
 			p.nextToken() // 跳过 T_CURLY_OPEN
-			if p.currentToken.Type == lexer.T_VARIABLE {
-				variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
-				parts = append(parts, variable)
+			
+			// 解析大括号内的表达式
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				parts = append(parts, expr)
+			}
+			
+			// 期望结束的 }
+			if p.peekToken.Type == lexer.TOKEN_RBRACE {
 				p.nextToken() // 移动到 }
-				if p.currentToken.Type != lexer.TOKEN_RBRACE {
-					p.errors = append(p.errors, "expected '}' after variable in heredoc interpolation")
-					return nil
-				}
 			} else {
-				p.errors = append(p.errors, "expected variable after '{' in heredoc interpolation")
+				p.errors = append(p.errors, "expected '}' after expression in heredoc interpolation")
 				return nil
 			}
 		default:
@@ -3824,10 +3848,13 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
 		p.nextToken() // 跳过当前token移动到extends
-		if !p.expectPeek(lexer.T_STRING) {
+		p.nextToken() // 移动到类名
+		className, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
 			return nil
 		}
-		extends := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		extends := ast.NewIdentifierNode(p.currentToken.Position, className)
 		class.Extends = extends
 	}
 
@@ -3891,10 +3918,13 @@ func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
 		p.nextToken() // 跳过当前token移动到extends
-		if !p.expectPeek(lexer.T_STRING) {
+		p.nextToken() // 移动到类名
+		className, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
 			return nil
 		}
-		extends := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+		extends := ast.NewIdentifierNode(p.currentToken.Position, className)
 		class.Extends = extends
 	}
 
@@ -4185,6 +4215,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 			// static property (e.g., static $var)
 			return parsePropertyDeclaration(p)
 		}
+	case lexer.T_ABSTRACT:
+		// Handle abstract methods: abstract [visibility] function name();
+		return parseFunctionDeclaration(p)
 	default:
 		// 跳过未识别的token
 		return nil
@@ -4561,6 +4594,59 @@ func parseInterpolatedString(p *Parser) ast.Expression {
 
 	// 返回字符串插值表达式
 	return ast.NewInterpolatedStringExpression(pos, parts)
+}
+
+// parseShellExecExpression 解析命令执行表达式 (反引号)
+func parseShellExecExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	var parts []ast.Expression
+
+	// 跳过开始的反引号
+	p.nextToken()
+
+	// 解析命令内容，直到遇到结束的反引号
+	for p.currentToken.Type != lexer.TOKEN_BACKTICK && !p.isAtEnd() {
+		switch p.currentToken.Type {
+		case lexer.T_VARIABLE:
+			// 变量插值
+			variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
+			parts = append(parts, variable)
+		case lexer.T_ENCAPSED_AND_WHITESPACE:
+			// 命令片段
+			if p.currentToken.Value != "" {
+				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				parts = append(parts, stringPart)
+			}
+		case lexer.T_CURLY_OPEN:
+			// {$expression} 形式的复杂表达式
+			p.nextToken() // 跳过 {
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				parts = append(parts, expr)
+			}
+			// 期待右花括号
+			if p.currentToken.Type == lexer.TOKEN_RBRACE {
+				// 已经在正确位置，不需要额外移动
+			} else {
+				p.errors = append(p.errors, "expected '}' after expression in shell execution")
+			}
+		default:
+			// 其他内容，当作命令片段处理
+			if p.currentToken.Value != "" {
+				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				parts = append(parts, stringPart)
+			}
+		}
+		p.nextToken()
+	}
+
+	// 如果没有找到结束的反引号，报错
+	if p.currentToken.Type != lexer.TOKEN_BACKTICK {
+		p.errors = append(p.errors, "unterminated shell execution expression")
+	}
+
+	// 如果只有一个部分且是简单字符串，仍返回 ShellExecExpression
+	return ast.NewShellExecExpression(pos, parts)
 }
 
 // parseVisibilityModifier 解析可见性修饰符 public/private/protected

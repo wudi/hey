@@ -1409,6 +1409,47 @@ func (ise *InterpolatedStringExpression) String() string {
 	return `"` + strings.Join(parts, "") + `"`
 }
 
+// ShellExecExpression 命令执行表达式 (反引号)
+type ShellExecExpression struct {
+	BaseNode
+	Parts []Expression `json:"parts"` // 命令的各个部分
+}
+
+func NewShellExecExpression(pos lexer.Position, parts []Expression) *ShellExecExpression {
+	return &ShellExecExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTShellExec,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Parts: parts,
+	}
+}
+
+// GetChildren 返回子节点
+func (se *ShellExecExpression) GetChildren() []Node {
+	nodes := make([]Node, len(se.Parts))
+	for i, part := range se.Parts {
+		nodes[i] = part
+	}
+	return nodes
+}
+
+// Accept 接受访问者
+func (se *ShellExecExpression) Accept(visitor Visitor) {
+	visitor.Visit(se)
+}
+
+func (se *ShellExecExpression) expressionNode() {}
+
+func (se *ShellExecExpression) String() string {
+	var parts []string
+	for _, part := range se.Parts {
+		parts = append(parts, part.String())
+	}
+	return "`" + strings.Join(parts, "") + "`"
+}
+
 // NumberLiteral 数字字面量
 type NumberLiteral struct {
 	BaseNode

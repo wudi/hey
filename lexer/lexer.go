@@ -302,6 +302,8 @@ func (l *Lexer) NextToken() Token {
 		return l.nextTokenInHeredoc()
 	case ST_NOWDOC:
 		return l.nextTokenInNowdoc()
+	case ST_BACKQUOTE:
+		return l.nextTokenInBackquote()
 	default:
 		return l.nextTokenInScripting()
 	}
@@ -697,6 +699,20 @@ func (l *Lexer) nextTokenInScripting() Token {
 		}
 		return Token{Type: T_CONSTANT_ENCAPSED_STRING, Value: "'" + str + "'", Position: pos}
 
+	case '`':
+		// 执行操作符 (backtick) - 检查是否包含变量插值
+		if l.containsInterpolation('`') {
+			// 包含变量插值，切换到 ST_BACKQUOTE 状态
+			l.readChar() // 跳过开头的 backtick
+			l.state = ST_BACKQUOTE
+			return Token{Type: TOKEN_BACKTICK, Value: "`", Position: pos}
+		} else {
+			// 简单命令执行，无插值 - 仍需要通过 shell exec 状态处理
+			l.readChar() // 跳过开头的 backtick
+			l.state = ST_BACKQUOTE
+			return Token{Type: TOKEN_BACKTICK, Value: "`", Position: pos}
+		}
+
 	case '#':
 		// 检查是否为属性语法 #[
 		if l.peekChar() == '[' {
@@ -818,6 +834,82 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 					content.WriteByte('\\')
 				case '"':
 					content.WriteByte('"')
+				case '$':
+					content.WriteByte('$')
+				default:
+					content.WriteByte(l.ch)
+				}
+				l.readChar()
+			}
+		} else {
+			content.WriteByte(l.ch)
+			l.readChar()
+		}
+	}
+
+	if content.Len() > 0 {
+		return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+	}
+
+	return Token{Type: T_EOF, Value: "", Position: pos}
+}
+
+// nextTokenInBackquote 在反引号命令执行中获取token
+func (l *Lexer) nextTokenInBackquote() Token {
+	pos := l.getCurrentPosition()
+
+	// 检查是否到达反引号结尾
+	if l.ch == '`' {
+		l.readChar() // 跳过结束的反引号
+		l.state = ST_IN_SCRIPTING
+		return Token{Type: TOKEN_BACKTICK, Value: "`", Position: pos}
+	}
+
+	if l.ch == 0 {
+		l.addError("unterminated shell execution string")
+		return Token{Type: T_EOF, Value: "", Position: pos}
+	}
+
+	var content strings.Builder
+
+	for l.ch != '`' && l.ch != 0 {
+		// 检查 {$variable} 语法
+		if l.ch == '{' && l.peekChar() == '$' {
+			// 如果已经有内容，先返回内容
+			if content.Len() > 0 {
+				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+			}
+			// 推入当前状态到栈
+			l.stateStack.Push(l.state)
+			l.state = ST_IN_SCRIPTING
+			l.readChar() // 跳过 {
+			return Token{Type: T_CURLY_OPEN, Value: "{", Position: pos}
+		} else if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
+			// 直接变量插值 $variable
+			if content.Len() > 0 {
+				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+			}
+			// 读取变量
+			l.readChar() // 跳过 $
+			identifier := l.readIdentifier()
+			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
+		}
+
+		// 处理转义字符
+		if l.ch == '\\' {
+			l.readChar() // 跳过反斜杠
+			if l.ch != 0 {
+				switch l.ch {
+				case 'n':
+					content.WriteByte('\n')
+				case 'r':
+					content.WriteByte('\r')
+				case 't':
+					content.WriteByte('\t')
+				case '\\':
+					content.WriteByte('\\')
+				case '`':
+					content.WriteByte('`')
 				case '$':
 					content.WriteByte('$')
 				default:
