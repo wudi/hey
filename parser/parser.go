@@ -1230,8 +1230,14 @@ func parseExpressionList(p *Parser, end lexer.TokenType) []ast.Expression {
 	}
 
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
-		p.nextToken()
-		p.nextToken()
+		p.nextToken() // 移动到逗号
+		
+		// 检查逗号后面是否直接是结束符（支持尾随逗号）
+		if p.peekToken.Type == end {
+			break
+		}
+		
+		p.nextToken() // 移动到逗号后的token
 
 		// Check for different argument types
 		if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.TOKEN_COLON {
@@ -1433,6 +1439,12 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 		// 处理更多参数
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 移动到逗号
+			
+			// 检查逗号后面是否直接是结束符（支持尾随逗号）
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+			
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
@@ -1807,6 +1819,12 @@ func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
 		// 处理更多参数
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 移动到逗号
+			
+			// 检查逗号后面是否直接是结束符（支持尾随逗号）
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+			
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
@@ -3752,6 +3770,12 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 		// 处理更多参数
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 移动到逗号
+			
+			// 检查逗号后面是否直接是结束符（支持尾随逗号）
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+			
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
@@ -4239,6 +4263,12 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 		// 处理更多参数
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 移动到逗号
+			
+			// 检查逗号后面是否直接是结束符（支持尾随逗号）
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+			
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
@@ -5101,6 +5131,12 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 		// 处理更多参数
 		for p.peekToken.Type == lexer.TOKEN_COMMA {
 			p.nextToken() // 移动到逗号
+			
+			// 检查逗号后面是否直接是结束符（支持尾随逗号）
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+			
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {

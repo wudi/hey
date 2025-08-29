@@ -2033,6 +2033,158 @@ PHP); ?>`,
 	}
 }
 
+func TestParsing_TrailingCommaInFunctionCalls(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Simple function call with trailing comma",
+			input:    `<?php func(1, 2,); ?>`,
+			expected: "func call with 2 arguments",
+		},
+		{
+			name:     "Method call with trailing comma",
+			input:    `<?php $obj->method(1, 2,); ?>`,
+			expected: "method call with 2 arguments",
+		},
+		{
+			name:     "Complex method chain with trailing comma",
+			input:    `<?php $obj->expectExceptionObject((new ModelNotFoundException())->setModel(EloquentTestUser::class, [1]),); ?>`,
+			expected: "method call with complex argument",
+		},
+		{
+			name:     "Nested function calls with trailing commas",
+			input:    `<?php outer(inner(1,), 2,); ?>`,
+			expected: "nested function calls",
+		},
+		{
+			name:     "Function call with mixed argument types and trailing comma",
+			input:    `<?php func($var, "string", 123, [1, 2, 3],); ?>`,
+			expected: "function call with 4 arguments",
+		},
+		{
+			name:     "Array function with trailing comma",
+			input:    `<?php array_merge([1, 2], [3, 4],); ?>`,
+			expected: "array_merge with 2 arguments",
+		},
+		{
+			name:     "Method call on new object with trailing comma",
+			input:    `<?php (new Class())->method(1, 2,); ?>`,
+			expected: "method call on new object",
+		},
+		{
+			name:     "Static method call with trailing comma",
+			input:    `<?php Class::method(1, 2,); ?>`,
+			expected: "static method call",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program, "Program should not be nil")
+			assert.Len(t, program.Body, 1, "Program should have 1 statement")
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			require.True(t, ok, "Statement should be ExpressionStatement")
+			require.NotNil(t, exprStmt.Expression, "Expression should not be nil")
+
+			// All test cases should result in valid call expressions
+			// The specific validation depends on the type of call
+			switch callExpr := exprStmt.Expression.(type) {
+			case *ast.CallExpression:
+				// Simple function call
+				assert.NotNil(t, callExpr.Callee)
+				if tt.name == "Simple function call with trailing comma" {
+					assert.Len(t, callExpr.Arguments, 2)
+				} else if tt.name == "Nested function calls with trailing commas" {
+					assert.Len(t, callExpr.Arguments, 2)
+					// Check that the first argument is also a call expression
+					innerCall, ok := callExpr.Arguments[0].(*ast.CallExpression)
+					require.True(t, ok, "First argument should be a function call")
+					assert.Len(t, innerCall.Arguments, 1)
+				} else if tt.name == "Function call with mixed argument types and trailing comma" {
+					assert.Len(t, callExpr.Arguments, 4)
+				} else if tt.name == "Array function with trailing comma" {
+					assert.Len(t, callExpr.Arguments, 2)
+				} else if tt.name == "Static method call with trailing comma" {
+					assert.Len(t, callExpr.Arguments, 2)
+				}
+			default:
+				// For more complex expressions, just ensure they parsed without error
+				assert.NotNil(t, callExpr, "Expression should not be nil")
+			}
+		})
+	}
+}
+
+func TestParsing_TrailingCommaInFunctionParameters(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		paramCount int
+	}{
+		{
+			name:       "Function with trailing comma in parameters",
+			input:      `<?php function test($a, $b,) { return $a + $b; } ?>`,
+			paramCount: 2,
+		},
+		{
+			name:       "Function with single parameter and trailing comma",
+			input:      `<?php function single($param,) { return $param; } ?>`,
+			paramCount: 1,
+		},
+		{
+			name:       "Function with typed parameters and trailing comma",
+			input:      `<?php function typed(int $a, string $b,): bool { return true; } ?>`,
+			paramCount: 2,
+		},
+		{
+			name:       "Function with reference parameters and trailing comma",
+			input:      `<?php function ref(&$a, &$b,) { $a = $b; } ?>`,
+			paramCount: 2,
+		},
+		{
+			name:       "Function with mixed parameters and trailing comma",
+			input:      `<?php function mixed(int $a, &$b, $c = "default",) { return $a; } ?>`,
+			paramCount: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program, "Program should not be nil")
+			assert.Len(t, program.Body, 1, "Program should have 1 statement")
+
+			stmt := program.Body[0]
+			funcDecl, ok := stmt.(*ast.FunctionDeclaration)
+			require.True(t, ok, "Statement should be FunctionDeclaration")
+			
+			assert.Len(t, funcDecl.Parameters, tt.paramCount, "Function should have correct number of parameters")
+			
+			// Verify parameter names are correctly parsed
+			if tt.paramCount >= 1 {
+				assert.NotEmpty(t, funcDecl.Parameters[0].Name, "First parameter should have a name")
+			}
+			if tt.paramCount >= 2 {
+				assert.NotEmpty(t, funcDecl.Parameters[1].Name, "Second parameter should have a name")
+			}
+		})
+	}
+}
+
 func TestParsing_AnonymousFunctions(t *testing.T) {
 	tests := []struct {
 		name           string
