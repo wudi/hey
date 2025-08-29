@@ -5151,6 +5151,51 @@ class Advanced {
 				assert.NotNil(t, property3.DefaultValue, "Property should have default value")
 			},
 		},
+		{
+			name:  "Static property with fully qualified namespaced type",
+			input: `<?php class A { protected static \WeakMap $recursionDetectionCache; }`,
+			expectedClassName:  "A",
+			expectedProperties: 1,
+			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
+				property, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "First body item should be PropertyDeclaration")
+				assert.Equal(t, "protected", property.Visibility)
+				assert.True(t, property.Static, "Property should be static")
+				assert.Equal(t, "recursionDetectionCache", property.Name)
+				assert.NotNil(t, property.Type, "Property should have type hint")
+				assert.Equal(t, "\\WeakMap", property.Type.Name)
+			},
+		},
+		{
+			name:  "Static property with qualified namespaced type",
+			input: `<?php class A { private static Foo\Bar $cache; }`,
+			expectedClassName:  "A",
+			expectedProperties: 1,
+			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
+				property, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "First body item should be PropertyDeclaration")
+				assert.Equal(t, "private", property.Visibility)
+				assert.True(t, property.Static, "Property should be static")
+				assert.Equal(t, "cache", property.Name)
+				assert.NotNil(t, property.Type, "Property should have type hint")
+				assert.Equal(t, "Foo\\Bar", property.Type.Name)
+			},
+		},
+		{
+			name:  "Static property with relative namespaced type",
+			input: `<?php class A { public static namespace\Cache $storage; }`,
+			expectedClassName:  "A",
+			expectedProperties: 1,
+			validateProperties: func(t *testing.T, classExpr *ast.ClassExpression) {
+				property, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				assert.True(t, ok, "First body item should be PropertyDeclaration")
+				assert.Equal(t, "public", property.Visibility)
+				assert.True(t, property.Static, "Property should be static")
+				assert.Equal(t, "storage", property.Name)
+				assert.NotNil(t, property.Type, "Property should have type hint")
+				assert.Equal(t, "namespace\\Cache", property.Type.Name)
+			},
+		},
 	}
 
 	for _, tt := range tests {

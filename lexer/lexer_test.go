@@ -615,3 +615,144 @@ func TestCommentWithClosingTag(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_QualifiedNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "fully qualified name",
+			input: `<?php \WeakMap`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_NAME_FULLY_QUALIFIED, "\\WeakMap"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "qualified name",
+			input: `<?php Foo\Bar`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_NAME_QUALIFIED, "Foo\\Bar"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "relative name",
+			input: `<?php namespace\Foo`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_NAME_RELATIVE, "namespace\\Foo"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "simple identifier",
+			input: `<?php Foo`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_STRING, "Foo"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "multiple qualified names",
+			input: `<?php \WeakMap Foo\Bar namespace\Baz SimpleClass`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_NAME_FULLY_QUALIFIED, "\\WeakMap"},
+				{T_NAME_QUALIFIED, "Foo\\Bar"},
+				{T_NAME_RELATIVE, "namespace\\Baz"},
+				{T_STRING, "SimpleClass"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "backslash alone",
+			input: `<?php \ $var`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_NS_SEPARATOR, "\\"},
+				{T_VARIABLE, "$var"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - tokentype wrong. expected=%q, got=%q",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
+
+func TestLexer_StaticPropertyWithNamespacedType(t *testing.T) {
+	// This tests the specific bug case that was fixed
+	input := `<?php
+class A {
+    protected static \WeakMap $recursionDetectionCache;
+}`
+
+	expected := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		{T_OPEN_TAG, "<?php\n"},
+		{T_CLASS, "class"},
+		{T_STRING, "A"},
+		{TOKEN_LBRACE, "{"},
+		{T_PROTECTED, "protected"},
+		{T_STATIC, "static"},
+		{T_NAME_FULLY_QUALIFIED, "\\WeakMap"},
+		{T_VARIABLE, "$recursionDetectionCache"},
+		{TOKEN_SEMICOLON, ";"},
+		{TOKEN_RBRACE, "}"},
+		{T_EOF, ""},
+	}
+
+	lexer := New(input)
+
+	for i, exp := range expected {
+		tok := lexer.NextToken()
+		assert.Equal(t, exp.expectedType, tok.Type,
+			"test[%d] - tokentype wrong. expected=%q, got=%q",
+			i, TokenNames[exp.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, exp.expectedValue, tok.Value,
+			"test[%d] - value wrong. expected=%q, got=%q",
+			i, exp.expectedValue, tok.Value)
+	}
+}

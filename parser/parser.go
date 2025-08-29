@@ -128,6 +128,9 @@ func init() {
 		lexer.T_DNUMBER:                  parseFloatLiteral,
 		lexer.T_CONSTANT_ENCAPSED_STRING: parseStringLiteral,
 		lexer.T_STRING:                   parseIdentifier,
+		lexer.T_NAME_FULLY_QUALIFIED:     parseIdentifier,
+		lexer.T_NAME_QUALIFIED:           parseIdentifier,
+		lexer.T_NAME_RELATIVE:            parseIdentifier,
 		lexer.TOKEN_EXCLAMATION:          parsePrefixExpression,
 		lexer.TOKEN_PLUS:                 parsePrefixExpression, // 一元正号操作符 +
 		lexer.TOKEN_MINUS:                parsePrefixExpression,
@@ -1614,21 +1617,36 @@ func parseNamespaceStatement(p *Parser) *ast.NamespaceStatement {
 		return stmt
 	}
 
-	// 解析命名空间名称
-	if !p.expectPeek(lexer.T_STRING) {
-		return nil
-	}
-
-	// 构建命名空间名称
-	nameParts := []string{p.currentToken.Value}
-
-	// 处理多级命名空间 (Foo\Bar\Baz)
-	for p.peekToken.Type == lexer.T_NS_SEPARATOR {
-		p.nextToken() // 移动到 \
-		if !p.expectPeek(lexer.T_STRING) {
-			return nil
+	// 解析命名空间名称 - 支持简单标识符和限定名
+	var nameParts []string
+	if p.peekToken.Type == lexer.T_STRING {
+		p.nextToken() // 移动到标识符
+		nameParts = []string{p.currentToken.Value}
+		
+		// 处理多级命名空间 (Foo\Bar\Baz) - 旧格式兼容
+		for p.peekToken.Type == lexer.T_NS_SEPARATOR {
+			p.nextToken() // 移动到 \
+			if !p.expectPeek(lexer.T_STRING) {
+				return nil
+			}
+			nameParts = append(nameParts, p.currentToken.Value)
 		}
-		nameParts = append(nameParts, p.currentToken.Value)
+	} else if p.peekToken.Type == lexer.T_NAME_QUALIFIED || p.peekToken.Type == lexer.T_NAME_RELATIVE {
+		p.nextToken() // 移动到限定名
+		// 分割限定名为各个部分
+		qualifiedName := p.currentToken.Value
+		nameParts = strings.Split(qualifiedName, "\\")
+		// 过滤空字符串（可能来自开头的\）
+		var filteredParts []string
+		for _, part := range nameParts {
+			if part != "" {
+				filteredParts = append(filteredParts, part)
+			}
+		}
+		nameParts = filteredParts
+	} else {
+		p.errors = append(p.errors, fmt.Sprintf("expected namespace name, got %s at position %s", p.peekToken.Value, p.peekToken.Position))
+		return nil
 	}
 
 	namespaceName := ast.NewNamespaceNameExpression(pos, nameParts)

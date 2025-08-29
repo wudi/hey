@@ -152,6 +152,73 @@ func (l *Lexer) readIdentifier() string {
 	return l.input[position:l.position]
 }
 
+// readQualifiedName 读取命名空间限定名
+// 返回 (name, tokenType) 其中 tokenType 可能是：
+// T_NAME_FULLY_QUALIFIED (\Name)
+// T_NAME_QUALIFIED (Name1\Name2) 
+// T_NAME_RELATIVE (namespace\Name)
+// T_STRING (Name - 简单标识符)
+func (l *Lexer) readQualifiedName() (string, TokenType) {
+	startPos := l.position
+	
+	// 检查是否以 \ 开头（fully qualified name）
+	if l.ch == '\\' {
+		l.readChar() // 跳过 \
+		
+		// 必须跟着一个标识符
+		if !isLetter(l.ch) && l.ch != '_' {
+			// 如果 \ 后面不是标识符，返回单独的 T_NS_SEPARATOR
+			// 不需要回退，因为我们已经正确读取了 \
+			return "\\", T_NS_SEPARATOR
+		}
+		
+		// 读取第一个标识符部分
+		for isLetter(l.ch) || isDigit(l.ch) {
+			l.readChar()
+		}
+		
+		// 继续读取后续的 \Name 部分
+		for l.ch == '\\' && isLetter(l.peekChar()) {
+			l.readChar() // 跳过 \
+			for isLetter(l.ch) || isDigit(l.ch) {
+				l.readChar()
+			}
+		}
+		
+		return l.input[startPos:l.position], T_NAME_FULLY_QUALIFIED
+	}
+	
+	// 不以 \ 开头，先读取第一个标识符
+	identifier := l.readIdentifier()
+	
+	// 检查是否是 'namespace' 关键字后跟 \
+	if identifier == "namespace" && l.ch == '\\' && isLetter(l.peekChar()) {
+		// 这是 namespace\Name 形式的相对名
+		for l.ch == '\\' && isLetter(l.peekChar()) {
+			l.readChar() // 跳过 \
+			for isLetter(l.ch) || isDigit(l.ch) {
+				l.readChar()
+			}
+		}
+		return l.input[startPos:l.position], T_NAME_RELATIVE
+	}
+	
+	// 检查是否后跟 \ (qualified name like Name1\Name2)
+	if l.ch == '\\' && isLetter(l.peekChar()) {
+		// 这是一个限定名 Name1\Name2
+		for l.ch == '\\' && isLetter(l.peekChar()) {
+			l.readChar() // 跳过 \
+			for isLetter(l.ch) || isDigit(l.ch) {
+				l.readChar()
+			}
+		}
+		return l.input[startPos:l.position], T_NAME_QUALIFIED
+	}
+	
+	// 简单标识符
+	return identifier, T_STRING
+}
+
 // readNumber 读取数字
 func (l *Lexer) readNumber() (string, TokenType) {
 	position := l.position
@@ -670,8 +737,9 @@ func (l *Lexer) nextTokenInScripting() Token {
 		return Token{Type: TOKEN_DOLLAR, Value: "$", Position: pos}
 
 	case '\\':
-		l.readChar()
-		return Token{Type: T_NS_SEPARATOR, Value: "\\", Position: pos}
+		// 处理命名空间限定名
+		name, tokenType := l.readQualifiedName()
+		return Token{Type: tokenType, Value: name, Position: pos}
 
 	case '"':
 		// 双引号字符串 - 检查是否包含变量插值
@@ -726,44 +794,47 @@ func (l *Lexer) nextTokenInScripting() Token {
 
 	default:
 		if isLetter(l.ch) || l.ch == '_' {
-			// 标识符或关键字
-			identifier := l.readIdentifier()
+			// 处理命名空间限定名（包括简单标识符）
+			name, tokenType := l.readQualifiedName()
+			
+			// 只有简单标识符才需要检查关键字和特殊复合关键字
+			if tokenType == T_STRING {
+				// 检查特殊复合关键字 "yield from"
+				if name == "yield" {
+					// 保存当前位置
+					savedPos := l.position
+					savedReadPos := l.readPosition
+					savedCh := l.ch
+					savedLine := l.line
+					savedColumn := l.column
 
-			// 检查特殊复合关键字 "yield from"
-			if identifier == "yield" {
-				// 保存当前位置
-				savedPos := l.position
-				savedReadPos := l.readPosition
-				savedCh := l.ch
-				savedLine := l.line
-				savedColumn := l.column
+					// 跳过空白
+					l.skipWhitespace()
 
-				// 跳过空白
-				l.skipWhitespace()
-
-				// 检查下一个标识符是否为 "from"
-				if isLetter(l.ch) || l.ch == '_' {
-					nextIdentifier := l.readIdentifier()
-					if nextIdentifier == "from" {
-						// 返回 T_YIELD_FROM token
-						return Token{Type: T_YIELD_FROM, Value: "yield from", Position: pos}
+					// 检查下一个标识符是否为 "from"
+					if isLetter(l.ch) || l.ch == '_' {
+						nextIdentifier := l.readIdentifier()
+						if nextIdentifier == "from" {
+							// 返回 T_YIELD_FROM token
+							return Token{Type: T_YIELD_FROM, Value: "yield from", Position: pos}
+						}
 					}
+
+					// 恢复位置（没有找到 "from"）
+					l.position = savedPos
+					l.readPosition = savedReadPos
+					l.ch = savedCh
+					l.line = savedLine
+					l.column = savedColumn
 				}
 
-				// 恢复位置（没有找到 "from"）
-				l.position = savedPos
-				l.readPosition = savedReadPos
-				l.ch = savedCh
-				l.line = savedLine
-				l.column = savedColumn
+				// 检查是否为关键字
+				if keywordType, isKeyword := IsKeyword(name); isKeyword {
+					return Token{Type: keywordType, Value: name, Position: pos}
+				}
 			}
 
-			// 检查是否为关键字
-			if tokenType, isKeyword := IsKeyword(identifier); isKeyword {
-				return Token{Type: tokenType, Value: identifier, Position: pos}
-			}
-
-			return Token{Type: T_STRING, Value: identifier, Position: pos}
+			return Token{Type: tokenType, Value: name, Position: pos}
 		} else if isDigit(l.ch) {
 			// 数字
 			number, tokenType := l.readNumber()
