@@ -825,6 +825,13 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseHaltCompilerStatement(p)
 	case lexer.TOKEN_LBRACE:
 		return parseBlockStatement(p)
+	case lexer.T_FINAL:
+		// Check if this is "final class"
+		if p.peekToken.Type == lexer.T_CLASS {
+			return parseFinalClassDeclaration(p)
+		}
+		// Otherwise fall through to expression statement
+		return parseExpressionStatement(p)
 	case lexer.T_STRING:
 		// 检查是否是标签（T_STRING followed by :)
 		if p.peekToken.Type == lexer.TOKEN_COLON {
@@ -4049,7 +4056,7 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 
 	// 解析类名
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	class := ast.NewClassExpression(pos, name, nil, nil, false)
+	class := ast.NewClassExpression(pos, name, nil, nil, false, false) // final = false, readOnly = false
 
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
@@ -4125,7 +4132,7 @@ func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 
 	// 解析类名
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	class := ast.NewClassExpression(pos, name, nil, nil, true) // readOnly = true
+	class := ast.NewClassExpression(pos, name, nil, nil, false, true) // final = false, readOnly = true
 
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
@@ -4175,6 +4182,79 @@ func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 	// 解析类体
 	p.nextToken() // 进入类体
 	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		stmt := parseClassStatement(p)
+		if stmt != nil {
+			class.Body = append(class.Body, stmt)
+		}
+		p.nextToken()
+	}
+
+	return ast.NewExpressionStatement(pos, class)
+}
+
+// parseFinalClassDeclaration 解析 final class 声明语句
+func parseFinalClassDeclaration(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+
+	// 跳过 'final' 关键字，移动到 'class'
+	if !p.expectPeek(lexer.T_CLASS) {
+		return nil
+	}
+
+	// 跳过 'class' 关键字
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	// 解析类名
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	class := ast.NewClassExpression(pos, name, nil, nil, true, false) // final = true, readOnly = false
+
+	// 检查是否有 extends 子句
+	if p.peekToken.Type == lexer.T_EXTENDS {
+		p.nextToken() // 跳过当前token移动到extends
+		p.nextToken() // 移动到类名
+		className, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		extends := ast.NewIdentifierNode(p.currentToken.Position, className)
+		class.Extends = extends
+	}
+
+	// 检查是否有 implements 子句
+	if p.peekToken.Type == lexer.T_IMPLEMENTS {
+		p.nextToken() // 移动到 implements
+		p.nextToken() // 移动到第一个接口名
+
+		interfaceName, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		class.Implements = append(class.Implements, ast.NewIdentifierNode(p.currentToken.Position, interfaceName))
+
+		// 处理多个接口
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个接口名
+			interfaceName, err := parseClassName(p)
+			if err != nil {
+				p.errors = append(p.errors, err.Error())
+				return nil
+			}
+			class.Implements = append(class.Implements, ast.NewIdentifierNode(p.currentToken.Position, interfaceName))
+		}
+	}
+
+	// 解析类主体
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	p.nextToken() // 移动到类主体第一个token
+	for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
 		stmt := parseClassStatement(p)
 		if stmt != nil {
 			class.Body = append(class.Body, stmt)
@@ -4307,7 +4387,7 @@ func parseClassExpression(p *Parser) ast.Expression {
 		name = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	}
 
-	return ast.NewClassExpression(pos, name, nil, nil, false) // name, extends, implements
+	return ast.NewClassExpression(pos, name, nil, nil, false, false) // final = false, readOnly = false
 }
 
 // parseVisibilityStaticFunction 解析 visibility static function 声明
@@ -4468,7 +4548,18 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 		return nil
 	}
 
-	p.nextToken() // Move to first constant name
+	p.nextToken() // Move past 'const'
+
+	// Check for optional type annotation (PHP 8.3+)
+	var constType *ast.TypeHint
+	if isTypeToken(p.currentToken.Type) && p.peekToken.Type != lexer.TOKEN_EQUAL {
+		// Only parse as type if the next token is not '=', meaning current token is type, not constant name
+		constType = parseTypeHint(p)
+		if constType == nil {
+			return nil
+		}
+		p.nextToken() // Move past the type to the constant name
+	}
 
 	// Parse constant list (can have multiple constants in one declaration)
 	var constants []ast.ConstantDeclarator
@@ -4510,7 +4601,7 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 		break
 	}
 
-	return ast.NewClassConstantDeclaration(pos, visibility, constants)
+	return ast.NewClassConstantDeclaration(pos, visibility, constType, constants)
 }
 
 // parsePropertyDeclaration 解析属性声明

@@ -4521,13 +4521,14 @@ func (ce *CaseExpression) String() string {
 type ClassExpression struct {
 	BaseNode
 	Name       Expression   `json:"name"`
+	Final      bool         `json:"final,omitempty"`      // final class
 	ReadOnly   bool         `json:"readOnly,omitempty"`   // readonly class
 	Extends    Expression   `json:"extends"`
 	Implements []Expression `json:"implements"`
 	Body       []Statement  `json:"body"`
 }
 
-func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression, readOnly bool) *ClassExpression {
+func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression, final, readOnly bool) *ClassExpression {
 	return &ClassExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTClass,
@@ -4535,6 +4536,7 @@ func NewClassExpression(pos lexer.Position, name, extends Expression, implements
 			LineNo:   uint32(pos.Line),
 		},
 		Name:       name,
+		Final:      final,
 		ReadOnly:   readOnly,
 		Extends:    extends,
 		Implements: implements,
@@ -4588,8 +4590,11 @@ func (ce *ClassExpression) expressionNode() {}
 
 func (ce *ClassExpression) String() string {
 	result := ""
+	if ce.Final {
+		result = "final "
+	}
 	if ce.ReadOnly {
-		result = "readonly "
+		result += "readonly "
 	}
 	result += "class"
 	if ce.Name != nil {
@@ -4659,6 +4664,7 @@ func (ce *ConstExpression) String() string {
 type ClassConstantDeclaration struct {
 	BaseNode
 	Visibility string              `json:"visibility"`   // private, protected, public
+	Type       *TypeHint           `json:"type,omitempty"` // PHP 8.3+ typed constants support
 	Constants  []ConstantDeclarator `json:"constants"`    // 支持一行声明多个常量
 }
 
@@ -4714,7 +4720,7 @@ func (cd *ConstantDeclarator) String() string {
 	return result
 }
 
-func NewClassConstantDeclaration(pos lexer.Position, visibility string, constants []ConstantDeclarator) *ClassConstantDeclaration {
+func NewClassConstantDeclaration(pos lexer.Position, visibility string, constType *TypeHint, constants []ConstantDeclarator) *ClassConstantDeclaration {
 	return &ClassConstantDeclaration{
 		BaseNode: BaseNode{
 			Kind:     ASTClassConstGroup,
@@ -4722,12 +4728,16 @@ func NewClassConstantDeclaration(pos lexer.Position, visibility string, constant
 			LineNo:   uint32(pos.Line),
 		},
 		Visibility: visibility,
+		Type:       constType,
 		Constants:  constants,
 	}
 }
 
 func (ccd *ClassConstantDeclaration) GetChildren() []Node {
 	var children []Node
+	if ccd.Type != nil {
+		children = append(children, ccd.Type)
+	}
 	for i := range ccd.Constants {
 		children = append(children, &ccd.Constants[i])
 	}
@@ -4736,6 +4746,9 @@ func (ccd *ClassConstantDeclaration) GetChildren() []Node {
 
 func (ccd *ClassConstantDeclaration) Accept(visitor Visitor) {
 	if visitor.Visit(ccd) {
+		if ccd.Type != nil {
+			ccd.Type.Accept(visitor)
+		}
 		for i := range ccd.Constants {
 			ccd.Constants[i].Accept(visitor)
 		}
@@ -4746,6 +4759,9 @@ func (ccd *ClassConstantDeclaration) statementNode() {}
 
 func (ccd *ClassConstantDeclaration) String() string {
 	result := ccd.Visibility + " const "
+	if ccd.Type != nil {
+		result += ccd.Type.String() + " "
+	}
 	for i, constant := range ccd.Constants {
 		if i > 0 {
 			result += ", "

@@ -2870,6 +2870,195 @@ class ComplexConsts {
 	}
 }
 
+func TestParsing_FinalClass(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, class *ast.ClassExpression)
+	}{
+		{
+			name: "Simple final class",
+			input: `<?php
+final class MyClass {
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				assert.True(t, class.Final, "Class should be final")
+				assert.False(t, class.ReadOnly, "Class should not be readonly")
+				assert.Equal(t, "MyClass", class.Name.(*ast.IdentifierNode).Name)
+			},
+		},
+		{
+			name: "Final class with extends",
+			input: `<?php
+final class Child extends Parent {
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				assert.True(t, class.Final, "Class should be final")
+				assert.Equal(t, "Child", class.Name.(*ast.IdentifierNode).Name)
+				assert.NotNil(t, class.Extends, "Class should have extends clause")
+				assert.Equal(t, "Parent", class.Extends.(*ast.IdentifierNode).Name)
+			},
+		},
+		{
+			name: "Final class with implements",
+			input: `<?php
+final class MyClass implements InterfaceA, InterfaceB {
+}`,
+			validate: func(t *testing.T, class *ast.ClassExpression) {
+				assert.True(t, class.Final, "Class should be final")
+				assert.Equal(t, "MyClass", class.Name.(*ast.IdentifierNode).Name)
+				assert.Len(t, class.Implements, 2, "Class should implement 2 interfaces")
+				assert.Equal(t, "InterfaceA", class.Implements[0].(*ast.IdentifierNode).Name)
+				assert.Equal(t, "InterfaceB", class.Implements[1].(*ast.IdentifierNode).Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			require.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			exprStmt, ok := stmt.(*ast.ExpressionStatement)
+			require.True(t, ok, "Statement should be ExpressionStatement")
+
+			class, ok := exprStmt.Expression.(*ast.ClassExpression)
+			require.True(t, ok, "Expression should be ClassExpression")
+
+			tt.validate(t, class)
+		})
+	}
+}
+
+func TestParsing_TypedClassConstants(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Private typed int constant",
+			input: `<?php
+class MyClass {
+    private const int VERSION = 1;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				class := extractClass(t, program)
+				require.Len(t, class.Body, 1, "Class should have one statement")
+
+				constDecl, ok := class.Body[0].(*ast.ClassConstantDeclaration)
+				require.True(t, ok, "Statement should be ClassConstantDeclaration")
+				
+				assert.Equal(t, "private", constDecl.Visibility)
+				require.NotNil(t, constDecl.Type, "Constant should have type")
+				assert.Equal(t, "int", constDecl.Type.Name)
+				
+				require.Len(t, constDecl.Constants, 1)
+				assert.Equal(t, "VERSION", constDecl.Constants[0].Name.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "1", constDecl.Constants[0].Value.(*ast.NumberLiteral).Value)
+			},
+		},
+		{
+			name: "Public typed string constant",
+			input: `<?php
+class MyClass {
+    public const string NAME = "test";
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				class := extractClass(t, program)
+				require.Len(t, class.Body, 1)
+
+				constDecl, ok := class.Body[0].(*ast.ClassConstantDeclaration)
+				require.True(t, ok, "Statement should be ClassConstantDeclaration")
+				
+				assert.Equal(t, "public", constDecl.Visibility)
+				require.NotNil(t, constDecl.Type, "Constant should have type")
+				assert.Equal(t, "string", constDecl.Type.Name)
+			},
+		},
+		{
+			name: "Multiple typed constants in one declaration",
+			input: `<?php
+class MyClass {
+    protected const int MIN = 1, MAX = 100;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				class := extractClass(t, program)
+				require.Len(t, class.Body, 1)
+
+				constDecl, ok := class.Body[0].(*ast.ClassConstantDeclaration)
+				require.True(t, ok, "Statement should be ClassConstantDeclaration")
+				
+				assert.Equal(t, "protected", constDecl.Visibility)
+				require.NotNil(t, constDecl.Type, "Constant should have type")
+				assert.Equal(t, "int", constDecl.Type.Name)
+				
+				require.Len(t, constDecl.Constants, 2, "Should have 2 constants")
+				assert.Equal(t, "MIN", constDecl.Constants[0].Name.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "MAX", constDecl.Constants[1].Name.(*ast.IdentifierNode).Name)
+			},
+		},
+		{
+			name: "Mixed typed and untyped constants",
+			input: `<?php
+class MyClass {
+    private const int VERSION = 1;
+    const LEGACY = "old";
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				class := extractClass(t, program)
+				require.Len(t, class.Body, 2, "Class should have 2 constant declarations")
+
+				// First constant - typed
+				typedConst, ok := class.Body[0].(*ast.ClassConstantDeclaration)
+				require.True(t, ok, "First statement should be ClassConstantDeclaration")
+				assert.Equal(t, "private", typedConst.Visibility)
+				require.NotNil(t, typedConst.Type, "First constant should have type")
+				assert.Equal(t, "int", typedConst.Type.Name)
+
+				// Second constant - untyped
+				untypedConst, ok := class.Body[1].(*ast.ClassConstantDeclaration)
+				require.True(t, ok, "Second statement should be ClassConstantDeclaration")
+				assert.Equal(t, "public", untypedConst.Visibility) // Default visibility
+				assert.Nil(t, untypedConst.Type, "Second constant should not have type")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+
+			tt.validate(t, program)
+		})
+	}
+}
+
+// Helper function to extract class from program
+func extractClass(t *testing.T, program *ast.Program) *ast.ClassExpression {
+	require.Len(t, program.Body, 1, "Program should have one statement")
+
+	stmt := program.Body[0]
+	exprStmt, ok := stmt.(*ast.ExpressionStatement)
+	require.True(t, ok, "Statement should be ExpressionStatement")
+
+	class, ok := exprStmt.Expression.(*ast.ClassExpression)
+	require.True(t, ok, "Expression should be ClassExpression")
+
+	return class
+}
+
 func TestParsing_ClassMethodsWithVisibility(t *testing.T) {
 	tests := []struct {
 		name     string
