@@ -228,7 +228,7 @@ func (l *Lexer) readNumber() (string, TokenType) {
 	if l.ch == '0' && (l.peekChar() == 'x' || l.peekChar() == 'X') {
 		l.readChar() // 跳过 '0'
 		l.readChar() // 跳过 'x'
-		for isHexDigit(l.ch) {
+		for isHexDigit(l.ch) || l.ch == '_' {
 			l.readChar()
 		}
 		return l.input[position:l.position], T_LNUMBER
@@ -236,7 +236,7 @@ func (l *Lexer) readNumber() (string, TokenType) {
 
 	// 处理八进制
 	if l.ch == '0' && isDigit(l.peekChar()) {
-		for isOctalDigit(l.ch) {
+		for isOctalDigit(l.ch) || l.ch == '_' {
 			l.readChar()
 		}
 		return l.input[position:l.position], T_LNUMBER
@@ -246,14 +246,14 @@ func (l *Lexer) readNumber() (string, TokenType) {
 	if l.ch == '0' && (l.peekChar() == 'b' || l.peekChar() == 'B') {
 		l.readChar() // 跳过 '0'
 		l.readChar() // 跳过 'b'
-		for isBinaryDigit(l.ch) {
+		for isBinaryDigit(l.ch) || l.ch == '_' {
 			l.readChar()
 		}
 		return l.input[position:l.position], T_LNUMBER
 	}
 
 	// 处理十进制
-	for isDigit(l.ch) {
+	for isDigit(l.ch) || l.ch == '_' {
 		l.readChar()
 	}
 
@@ -261,7 +261,7 @@ func (l *Lexer) readNumber() (string, TokenType) {
 	if l.ch == '.' && isDigit(l.peekChar()) {
 		tokenType = T_DNUMBER
 		l.readChar() // 跳过 '.'
-		for isDigit(l.ch) {
+		for isDigit(l.ch) || l.ch == '_' {
 			l.readChar()
 		}
 	}
@@ -273,7 +273,7 @@ func (l *Lexer) readNumber() (string, TokenType) {
 		if l.ch == '+' || l.ch == '-' {
 			l.readChar()
 		}
-		for isDigit(l.ch) {
+		for isDigit(l.ch) || l.ch == '_' {
 			l.readChar()
 		}
 	}

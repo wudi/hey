@@ -756,3 +756,151 @@ class A {
 			i, exp.expectedValue, tok.Value)
 	}
 }
+
+func TestLexer_NumericSeparators(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "Integer with underscores",
+			input: `<?php $x = 1_000_000; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$x"},
+				{TOKEN_EQUAL, "="},
+				{T_LNUMBER, "1_000_000"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "Binary with underscores",
+			input: `<?php $binary = 0b1010_1001_1111_0000; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$binary"},
+				{TOKEN_EQUAL, "="},
+				{T_LNUMBER, "0b1010_1001_1111_0000"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "Hexadecimal with underscores",
+			input: `<?php $hex = 0xFF_EC_DE_5E; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$hex"},
+				{TOKEN_EQUAL, "="},
+				{T_LNUMBER, "0xFF_EC_DE_5E"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "Octal with underscores",
+			input: `<?php $octal = 0755_444; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$octal"},
+				{TOKEN_EQUAL, "="},
+				{T_LNUMBER, "0755_444"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "Float with underscores",
+			input: `<?php $float = 1_234.567_890; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$float"},
+				{TOKEN_EQUAL, "="},
+				{T_DNUMBER, "1_234.567_890"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "Scientific notation with underscores",
+			input: `<?php $scientific = 1_500e3_000; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$scientific"},
+				{TOKEN_EQUAL, "="},
+				{T_DNUMBER, "1_500e3_000"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "Multiple numeric separators",
+			input: `<?php $a = 1_000_000; $b = 0xFF_AA; $c = 0b1010_1010; ?>`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$a"},
+				{TOKEN_EQUAL, "="},
+				{T_LNUMBER, "1_000_000"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_VARIABLE, "$b"},
+				{TOKEN_EQUAL, "="},
+				{T_LNUMBER, "0xFF_AA"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_VARIABLE, "$c"},
+				{TOKEN_EQUAL, "="},
+				{T_LNUMBER, "0b1010_1010"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - tokentype wrong. expected=%q, got=%q",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
