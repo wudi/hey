@@ -139,6 +139,7 @@ func init() {
 		lexer.T_INC:                      parsePrefixExpression,
 		lexer.T_DEC:                      parsePrefixExpression,
 		lexer.TOKEN_LPAREN:               parseGroupedExpression,
+		lexer.TOKEN_LBRACE:               parseCurlyBraceExpression,
 		lexer.T_ARRAY:                    parseArrayExpression,
 		lexer.T_INLINE_HTML:              parseInlineHTML,
 		lexer.T_OPEN_TAG:                 parseOpenTag,
@@ -4238,7 +4239,9 @@ func parseMatchArm(p *Parser) *ast.MatchArm {
 	} else {
 		// 解析条件列表
 		for {
-			condition := parseExpression(p, LOGICAL_OR)
+			// 解析条件表达式，允许逻辑运算符（||、&&）作为条件的一部分
+			// 使用 COALESCE 优先级，这样会包含 || 和 && 但停在 => 之前
+			condition := parseExpression(p, COALESCE)
 			if condition == nil {
 				return nil
 			}
@@ -5355,6 +5358,15 @@ func parseClassBody(p *Parser) []ast.Statement {
 	return statements
 }
 
+// isTraitName 检查当前 token 是否可以作为 trait 名称
+// trait 名称可以是简单名称或限定名称
+func isTraitName(tokenType lexer.TokenType) bool {
+	return tokenType == lexer.T_STRING ||
+		tokenType == lexer.T_NAME_QUALIFIED ||
+		tokenType == lexer.T_NAME_FULLY_QUALIFIED ||
+		tokenType == lexer.T_NAME_RELATIVE
+}
+
 // parseUseTraitStatement 解析 trait 使用语句 (use TraitA, TraitB { ... })
 func parseUseTraitStatement(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
@@ -5365,7 +5377,7 @@ func parseUseTraitStatement(p *Parser) ast.Statement {
 	var traits []*ast.IdentifierNode
 
 	// 解析第一个 trait 名称
-	if p.currentToken.Type != lexer.T_STRING {
+	if !isTraitName(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at position %s", p.currentToken.Value, p.currentToken.Position))
 		return nil
 	}
@@ -5377,7 +5389,7 @@ func parseUseTraitStatement(p *Parser) ast.Statement {
 		p.nextToken() // 跳过逗号
 		p.nextToken() // 移动到下一个 trait 名称
 
-		if p.currentToken.Type != lexer.T_STRING {
+		if !isTraitName(p.currentToken.Type) {
 			p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at position %s", p.currentToken.Value, p.currentToken.Position))
 			return nil
 		}
@@ -5485,7 +5497,7 @@ func parseTraitPrecedence(p *Parser, methodRef *ast.TraitMethodReference) ast.Tr
 
 	var insteadOfTraits []*ast.IdentifierNode
 
-	if p.currentToken.Type != lexer.T_STRING {
+	if !isTraitName(p.currentToken.Type) {
 		p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at position %s", p.currentToken.Value, p.currentToken.Position))
 		return nil
 	}
@@ -5497,7 +5509,7 @@ func parseTraitPrecedence(p *Parser, methodRef *ast.TraitMethodReference) ast.Tr
 		p.nextToken() // 跳过逗号
 		p.nextToken() // 移动到下一个 trait 名称
 
-		if p.currentToken.Type != lexer.T_STRING {
+		if !isTraitName(p.currentToken.Type) {
 			p.errors = append(p.errors, fmt.Sprintf("expected trait name, got %s at position %s", p.currentToken.Value, p.currentToken.Position))
 			return nil
 		}
@@ -5540,4 +5552,23 @@ func parseTraitAlias(p *Parser, methodRef *ast.TraitMethodReference) ast.TraitAd
 	}
 
 	return ast.NewTraitAliasStatement(pos, methodRef, alias, visibility)
+}
+
+// parseCurlyBraceExpression 解析花括号表达式 {expression}
+// 根据 PHP 语法，member_name 可以是 '{' expr '}'，直接返回内部表达式
+func parseCurlyBraceExpression(p *Parser) ast.Expression {
+	// 当前 token 是 '{'
+	// 跳过 '{'
+	p.nextToken()
+	
+	// 解析内部表达式
+	expr := parseExpression(p, LOWEST)
+	
+	// 期望 '}'
+	if !p.expectPeek(lexer.TOKEN_RBRACE) {
+		return nil
+	}
+	
+	// 根据 PHP 语法，直接返回内部表达式，不需要包装节点
+	return expr
 }

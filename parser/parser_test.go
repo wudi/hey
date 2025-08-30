@@ -10823,3 +10823,205 @@ class Model
 		})
 	}
 }
+
+func TestParsing_DynamicStaticMethodCalls(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name:  "dynamic method name with curly braces",
+			input: `<?php $value::{$method}(); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				callExpr := exprStmt.Expression.(*ast.CallExpression)
+				
+				// Should be a static method call with dynamic method name
+				staticAccessExpr := callExpr.Callee.(*ast.StaticAccessExpression)
+				assert.Equal(t, "$value", staticAccessExpr.Class.(*ast.Variable).Name)
+				
+				// The property/method should be the inner expression $method
+				methodVar := staticAccessExpr.Property.(*ast.Variable)
+				assert.Equal(t, "$method", methodVar.Name)
+			},
+		},
+		{
+			name:  "dynamic method name with parameters",
+			input: `<?php $value::{$method}($param1, $param2); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				callExpr := exprStmt.Expression.(*ast.CallExpression)
+				
+				// Check arguments
+				assert.Len(t, callExpr.Arguments, 2)
+				param1 := callExpr.Arguments[0].(*ast.Variable)
+				param2 := callExpr.Arguments[1].(*ast.Variable)
+				assert.Equal(t, "$param1", param1.Name)
+				assert.Equal(t, "$param2", param2.Name)
+				
+				// Check the static access structure
+				staticAccessExpr := callExpr.Callee.(*ast.StaticAccessExpression)
+				assert.Equal(t, "$value", staticAccessExpr.Class.(*ast.Variable).Name)
+				assert.Equal(t, "$method", staticAccessExpr.Property.(*ast.Variable).Name)
+			},
+		},
+		{
+			name:  "simple static method call - should continue to work",
+			input: `<?php $value::method(); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				callExpr := exprStmt.Expression.(*ast.CallExpression)
+				
+				staticAccessExpr := callExpr.Callee.(*ast.StaticAccessExpression)
+				assert.Equal(t, "$value", staticAccessExpr.Class.(*ast.Variable).Name)
+				assert.Equal(t, "method", staticAccessExpr.Property.(*ast.IdentifierNode).Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_QualifiedTraitNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name:  "simple qualified trait name",
+			input: `<?php class Test { use Concerns\CallsCommands; } ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				classExpr := exprStmt.Expression.(*ast.ClassExpression)
+				
+				assert.Len(t, classExpr.Body, 1)
+				traitUse := classExpr.Body[0].(*ast.UseTraitStatement)
+				
+				assert.Len(t, traitUse.Traits, 1)
+				assert.Equal(t, "Concerns\\CallsCommands", traitUse.Traits[0].Name)
+			},
+		},
+		{
+			name:  "multiple qualified trait names", 
+			input: `<?php class Test { use Concerns\CallsCommands, Concerns\InteractsWithIO, Macroable; } ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				classExpr := exprStmt.Expression.(*ast.ClassExpression)
+				
+				assert.Len(t, classExpr.Body, 1)
+				traitUse := classExpr.Body[0].(*ast.UseTraitStatement)
+				
+				assert.Len(t, traitUse.Traits, 3)
+				assert.Equal(t, "Concerns\\CallsCommands", traitUse.Traits[0].Name)
+				assert.Equal(t, "Concerns\\InteractsWithIO", traitUse.Traits[1].Name)
+				assert.Equal(t, "Macroable", traitUse.Traits[2].Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_MatchExpressionWithComplexConditions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name:  "match with boolean OR condition",
+			input: `<?php match(true) { is_array($x) || str_contains($x, 'y') => 'action' }; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				matchExpr := exprStmt.Expression.(*ast.MatchExpression)
+				
+				assert.Equal(t, "true", matchExpr.Subject.(*ast.IdentifierNode).Name)
+				assert.Len(t, matchExpr.Arms, 1)
+				
+				arm := matchExpr.Arms[0]
+				assert.Len(t, arm.Conditions, 1)
+				
+				// The condition should be a binary expression with || operator
+				condition := arm.Conditions[0].(*ast.BinaryExpression)
+				assert.Equal(t, "||", condition.Operator)
+				
+				// Left side should be is_array($x) function call
+				leftCall := condition.Left.(*ast.CallExpression)
+				assert.Equal(t, "is_array", leftCall.Callee.(*ast.IdentifierNode).Name)
+				assert.Len(t, leftCall.Arguments, 1)
+				assert.Equal(t, "$x", leftCall.Arguments[0].(*ast.Variable).Name)
+				
+				// Right side should be str_contains($x, 'y') function call
+				rightCall := condition.Right.(*ast.CallExpression)
+				assert.Equal(t, "str_contains", rightCall.Callee.(*ast.IdentifierNode).Name)
+				assert.Len(t, rightCall.Arguments, 2)
+				assert.Equal(t, "$x", rightCall.Arguments[0].(*ast.Variable).Name)
+				assert.Equal(t, "y", rightCall.Arguments[1].(*ast.StringLiteral).Value)
+				
+				// Body should be 'action' string
+				assert.Equal(t, "action", arm.Body.(*ast.StringLiteral).Value)
+			},
+		},
+		{
+			name:  "match with boolean AND condition",
+			input: `<?php match(true) { is_string($x) && !empty($x) => 'valid' }; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				matchExpr := exprStmt.Expression.(*ast.MatchExpression)
+				
+				assert.Len(t, matchExpr.Arms, 1)
+				arm := matchExpr.Arms[0]
+				condition := arm.Conditions[0].(*ast.BinaryExpression)
+				assert.Equal(t, "&&", condition.Operator)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
