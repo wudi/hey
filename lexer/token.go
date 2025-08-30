@@ -1,6 +1,9 @@
 package lexer
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // TokenType 表示 PHP Token 类型，与 PHP 官方保持一致
 type TokenType int
@@ -478,8 +481,10 @@ var Keywords = map[string]TokenType{
 }
 
 // IsKeyword 检查给定字符串是否为 PHP 关键字
+// PHP keywords are case-insensitive
 func IsKeyword(s string) (TokenType, bool) {
-	tokenType, exists := Keywords[s]
+	// Convert to lowercase for case-insensitive lookup
+	tokenType, exists := Keywords[strings.ToLower(s)]
 	return tokenType, exists
 }
 

@@ -904,3 +904,42 @@ func TestLexer_NumericSeparators(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_CaseInsensitiveKeywords(t *testing.T) {
+	// PHP keywords should be case-insensitive
+	input := `<?php forEach($arr AS $value) { ECHO $value; IF ($condition) RETURN; } ?>`
+
+	tests := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		{T_OPEN_TAG, "<?php "},
+		{T_FOREACH, "forEach"},
+		{TOKEN_LPAREN, "("},
+		{T_VARIABLE, "$arr"},
+		{T_AS, "AS"},
+		{T_VARIABLE, "$value"},
+		{TOKEN_RPAREN, ")"},
+		{TOKEN_LBRACE, "{"},
+		{T_ECHO, "ECHO"},
+		{T_VARIABLE, "$value"},
+		{TOKEN_SEMICOLON, ";"},
+		{T_IF, "IF"},
+		{TOKEN_LPAREN, "("},
+		{T_VARIABLE, "$condition"},
+		{TOKEN_RPAREN, ")"},
+		{T_RETURN, "RETURN"},
+		{TOKEN_SEMICOLON, ";"},
+		{TOKEN_RBRACE, "}"},
+		{T_CLOSE_TAG, "?>"},
+		{T_EOF, ""},
+	}
+
+	lexer := New(input)
+
+	for i, tt := range tests {
+		tok := lexer.NextToken()
+		assert.Equal(t, tt.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[tt.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
+	}
+}
