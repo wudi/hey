@@ -4539,8 +4539,8 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 	var typeHint *ast.TypeHint
 	if p.peekToken.Type != lexer.T_VARIABLE {
 		p.nextToken()
-		// 这是一个类型提示
-		if isTypeToken(p.currentToken.Type) {
+		// 这是一个类型提示 (包括可空类型 ?Type)
+		if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION {
 			typeHint = parseTypeHint(p)
 		}
 	}

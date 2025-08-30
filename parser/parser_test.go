@@ -10537,3 +10537,289 @@ use A\B\C, D\E\F as G, H\I\J;
 		})
 	}
 }
+
+// TestParsing_NullablePropertyTypes tests parsing of nullable typed properties
+func TestParsing_NullablePropertyTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Simple nullable bool properties",
+			input: `<?php
+class Settings
+{
+    public ?bool $foo;
+    public ?bool $bar;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Settings", nameIdent.Name)
+				
+				require.Len(t, classExpr.Body, 2)
+				
+				// Check first property: public ?bool $foo;
+				prop1, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "public", prop1.Visibility)
+				assert.Equal(t, "foo", prop1.Name)
+				assert.False(t, prop1.Static)
+				assert.False(t, prop1.ReadOnly)
+				require.NotNil(t, prop1.Type)
+				assert.Equal(t, "bool", prop1.Type.Name)
+				assert.True(t, prop1.Type.Nullable)
+				assert.Nil(t, prop1.DefaultValue)
+				
+				// Check second property: public ?bool $bar;
+				prop2, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "public", prop2.Visibility)
+				assert.Equal(t, "bar", prop2.Name)
+				assert.False(t, prop2.Static)
+				assert.False(t, prop2.ReadOnly)
+				require.NotNil(t, prop2.Type)
+				assert.Equal(t, "bool", prop2.Type.Name)
+				assert.True(t, prop2.Type.Nullable)
+				assert.Nil(t, prop2.DefaultValue)
+			},
+		},
+		{
+			name: "Mixed nullable and non-nullable properties",
+			input: `<?php
+class User
+{
+    public string $name;
+    public ?string $email;
+    protected ?array $metadata;
+    private bool $active;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "User", nameIdent.Name)
+				
+				require.Len(t, classExpr.Body, 4)
+				
+				// public string $name;
+				prop1, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "name", prop1.Name)
+				require.NotNil(t, prop1.Type)
+				assert.Equal(t, "string", prop1.Type.Name)
+				assert.False(t, prop1.Type.Nullable)
+				
+				// public ?string $email;
+				prop2, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "email", prop2.Name)
+				require.NotNil(t, prop2.Type)
+				assert.Equal(t, "string", prop2.Type.Name)
+				assert.True(t, prop2.Type.Nullable)
+				
+				// protected ?array $metadata;
+				prop3, ok := classExpr.Body[2].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "protected", prop3.Visibility)
+				assert.Equal(t, "metadata", prop3.Name)
+				require.NotNil(t, prop3.Type)
+				assert.Equal(t, "array", prop3.Type.Name)
+				assert.True(t, prop3.Type.Nullable)
+				
+				// private bool $active;
+				prop4, ok := classExpr.Body[3].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "private", prop4.Visibility)
+				assert.Equal(t, "active", prop4.Name)
+				require.NotNil(t, prop4.Type)
+				assert.Equal(t, "bool", prop4.Type.Name)
+				assert.False(t, prop4.Type.Nullable)
+			},
+		},
+		{
+			name: "Nullable properties with default values",
+			input: `<?php
+class Config
+{
+    public ?string $host = null;
+    public ?int $port = 8080;
+    private ?array $options = [];
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Config", nameIdent.Name)
+				
+				require.Len(t, classExpr.Body, 3)
+				
+				// public ?string $host = null;
+				prop1, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "host", prop1.Name)
+				require.NotNil(t, prop1.Type)
+				assert.Equal(t, "string", prop1.Type.Name)
+				assert.True(t, prop1.Type.Nullable)
+				require.NotNil(t, prop1.DefaultValue)
+				
+				// public ?int $port = 8080;
+				prop2, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "port", prop2.Name)
+				require.NotNil(t, prop2.Type)
+				assert.Equal(t, "int", prop2.Type.Name)
+				assert.True(t, prop2.Type.Nullable)
+				require.NotNil(t, prop2.DefaultValue)
+				
+				// private ?array $options = [];
+				prop3, ok := classExpr.Body[2].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "private", prop3.Visibility)
+				assert.Equal(t, "options", prop3.Name)
+				require.NotNil(t, prop3.Type)
+				assert.Equal(t, "array", prop3.Type.Name)
+				assert.True(t, prop3.Type.Nullable)
+				require.NotNil(t, prop3.DefaultValue)
+			},
+		},
+		{
+			name: "Static nullable properties with visibility",
+			input: `<?php
+class Service
+{
+    public static ?object $instance;
+    private static ?callable $callback = null;
+    protected static ?Service $singleton;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Service", nameIdent.Name)
+				
+				require.Len(t, classExpr.Body, 3)
+				
+				// public static ?object $instance;
+				prop1, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "public", prop1.Visibility)
+				assert.Equal(t, "instance", prop1.Name)
+				assert.True(t, prop1.Static)
+				require.NotNil(t, prop1.Type)
+				assert.Equal(t, "object", prop1.Type.Name)
+				assert.True(t, prop1.Type.Nullable)
+				assert.Nil(t, prop1.DefaultValue)
+				
+				// private static ?callable $callback = null;
+				prop2, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "private", prop2.Visibility)
+				assert.Equal(t, "callback", prop2.Name)
+				assert.True(t, prop2.Static)
+				require.NotNil(t, prop2.Type)
+				assert.Equal(t, "callable", prop2.Type.Name)
+				assert.True(t, prop2.Type.Nullable)
+				require.NotNil(t, prop2.DefaultValue)
+				
+				// protected static ?Service $singleton;
+				prop3, ok := classExpr.Body[2].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "protected", prop3.Visibility)
+				assert.Equal(t, "singleton", prop3.Name)
+				assert.True(t, prop3.Static)
+				require.NotNil(t, prop3.Type)
+				assert.Equal(t, "Service", prop3.Type.Name)
+				assert.True(t, prop3.Type.Nullable)
+				assert.Nil(t, prop3.DefaultValue)
+			},
+		},
+		{
+			name: "Readonly nullable properties",
+			input: `<?php
+class Model
+{
+    public readonly ?string $id;
+    private readonly ?DateTime $createdAt;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Model", nameIdent.Name)
+				
+				require.Len(t, classExpr.Body, 2)
+				
+				// public readonly ?string $id;
+				prop1, ok := classExpr.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "public", prop1.Visibility)
+				assert.Equal(t, "id", prop1.Name)
+				assert.False(t, prop1.Static)
+				assert.True(t, prop1.ReadOnly)
+				require.NotNil(t, prop1.Type)
+				assert.Equal(t, "string", prop1.Type.Name)
+				assert.True(t, prop1.Type.Nullable)
+				
+				// private readonly ?DateTime $createdAt;
+				prop2, ok := classExpr.Body[1].(*ast.PropertyDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "private", prop2.Visibility)
+				assert.Equal(t, "createdAt", prop2.Name)
+				assert.False(t, prop2.Static)
+				assert.True(t, prop2.ReadOnly)
+				require.NotNil(t, prop2.Type)
+				assert.Equal(t, "DateTime", prop2.Type.Name)
+				assert.True(t, prop2.Type.Nullable)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			if len(p.Errors()) > 0 {
+				t.Errorf("Parser errors: %v", p.Errors())
+				return
+			}
+			
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
