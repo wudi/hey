@@ -2194,8 +2194,10 @@ func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
 
 // parseEnumCase 解析 enum 案例
 func parseEnumCase(p *Parser) *ast.EnumCase {
-	// 期望案例名称
-	if !p.expectPeek(lexer.T_STRING) {
+	// 期望案例名称（可以是T_STRING或半保留关键字）
+	p.nextToken()
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.peekError(lexer.T_STRING)
 		return nil
 	}
 
