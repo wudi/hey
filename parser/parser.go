@@ -756,6 +756,8 @@ func parseStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
 	case lexer.T_ECHO:
 		return parseEchoStatement(p)
+	case lexer.T_OPEN_TAG_WITH_ECHO:
+		return parseShortEchoStatement(p)
 	case lexer.T_PRINT:
 		return parsePrintStatement(p)
 	case lexer.T_IF:
@@ -854,6 +856,22 @@ func parseEchoStatement(p *Parser) *ast.EchoStatement {
 
 	if !p.expectSemicolon() {
 		return nil
+	}
+
+	return stmt
+}
+
+// parseShortEchoStatement 解析短回声语句 (<?= ... ?>)
+func parseShortEchoStatement(p *Parser) *ast.EchoStatement {
+	stmt := ast.NewEchoStatement(p.currentToken.Position)
+
+	// 解析表达式 (<?= 之后的内容)
+	p.nextToken()
+	stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+
+	// 处理可选的分号（在短回声标签中可以有分号）
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken() // 移动到分号位置
 	}
 
 	return stmt
