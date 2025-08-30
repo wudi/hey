@@ -4308,21 +4308,23 @@ func (le *ListExpression) String() string {
 // AnonymousFunctionExpression 表示匿名函数表达式
 type AnonymousFunctionExpression struct {
 	BaseNode
-	Parameters []Parameter  `json:"parameters"`
-	Body       []Statement  `json:"body"`
-	UseClause  []Expression `json:"useClause,omitempty"`
+	Parameters  []Parameter  `json:"parameters"`
+	Body        []Statement  `json:"body"`
+	UseClause   []Expression `json:"useClause,omitempty"`
+	ByReference bool         `json:"byReference,omitempty"` // function &() returns by reference
 }
 
-func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression) *AnonymousFunctionExpression {
+func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression, byReference bool) *AnonymousFunctionExpression {
 	return &AnonymousFunctionExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTClosure, // PHP uses CLOSURE for anonymous functions
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Parameters: parameters,
-		Body:       body,
-		UseClause:  useClause,
+		Parameters:  parameters,
+		Body:        body,
+		UseClause:   useClause,
+		ByReference: byReference,
 	}
 }
 

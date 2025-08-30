@@ -553,8 +553,28 @@ func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 		return parseUnionType(p, baseType)
 	}
 
-	// 注意：在参数上下文中暂时不支持intersection类型
-	// 因为 & 在参数中更常见的是表示引用参数，需要更复杂的前瞻来区分
+	// 检查是否为intersection类型 Type1&Type2&Type3 
+	// PHP 8.1+ 支持交集类型在参数和返回值中
+	// 在类型提示上下文中，& 应该被解释为交集类型操作符
+	// 但需要确保 & 后面跟着的是类型token，而不是变量（引用参数）
+	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		// 临时前瞻：检查 & 后面是否是类型token
+		// 保存当前lexer状态
+		savedToken := p.currentToken
+		savedPeek := p.peekToken
+		
+		p.nextToken() // 移动到 &
+		// 此时 peekToken 应该是 & 后面的token
+		isIntersectionType := isTypeToken(p.peekToken.Type)
+		
+		// 恢复lexer状态
+		p.currentToken = savedToken
+		p.peekToken = savedPeek
+		
+		if isIntersectionType {
+			return parseIntersectionType(p, baseType)
+		}
+	}
 
 	return baseType
 }
@@ -3890,6 +3910,13 @@ func parseListExpression(p *Parser) ast.Expression {
 func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
+	// 检查是否为引用返回匿名函数 function &()
+	byReference := false
+	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		byReference = true
+		p.nextToken() // 移动到 &
+	}
+
 	// 解析参数列表
 	if !p.expectToken(lexer.TOKEN_LPAREN) {
 		return nil
@@ -3997,7 +4024,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 
 	body := parseBlockStatements(p)
 
-	return ast.NewAnonymousFunctionExpression(pos, parameters, body, useClause)
+	return ast.NewAnonymousFunctionExpression(pos, parameters, body, useClause, byReference)
 }
 
 // parseUseExpression 解析 use 表达式（在表达式上下文中）
