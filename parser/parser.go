@@ -4807,6 +4807,10 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 	} else if p.currentToken.Type == lexer.T_NEW {
 		// Special handling for ::new as a method name (not the new keyword)
 		property = ast.NewIdentifierNode(p.currentToken.Position, "new")
+	} else if isSemiReserved(p.currentToken.Type) {
+		// Handle reserved keywords as method/property names (e.g., ::for, ::if, ::return)
+		// This matches PHP's grammar where reserved_non_modifiers can be used as member_name
+		property = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	} else if p.currentToken.Type == lexer.TOKEN_DOLLAR && p.peekToken.Type == lexer.TOKEN_LBRACE {
 		// Handle complex variable property syntax: static::${$var}
 		// Use the parseDollarBraceExpression function we just created

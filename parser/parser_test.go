@@ -8705,6 +8705,167 @@ class TestClass {
 	}
 }
 
+func TestParsing_StaticMethodCallsWithReservedKeywords(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Static method call with 'for' keyword and chaining",
+			input: `<?php
+Sleep::for(600)->milliseconds();`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				// The outer call: ->milliseconds()
+				outerCall, ok := exprStmt.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+
+				// The property access: ->milliseconds
+				propAccess, ok := outerCall.Callee.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				
+				propName, ok := propAccess.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "milliseconds", propName.Name)
+
+				// The inner static call: Sleep::for(600)
+				innerCall, ok := propAccess.Object.(*ast.CallExpression)
+				require.True(t, ok)
+				
+				staticAccess, ok := innerCall.Callee.(*ast.StaticAccessExpression)
+				require.True(t, ok)
+				
+				className, ok := staticAccess.Class.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Sleep", className.Name)
+				
+				methodName, ok := staticAccess.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "for", methodName.Name)
+				
+				// Check the argument (600)
+				require.Len(t, innerCall.Arguments, 1)
+				arg, ok := innerCall.Arguments[0].(*ast.NumberLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "600", arg.Value)
+			},
+		},
+		{
+			name: "Static method calls with various reserved keywords",
+			input: `<?php
+MyClass::if($condition);
+MyClass::while();
+MyClass::return($value);
+MyClass::function();
+MyClass::class();
+MyClass::new();
+MyClass::foreach($items);
+MyClass::try();
+MyClass::catch($e);
+MyClass::finally();
+MyClass::switch($case);
+MyClass::case();
+MyClass::default();
+MyClass::do();
+MyClass::echo($msg);
+MyClass::print($msg);
+MyClass::break();
+MyClass::continue();
+MyClass::goto($label);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 19)
+				
+				// Test a few representative cases
+				testCases := []struct {
+					index int
+					expectedMethod string
+				}{
+					{0, "if"},
+					{1, "while"},
+					{2, "return"},
+					{3, "function"},
+					{4, "class"},
+					{5, "new"},
+					{6, "foreach"},
+					{7, "try"},
+					{8, "catch"},
+					{9, "finally"},
+					{10, "switch"},
+					{11, "case"},
+					{12, "default"},
+					{13, "do"},
+					{14, "echo"},
+					{15, "print"},
+					{16, "break"},
+					{17, "continue"},
+					{18, "goto"},
+				}
+				
+				for _, tc := range testCases {
+					exprStmt, ok := program.Body[tc.index].(*ast.ExpressionStatement)
+					require.True(t, ok, "Statement %d should be an ExpressionStatement", tc.index)
+					
+					call, ok := exprStmt.Expression.(*ast.CallExpression)
+					require.True(t, ok, "Expression %d should be a CallExpression", tc.index)
+					
+					staticAccess, ok := call.Callee.(*ast.StaticAccessExpression)
+					require.True(t, ok, "Callee %d should be a StaticAccessExpression", tc.index)
+					
+					methodName, ok := staticAccess.Property.(*ast.IdentifierNode)
+					require.True(t, ok, "Property %d should be an IdentifierNode", tc.index)
+					assert.Equal(t, tc.expectedMethod, methodName.Name, "Method name mismatch at index %d", tc.index)
+				}
+			},
+		},
+		{
+			name: "Complex chaining with reserved keywords",
+			input: `<?php
+Builder::create()->if($condition)->else($alternative)->finally();
+Database::table('users')->where('id', 1)->for($user)->do($action);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 2)
+				
+				// First statement: Builder::create()->if($condition)->else($alternative)->finally()
+				exprStmt1, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				// Navigate through the chain and verify 'if' and 'else' are parsed correctly
+				finalCall, ok := exprStmt1.Expression.(*ast.CallExpression)
+				require.True(t, ok)
+				
+				finalProp, ok := finalCall.Callee.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				finalName, ok := finalProp.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "finally", finalName.Name)
+				
+				// Second statement should also parse without errors
+				exprStmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				assert.NotNil(t, exprStmt2.Expression)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			parser := New(lexer.New(test.input))
+			program := parser.ParseProgram()
+
+			if len(parser.Errors()) != 0 {
+				t.Errorf("Parser errors: %v", parser.Errors())
+			}
+
+			test.expected(t, program)
+		})
+	}
+}
+
 func TestParsing_ReservedKeywords_IsHelperFunctions(t *testing.T) {
 	tests := []struct {
 		name       string
