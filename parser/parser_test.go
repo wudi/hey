@@ -8914,6 +8914,136 @@ Database::table('users')->where('id', 1)->for($user)->do($action);`,
 	}
 }
 
+func TestParsing_ReservedKeywordsAsMethodNames(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "method named 'default' with static access patterns",
+			input: `<?php
+class A {
+    public static function default()
+    {
+        $password = is_callable(static::$defaultCallback)
+            ? call_user_func(static::$defaultCallback)
+            : static::$defaultCallback;
+        
+        return $password instanceof Rule ? $password : static::min(8);
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				// Check class name
+				className, ok := classDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "A", className.Name)
+
+				// Check method
+				require.Len(t, classDecl.Body, 1)
+				method, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+
+				// Check method name is 'default'
+				methodName, ok := method.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "default", methodName.Name)
+				assert.Equal(t, "public", method.Visibility)
+				assert.True(t, method.IsStatic)
+
+				// Verify the method has a proper body with complex expressions
+				require.Len(t, method.Body, 2) // assignment + return statements
+			},
+		},
+		{
+			name: "multiple reserved keywords as method names",
+			input: `<?php
+class Test {
+    public function default() {}
+    public function return() {}
+    public function break() {}
+    public function case() {} 
+    public function switch() {}
+    public function for() {}
+    public function while() {}
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+
+				expectedMethods := []string{"default", "return", "break", "case", "switch", "for", "while"}
+				require.Len(t, classDecl.Body, len(expectedMethods))
+
+				for i, expectedMethodName := range expectedMethods {
+					method, ok := classDecl.Body[i].(*ast.FunctionDeclaration)
+					require.True(t, ok, "Body item %d should be FunctionDeclaration", i)
+
+					methodName, ok := method.Name.(*ast.IdentifierNode)
+					require.True(t, ok, "Method %d name should be IdentifierNode", i)
+					assert.Equal(t, expectedMethodName, methodName.Name, "Method %d name mismatch", i)
+					assert.Equal(t, "public", method.Visibility, "Method %d visibility", i)
+				}
+			},
+		},
+		{
+			name: "interface method with reserved keyword name",
+			input: `<?php
+interface TestInterface {
+    public function default();
+    public function case($arg);
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				interfaceDecl, ok := program.Body[0].(*ast.InterfaceDeclaration)
+				require.True(t, ok)
+
+				// Check interface has two methods
+				require.Len(t, interfaceDecl.Methods, 2)
+
+				// First method: default()
+				method1 := interfaceDecl.Methods[0]
+				assert.Equal(t, "default", method1.Name.Name)
+
+				// Second method: case($arg)
+				method2 := interfaceDecl.Methods[1]
+				assert.Equal(t, "case", method2.Name.Name)
+				require.Len(t, method2.Parameters, 1)
+				assert.Equal(t, "$arg", method2.Parameters[0].Name)
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l := lexer.New(test.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			require.NotNil(t, program)
+			errors := p.Errors()
+			if len(errors) > 0 {
+				t.Fatalf("Parser errors: %v", errors)
+			}
+
+			test.expected(t, program)
+		})
+	}
+}
+
 func TestParsing_ReservedKeywords_IsHelperFunctions(t *testing.T) {
 	tests := []struct {
 		name       string

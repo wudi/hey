@@ -1883,8 +1883,11 @@ func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
 		return nil
 	}
 
-	// 期望方法名
-	if !p.expectPeek(lexer.T_STRING) {
+	// 期望方法名 (allow reserved keywords)
+	p.nextToken()
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected method name, got %s at position %s",
+			p.currentToken.Value, p.currentToken.Position))
 		return nil
 	}
 
@@ -4304,12 +4307,10 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 	}
 
 	// Expect method/function name (allow reserved keywords)
-	if !p.expectPeek(lexer.T_STRING) {
-		return nil
-	}
-
+	p.nextToken()
 	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
-		p.errors = append(p.errors, fmt.Sprintf("expected function name, got %s", p.currentToken.Value))
+		p.errors = append(p.errors, fmt.Sprintf("expected function name, got %s at position %s",
+			p.currentToken.Value, p.currentToken.Position))
 		return nil
 	}
 
