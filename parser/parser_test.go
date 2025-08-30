@@ -7727,6 +7727,54 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				assert.Empty(t, anonClass.Body)
 			},
 		},
+		{
+			name:  "anonymous class with variadic constructor arguments",
+			input: `<?php return new class(...$arguments) implements CastsAttributes, SerializesCastableAttributes { private $argument; public function __construct($argument = null) { $this->argument = $argument; } };`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				returnStmt, ok := program.Body[0].(*ast.ReturnStatement)
+				require.True(t, ok)
+
+				anonClass, ok := returnStmt.Argument.(*ast.AnonymousClass)
+				require.True(t, ok)
+
+				// Check variadic argument
+				require.Len(t, anonClass.Arguments, 1)
+				spreadExpr, ok := anonClass.Arguments[0].(*ast.SpreadExpression)
+				require.True(t, ok, "Expected SpreadExpression for ...%arguments, got %T", anonClass.Arguments[0])
+
+				variable, ok := spreadExpr.Argument.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$arguments", variable.Name)
+
+				// Check implements clause with multiple interfaces
+				require.Len(t, anonClass.Implements, 2)
+				
+				iface1, ok := anonClass.Implements[0].(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "CastsAttributes", iface1.Name)
+
+				iface2, ok := anonClass.Implements[1].(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "SerializesCastableAttributes", iface2.Name)
+
+				// Check class body has property and constructor
+				require.Len(t, anonClass.Body, 2)
+				
+				// First should be property declaration
+				_, ok = anonClass.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Expected PropertyDeclaration, got %T", anonClass.Body[0])
+
+				// Second should be constructor method
+				method, ok := anonClass.Body[1].(*ast.FunctionDeclaration)
+				require.True(t, ok, "Expected FunctionDeclaration, got %T", anonClass.Body[1])
+				methodName, ok := method.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "__construct", methodName.Name)
+			},
+		},
 	}
 
 	for _, tt := range tests {

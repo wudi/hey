@@ -5300,22 +5300,7 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 	// 检查构造函数参数
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		p.nextToken() // 移动到 (
-
-		// 解析参数列表
-		if p.peekToken.Type != lexer.TOKEN_RPAREN {
-			p.nextToken()
-			arguments = append(arguments, parseExpression(p, LOWEST))
-
-			for p.peekToken.Type == lexer.TOKEN_COMMA {
-				p.nextToken() // 移动到逗号
-				p.nextToken() // 移动到下一个参数
-				arguments = append(arguments, parseExpression(p, LOWEST))
-			}
-		}
-
-		if !p.expectPeek(lexer.TOKEN_RPAREN) {
-			return nil
-		}
+		arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
 	}
 
 	// 检查 extends 子句
