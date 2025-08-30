@@ -234,7 +234,17 @@ func (l *Lexer) readNumber() (string, TokenType) {
 		return l.input[position:l.position], T_LNUMBER
 	}
 
-	// 处理八进制
+	// 处理新式八进制 (0o777)
+	if l.ch == '0' && (l.peekChar() == 'o' || l.peekChar() == 'O') {
+		l.readChar() // 跳过 '0'
+		l.readChar() // 跳过 'o'
+		for isOctalDigit(l.ch) || l.ch == '_' {
+			l.readChar()
+		}
+		return l.input[position:l.position], T_LNUMBER
+	}
+
+	// 处理传统八进制 (0777)
 	if l.ch == '0' && isDigit(l.peekChar()) {
 		for isOctalDigit(l.ch) || l.ch == '_' {
 			l.readChar()
