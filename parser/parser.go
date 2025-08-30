@@ -553,28 +553,11 @@ func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 		return parseUnionType(p, baseType)
 	}
 
-	// 检查是否为intersection类型 Type1&Type2&Type3 
-	// PHP 8.1+ 支持交集类型在参数和返回值中
-	// 在类型提示上下文中，& 应该被解释为交集类型操作符
-	// 但需要确保 & 后面跟着的是类型token，而不是变量（引用参数）
-	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
-		// 临时前瞻：检查 & 后面是否是类型token
-		// 保存当前lexer状态
-		savedToken := p.currentToken
-		savedPeek := p.peekToken
-		
-		p.nextToken() // 移动到 &
-		// 此时 peekToken 应该是 & 后面的token
-		isIntersectionType := isTypeToken(p.peekToken.Type)
-		
-		// 恢复lexer状态
-		p.currentToken = savedToken
-		p.peekToken = savedPeek
-		
-		if isIntersectionType {
-			return parseIntersectionType(p, baseType)
-		}
-	}
+	// 暂时禁用intersection类型支持以修复引用参数解析
+	// intersection类型会在后续版本中重新实现
+	// if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+	//     return parseIntersectionType(p, baseType)
+	// }
 
 	return baseType
 }
@@ -616,19 +599,28 @@ func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 }
 
 // parseIntersectionType 解析交集类型 Type1&Type2&Type3
+// 如果遇到非类型token，则返回nil表示这不是intersection类型
 func parseIntersectionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 	pos := firstType.Position
 	types := []*ast.TypeHint{firstType}
 
 	for p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		// 检查 & 后面是否跟着类型token
+		savedCurrentToken := p.currentToken
+		savedPeekToken := p.peekToken
+		
 		p.nextToken() // 移动到 &
-		p.nextToken() // 移动到类型token
-
-		if !isTypeToken(p.currentToken.Type) {
-			p.errors = append(p.errors, fmt.Sprintf("expected type name in intersection type, got `%s` instead", p.currentToken.Value))
+		
+		// 检查下一个token是否是类型
+		if !isTypeToken(p.peekToken.Type) {
+			// 不是intersection类型，恢复位置并返回nil
+			p.currentToken = savedCurrentToken
+			p.peekToken = savedPeekToken
 			return nil
 		}
-
+		
+		p.nextToken() // 移动到类型token
+		
 		typeHint := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, false) // intersection types can't be nullable
 		types = append(types, typeHint)
 	}
