@@ -799,6 +799,7 @@ type EnumDeclaration struct {
 	BackingType *TypeHint         `json:"backingType,omitempty"` // 可选的支撑类型 (string, int)
 	Implements  []*IdentifierNode `json:"implements,omitempty"`  // 实现的接口
 	Cases       []*EnumCase       `json:"cases"`                 // enum 案例
+	Constants   []*ClassConstantDeclaration `json:"constants,omitempty"` // enum 常量
 	Methods     []*FunctionDeclaration `json:"methods,omitempty"` // enum 方法
 }
 

@@ -2071,6 +2071,24 @@ func parseEnumExpression(p *Parser) ast.Expression {
 	return nil
 }
 
+// isConstantDeclaration 检查当前位置是否为常量声明
+// 例如: public const, private const, protected const
+func isConstantDeclaration(p *Parser) bool {
+	// 如果当前 token 是 const，则肯定是常量声明
+	if p.currentToken.Type == lexer.T_CONST {
+		return true
+	}
+	
+	// 如果当前 token 是可见性修饰符，检查下一个 token 是否为 const
+	if p.currentToken.Type == lexer.T_PUBLIC ||
+		p.currentToken.Type == lexer.T_PRIVATE ||
+		p.currentToken.Type == lexer.T_PROTECTED {
+		return p.peekToken.Type == lexer.T_CONST
+	}
+	
+	return false
+}
+
 // parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)
 func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
 	pos := p.currentToken.Position
@@ -2140,10 +2158,29 @@ func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
 			p.currentToken.Type == lexer.T_PUBLIC ||
 			p.currentToken.Type == lexer.T_PRIVATE ||
 			p.currentToken.Type == lexer.T_PROTECTED {
-			// 解析 enum 方法
-			method := parseFunctionDeclaration(p)
-			if method != nil {
-				enumDecl.Methods = append(enumDecl.Methods, method)
+			// 检查这是方法还是常量声明
+			if isConstantDeclaration(p) {
+				// 解析 enum 常量声明
+				constant := parseClassConstantDeclaration(p)
+				if constant != nil {
+					if constDecl, ok := constant.(*ast.ClassConstantDeclaration); ok {
+						enumDecl.Constants = append(enumDecl.Constants, constDecl)
+					}
+				}
+			} else {
+				// 解析 enum 方法
+				method := parseFunctionDeclaration(p)
+				if method != nil {
+					enumDecl.Methods = append(enumDecl.Methods, method)
+				}
+			}
+		} else if p.currentToken.Type == lexer.T_CONST {
+			// 解析没有可见性修饰符的常量声明
+			constant := parseClassConstantDeclaration(p)
+			if constant != nil {
+				if constDecl, ok := constant.(*ast.ClassConstantDeclaration); ok {
+					enumDecl.Constants = append(enumDecl.Constants, constDecl)
+				}
 			}
 		}
 	}

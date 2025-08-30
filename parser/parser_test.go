@@ -11214,3 +11214,65 @@ func TestParsing_MatchExpressionWithComplexConditions(t *testing.T) {
 		})
 	}
 }
+
+func TestParsing_EnumConstants(t *testing.T) {
+	input := `<?php
+enum Level: int
+{
+    case Debug = 100;
+    case Info = 200;
+    
+    public const VALUES = [100, 200];
+    private const NAMES = ['debug', 'info'];
+    const DEFAULT = 100;
+    
+    public function getName(): string {
+        return 'test';
+    }
+}
+?>`
+
+	l := lexer.New(input)
+	p := New(l)
+	program := p.ParseProgram()
+
+	checkParserErrors(t, p)
+	assert.NotNil(t, program)
+	assert.Len(t, program.Body, 1)
+
+	// 检查 enum 声明
+	enumStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+	assert.True(t, ok)
+	enumDecl, ok := enumStmt.Expression.(*ast.EnumDeclaration)
+	assert.True(t, ok)
+	assert.Equal(t, "Level", enumDecl.Name.Name)
+	assert.Equal(t, "int", enumDecl.BackingType.Name)
+
+	// 检查 enum 案例
+	assert.Len(t, enumDecl.Cases, 2)
+	assert.Equal(t, "Debug", enumDecl.Cases[0].Name.Name)
+	assert.Equal(t, "Info", enumDecl.Cases[1].Name.Name)
+
+	// 检查 enum 常量
+	assert.Len(t, enumDecl.Constants, 3)
+	
+	// public const VALUES
+	assert.Equal(t, "public", enumDecl.Constants[0].Visibility)
+	assert.Len(t, enumDecl.Constants[0].Constants, 1)
+	assert.Equal(t, "VALUES", enumDecl.Constants[0].Constants[0].Name.Name)
+	
+	// private const NAMES  
+	assert.Equal(t, "private", enumDecl.Constants[1].Visibility)
+	assert.Len(t, enumDecl.Constants[1].Constants, 1)
+	assert.Equal(t, "NAMES", enumDecl.Constants[1].Constants[0].Name.Name)
+	
+	// const DEFAULT (no visibility)
+	assert.Equal(t, "", enumDecl.Constants[2].Visibility)
+	assert.Len(t, enumDecl.Constants[2].Constants, 1)
+	assert.Equal(t, "DEFAULT", enumDecl.Constants[2].Constants[0].Name.Name)
+
+	// 检查 enum 方法
+	assert.Len(t, enumDecl.Methods, 1)
+	assert.Equal(t, "getName", enumDecl.Methods[0].Name.Name)
+	assert.Equal(t, "public", enumDecl.Methods[0].Visibility)
+}
