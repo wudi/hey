@@ -3315,15 +3315,20 @@ func parseNewExpression(p *Parser) ast.Expression {
 
 	newExpr := ast.NewNewExpression(pos, class)
 
-	// Check if there are constructor arguments
-	// After parseExpression, currentToken is positioned at the next token after the class identifier
-	if p.currentToken.Type == lexer.TOKEN_LPAREN {
-		// Use parseExpressionList to handle arguments including spread operator (...)
-		newExpr.Arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
-		
-		// parseExpressionList handles positioning to the closing paren
-		if p.currentToken.Type != lexer.TOKEN_RPAREN {
-			p.expectPeek(lexer.TOKEN_RPAREN)
+	// 检查是否有构造函数参数
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		p.nextToken() // 移动到 (
+		p.nextToken() // 进入括号内部
+
+		// 解析参数列表
+		for p.currentToken.Type != lexer.TOKEN_RPAREN && p.currentToken.Type != lexer.T_EOF {
+			arg := parseExpression(p, LOWEST)
+			newExpr.Arguments = append(newExpr.Arguments, arg)
+
+			p.nextToken()
+			if p.currentToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 跳过逗号
+			}
 		}
 	}
 
@@ -5296,14 +5301,20 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		p.nextToken() // 移动到 (
 
-		// 使用 parseExpressionList 来处理参数列表，支持 spread operator (...)
-		arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
-		
-		// parseExpressionList 会处理到右括号，但不会跳过它
-		if p.currentToken.Type != lexer.TOKEN_RPAREN {
-			if !p.expectPeek(lexer.TOKEN_RPAREN) {
-				return nil
+		// 解析参数列表
+		if p.peekToken.Type != lexer.TOKEN_RPAREN {
+			p.nextToken()
+			arguments = append(arguments, parseExpression(p, LOWEST))
+
+			for p.peekToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 移动到逗号
+				p.nextToken() // 移动到下一个参数
+				arguments = append(arguments, parseExpression(p, LOWEST))
 			}
+		}
+
+		if !p.expectPeek(lexer.TOKEN_RPAREN) {
+			return nil
 		}
 	}
 
