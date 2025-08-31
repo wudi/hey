@@ -11625,3 +11625,177 @@ enum LogLevel: int implements Stringable
 		})
 	}
 }
+
+// TestParsing_SemiReservedAsIdentifiers tests that semi-reserved keywords can be used as identifiers
+func TestParsing_SemiReservedAsIdentifiers(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "new Enum() class instantiation",
+			input: "<?php new Enum(StringStatus::class);",
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected expression statement")
+				
+				newExpr, ok := stmt.Expression.(*ast.NewExpression)
+				require.True(t, ok, "Expected new expression")
+				
+				callExpr, ok := newExpr.Class.(*ast.CallExpression)
+				require.True(t, ok, "Expected call expression")
+				
+				ident, ok := callExpr.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected identifier")
+				assert.Equal(t, "Enum", ident.Name)
+				
+				// Check the argument: StringStatus::class
+				require.Len(t, callExpr.Arguments, 1)
+				staticAccess, ok := callExpr.Arguments[0].(*ast.StaticAccessExpression)
+				require.True(t, ok, "Expected static access expression")
+				
+				classIdent, ok := staticAccess.Class.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected class identifier")
+				assert.Equal(t, "StringStatus", classIdent.Name)
+				
+				propIdent, ok := staticAccess.Property.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected property identifier")
+				assert.Equal(t, "class", propIdent.Name)
+			},
+		},
+		{
+			name:  "new fn() class instantiation", 
+			input: "<?php new fn();",
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected expression statement")
+				
+				newExpr, ok := stmt.Expression.(*ast.NewExpression)
+				require.True(t, ok, "Expected new expression")
+				
+				callExpr, ok := newExpr.Class.(*ast.CallExpression)
+				require.True(t, ok, "Expected call expression")
+				
+				ident, ok := callExpr.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected identifier")
+				assert.Equal(t, "fn", ident.Name)
+			},
+		},
+		{
+			name:  "Original failing case - Complex Enum usage",
+			input: `<?php
+$v = new Validator(
+    resolve('translator'),
+    [
+        'status' => 'pending',
+        'int_status' => 1,
+    ],
+    [
+        'status' => new Enum(StringStatus::class),
+        'int_status' => new Enum(IntegerStatus::class),
+    ]
+);`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected expression statement")
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok, "Expected assignment expression")
+				
+				// Check left side is $v
+				variable, ok := assignment.Left.(*ast.Variable)
+				require.True(t, ok, "Expected variable")
+				assert.Equal(t, "$v", variable.Name)
+				
+				// Check right side is new Validator(...)
+				newExpr, ok := assignment.Right.(*ast.NewExpression)
+				require.True(t, ok, "Expected new expression")
+				
+				validatorCall, ok := newExpr.Class.(*ast.CallExpression)
+				require.True(t, ok, "Expected call expression")
+				
+				validatorIdent, ok := validatorCall.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected identifier")
+				assert.Equal(t, "Validator", validatorIdent.Name)
+				
+				// The third argument should be an array with Enum instantiations
+				require.Len(t, validatorCall.Arguments, 3)
+				thirdArg, ok := validatorCall.Arguments[2].(*ast.ArrayExpression)
+				require.True(t, ok, "Expected array expression for third argument")
+				
+				// Check both array elements have new Enum(...) as values
+				require.Len(t, thirdArg.Elements, 2)
+				
+				// First element: 'status' => new Enum(StringStatus::class)
+				statusElement, ok := thirdArg.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok, "Expected array element expression")
+				statusKey, ok := statusElement.Key.(*ast.StringLiteral)
+				require.True(t, ok, "Expected string key")
+				assert.Equal(t, "status", statusKey.Value)
+				
+				statusNewExpr, ok := statusElement.Value.(*ast.NewExpression)
+				require.True(t, ok, "Expected new expression")
+				
+				statusEnumCall, ok := statusNewExpr.Class.(*ast.CallExpression)
+				require.True(t, ok, "Expected call expression")
+				
+				statusEnumIdent, ok := statusEnumCall.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected identifier")
+				assert.Equal(t, "Enum", statusEnumIdent.Name)
+				
+				// Second element: 'int_status' => new Enum(IntegerStatus::class)
+				intElement, ok := thirdArg.Elements[1].(*ast.ArrayElementExpression)
+				require.True(t, ok, "Expected array element expression")
+				intKey, ok := intElement.Key.(*ast.StringLiteral)
+				require.True(t, ok, "Expected string key")
+				assert.Equal(t, "int_status", intKey.Value)
+				
+				intNewExpr, ok := intElement.Value.(*ast.NewExpression)
+				require.True(t, ok, "Expected new expression")
+				
+				intEnumCall, ok := intNewExpr.Class.(*ast.CallExpression)
+				require.True(t, ok, "Expected call expression")
+				
+				intEnumIdent, ok := intEnumCall.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected identifier")
+				assert.Equal(t, "Enum", intEnumIdent.Name)
+			},
+		},
+		{
+			name:  "match as identifier in new expression",
+			input: "<?php new match();",
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected expression statement")
+				
+				newExpr, ok := stmt.Expression.(*ast.NewExpression)
+				require.True(t, ok, "Expected new expression")
+				
+				callExpr, ok := newExpr.Class.(*ast.CallExpression)
+				require.True(t, ok, "Expected call expression")
+				
+				ident, ok := callExpr.Callee.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected identifier")
+				assert.Equal(t, "match", ident.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// The key test: no parsing errors should occur
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
