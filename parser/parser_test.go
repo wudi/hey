@@ -2692,7 +2692,7 @@ class TestConsts {
 			validateConstants: func(t *testing.T, classExpr *ast.ClassExpression) {
 				constGroup, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
-				assert.Equal(t, "public", constGroup.Visibility) // Default visibility
+				assert.Equal(t, "", constGroup.Visibility) // No explicit visibility
 				assert.Len(t, constGroup.Constants, 3)
 
 				// Check first constant: A = 1
@@ -2768,7 +2768,7 @@ class Mixed {
 				// Check first constant
 				constGroup1, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok, "First body item should be ClassConstantDeclaration")
-				assert.Equal(t, "public", constGroup1.Visibility)
+				assert.Equal(t, "", constGroup1.Visibility) // No explicit visibility
 				versionName, ok := constGroup1.Constants[0].Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "VERSION", versionName.Name)
@@ -2805,7 +2805,7 @@ class ComplexConsts {
 				// Check first constant with simple array
 				constGroup1, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
-				assert.Equal(t, "public", constGroup1.Visibility)
+				assert.Equal(t, "", constGroup1.Visibility) // No explicit visibility
 				arrayName, ok := constGroup1.Constants[0].Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "ARRAY_CONST", arrayName.Name)
@@ -3025,7 +3025,7 @@ class MyClass {
 				// Second constant - untyped
 				untypedConst, ok := class.Body[1].(*ast.ClassConstantDeclaration)
 				require.True(t, ok, "Second statement should be ClassConstantDeclaration")
-				assert.Equal(t, "public", untypedConst.Visibility) // Default visibility
+				assert.Equal(t, "", untypedConst.Visibility) // No explicit visibility
 				assert.Nil(t, untypedConst.Type, "Second constant should not have type")
 			},
 		},
@@ -8703,7 +8703,7 @@ class TestClass {
 				// Test first constant: const class = 'class_value';
 				constDecl1, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				require.True(t, ok)
-				assert.Equal(t, "public", constDecl1.Visibility)
+				assert.Equal(t, "", constDecl1.Visibility) // No explicit visibility
 				assert.Len(t, constDecl1.Constants, 1)
 				nameNode1, ok := constDecl1.Constants[0].Name.(*ast.IdentifierNode)
 				require.True(t, ok)
@@ -8712,7 +8712,7 @@ class TestClass {
 				// Test public const new = 'new_value';
 				constDecl4, ok := classExpr.Body[3].(*ast.ClassConstantDeclaration)
 				require.True(t, ok)
-				assert.Equal(t, "public", constDecl4.Visibility)
+				assert.Equal(t, "public", constDecl4.Visibility) // Has explicit public visibility
 				nameNode4, ok := constDecl4.Constants[0].Name.(*ast.IdentifierNode)
 				require.True(t, ok)
 				assert.Equal(t, "new", nameNode4.Name)
@@ -11241,11 +11241,10 @@ enum Level: int
 	assert.Len(t, program.Body, 1)
 
 	// 检查 enum 声明
-	enumStmt, ok := program.Body[0].(*ast.ExpressionStatement)
-	assert.True(t, ok)
-	enumDecl, ok := enumStmt.Expression.(*ast.EnumDeclaration)
+	enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
 	assert.True(t, ok)
 	assert.Equal(t, "Level", enumDecl.Name.Name)
+	assert.NotNil(t, enumDecl.BackingType)
 	assert.Equal(t, "int", enumDecl.BackingType.Name)
 
 	// 检查 enum 案例
@@ -11259,20 +11258,278 @@ enum Level: int
 	// public const VALUES
 	assert.Equal(t, "public", enumDecl.Constants[0].Visibility)
 	assert.Len(t, enumDecl.Constants[0].Constants, 1)
-	assert.Equal(t, "VALUES", enumDecl.Constants[0].Constants[0].Name.Name)
+	// Check first constant - cast Name to *IdentifierNode
+	if constName, ok := enumDecl.Constants[0].Constants[0].Name.(*ast.IdentifierNode); ok {
+		assert.Equal(t, "VALUES", constName.Name)
+	} else {
+		assert.Fail(t, "Expected constant name to be an IdentifierNode")
+	}
 	
 	// private const NAMES  
 	assert.Equal(t, "private", enumDecl.Constants[1].Visibility)
 	assert.Len(t, enumDecl.Constants[1].Constants, 1)
-	assert.Equal(t, "NAMES", enumDecl.Constants[1].Constants[0].Name.Name)
+	// Check second constant - cast Name to *IdentifierNode
+	if constName, ok := enumDecl.Constants[1].Constants[0].Name.(*ast.IdentifierNode); ok {
+		assert.Equal(t, "NAMES", constName.Name)
+	} else {
+		assert.Fail(t, "Expected constant name to be an IdentifierNode")
+	}
 	
 	// const DEFAULT (no visibility)
 	assert.Equal(t, "", enumDecl.Constants[2].Visibility)
 	assert.Len(t, enumDecl.Constants[2].Constants, 1)
-	assert.Equal(t, "DEFAULT", enumDecl.Constants[2].Constants[0].Name.Name)
+	// Check third constant - cast Name to *IdentifierNode
+	if constName, ok := enumDecl.Constants[2].Constants[0].Name.(*ast.IdentifierNode); ok {
+		assert.Equal(t, "DEFAULT", constName.Name)
+	} else {
+		assert.Fail(t, "Expected constant name to be an IdentifierNode")
+	}
 
 	// 检查 enum 方法
 	assert.Len(t, enumDecl.Methods, 1)
-	assert.Equal(t, "getName", enumDecl.Methods[0].Name.Name)
+	// Check method
+	if methodName, ok := enumDecl.Methods[0].Name.(*ast.IdentifierNode); ok {
+		assert.Equal(t, "getName", methodName.Name)
+	} else {
+		assert.Fail(t, "Expected method name to be an IdentifierNode")
+	}
 	assert.Equal(t, "public", enumDecl.Methods[0].Visibility)
+}
+
+func TestParsing_EnumComprehensive(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Simple enum without backing type",
+			input: `<?php
+enum Status
+{
+    case Pending;
+    case Active;
+    case Inactive;
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "Status", enumDecl.Name.Name)
+				assert.Nil(t, enumDecl.BackingType) // No backing type
+				assert.Len(t, enumDecl.Cases, 3)
+				assert.Equal(t, "Pending", enumDecl.Cases[0].Name.Name)
+				assert.Equal(t, "Active", enumDecl.Cases[1].Name.Name)
+				assert.Equal(t, "Inactive", enumDecl.Cases[2].Name.Name)
+			},
+		},
+		{
+			name: "String-backed enum with values",
+			input: `<?php
+enum Color: string
+{
+    case Red = 'red';
+    case Green = 'green';
+    case Blue = 'blue';
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "Color", enumDecl.Name.Name)
+				assert.NotNil(t, enumDecl.BackingType)
+				assert.Equal(t, "string", enumDecl.BackingType.Name)
+				assert.Len(t, enumDecl.Cases, 3)
+				assert.Equal(t, "Red", enumDecl.Cases[0].Name.Name)
+				assert.NotNil(t, enumDecl.Cases[0].Value)
+				assert.Equal(t, "Green", enumDecl.Cases[1].Name.Name)
+				assert.NotNil(t, enumDecl.Cases[1].Value)
+			},
+		},
+		{
+			name: "Int-backed enum with constants",
+			input: `<?php
+enum HttpStatus: int
+{
+    case OK = 200;
+    case NotFound = 404;
+    
+    const PREFIX = 'HTTP_';
+    public const CODES = [200, 404];
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "HttpStatus", enumDecl.Name.Name)
+				assert.NotNil(t, enumDecl.BackingType)
+				assert.Equal(t, "int", enumDecl.BackingType.Name)
+				assert.Len(t, enumDecl.Cases, 2)
+				assert.Len(t, enumDecl.Constants, 2)
+				
+				// Check first constant (no visibility)
+				assert.Equal(t, "", enumDecl.Constants[0].Visibility)
+				if constName, ok := enumDecl.Constants[0].Constants[0].Name.(*ast.IdentifierNode); ok {
+					assert.Equal(t, "PREFIX", constName.Name)
+				}
+				
+				// Check second constant (public)
+				assert.Equal(t, "public", enumDecl.Constants[1].Visibility)
+				if constName, ok := enumDecl.Constants[1].Constants[0].Name.(*ast.IdentifierNode); ok {
+					assert.Equal(t, "CODES", constName.Name)
+				}
+			},
+		},
+		{
+			name: "Enum with all visibility modifiers for constants",
+			input: `<?php
+enum Permission: string
+{
+    case Read = 'r';
+    case Write = 'w';
+    case Execute = 'x';
+    
+    private const ADMIN = 'rwx';
+    protected const USER = 'r';
+    public const GUEST = '';
+    const DEFAULT = 'r';
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				require.True(t, ok)
+				assert.Len(t, enumDecl.Constants, 4)
+				
+				// Check visibility modifiers
+				assert.Equal(t, "private", enumDecl.Constants[0].Visibility)
+				assert.Equal(t, "protected", enumDecl.Constants[1].Visibility)
+				assert.Equal(t, "public", enumDecl.Constants[2].Visibility)
+				assert.Equal(t, "", enumDecl.Constants[3].Visibility) // No explicit visibility
+			},
+		},
+		{
+			name: "Enum with multiple methods",
+			input: `<?php
+enum UserRole: string
+{
+    case Admin = 'admin';
+    case User = 'user';
+    
+    public function getLabel(): string {
+        return match($this) {
+            self::Admin => 'Administrator',
+            self::User => 'Regular User',
+        };
+    }
+    
+    private function validate(): bool {
+        return true;
+    }
+    
+    protected function format(): string {
+        return strtoupper($this->value);
+    }
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				require.True(t, ok)
+				assert.Len(t, enumDecl.Methods, 3)
+				
+				// Check method visibility
+				assert.Equal(t, "public", enumDecl.Methods[0].Visibility)
+				if methodName, ok := enumDecl.Methods[0].Name.(*ast.IdentifierNode); ok {
+					assert.Equal(t, "getLabel", methodName.Name)
+				}
+				
+				assert.Equal(t, "private", enumDecl.Methods[1].Visibility)
+				if methodName, ok := enumDecl.Methods[1].Name.(*ast.IdentifierNode); ok {
+					assert.Equal(t, "validate", methodName.Name)
+				}
+				
+				assert.Equal(t, "protected", enumDecl.Methods[2].Visibility)
+				if methodName, ok := enumDecl.Methods[2].Name.(*ast.IdentifierNode); ok {
+					assert.Equal(t, "format", methodName.Name)
+				}
+			},
+		},
+		{
+			name: "Enum implementing interfaces",
+			input: `<?php
+enum Priority: int implements Comparable, Serializable
+{
+    case Low = 1;
+    case Medium = 5;
+    case High = 10;
+    
+    public function compareTo($other): int {
+        return $this->value <=> $other->value;
+    }
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "Priority", enumDecl.Name.Name)
+				assert.Len(t, enumDecl.Implements, 2)
+				assert.Equal(t, "Comparable", enumDecl.Implements[0].Name)
+				assert.Equal(t, "Serializable", enumDecl.Implements[1].Name)
+			},
+		},
+		{
+			name: "Mixed enum features",
+			input: `<?php
+enum LogLevel: int implements Stringable
+{
+    case Emergency = 0;
+    case Alert = 1;
+    case Critical = 2;
+    case Error = 3;
+    
+    const SEVERE_LEVELS = [0, 1, 2];
+    private const MAX_LEVEL = 7;
+    public const DEFAULT = 3;
+    
+    public function __toString(): string {
+        return $this->name;
+    }
+    
+    public static function fromString(string $name): self {
+        return self::tryFrom($name);
+    }
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				require.True(t, ok)
+				assert.Equal(t, "LogLevel", enumDecl.Name.Name)
+				assert.NotNil(t, enumDecl.BackingType)
+				assert.Equal(t, "int", enumDecl.BackingType.Name)
+				assert.Len(t, enumDecl.Cases, 4)
+				assert.Len(t, enumDecl.Constants, 3)
+				assert.Len(t, enumDecl.Methods, 2)
+				assert.Len(t, enumDecl.Implements, 1)
+				assert.Equal(t, "Stringable", enumDecl.Implements[0].Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
 }

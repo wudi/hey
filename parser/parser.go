@@ -4594,7 +4594,7 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
 
 	// Parse visibility modifier (if present)
-	visibility := "public" // Default visibility
+	visibility := "" // Empty by default (implicitly public when not specified)
 	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
 		visibility = p.currentToken.Value
 		p.nextToken() // Move to 'const'
