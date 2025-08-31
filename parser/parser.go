@@ -4144,12 +4144,16 @@ func parseCaseExpression(p *Parser) ast.Expression {
 func parseClassDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
 
-	// 跳过 'class' 关键字
-	if !p.expectPeek(lexer.T_STRING) {
+	// 跳过 'class' 关键字，移动到类名
+	p.nextToken()
+	
+	// 解析类名 (允许半保留关键字作为类名)
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected class name, got %s at position %s",
+			p.currentToken.Value, p.currentToken.Position))
 		return nil
 	}
-
-	// 解析类名
+	
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	class := ast.NewClassExpression(pos, name, nil, nil, false, false) // final = false, readOnly = false
 
