@@ -4433,9 +4433,15 @@ func parseMatchArm(p *Parser) *ast.MatchArm {
 
 			// 检查下一个 token 是什么
 			if p.peekToken.Type == lexer.TOKEN_COMMA {
-				// 有更多条件
-				p.nextToken() // 跳过逗号
-				p.nextToken() // 移动到下一个条件
+				// 跳过逗号
+				p.nextToken()
+				// 检查是否为 trailing comma（逗号后跟 '=>'）
+				if p.peekToken.Type == lexer.T_DOUBLE_ARROW {
+					// 这是一个 trailing comma，停止解析条件
+					break
+				}
+				// 有更多条件，移动到下一个条件
+				p.nextToken()
 			} else if p.peekToken.Type == lexer.T_DOUBLE_ARROW {
 				// 找到 =>，停止解析条件
 				break

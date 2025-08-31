@@ -11406,6 +11406,156 @@ func TestParsing_MatchExpressionWithComplexConditions(t *testing.T) {
 	}
 }
 
+func TestParsing_MatchExpressionTrailingCommas(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Simple trailing comma in condition list",
+			input: `<?php match ($name) { 'a', 'b', => 'value', default => null }; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				matchExpr := exprStmt.Expression.(*ast.MatchExpression)
+				
+				assert.Equal(t, "$name", matchExpr.Subject.(*ast.Variable).Name)
+				assert.Len(t, matchExpr.Arms, 2)
+				
+				// First arm should have two conditions
+				arm := matchExpr.Arms[0]
+				assert.Len(t, arm.Conditions, 2)
+				assert.Equal(t, "a", arm.Conditions[0].(*ast.StringLiteral).Value)
+				assert.Equal(t, "b", arm.Conditions[1].(*ast.StringLiteral).Value)
+				assert.Equal(t, "value", arm.Body.(*ast.StringLiteral).Value)
+				assert.False(t, arm.IsDefault)
+				
+				// Second arm should be default
+				assert.True(t, matchExpr.Arms[1].IsDefault)
+				assert.Equal(t, "null", matchExpr.Arms[1].Body.(*ast.IdentifierNode).Name)
+			},
+		},
+		{
+			name: "Original failing case - multiple conditions with trailing commas",
+			input: `<?php
+foreach ($context as $name => $value) {
+    match ($name) {
+        'use-cache', 'client-tracking', 'throw-on-error', 'client-invalidations', 'reply-literal', 'persistent',
+            => $context[$name] = filter_var($value, \FILTER_VALIDATE_BOOLEAN),
+        'max-retries', 'serializer', 'compression', 'compression-level',
+            => $context[$name] = filter_var($value, \FILTER_VALIDATE_INT),
+        default => null,
+    };
+}
+?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				foreachStmt := program.Body[0].(*ast.ForeachStatement)
+				require.NotNil(t, foreachStmt)
+				
+				blockStmt := foreachStmt.Body.(*ast.BlockStatement)
+				require.Len(t, blockStmt.Body, 1)
+				
+				exprStmt := blockStmt.Body[0].(*ast.ExpressionStatement)
+				matchExpr := exprStmt.Expression.(*ast.MatchExpression)
+				
+				assert.Equal(t, "$name", matchExpr.Subject.(*ast.Variable).Name)
+				assert.Len(t, matchExpr.Arms, 3)
+				
+				// First arm - boolean filters
+				arm1 := matchExpr.Arms[0]
+				assert.Len(t, arm1.Conditions, 6)
+				assert.Equal(t, "use-cache", arm1.Conditions[0].(*ast.StringLiteral).Value)
+				assert.Equal(t, "client-tracking", arm1.Conditions[1].(*ast.StringLiteral).Value)
+				assert.Equal(t, "throw-on-error", arm1.Conditions[2].(*ast.StringLiteral).Value)
+				assert.Equal(t, "client-invalidations", arm1.Conditions[3].(*ast.StringLiteral).Value)
+				assert.Equal(t, "reply-literal", arm1.Conditions[4].(*ast.StringLiteral).Value)
+				assert.Equal(t, "persistent", arm1.Conditions[5].(*ast.StringLiteral).Value)
+				assert.False(t, arm1.IsDefault)
+				
+				// Check the body is an assignment
+				assignment1 := arm1.Body.(*ast.AssignmentExpression)
+				assert.Equal(t, "=", assignment1.Operator)
+				
+				// Second arm - integer filters
+				arm2 := matchExpr.Arms[1]
+				assert.Len(t, arm2.Conditions, 4)
+				assert.Equal(t, "max-retries", arm2.Conditions[0].(*ast.StringLiteral).Value)
+				assert.Equal(t, "serializer", arm2.Conditions[1].(*ast.StringLiteral).Value)
+				assert.Equal(t, "compression", arm2.Conditions[2].(*ast.StringLiteral).Value)
+				assert.Equal(t, "compression-level", arm2.Conditions[3].(*ast.StringLiteral).Value)
+				assert.False(t, arm2.IsDefault)
+				
+				// Third arm - default
+				arm3 := matchExpr.Arms[2]
+				assert.True(t, arm3.IsDefault)
+				assert.Equal(t, "null", arm3.Body.(*ast.IdentifierNode).Name)
+			},
+		},
+		{
+			name: "Multiple trailing commas in different arms",
+			input: `<?php match ($x) {
+				1, 2, => 'first',
+				3, 4, => 'second',
+				5, => 'third',
+				default => 'other'
+			}; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt := program.Body[0].(*ast.ExpressionStatement)
+				matchExpr := exprStmt.Expression.(*ast.MatchExpression)
+				
+				assert.Len(t, matchExpr.Arms, 4)
+				
+				// First arm: 1, 2, => 'first'
+				assert.Len(t, matchExpr.Arms[0].Conditions, 2)
+				assert.Equal(t, "first", matchExpr.Arms[0].Body.(*ast.StringLiteral).Value)
+				
+				// Second arm: 3, 4, => 'second'  
+				assert.Len(t, matchExpr.Arms[1].Conditions, 2)
+				assert.Equal(t, "second", matchExpr.Arms[1].Body.(*ast.StringLiteral).Value)
+				
+				// Third arm: 5, => 'third'
+				assert.Len(t, matchExpr.Arms[2].Conditions, 1)
+				assert.Equal(t, "third", matchExpr.Arms[2].Body.(*ast.StringLiteral).Value)
+				
+				// Default arm
+				assert.True(t, matchExpr.Arms[3].IsDefault)
+				assert.Equal(t, "other", matchExpr.Arms[3].Body.(*ast.StringLiteral).Value)
+			},
+		},
+		{
+			name: "Empty condition list with trailing comma (error case)",
+			input: `<?php match ($x) { , => 'invalid' }; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				// This should parse but the first condition should be empty or invalid
+				// The focus is that the parser doesn't crash
+				require.NotNil(t, program)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			// For most cases, we expect no parsing errors
+			if tt.name != "Empty condition list with trailing comma (error case)" {
+				assert.Empty(t, p.errors, "Unexpected parsing errors: %v", p.errors)
+			}
+			
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
 func TestParsing_EnumConstants(t *testing.T) {
 	input := `<?php
 enum Level: int
