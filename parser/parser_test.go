@@ -2437,6 +2437,105 @@ $complex = function ($param) use ($var1, &$ref1, $var2, &$ref2) {
 	}
 }
 
+func TestParsing_ArrowFunctions(t *testing.T) {
+	tests := []struct {
+		name               string
+		input              string
+		expectedParamCount int
+		expectedStatic     bool
+	}{
+		{
+			name:  "Basic arrow function with single parameter",
+			input: `<?php $fn = fn($x) => $x * 2;`,
+			expectedParamCount: 1,
+			expectedStatic:     false,
+		},
+		{
+			name:  "Arrow function with no parameters",
+			input: `<?php $fn = fn() => 42;`,
+			expectedParamCount: 0,
+			expectedStatic:     false,
+		},
+		{
+			name:  "Arrow function with multiple parameters",
+			input: `<?php $fn = fn($a, $b, $c) => $a + $b + $c;`,
+			expectedParamCount: 3,
+			expectedStatic:     false,
+		},
+		{
+			name:  "Arrow function with typed parameters",
+			input: `<?php $fn = fn(string $userId) => strtoupper($userId);`,
+			expectedParamCount: 1,
+			expectedStatic:     false,
+		},
+		{
+			name:  "Arrow function with return type",
+			input: `<?php $fn = fn($x): int => (int)$x;`,
+			expectedParamCount: 1,
+			expectedStatic:     false,
+		},
+		{
+			name:  "Static arrow function",
+			input: `<?php $fn = static fn($x) => $x;`,
+			expectedParamCount: 1,
+			expectedStatic:     true,
+		},
+		{
+			name:  "Arrow function in method call",
+			input: `<?php $rateLimiter->for('user_limiter', fn(string $userId) => [$userId]);`,
+			expectedParamCount: 1,
+			expectedStatic:     false,
+		},
+		{
+			name:  "Arrow function with complex body",
+			input: `<?php $fn = fn($x) => $obj->method($x)->chain();`,
+			expectedParamCount: 1,
+			expectedStatic:     false,
+		},
+		{
+			name:  "Arrow function with array return",
+			input: `<?php $fn = fn($a, $b) => [$a, $b, 'constant'];`,
+			expectedParamCount: 2,
+			expectedStatic:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			assert.NotNil(t, program, "program should not be nil")
+			assert.Len(t, program.Body, 1, "should have exactly one statement")
+
+			stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+			assert.True(t, ok, "should be an expression statement")
+
+			// The arrow function might be directly in the assignment or in a method call
+			var arrowFunc *ast.ArrowFunctionExpression
+			if assignExpr, ok := stmt.Expression.(*ast.AssignmentExpression); ok {
+				// Direct assignment: $fn = fn(...) => ...
+				arrowFunc, ok = assignExpr.Right.(*ast.ArrowFunctionExpression)
+				assert.True(t, ok, "right side should be arrow function")
+			} else if callExpr, ok := stmt.Expression.(*ast.CallExpression); ok {
+				// Method call with arrow function as argument
+				assert.Len(t, callExpr.Arguments, 2, "should have 2 arguments")
+				arrowFunc, ok = callExpr.Arguments[1].(*ast.ArrowFunctionExpression)
+				assert.True(t, ok, "second argument should be arrow function")
+			} else {
+				t.Fatalf("unexpected expression type: %T", stmt.Expression)
+			}
+
+			assert.NotNil(t, arrowFunc, "arrow function should not be nil")
+			assert.Len(t, arrowFunc.Parameters, tt.expectedParamCount, "parameter count should match")
+			assert.Equal(t, tt.expectedStatic, arrowFunc.Static, "static flag should match")
+			assert.NotNil(t, arrowFunc.Body, "body should not be nil")
+		})
+	}
+}
+
 func TestParsing_ClassDeclarations(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -11663,25 +11762,6 @@ func TestParsing_SemiReservedAsIdentifiers(t *testing.T) {
 				propIdent, ok := staticAccess.Property.(*ast.IdentifierNode)
 				require.True(t, ok, "Expected property identifier")
 				assert.Equal(t, "class", propIdent.Name)
-			},
-		},
-		{
-			name:  "new fn() class instantiation", 
-			input: "<?php new fn();",
-			validate: func(t *testing.T, program *ast.Program) {
-				require.Len(t, program.Body, 1)
-				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
-				require.True(t, ok, "Expected expression statement")
-				
-				newExpr, ok := stmt.Expression.(*ast.NewExpression)
-				require.True(t, ok, "Expected new expression")
-				
-				callExpr, ok := newExpr.Class.(*ast.CallExpression)
-				require.True(t, ok, "Expected call expression")
-				
-				ident, ok := callExpr.Callee.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected identifier")
-				assert.Equal(t, "fn", ident.Name)
 			},
 		},
 		{

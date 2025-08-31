@@ -205,7 +205,7 @@ func init() {
 		lexer.T_OBJECT_CAST:              parseTypeCast,
 		lexer.T_UNSET_CAST:               parseTypeCast,
 		lexer.T_ATTRIBUTE:                parseAttributeExpression,
-		lexer.T_FN:                       parseIdentifier,
+		lexer.T_FN:                       parseArrowFunctionExpression,
 		lexer.T_YIELD:                    parseYieldExpression,
 		lexer.T_YIELD_FROM:               parseYieldFromExpression,
 		lexer.T_THROW:                    parseThrowExpression,
