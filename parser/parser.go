@@ -3662,6 +3662,12 @@ func parseAttributeDecl(p *Parser) *ast.Attribute {
 
 			for p.peekToken.Type == lexer.TOKEN_COMMA {
 				p.nextToken() // 移动到逗号
+				
+				// 检查是否为尾随逗号 (trailing comma)
+				if p.peekToken.Type == lexer.TOKEN_RPAREN {
+					break // 如果逗号后面是右括号，说明是尾随逗号，跳出循环
+				}
+				
 				p.nextToken() // 移动到下一个参数
 
 				// Check for named argument

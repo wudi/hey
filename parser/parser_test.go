@@ -8111,7 +8111,7 @@ func TestParsing_AttributesEnhanced(t *testing.T) {
 		},
 		{
 			name:  "multiple attributes without parameters",
-			input: `<?php $expr = #[Deprecated, Internal, Final];`,
+			input: `<?php $expr = #[Deprecated, Internal, Serializable];`,
 			expected: func(t *testing.T, result ast.Node) {
 				program := result.(*ast.Program)
 				require.Len(t, program.Body, 1)
@@ -8127,11 +8127,103 @@ func TestParsing_AttributesEnhanced(t *testing.T) {
 
 				require.Len(t, attrGroup.Attributes, 3)
 
-				expectedNames := []string{"Deprecated", "Internal", "Final"}
+				expectedNames := []string{"Deprecated", "Internal", "Serializable"}
 				for i, attr := range attrGroup.Attributes {
 					assert.Equal(t, expectedNames[i], attr.Name.Name)
 					assert.Empty(t, attr.Arguments)
 				}
+			},
+		},
+		{
+			name:  "multiline attribute with trailing comma",
+			input: `<?php $expr = #[AsCommand(
+    name: 'error:dump',
+    description: 'Dump error pages to plain HTML files',
+)];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok)
+
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
+				assert.Equal(t, "AsCommand", attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+
+				// First argument: name: 'error:dump'
+				namedArg1, ok := attr.Arguments[0].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "name", namedArg1.Name.Name)
+				str1, ok := namedArg1.Value.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "error:dump", str1.Value)
+
+				// Second argument: description: 'Dump error pages...'
+				namedArg2, ok := attr.Arguments[1].(*ast.NamedArgument)
+				require.True(t, ok)
+				assert.Equal(t, "description", namedArg2.Name.Name)
+				str2, ok := namedArg2.Value.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "Dump error pages to plain HTML files", str2.Value)
+			},
+		},
+		{
+			name:  "attribute with static keyword",
+			input: `<?php $expr = #[Route, static];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok)
+
+				require.Len(t, attrGroup.Attributes, 2)
+				assert.Equal(t, "Route", attrGroup.Attributes[0].Name.Name)
+				assert.Equal(t, "static", attrGroup.Attributes[1].Name.Name)
+			},
+		},
+		{
+			name:  "attribute with simple trailing comma",
+			input: `<?php $expr = #[Route("path", "GET",)];`,
+			expected: func(t *testing.T, result ast.Node) {
+				program := result.(*ast.Program)
+				require.Len(t, program.Body, 1)
+
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+
+				assign, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+
+				attrGroup, ok := assign.Right.(*ast.AttributeGroup)
+				require.True(t, ok)
+
+				require.Len(t, attrGroup.Attributes, 1)
+				attr := attrGroup.Attributes[0]
+				assert.Equal(t, "Route", attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+
+				str1, ok := attr.Arguments[0].(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "path", str1.Value)
+
+				str2, ok := attr.Arguments[1].(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "GET", str2.Value)
 			},
 		},
 	}
