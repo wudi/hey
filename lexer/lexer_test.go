@@ -557,15 +557,15 @@ SH;`
 
 func TestCommentWithClosingTag(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
+		name     string
+		input    string
 		expected []struct {
 			expectedType  TokenType
 			expectedValue string
 		}
 	}{
 		{
-			name: "line comment terminated by ?>",
+			name:  "line comment terminated by ?>",
 			input: `<?php // comment text ?><h1>HTML</h1><?php echo "test"; ?>`,
 			expected: []struct {
 				expectedType  TokenType
@@ -584,7 +584,7 @@ func TestCommentWithClosingTag(t *testing.T) {
 			},
 		},
 		{
-			name: "hash comment terminated by ?>",
+			name:  "hash comment terminated by ?>",
 			input: `<?php # hash comment ?><div>Content</div>`,
 			expected: []struct {
 				expectedType  TokenType
@@ -605,11 +605,11 @@ func TestCommentWithClosingTag(t *testing.T) {
 
 			for i, expected := range tt.expected {
 				tok := lexer.NextToken()
-				assert.Equal(t, expected.expectedType, tok.Type, 
-					"test[%d] - tokentype wrong. expected=%q, got=%q", 
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - tokentype wrong. expected=%q, got=%q",
 					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
-				assert.Equal(t, expected.expectedValue, tok.Value, 
-					"test[%d] - value wrong. expected=%q, got=%q", 
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
 					i, expected.expectedValue, tok.Value)
 			}
 		})
@@ -931,6 +931,36 @@ func TestLexer_CaseInsensitiveKeywords(t *testing.T) {
 		{T_RETURN, "RETURN"},
 		{TOKEN_SEMICOLON, ";"},
 		{TOKEN_RBRACE, "}"},
+		{T_CLOSE_TAG, "?>"},
+		{T_EOF, ""},
+	}
+
+	lexer := New(input)
+
+	for i, tt := range tests {
+		tok := lexer.NextToken()
+		assert.Equal(t, tt.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[tt.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
+	}
+}
+
+func TestLexer_UnicodeIdentifiers(t *testing.T) {
+	// PHP variable names can include Unicode characters
+	input := `<?php $变量 = "值"; $имя = "Джон"; ?>`
+
+	tests := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		{T_OPEN_TAG, "<?php "},
+		{T_VARIABLE, "$变量"},
+		{TOKEN_EQUAL, "="},
+		{T_CONSTANT_ENCAPSED_STRING, `"值"`},
+		{TOKEN_SEMICOLON, ";"},
+		{T_VARIABLE, "$имя"},
+		{TOKEN_EQUAL, "="},
+		{T_CONSTANT_ENCAPSED_STRING, `"Джон"`},
+		{TOKEN_SEMICOLON, ";"},
 		{T_CLOSE_TAG, "?>"},
 		{T_EOF, ""},
 	}

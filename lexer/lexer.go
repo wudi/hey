@@ -146,7 +146,7 @@ func (l *Lexer) skipWhitespace() {
 // readIdentifier 读取标识符
 func (l *Lexer) readIdentifier() string {
 	position := l.position
-	for isLetter(l.ch) || isDigit(l.ch) {
+	for isLabelPart(l.ch) {
 		l.readChar()
 	}
 	return l.input[position:l.position]
@@ -155,66 +155,66 @@ func (l *Lexer) readIdentifier() string {
 // readQualifiedName 读取命名空间限定名
 // 返回 (name, tokenType) 其中 tokenType 可能是：
 // T_NAME_FULLY_QUALIFIED (\Name)
-// T_NAME_QUALIFIED (Name1\Name2) 
+// T_NAME_QUALIFIED (Name1\Name2)
 // T_NAME_RELATIVE (namespace\Name)
 // T_STRING (Name - 简单标识符)
 func (l *Lexer) readQualifiedName() (string, TokenType) {
 	startPos := l.position
-	
+
 	// 检查是否以 \ 开头（fully qualified name）
 	if l.ch == '\\' {
 		l.readChar() // 跳过 \
-		
+
 		// 必须跟着一个标识符
-		if !isLetter(l.ch) && l.ch != '_' {
+		if !isLabelStart(l.ch) {
 			// 如果 \ 后面不是标识符，返回单独的 T_NS_SEPARATOR
 			// 不需要回退，因为我们已经正确读取了 \
 			return "\\", T_NS_SEPARATOR
 		}
-		
+
 		// 读取第一个标识符部分
-		for isLetter(l.ch) || isDigit(l.ch) {
+		for isLabelPart(l.ch) {
 			l.readChar()
 		}
-		
+
 		// 继续读取后续的 \Name 部分
-		for l.ch == '\\' && isLetter(l.peekChar()) {
+		for l.ch == '\\' && isLabelStart(l.peekChar()) {
 			l.readChar() // 跳过 \
-			for isLetter(l.ch) || isDigit(l.ch) {
+			for isLabelPart(l.ch) {
 				l.readChar()
 			}
 		}
-		
+
 		return l.input[startPos:l.position], T_NAME_FULLY_QUALIFIED
 	}
-	
+
 	// 不以 \ 开头，先读取第一个标识符
 	identifier := l.readIdentifier()
-	
+
 	// 检查是否是 'namespace' 关键字后跟 \
-	if identifier == "namespace" && l.ch == '\\' && isLetter(l.peekChar()) {
+	if identifier == "namespace" && l.ch == '\\' && isLabelStart(l.peekChar()) {
 		// 这是 namespace\Name 形式的相对名
-		for l.ch == '\\' && isLetter(l.peekChar()) {
+		for l.ch == '\\' && isLabelStart(l.peekChar()) {
 			l.readChar() // 跳过 \
-			for isLetter(l.ch) || isDigit(l.ch) {
+			for isLabelPart(l.ch) {
 				l.readChar()
 			}
 		}
 		return l.input[startPos:l.position], T_NAME_RELATIVE
 	}
-	
+
 	// 检查是否后跟 \ (qualified name like Name1\Name2)
-	if l.ch == '\\' && isLetter(l.peekChar()) {
+	if l.ch == '\\' && isLabelStart(l.peekChar()) {
 		// 这是一个限定名 Name1\Name2
-		for l.ch == '\\' && isLetter(l.peekChar()) {
+		for l.ch == '\\' && isLabelPart(l.peekChar()) {
 			l.readChar() // 跳过 \
-			for isLetter(l.ch) || isDigit(l.ch) {
+			for isLabelPart(l.ch) {
 				l.readChar()
 			}
 		}
 		return l.input[startPos:l.position], T_NAME_QUALIFIED
 	}
-	
+
 	// 简单标识符
 	return identifier, T_STRING
 }
@@ -737,7 +737,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 		return Token{Type: TOKEN_COLON, Value: ":", Position: pos}
 
 	case '$':
-		if isLetter(l.peekChar()) || l.peekChar() == '_' {
+		if isLabelStart(l.peekChar()) {
 			// 变量
 			l.readChar() // 跳过 $
 			identifier := l.readIdentifier()
@@ -803,10 +803,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 		return Token{Type: T_COMMENT, Value: comment, Position: pos}
 
 	default:
-		if isLetter(l.ch) || l.ch == '_' {
+		if isLabelStart(l.ch) {
 			// 处理命名空间限定名（包括简单标识符）
 			name, tokenType := l.readQualifiedName()
-			
+
 			// 只有简单标识符才需要检查关键字和特殊复合关键字
 			if tokenType == T_STRING {
 				// 检查特殊复合关键字 "yield from"
@@ -822,7 +822,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 					l.skipWhitespace()
 
 					// 检查下一个标识符是否为 "from"
-					if isLetter(l.ch) || l.ch == '_' {
+					if isLabelStart(l.ch) {
 						nextIdentifier := l.readIdentifier()
 						if nextIdentifier == "from" {
 							// 返回 T_YIELD_FROM token
@@ -889,7 +889,7 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 			l.state = ST_IN_SCRIPTING
 			l.readChar() // 跳过 {
 			return Token{Type: T_CURLY_OPEN, Value: "{", Position: pos}
-		} else if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
+		} else if l.ch == '$' && isLabelStart(l.peekChar()) {
 			// 直接变量插值 $variable
 			if content.Len() > 0 {
 				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
@@ -965,7 +965,7 @@ func (l *Lexer) nextTokenInBackquote() Token {
 			l.state = ST_IN_SCRIPTING
 			l.readChar() // 跳过 {
 			return Token{Type: T_CURLY_OPEN, Value: "{", Position: pos}
-		} else if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
+		} else if l.ch == '$' && isLabelStart(l.peekChar()) {
 			// 直接变量插值 $variable
 			if content.Len() > 0 {
 				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
@@ -1080,11 +1080,11 @@ func (l *Lexer) readHeredocLabel() string {
 	var label strings.Builder
 
 	// 第一个字符必须是字母或下划线
-	if !isLetter(l.ch) {
+	if !isLabelStart(l.ch) {
 		return ""
 	}
 
-	for isLetter(l.ch) || isDigit(l.ch) {
+	for isLabelPart(l.ch) {
 		label.WriteByte(l.ch)
 		l.readChar()
 	}
@@ -1129,7 +1129,7 @@ func (l *Lexer) nextTokenInHeredoc() Token {
 			l.state = ST_IN_SCRIPTING  // 切换到脚本状态
 			l.readChar()               // 跳过 {
 			return Token{Type: T_CURLY_OPEN, Value: "{", Position: pos}
-		} else if l.ch == '$' && (isLetter(l.peekChar()) || l.peekChar() == '_') {
+		} else if l.ch == '$' && isLabelStart(l.peekChar()) {
 			// 直接的变量插值 $variable
 			if content.Len() > 0 {
 				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
@@ -1272,8 +1272,8 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 
 	// 读取类型名称
 	start := l.position
-	if isLetter(l.ch) {
-		for isLetter(l.ch) || isDigit(l.ch) {
+	if isLabelStart(l.ch) {
+		for isLabelPart(l.ch) {
 			l.readChar()
 		}
 	}
@@ -1345,6 +1345,14 @@ func isLetter(ch byte) bool {
 	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_'
 }
 
+func isLabelStart(ch byte) bool {
+	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch >= 0x80
+}
+
+func isLabelPart(ch byte) bool {
+	return isLabelStart(ch) || isDigit(ch)
+}
+
 func isDigit(ch byte) bool {
 	return '0' <= ch && ch <= '9'
 }
@@ -1375,7 +1383,7 @@ func (l *Lexer) containsInterpolation(delimiter byte) bool {
 		// 检查变量插值
 		if l.input[pos] == '$' && pos+1 < len(l.input) {
 			nextChar := l.input[pos+1]
-			if isLetter(nextChar) || nextChar == '{' {
+			if isLabelStart(nextChar) || nextChar == '{' {
 				return true
 			}
 		}
