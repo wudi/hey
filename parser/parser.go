@@ -783,6 +783,11 @@ func parseStatement(p *Parser) ast.Statement {
 	case lexer.T_FOR:
 		return parseForStatement(p)
 	case lexer.T_FUNCTION:
+		// Check if this is an anonymous function (function followed by () ) vs named function
+		if p.peekToken.Type == lexer.TOKEN_LPAREN {
+			// This is an anonymous function like "function ($x) { }", treat as expression statement
+			return parseExpressionStatement(p)
+		}
 		return parseFunctionDeclaration(p)
 	case lexer.T_CLASS:
 		// Check if this is class::method (static call) vs class declaration
@@ -3993,7 +3998,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 			for {
 				if p.currentToken.Type == lexer.T_VARIABLE {
 					useClause = append(useClause, parseVariable(p))
-				} else if p.currentToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
+				} else if p.currentToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
 					// 处理引用变量 &$var
 					refExpr := parseReferenceExpression(p)
 					useClause = append(useClause, refExpr)
