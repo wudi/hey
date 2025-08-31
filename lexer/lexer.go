@@ -659,8 +659,17 @@ func (l *Lexer) nextTokenInScripting() Token {
 			l.readChar()
 			return Token{Type: T_AND_EQUAL, Value: "&=", Position: pos}
 		}
-		l.readChar()
-		return Token{Type: TOKEN_AMPERSAND, Value: "&", Position: pos}
+		
+		// 实现PHP官方的上下文相关&符号区分
+		// 检查 & 后面是否跟着 $ (变量) 或 ... (可变参数)
+		// 这需要跳过空白字符和注释
+		if l.isAmpersandFollowedByVarOrVararg() {
+			l.readChar()
+			return Token{Type: T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG, Value: "&", Position: pos}
+		} else {
+			l.readChar()
+			return Token{Type: T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG, Value: "&", Position: pos}
+		}
 
 	case '|':
 		if l.peekChar() == '|' {
@@ -1397,4 +1406,68 @@ func (l *Lexer) containsInterpolation(delimiter byte) bool {
 	}
 
 	return false
+}
+// isAmpersandFollowedByVarOrVararg 检查&符号后面是否跟着$变量或...可变参数
+// 实现PHP官方的OPTIONAL_WHITESPACE_OR_COMMENTS("$"|"...")逻辑
+func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
+	pos := l.readPosition // 从&符号后开始检查
+
+	// 跳过空白字符和注释
+	for pos < len(l.input) {
+		ch := l.input[pos]
+		
+		// 跳过空白字符
+		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+			pos++
+			continue
+		}
+		
+		// 跳过单行注释 //
+		if ch == '/' && pos+1 < len(l.input) && l.input[pos+1] == '/' {
+			// 跳过到行尾
+			for pos < len(l.input) && l.input[pos] != '\n' {
+				pos++
+			}
+			continue
+		}
+		
+		// 跳过多行注释 /* */
+		if ch == '/' && pos+1 < len(l.input) && l.input[pos+1] == '*' {
+			pos += 2 // 跳过/*
+			// 寻找*/
+			for pos+1 < len(l.input) {
+				if l.input[pos] == '*' && l.input[pos+1] == '/' {
+					pos += 2 // 跳过*/
+					break
+				}
+				pos++
+			}
+			continue
+		}
+		
+		// 跳过# 风格注释
+		if ch == '#' {
+			// 跳过到行尾  
+			for pos < len(l.input) && l.input[pos] != '\n' {
+				pos++
+			}
+			continue
+		}
+		
+		// 检查第一个非空白/非注释字符
+		if ch == '$' {
+			return true // &后跟$变量
+		}
+		
+		// 检查...（可变参数）
+		if ch == '.' && pos+2 < len(l.input) && 
+		   l.input[pos+1] == '.' && l.input[pos+2] == '.' {
+			return true // &后跟...
+		}
+		
+		// 遇到其他字符，不是$或...
+		return false
+	}
+	
+	return false // 到达文件末尾
 }

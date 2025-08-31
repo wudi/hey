@@ -12029,3 +12029,127 @@ $v = new Validator(
 		})
 	}
 }
+
+func TestParsing_IntersectionTypeParameters(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Simple intersection type parameter",
+			input: `<?php function test(A&B $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				assert.True(t, ok, "Expected FunctionDeclaration")
+				assert.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
+
+				assert.Len(t, funcDecl.Parameters, 1)
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+
+				assert.NotNil(t, param.Type)
+				assert.Equal(t, ast.ASTTypeIntersection, param.Type.GetKind())
+				assert.Len(t, param.Type.IntersectionTypes, 2)
+				assert.Equal(t, "A", param.Type.IntersectionTypes[0].Name)
+				assert.Equal(t, "B", param.Type.IntersectionTypes[1].Name)
+			},
+		},
+		{
+			name:  "Triple intersection type parameter",
+			input: `<?php function test(A&B&C $param) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				assert.True(t, ok, "Expected FunctionDeclaration")
+
+				assert.Len(t, funcDecl.Parameters, 1)
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$param", param.Name)
+
+				assert.NotNil(t, param.Type)
+				assert.Equal(t, ast.ASTTypeIntersection, param.Type.GetKind())
+				assert.Len(t, param.Type.IntersectionTypes, 3)
+				assert.Equal(t, "A", param.Type.IntersectionTypes[0].Name)
+				assert.Equal(t, "B", param.Type.IntersectionTypes[1].Name)
+				assert.Equal(t, "C", param.Type.IntersectionTypes[2].Name)
+			},
+		},
+		{
+			name:  "Constructor with intersection type parameter and visibility",
+			input: `<?php 
+			class Test {
+			    public function __construct(
+			        private TranslatorInterface&TranslatorBagInterface&LocaleAwareInterface $translator,
+			    ) {
+			    }
+			}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				assert.True(t, ok, "Expected ExpressionStatement")
+
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				assert.True(t, ok, "Expected ClassExpression")
+				assert.Equal(t, "Test", classExpr.Name.(*ast.IdentifierNode).Name)
+				assert.Len(t, classExpr.Body, 1)
+
+				constructor, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				assert.True(t, ok, "Expected FunctionDeclaration")
+				assert.Equal(t, "__construct", constructor.Name.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "public", constructor.Visibility)
+
+				assert.Len(t, constructor.Parameters, 1)
+				param := constructor.Parameters[0]
+				assert.Equal(t, "$translator", param.Name)
+				assert.Equal(t, "private", param.Visibility)
+
+				assert.NotNil(t, param.Type)
+				assert.Equal(t, ast.ASTTypeIntersection, param.Type.GetKind())
+				assert.Len(t, param.Type.IntersectionTypes, 3)
+				assert.Equal(t, "TranslatorInterface", param.Type.IntersectionTypes[0].Name)
+				assert.Equal(t, "TranslatorBagInterface", param.Type.IntersectionTypes[1].Name)
+				assert.Equal(t, "LocaleAwareInterface", param.Type.IntersectionTypes[2].Name)
+			},
+		},
+		{
+			name:  "Intersection type with variadic parameter", 
+			input: `<?php function test(A&B ...$params) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				assert.True(t, ok, "Expected FunctionDeclaration")
+
+				assert.Len(t, funcDecl.Parameters, 1)
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$params", param.Name)
+				assert.True(t, param.Variadic)
+
+				assert.NotNil(t, param.Type)
+				assert.Equal(t, ast.ASTTypeIntersection, param.Type.GetKind())
+				assert.Len(t, param.Type.IntersectionTypes, 2)
+				assert.Equal(t, "A", param.Type.IntersectionTypes[0].Name)
+				assert.Equal(t, "B", param.Type.IntersectionTypes[1].Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

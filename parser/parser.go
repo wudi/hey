@@ -69,7 +69,8 @@ var precedences = map[lexer.TokenType]Precedence{
 	// 位运算符
 	lexer.TOKEN_PIPE:      BITWISE_OR,
 	lexer.TOKEN_CARET:     BITWISE_XOR,
-	lexer.TOKEN_AMPERSAND: BITWISE_AND,
+	lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG: BITWISE_AND,
+	lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG:     BITWISE_AND, // 也用于bitwise运算
 
 	// 比较运算符
 	lexer.T_IS_EQUAL:            EQUALS,
@@ -182,7 +183,8 @@ func init() {
 		lexer.T_EOF:                      parseFallback,
 		lexer.TOKEN_DOT:                  parseStringConcatenation,
 		lexer.TOKEN_RBRACE:               parseFallback,
-		lexer.TOKEN_AMPERSAND:            parseReferenceExpression,
+		lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG: parseReferenceExpression,
+		lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG:     parseReferenceExpression,
 		lexer.T_AS:                       parseFallback,
 		lexer.T_CASE:                     parseCaseExpression,
 		lexer.T_CLASS:                    parseClassExpression,
@@ -236,7 +238,8 @@ func init() {
 		// 位运算符
 		lexer.T_SR:            parseInfixExpression, // >> (right shift)
 		lexer.T_SL:            parseInfixExpression, // << (left shift)
-		lexer.TOKEN_AMPERSAND: parseInfixExpression, // & (bitwise AND)
+		lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG: parseInfixExpression, // & (bitwise AND)
+		lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG:     parseInfixExpression, // & (bitwise AND)
 		lexer.TOKEN_PIPE:      parseInfixExpression, // | (bitwise OR)
 		lexer.TOKEN_CARET:     parseInfixExpression, // ^ (bitwise XOR)
 
@@ -502,7 +505,7 @@ func parseTypeHint(p *Parser) *ast.TypeHint {
 	}
 
 	// 检查是否为intersection类型 Type1&Type2
-	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		return parseIntersectionType(p, baseType)
 	}
 
@@ -553,14 +556,14 @@ func parseParameterTypeHint(p *Parser) *ast.TypeHint {
 		return parseUnionType(p, baseType)
 	}
 
-	// 暂时禁用intersection类型支持以修复引用参数解析
-	// intersection类型会在后续版本中重新实现
-	// if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
-	//     return parseIntersectionType(p, baseType)
-	// }
+	// 检查是否为intersection类型 Type1&Type2
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
+		return parseIntersectionType(p, baseType)
+	}
 
 	return baseType
 }
+
 
 // parseUnionType 解析联合类型 Type1|Type2|Type3
 func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
@@ -599,29 +602,30 @@ func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 }
 
 // parseIntersectionType 解析交集类型 Type1&Type2&Type3
-// 如果遇到非类型token，则返回nil表示这不是intersection类型
 func parseIntersectionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 	pos := firstType.Position
 	types := []*ast.TypeHint{firstType}
 
-	for p.peekToken.Type == lexer.TOKEN_AMPERSAND {
-		// 检查 & 后面是否跟着类型token
-		savedCurrentToken := p.currentToken
-		savedPeekToken := p.peekToken
-		
+	for p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		p.nextToken() // 移动到 &
-		
-		// 检查下一个token是否是类型
-		if !isTypeToken(p.peekToken.Type) {
-			// 不是intersection类型，恢复位置并返回nil
-			p.currentToken = savedCurrentToken
-			p.peekToken = savedPeekToken
-			return nil
-		}
-		
 		p.nextToken() // 移动到类型token
 		
-		typeHint := ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, false) // intersection types can't be nullable
+		// 解析完整的类型名（可能包含命名空间）
+		var typeName string
+		if p.currentToken.Type == lexer.T_NS_SEPARATOR || p.currentToken.Type == lexer.T_STRING {
+			// 使用 parseClassName 来处理完整的命名空间名称
+			className, err := parseClassName(p)
+			if err != nil {
+				p.errors = append(p.errors, err.Error())
+				return nil
+			}
+			typeName = className
+		} else {
+			// 简单类型名
+			typeName = p.currentToken.Value
+		}
+		
+		typeHint := ast.NewSimpleTypeHint(p.currentToken.Position, typeName, false) // intersection types can't be nullable
 		types = append(types, typeHint)
 	}
 
@@ -659,7 +663,7 @@ func parseParenthesizedTypeHint(p *Parser, nullable bool) *ast.TypeHint {
 	// 检查括号后是否有union/intersection操作符
 	if p.peekToken.Type == lexer.TOKEN_PIPE {
 		return parseUnionType(p, innerType)
-	} else if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+	} else if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		return parseIntersectionType(p, innerType)
 	}
 
@@ -683,7 +687,7 @@ func parseComplexTypeHint(p *Parser) *ast.TypeHint {
 	}
 
 	// 检查是否为intersection类型 Type1&Type2
-	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		return parseIntersectionType(p, baseType)
 	}
 
@@ -1502,7 +1506,7 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 
 	// 检查是否为引用返回函数 function &foo()
 	byReference := false
-	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		byReference = true
 		p.nextToken() // 移动到 &
 	}
@@ -1625,7 +1629,7 @@ func parseParameter(p *Parser) *ast.Parameter {
 	}
 
 	// 检查引用参数 &$param
-	if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+	if p.currentToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
 		param.ByReference = true
 		p.nextToken()
 	}
@@ -3932,7 +3936,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 
 	// 检查是否为引用返回匿名函数 function &()
 	byReference := false
-	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		byReference = true
 		p.nextToken() // 移动到 &
 	}
@@ -3989,7 +3993,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 			for {
 				if p.currentToken.Type == lexer.T_VARIABLE {
 					useClause = append(useClause, parseVariable(p))
-				} else if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+				} else if p.currentToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 					// 处理引用变量 &$var
 					refExpr := parseReferenceExpression(p)
 					useClause = append(useClause, refExpr)
@@ -4031,7 +4035,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 		}
 
 		// 处理联合类型和交叉类型
-		for p.peekToken.Type == lexer.TOKEN_PIPE || p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+		for p.peekToken.Type == lexer.TOKEN_PIPE || p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 			p.nextToken() // 跳过 | 或 &
 			p.nextToken() // 移动到下一个类型
 		}
@@ -4501,7 +4505,7 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 
 	// 检查是否为引用返回函数 function &foo()
 	byReference := false
-	if p.peekToken.Type == lexer.TOKEN_AMPERSAND {
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		byReference = true
 		p.nextToken() // 移动到 &
 	}
@@ -4800,7 +4804,7 @@ func parsePropertyHookList(p *Parser) []*ast.PropertyHook {
 
 	// 解析hook列表，直到遇到 }
 	for p.currentToken.Type != lexer.TOKEN_RBRACE && !p.isAtEnd() {
-		if (p.currentToken.Type == lexer.T_STRING && (p.currentToken.Value == "get" || p.currentToken.Value == "set")) || p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+		if (p.currentToken.Type == lexer.T_STRING && (p.currentToken.Value == "get" || p.currentToken.Value == "set")) || p.currentToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 			hook := parsePropertyHook(p)
 			if hook != nil {
 				hooks = append(hooks, hook)
@@ -4825,7 +4829,7 @@ func parsePropertyHook(p *Parser) *ast.PropertyHook {
 
 	// 检查是否为引用钩子 (&get)
 	byRef := false
-	if p.currentToken.Type == lexer.TOKEN_AMPERSAND {
+	if p.currentToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
 		byRef = true
 		p.nextToken()
 	}
