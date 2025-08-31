@@ -781,6 +781,11 @@ func parseStatement(p *Parser) ast.Statement {
 	case lexer.T_FUNCTION:
 		return parseFunctionDeclaration(p)
 	case lexer.T_CLASS:
+		// Check if this is class::method (static call) vs class declaration
+		if p.peekToken.Type == lexer.T_PAAMAYIM_NEKUDOTAYIM {
+			// This is a static method call like "Class::method()", treat as expression statement
+			return parseExpressionStatement(p)
+		}
 		return parseClassDeclaration(p)
 	case lexer.T_NAMESPACE:
 		return parseNamespaceStatement(p)
@@ -3373,20 +3378,27 @@ func parseGotoStatement(p *Parser) ast.Statement {
 // parseNewExpression 解析new表达式
 // isAnonymousClassPattern 检查是否是匿名类模式
 func isAnonymousClassPattern(p *Parser) bool {
-	// 简单检查：如果 peekToken 是 class、修饰符或属性，就认为是匿名类
-	return p.peekToken.Type == lexer.T_CLASS ||
-		p.peekToken.Type == lexer.T_FINAL ||
+	// 检查修饰符或属性，这些肯定是匿名类
+	if p.peekToken.Type == lexer.T_FINAL ||
 		p.peekToken.Type == lexer.T_ABSTRACT ||
 		p.peekToken.Type == lexer.T_READONLY ||
-		p.peekToken.Type == lexer.T_ATTRIBUTE // 支持属性 #[
+		p.peekToken.Type == lexer.T_ATTRIBUTE {
+		return true
+	}
+	
+	// 如果下一个token是 T_CLASS，需要向前看来确定
+	// 这已经在parseNewExpression中处理，所以这里直接检查T_CLASS
+	return p.peekToken.Type == lexer.T_CLASS
 }
 
 func parseNewExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 
 	// 检查是否是匿名类 "new [modifiers] class"
-	// 需要向前看多个token来检测匿名类模式
 	if isAnonymousClassPattern(p) {
+		// 对于T_CLASS的情况，我们需要更仔细地检查
+		// 但由于无法安全地进行lookahead而不破坏解析状态，
+		// 我们会在parseAnonymousClass中处理这种边缘情况
 		return parseAnonymousClass(p, pos)
 	}
 
@@ -3395,7 +3407,7 @@ func parseNewExpression(p *Parser) ast.Expression {
 
 	newExpr := ast.NewNewExpression(pos, class)
 
-	// 检查是否有构造函数参数
+	// 检查是否有构造函数参数（支持trailing comma）
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		p.nextToken() // 移动到 (
 		p.nextToken() // 进入括号内部
@@ -3408,6 +3420,10 @@ func parseNewExpression(p *Parser) ast.Expression {
 			p.nextToken()
 			if p.currentToken.Type == lexer.TOKEN_COMMA {
 				p.nextToken() // 跳过逗号
+				// 检查trailing comma情况
+				if p.currentToken.Type == lexer.TOKEN_RPAREN {
+					break // 允许trailing comma
+				}
 			}
 		}
 	}
@@ -4436,6 +4452,13 @@ func parseMatchArm(p *Parser) *ast.MatchArm {
 // parseClassExpression 解析类表达式（保持向后兼容）
 func parseClassExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
+
+	// 检查是否是静态访问：class::method 的情况
+	// 在这种情况下，"class" 应该被视为类名标识符，而不是类声明
+	if p.peekToken.Type == lexer.T_PAAMAYIM_NEKUDOTAYIM {
+		// 这是 class::something 的情况，将 "class" 作为标识符返回
+		return ast.NewIdentifierNode(pos, "class")
+	}
 
 	// 类声明通常需要名称和可能的扩展
 	p.nextToken()
@@ -5468,10 +5491,51 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 
 	var arguments []ast.Expression
 
-	// 检查构造函数参数
+	// 检查这是否真的是匿名类还是尝试实例化"class"类
+	// 匿名类的模式：
+	// - new class { } (直接有类体)
+	// - new class extends Base { }  
+	// - new class implements Interface { }
+	// - new class() { } (有构造函数参数)
+	// 非匿名类的模式：
+	// - new class() (没有类体，只有构造函数调用)
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		// 需要检查括号后面是否有类体
+		// 保存当前位置
+		savedPos := pos
+		
+		// 跳过构造函数参数来看后面是否有类体
 		p.nextToken() // 移动到 (
 		arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
+		
+		// 现在检查后面是否有 {, extends, implements
+		hasClassBody := p.peekToken.Type == lexer.TOKEN_LBRACE ||
+			p.peekToken.Type == lexer.T_EXTENDS ||
+			p.peekToken.Type == lexer.T_IMPLEMENTS
+		
+		if !hasClassBody {
+			// 这不是匿名类，而是尝试实例化"class"类
+			// 创建一个普通的new表达式
+			class := ast.NewIdentifierNode(p.currentToken.Position, "class")
+			newExpr := ast.NewNewExpression(savedPos, class)
+			newExpr.Arguments = arguments
+			return newExpr
+		}
+		
+		// 这是真正的匿名类，继续正常处理
+		// arguments已经被解析了，不需要重新解析
+	} else {
+		// 没有构造函数参数，检查是否有类体
+		if p.peekToken.Type != lexer.TOKEN_LBRACE &&
+			p.peekToken.Type != lexer.T_EXTENDS &&
+			p.peekToken.Type != lexer.T_IMPLEMENTS {
+			// 这看起来不像匿名类，但也不是正确的语法
+			// 返回nil让外层处理
+			return nil
+		}
+		
+		// 没有构造函数参数的匿名类
+		arguments = []ast.Expression{}
 	}
 
 	// 检查 extends 子句
