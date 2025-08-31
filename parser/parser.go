@@ -5106,6 +5106,21 @@ func parseInterpolatedString(p *Parser) ast.Expression {
 				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 				parts = append(parts, stringPart)
 			}
+		case lexer.T_CURLY_OPEN:
+			// 复杂变量插值 {$var} 或 {$var['key']} 或 {$var->prop} 或 {$obj->method()}
+			p.nextToken() // 跳过 T_CURLY_OPEN
+
+			// 解析大括号内的表达式
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				parts = append(parts, expr)
+			}
+
+			// 期待并跳过结束的大括号
+			if p.currentToken.Type == lexer.TOKEN_RBRACE {
+				p.nextToken()
+			}
+			continue // 跳过最后的 p.nextToken()
 		default:
 			// 其他内容，当作字符串处理
 			if p.currentToken.Value != "" {
