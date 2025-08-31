@@ -11766,21 +11766,21 @@ $v = new Validator(
 			},
 		},
 		{
-			name:  "match as identifier in new expression",
-			input: "<?php new match();",
+			name:  "match as method name",
+			input: "<?php $obj->match();",
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Expected expression statement")
 				
-				newExpr, ok := stmt.Expression.(*ast.NewExpression)
-				require.True(t, ok, "Expected new expression")
-				
-				callExpr, ok := newExpr.Class.(*ast.CallExpression)
+				callExpr, ok := stmt.Expression.(*ast.CallExpression)
 				require.True(t, ok, "Expected call expression")
 				
-				ident, ok := callExpr.Callee.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected identifier")
+				methodCallExpr, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
+				require.True(t, ok, "Expected property access expression")
+				
+				ident, ok := methodCallExpr.Property.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected identifier for method name")
 				assert.Equal(t, "match", ident.Name)
 			},
 		},

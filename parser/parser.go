@@ -191,7 +191,7 @@ func init() {
 		lexer.T_EVAL:                     parseEvalExpression,
 		lexer.T_EXTENDS:                  parseFallback,
 		lexer.T_LOGICAL_OR:               parseFallback,
-		lexer.T_MATCH:                    parseIdentifier,
+		lexer.T_MATCH:                    parseMatchToken,
 		lexer.T_ENUM:                     parseIdentifier,
 		lexer.T_PAAMAYIM_NEKUDOTAYIM:     parseStaticAccess,
 		lexer.T_PRIVATE:                  parseVisibilityModifier,
@@ -2080,62 +2080,19 @@ func parseTraitProperty(p *Parser, visibility string) *ast.PropertyDeclaration {
 	return property
 }
 
-// parseMatchOrIdentifier 解析 match 表达式或将 match 作为标识符
-// 根据后续 token 判断是 match 表达式还是普通标识符
-func parseMatchOrIdentifier(p *Parser) ast.Expression {
-	// 如果后面跟着左括号，则是 match 表达式
+// parseMatchToken handles T_MATCH tokens - can be either match expressions or identifiers
+// Based on PHP's grammar: expr includes `match` rule, and `identifier` includes semi_reserved tokens
+func parseMatchToken(p *Parser) ast.Expression {
+	// Look ahead: if T_MATCH is followed by '(', it's a match expression
+	// Otherwise, it's used as an identifier (semi-reserved keyword)
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		return parseMatchExpression(p)
 	}
-	// 否则作为普通标识符处理
+	
+	// Treat as identifier (semi-reserved keyword usage)
 	return parseIdentifier(p)
 }
 
-// parseArrowFunctionOrIdentifier 解析箭头函数或将 fn 作为标识符
-// 通过检查语法模式来判断上下文
-func parseArrowFunctionOrIdentifier(p *Parser) ast.Expression {
-	// 如果后面跟着左括号，需要仔细判断是否为箭头函数
-	if p.peekToken.Type == lexer.TOKEN_LPAREN {
-		// 尝试箭头函数解析，但使用宽松模式
-		result := parseArrowFunctionExpressionLenient(p)
-		if result != nil {
-			return result
-		}
-		// 如果箭头函数解析失败，当作标识符处理
-		return parseIdentifier(p)
-	}
-	// 否则作为普通标识符处理 (如 class fn extends, fn::class 等)
-	return parseIdentifier(p)
-}
-
-// parseArrowFunctionExpressionLenient 宽松的箭头函数解析
-// 使用简单的前瞻检查，避免复杂的回退
-func parseArrowFunctionExpressionLenient(p *Parser) ast.Expression {
-	// 简单检查：在不消费 token 的情况下检查是否像箭头函数
-	if !looksLikeArrowFunction(p) {
-		return nil
-	}
-	
-	// 如果看起来像箭头函数，就用标准的箭头函数解析
-	return parseArrowFunctionExpression(p)
-}
-
-// looksLikeArrowFunction 检查当前位置是否像箭头函数模式
-// 这个函数不消费任何 token，只是前瞻检查
-func looksLikeArrowFunction(p *Parser) bool {
-	// 当前应该是 fn，peek 应该是 (
-	if p.currentToken.Type != lexer.T_FN || p.peekToken.Type != lexer.TOKEN_LPAREN {
-		return false
-	}
-	
-	// 简单启发式：如果是 new fn()，一般不是箭头函数
-	// 这里我们无法深度前瞻，所以使用一个简化的检查
-	// 实际上，我们可以通过其他线索判断
-	// 
-	// 但是由于没有简单的方法来检查，我们返回 true，让标准解析器决定
-	// 标准解析器会在找不到 => 时失败并返回 nil
-	return true
-}
 
 // isConstantDeclaration 检查当前位置是否为常量声明
 // 例如: public const, private const, protected const
