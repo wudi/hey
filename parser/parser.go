@@ -4423,6 +4423,49 @@ func parseMatchExpression(p *Parser) ast.Expression {
 	return matchExpr
 }
 
+// parseExpressionUntil 解析表达式直到遇到指定的停止token类型
+func parseExpressionUntil(p *Parser, stopTokens ...lexer.TokenType) ast.Expression {
+	// 创建停止token的映射用于快速查找
+	stopTokenMap := make(map[lexer.TokenType]bool)
+	for _, token := range stopTokens {
+		stopTokenMap[token] = true
+	}
+	
+	// 使用递归下降解析，但在遇到停止token时停止
+	return parseExpressionUntilImpl(p, LOWEST, stopTokenMap)
+}
+
+// parseExpressionUntilImpl 实现带停止条件的表达式解析
+func parseExpressionUntilImpl(p *Parser, precedence Precedence, stopTokens map[lexer.TokenType]bool) ast.Expression {
+	// 检查是否遇到停止token
+	if stopTokens[p.currentToken.Type] {
+		return nil
+	}
+	
+	// 获取前缀解析函数
+	prefixParseFn := globalPrefixParseFns[p.currentToken.Type]
+	if prefixParseFn == nil {
+		p.noPrefixParseFnError(p.currentToken.Type)
+		return nil
+	}
+	
+	// 解析左侧表达式
+	leftExp := prefixParseFn(p)
+	
+	// 继续解析中缀表达式，但在遇到停止token时停止
+	for !stopTokens[p.peekToken.Type] && !p.isAtEnd() && precedence < p.peekPrecedence() {
+		infixParseFn := globalInfixParseFns[p.peekToken.Type]
+		if infixParseFn == nil {
+			return leftExp
+		}
+		
+		p.nextToken()
+		leftExp = infixParseFn(p, leftExp)
+	}
+	
+	return leftExp
+}
+
 // parseMatchArm 解析 match 表达式的一个分支
 func parseMatchArm(p *Parser) *ast.MatchArm {
 	pos := p.currentToken.Position
@@ -4436,9 +4479,9 @@ func parseMatchArm(p *Parser) *ast.MatchArm {
 	} else {
 		// 解析条件列表
 		for {
-			// 解析条件表达式，允许逻辑运算符（||、&&）作为条件的一部分
-			// 使用 COALESCE 优先级，这样会包含 || 和 && 但停在 => 之前
-			condition := parseExpression(p, COALESCE)
+			// 解析条件表达式，允许复杂表达式包括三元运算符
+			// 需要解析完整的表达式但在遇到 => 或 , 时停止
+			condition := parseExpressionUntil(p, lexer.T_DOUBLE_ARROW, lexer.TOKEN_COMMA)
 			if condition == nil {
 				return nil
 			}
