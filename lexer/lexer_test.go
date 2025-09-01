@@ -1009,3 +1009,26 @@ func TestLexer_UnicodeIdentifiers(t *testing.T) {
 		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
 	}
 }
+
+func TestLexer_PropertyHooks(t *testing.T) {
+	input := `<?php private(set) protected(set) public(set)`
+
+	tests := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		{T_OPEN_TAG, "<?php "},
+		{T_PRIVATE_SET, "private(set)"},
+		{T_PROTECTED_SET, "protected(set)"},
+		{T_PUBLIC_SET, "public(set)"},
+		{T_EOF, ""},
+	}
+
+	lexer := New(input)
+
+	for i, tt := range tests {
+		tok := lexer.NextToken()
+		assert.Equal(t, tt.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[tt.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
+	}
+}

@@ -850,6 +850,40 @@ func (l *Lexer) nextTokenInScripting() Token {
 					l.column = savedColumn
 				}
 
+				// 检查特殊的属性钩子关键字 (PHP 8.4)
+				if name == "private" && l.ch == '(' && l.peekChar() == 's' && 
+					l.peekCharN(1) == 'e' && l.peekCharN(2) == 't' && l.peekCharN(3) == ')' {
+					// 读取 (set)
+					hookPart := ""
+					for i := 0; i < 5; i++ {
+						hookPart += string(l.ch)
+						l.readChar()
+					}
+					return Token{Type: T_PRIVATE_SET, Value: name + hookPart, Position: pos}
+				}
+				
+				if name == "protected" && l.ch == '(' && l.peekChar() == 's' && 
+					l.peekCharN(1) == 'e' && l.peekCharN(2) == 't' && l.peekCharN(3) == ')' {
+					// 读取 (set)
+					hookPart := ""
+					for i := 0; i < 5; i++ {
+						hookPart += string(l.ch)
+						l.readChar()
+					}
+					return Token{Type: T_PROTECTED_SET, Value: name + hookPart, Position: pos}
+				}
+				
+				if name == "public" && l.ch == '(' && l.peekChar() == 's' && 
+					l.peekCharN(1) == 'e' && l.peekCharN(2) == 't' && l.peekCharN(3) == ')' {
+					// 读取 (set)
+					hookPart := ""
+					for i := 0; i < 5; i++ {
+						hookPart += string(l.ch)
+						l.readChar()
+					}
+					return Token{Type: T_PUBLIC_SET, Value: name + hookPart, Position: pos}
+				}
+
 				// 检查是否为关键字
 				if keywordType, isKeyword := IsKeyword(name); isKeyword {
 					return Token{Type: keywordType, Value: name, Position: pos}

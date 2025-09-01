@@ -1628,9 +1628,18 @@ func parseParameter(p *Parser) *ast.Parameter {
 
 	// 检查可见性修饰符 (public, private, protected, readonly)
 	// 这些通常只在构造函数参数中使用
-	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
-		param.Visibility = p.currentToken.Value
+	// PHP 8.4 支持多个修饰符：public private(set), protected public(set) 等
+	var visibilityModifiers []string
+	
+	for p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED ||
+		p.currentToken.Type == lexer.T_PUBLIC_SET || p.currentToken.Type == lexer.T_PRIVATE_SET || p.currentToken.Type == lexer.T_PROTECTED_SET {
+		visibilityModifiers = append(visibilityModifiers, p.currentToken.Value)
 		p.nextToken()
+	}
+	
+	// 合并多个可见性修饰符为单个字符串
+	if len(visibilityModifiers) > 0 {
+		param.Visibility = strings.Join(visibilityModifiers, " ")
 	}
 
 	if p.currentToken.Type == lexer.T_READONLY {

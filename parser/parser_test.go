@@ -2618,7 +2618,7 @@ func TestParsing_ArrowFunctions(t *testing.T) {
 	}
 }
 
-func TestParsing_ClassDeclarations(t *testing.T) {
+func TestParsing_ClassExpressions(t *testing.T) {
 	tests := []struct {
 		name               string
 		input              string
@@ -3494,7 +3494,7 @@ class Mixed {
 
 			class, ok := stmt.Expression.(*ast.ClassExpression)
 			if !ok {
-				t.Errorf("Expected ClassDeclaration, got %T", stmt.Expression)
+				t.Errorf("Expected ClassExpression, got %T", stmt.Expression)
 				return
 			}
 
@@ -12820,6 +12820,161 @@ func TestParsing_ClosuresTrailingCommaFix(t *testing.T) {
 				
 				// Verify body contains foreach statement
 				require.Len(t, closure.Body, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+func TestParsing_PropertyHooks(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Basic property hooks in constructor",
+			input: `<?php
+class Test {
+    public function __construct(
+        public private(set) string $title,
+        public protected(set) string $author,
+        protected private(set) int $pubYear,
+    ) {
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				require.IsType(t, &ast.ExpressionStatement{}, stmt)
+
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				require.IsType(t, &ast.ClassExpression{}, exprStmt.Expression)
+
+				class := exprStmt.Expression.(*ast.ClassExpression)
+				require.Equal(t, "Test", class.Name.(*ast.IdentifierNode).Name)
+				require.Len(t, class.Body, 1)
+
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				require.Equal(t, "__construct", method.Name.(*ast.IdentifierNode).Name)
+				require.Len(t, method.Parameters, 3)
+
+				// Test first parameter: public private(set) string $title
+				param1 := method.Parameters[0]
+				require.Equal(t, "$title", param1.Name)
+				require.Equal(t, "public private(set)", param1.Visibility)
+				require.NotNil(t, param1.Type)
+				require.Equal(t, "string", param1.Type.Name)
+
+				// Test second parameter: public protected(set) string $author
+				param2 := method.Parameters[1]
+				require.Equal(t, "$author", param2.Name)
+				require.Equal(t, "public protected(set)", param2.Visibility)
+				require.NotNil(t, param2.Type)
+				require.Equal(t, "string", param2.Type.Name)
+
+				// Test third parameter: protected private(set) int $pubYear
+				param3 := method.Parameters[2]
+				require.Equal(t, "$pubYear", param3.Name)
+				require.Equal(t, "protected private(set)", param3.Visibility)
+				require.NotNil(t, param3.Type)
+				require.Equal(t, "int", param3.Type.Name)
+			},
+		},
+		{
+			name: "Single property hook modifier",
+			input: `<?php
+class Test {
+    public function __construct(
+        private(set) string $value,
+    ) {
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				require.Len(t, method.Parameters, 1)
+
+				param := method.Parameters[0]
+				require.Equal(t, "$value", param.Name)
+				require.Equal(t, "private(set)", param.Visibility)
+				require.Equal(t, "string", param.Type.Name)
+			},
+		},
+		{
+			name: "Property hooks with different order",
+			input: `<?php
+class Test {
+    public function __construct(
+        protected(set) public string $title,
+        private(set) protected string $author,
+    ) {
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				require.Len(t, method.Parameters, 2)
+
+				// Test first parameter: protected(set) public string $title
+				param1 := method.Parameters[0]
+				require.Equal(t, "$title", param1.Name)
+				require.Equal(t, "protected(set) public", param1.Visibility)
+				require.Equal(t, "string", param1.Type.Name)
+
+				// Test second parameter: private(set) protected string $author
+				param2 := method.Parameters[1]
+				require.Equal(t, "$author", param2.Name)
+				require.Equal(t, "private(set) protected", param2.Visibility)
+				require.Equal(t, "string", param2.Type.Name)
+			},
+		},
+		{
+			name: "Property hooks with readonly modifier",
+			input: `<?php
+class Test {
+    public function __construct(
+        public private(set) readonly string $title,
+    ) {
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				require.Len(t, method.Parameters, 1)
+
+				param := method.Parameters[0]
+				require.Equal(t, "$title", param.Name)
+				require.Equal(t, "public private(set)", param.Visibility)
+				require.True(t, param.ReadOnly)
+				require.Equal(t, "string", param.Type.Name)
 			},
 		},
 	}
