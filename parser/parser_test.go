@@ -12992,3 +12992,206 @@ class Test {
 		})
 	}
 }
+
+func TestParsing_AttributesOnClassMembers(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Attribute on class property with named arguments",
+			input: `<?php
+class Test {
+    #[SomeAttribute(expression: "simple string", constraints: ["array", "values"])]
+    private $foo;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				propDecl := class.Body[0].(*ast.PropertyDeclaration)
+				
+				require.Equal(t, "foo", propDecl.Name)
+				require.Equal(t, "private", propDecl.Visibility)
+				
+				// Check attributes
+				require.Len(t, propDecl.Attributes, 1)
+				attrGroup := propDecl.Attributes[0]
+				require.Len(t, attrGroup.Attributes, 1)
+				
+				attr := attrGroup.Attributes[0]
+				require.Equal(t, "SomeAttribute", attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+				
+				// Check first named argument
+				namedArg1 := attr.Arguments[0].(*ast.NamedArgument)
+				require.Equal(t, "expression", namedArg1.Name.Name)
+				stringLit1 := namedArg1.Value.(*ast.StringLiteral)
+				require.Equal(t, "simple string", stringLit1.Value)
+				
+				// Check second named argument
+				namedArg2 := attr.Arguments[1].(*ast.NamedArgument)
+				require.Equal(t, "constraints", namedArg2.Name.Name)
+				arrayExpr := namedArg2.Value.(*ast.ArrayExpression)
+				require.Len(t, arrayExpr.Elements, 2)
+			},
+		},
+		{
+			name: "Multiple attributes on class property",
+			input: `<?php
+class Test {
+    #[FirstAttribute]
+    #[SecondAttribute("value")]
+    private $foo;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				propDecl := class.Body[0].(*ast.PropertyDeclaration)
+				
+				require.Equal(t, "foo", propDecl.Name)
+				require.Equal(t, "private", propDecl.Visibility)
+				
+				// Check attributes - should have 2 attribute groups
+				require.Len(t, propDecl.Attributes, 2)
+				
+				// First attribute
+				attr1 := propDecl.Attributes[0].Attributes[0]
+				require.Equal(t, "FirstAttribute", attr1.Name.Name)
+				require.Len(t, attr1.Arguments, 0)
+				
+				// Second attribute
+				attr2 := propDecl.Attributes[1].Attributes[0]
+				require.Equal(t, "SecondAttribute", attr2.Name.Name)
+				require.Len(t, attr2.Arguments, 1)
+			},
+		},
+		{
+			name: "Attribute on class method",
+			input: `<?php
+class Test {
+    #[Route("/api/test")]
+    public function testMethod() {
+        return true;
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "testMethod", method.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "public", method.Visibility)
+				
+				// Check attributes
+				require.Len(t, method.Attributes, 1)
+				attr := method.Attributes[0].Attributes[0]
+				require.Equal(t, "Route", attr.Name.Name)
+				require.Len(t, attr.Arguments, 1)
+				
+				stringLit := attr.Arguments[0].(*ast.StringLiteral)
+				require.Equal(t, "/api/test", stringLit.Value)
+			},
+		},
+		{
+			name: "Attribute on class constant",
+			input: `<?php
+class Test {
+    #[Deprecated("Use NEW_CONSTANT instead")]
+    public const OLD_CONSTANT = "old";
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				constDecl := class.Body[0].(*ast.ClassConstantDeclaration)
+				
+				require.Equal(t, "public", constDecl.Visibility)
+				require.Len(t, constDecl.Constants, 1)
+				
+				// Check attributes
+				require.Len(t, constDecl.Attributes, 1)
+				attr := constDecl.Attributes[0].Attributes[0]
+				require.Equal(t, "Deprecated", attr.Name.Name)
+				require.Len(t, attr.Arguments, 1)
+				
+				stringLit := attr.Arguments[0].(*ast.StringLiteral)
+				require.Equal(t, "Use NEW_CONSTANT instead", stringLit.Value)
+			},
+		},
+		{
+			name: "Complex attribute with static function (like original failing case)",
+			input: `<?php
+class Test {
+    #[When(expression: static function () { return true; }, constraints: [new NotNull()])]
+    private $foo;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				propDecl := class.Body[0].(*ast.PropertyDeclaration)
+				
+				require.Equal(t, "foo", propDecl.Name)
+				require.Equal(t, "private", propDecl.Visibility)
+				
+				// Check attributes
+				require.Len(t, propDecl.Attributes, 1)
+				attr := propDecl.Attributes[0].Attributes[0]
+				require.Equal(t, "When", attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+				
+				// First argument should be named "expression" with a static function
+				namedArg1 := attr.Arguments[0].(*ast.NamedArgument)
+				require.Equal(t, "expression", namedArg1.Name.Name)
+				
+				// Check that the function is parsed (even if not semantically valid)
+				funcExpr := namedArg1.Value.(*ast.AnonymousFunctionExpression)
+				require.True(t, funcExpr.Static)
+				require.Len(t, funcExpr.Body, 1)
+				
+				// Second argument should be named "constraints" with array containing new expression
+				namedArg2 := attr.Arguments[1].(*ast.NamedArgument)
+				require.Equal(t, "constraints", namedArg2.Name.Name)
+				arrayExpr := namedArg2.Value.(*ast.ArrayExpression)
+				require.Len(t, arrayExpr.Elements, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

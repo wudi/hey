@@ -5081,6 +5081,9 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 // 基于 PHP 官方语法实现：先识别修饰符序列，再根据后续 token 确定声明类型
 func parseClassStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
+	case lexer.T_ATTRIBUTE:
+		// Parse attributes for class members #[Attr] private $prop; #[Attr] public function() {}
+		return parseAttributedClassStatement(p)
 	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
 		// Visibility modifiers - let parseClassConstantDeclaration and parseFunctionDeclaration handle them
 		if p.peekToken.Type == lexer.T_CONST {
@@ -5131,6 +5134,121 @@ func parseClassStatement(p *Parser) ast.Statement {
 		return parsePropertyDeclaration(p)
 	default:
 		// Skip unrecognized tokens
+		return nil
+	}
+}
+
+// parseAttributedClassStatement 解析带属性的类成员语句 #[Attr] private $prop; #[Attr] public function() {}
+func parseAttributedClassStatement(p *Parser) ast.Statement {
+	// Collect all consecutive attribute groups
+	var attributeGroups []*ast.AttributeGroup
+	
+	for p.currentToken.Type == lexer.T_ATTRIBUTE {
+		attributeGroup := parseAttributeGroup(p)
+		if attributeGroup == nil {
+			return nil
+		}
+		attributeGroups = append(attributeGroups, attributeGroup)
+		
+		// parseAttributeGroup ends with currentToken as ']', check next token
+		if p.peekToken.Type == lexer.T_ATTRIBUTE {
+			p.nextToken() // advance to next attribute group
+		} else {
+			p.nextToken() // advance to token after attributes
+			break
+		}
+	}
+	
+	// Parse the class member based on the token after attributes
+	switch p.currentToken.Type {
+	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
+		// Attributed visibility modifiers
+		if p.peekToken.Type == lexer.T_CONST {
+			// #[Attr] public const FOO = 1;
+			stmt := parseClassConstantDeclaration(p)
+			if constDecl, ok := stmt.(*ast.ClassConstantDeclaration); ok {
+				constDecl.Attributes = attributeGroups
+			}
+			return stmt
+		} else if p.peekToken.Type == lexer.T_FUNCTION {
+			// #[Attr] public function foo() {}
+			funcDecl := parseFunctionDeclaration(p)
+			if funcDecl != nil {
+				funcDecl.Attributes = attributeGroups
+			}
+			return funcDecl
+		} else {
+			// #[Attr] private $prop;
+			stmt := parsePropertyDeclaration(p)
+			if propDecl, ok := stmt.(*ast.PropertyDeclaration); ok {
+				propDecl.Attributes = attributeGroups
+			}
+			return stmt
+		}
+	case lexer.T_FUNCTION:
+		// #[Attr] function foo() {}
+		funcDecl := parseFunctionDeclaration(p)
+		if funcDecl != nil {
+			funcDecl.Attributes = attributeGroups
+		}
+		return funcDecl
+	case lexer.T_CONST:
+		// #[Attr] const FOO = 1;
+		stmt := parseClassConstantDeclaration(p)
+		if constDecl, ok := stmt.(*ast.ClassConstantDeclaration); ok {
+			constDecl.Attributes = attributeGroups
+		}
+		return stmt
+	case lexer.T_STATIC:
+		// #[Attr] static function foo() {} or #[Attr] static $prop
+		if p.peekToken.Type == lexer.T_FUNCTION {
+			funcDecl := parseFunctionDeclaration(p)
+			if funcDecl != nil {
+				funcDecl.Attributes = attributeGroups
+			}
+			return funcDecl
+		} else if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
+			stmt := parseStaticVisibilityDeclaration(p)
+			// Note: parseStaticVisibilityDeclaration might return different types, need to handle accordingly
+			return stmt
+		} else {
+			stmt := parsePropertyDeclaration(p)
+			if propDecl, ok := stmt.(*ast.PropertyDeclaration); ok {
+				propDecl.Attributes = attributeGroups
+			}
+			return stmt
+		}
+	case lexer.T_ABSTRACT:
+		// #[Attr] abstract function foo();
+		funcDecl := parseFunctionDeclaration(p)
+		if funcDecl != nil {
+			funcDecl.Attributes = attributeGroups
+		}
+		return funcDecl
+	case lexer.T_FINAL:
+		// #[Attr] final const FOO = 1; or #[Attr] final function foo() {}
+		if p.peekToken.Type == lexer.T_CONST {
+			stmt := parseClassConstantDeclaration(p)
+			if constDecl, ok := stmt.(*ast.ClassConstantDeclaration); ok {
+				constDecl.Attributes = attributeGroups
+			}
+			return stmt
+		} else {
+			funcDecl := parseFunctionDeclaration(p)
+			if funcDecl != nil {
+				funcDecl.Attributes = attributeGroups
+			}
+			return funcDecl
+		}
+	case lexer.T_READONLY:
+		// #[Attr] readonly $prop;
+		stmt := parsePropertyDeclaration(p)
+		if propDecl, ok := stmt.(*ast.PropertyDeclaration); ok {
+			propDecl.Attributes = attributeGroups
+		}
+		return stmt
+	default:
+		// Unknown token after attributes, return nil
 		return nil
 	}
 }

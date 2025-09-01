@@ -2243,12 +2243,13 @@ func (n *NamespaceNameExpression) String() string {
 // PropertyDeclaration 属性声明语句
 type PropertyDeclaration struct {
 	BaseNode
-	Visibility   string      `json:"visibility"`   // private, protected, public
-	Static       bool        `json:"static,omitempty"`       // static
-	ReadOnly     bool        `json:"readOnly,omitempty"`     // readonly
-	Type         *TypeHint   `json:"type,omitempty"`
-	Name         string      `json:"name"`         // Property name without $
-	DefaultValue Expression  `json:"defaultValue,omitempty"`
+	Visibility   string             `json:"visibility"`   // private, protected, public
+	Static       bool               `json:"static,omitempty"`       // static
+	ReadOnly     bool               `json:"readOnly,omitempty"`     // readonly
+	Type         *TypeHint          `json:"type,omitempty"`
+	Name         string             `json:"name"`         // Property name without $
+	DefaultValue Expression         `json:"defaultValue,omitempty"`
+	Attributes   []*AttributeGroup  `json:"attributes,omitempty"`   // #[...] attributes
 }
 
 func NewPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly bool, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
@@ -4687,6 +4688,7 @@ type ClassConstantDeclaration struct {
 	Constants  []ConstantDeclarator `json:"constants"`    // 支持一行声明多个常量
 	IsFinal    bool                `json:"isFinal,omitempty"`    // final const
 	IsAbstract bool                `json:"isAbstract,omitempty"` // abstract const
+	Attributes []*AttributeGroup   `json:"attributes,omitempty"`   // #[...] attributes
 }
 
 // ConstantDeclarator 单个常量声明
