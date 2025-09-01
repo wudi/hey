@@ -1471,3 +1471,7 @@ func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
 	
 	return false // 到达文件末尾
 }
+// GetInput returns the lexer input for lookahead purposes
+func (l *Lexer) GetInput() string {
+	return l.input
+}

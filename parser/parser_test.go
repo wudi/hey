@@ -12153,3 +12153,213 @@ func TestParsing_IntersectionTypeParameters(t *testing.T) {
 		})
 	}
 }
+func TestParsing_FinalPublicFunctionWithUnionTypesAndStaticReturn(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "final public function with union parameter and static return",
+			input: `<?php class BaseUri { final public function host(string|array $host): static { } }`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				require.Equal(t, "BaseUri", classDecl.Name.(*ast.IdentifierNode).Name)
+				require.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				// Check function properties
+				require.Equal(t, "host", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "public", funcDecl.Visibility)
+				require.True(t, funcDecl.IsFinal)
+				require.False(t, funcDecl.IsStatic)
+				require.False(t, funcDecl.IsAbstract)
+				
+				// Check parameter with union type
+				require.Len(t, funcDecl.Parameters, 1)
+				param := funcDecl.Parameters[0]
+				require.Equal(t, "$host", param.Name)
+				require.NotNil(t, param.Type)
+				
+				require.Len(t, param.Type.UnionTypes, 2, "Parameter should have union type with 2 types")
+				require.Equal(t, "string", param.Type.UnionTypes[0].Name)
+				require.Equal(t, "array", param.Type.UnionTypes[1].Name)
+				
+				// Check static return type
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, "static", funcDecl.ReturnType.Name)
+			},
+		},
+		{
+			name:  "final private function with union types",
+			input: `<?php class Test { final private function test(int|string|null $value): array { } }`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				require.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				require.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "private", funcDecl.Visibility)
+				require.True(t, funcDecl.IsFinal)
+				
+				// Check parameter with 3-type union
+				require.Len(t, funcDecl.Parameters, 1)
+				param := funcDecl.Parameters[0]
+				require.Equal(t, "$value", param.Name)
+				
+				require.Len(t, param.Type.UnionTypes, 3, "Parameter should have union type with 3 types")
+				require.Equal(t, "int", param.Type.UnionTypes[0].Name)
+				require.Equal(t, "string", param.Type.UnionTypes[1].Name)
+				require.Equal(t, "null", param.Type.UnionTypes[2].Name)
+				
+				// Check array return type
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, "array", funcDecl.ReturnType.Name)
+			},
+		},
+		{
+			name:  "final protected function with complex union types",
+			input: `<?php class Test { final protected function process(MyClass|YourClass|TheirClass $obj): self|static { } }`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				require.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				require.Equal(t, "process", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "protected", funcDecl.Visibility)
+				require.True(t, funcDecl.IsFinal)
+				
+				// Check parameter union type with class names
+				require.Len(t, funcDecl.Parameters, 1)
+				param := funcDecl.Parameters[0]
+				require.Equal(t, "$obj", param.Name)
+				
+				require.Len(t, param.Type.UnionTypes, 3, "Parameter should have union type with 3 class types")
+				require.Equal(t, "MyClass", param.Type.UnionTypes[0].Name)
+				require.Equal(t, "YourClass", param.Type.UnionTypes[1].Name)
+				require.Equal(t, "TheirClass", param.Type.UnionTypes[2].Name)
+				
+				// Check return union type with self|static
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Len(t, funcDecl.ReturnType.UnionTypes, 2, "Return type should have union of self|static")
+				require.Equal(t, "self", funcDecl.ReturnType.UnionTypes[0].Name)
+				require.Equal(t, "static", funcDecl.ReturnType.UnionTypes[1].Name)
+			},
+		},
+		{
+			name:  "final public static function with union types",
+			input: `<?php class Test { final public static function create(string|array $data): static { } }`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				require.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				require.Equal(t, "create", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "public", funcDecl.Visibility)
+				require.True(t, funcDecl.IsFinal)
+				require.True(t, funcDecl.IsStatic)
+				
+				// Check union parameter
+				require.Len(t, funcDecl.Parameters, 1)
+				param := funcDecl.Parameters[0]
+				require.Len(t, param.Type.UnionTypes, 2, "Parameter should have union type")
+				require.Equal(t, "string", param.Type.UnionTypes[0].Name)
+				require.Equal(t, "array", param.Type.UnionTypes[1].Name)
+				
+				// Check static return
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, "static", funcDecl.ReturnType.Name)
+			},
+		},
+		{
+			name:  "multiple parameters with mixed union and simple types",
+			input: `<?php class Test { final public function mixed(string $name, int|float $number, bool $flag): void { } }`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				require.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				require.Equal(t, "mixed", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "public", funcDecl.Visibility)
+				require.True(t, funcDecl.IsFinal)
+				
+				// Check all parameters
+				require.Len(t, funcDecl.Parameters, 3)
+				
+				// First parameter: string $name
+				param1 := funcDecl.Parameters[0]
+				require.Equal(t, "$name", param1.Name)
+				require.Equal(t, "string", param1.Type.Name)
+				
+				// Second parameter: int|float $number
+				param2 := funcDecl.Parameters[1]
+				require.Equal(t, "$number", param2.Name)
+				require.Len(t, param2.Type.UnionTypes, 2, "Second parameter should have union type")
+				require.Equal(t, "int", param2.Type.UnionTypes[0].Name)
+				require.Equal(t, "float", param2.Type.UnionTypes[1].Name)
+				
+				// Third parameter: bool $flag
+				param3 := funcDecl.Parameters[2]
+				require.Equal(t, "$flag", param3.Name)
+				require.Equal(t, "bool", param3.Type.Name)
+				
+				// Check void return type
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, "void", funcDecl.ReturnType.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

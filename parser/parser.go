@@ -2144,17 +2144,60 @@ func isConstantDeclarationAfterModifiers(p *Parser) bool {
 		return true
 	}
 	
-	// Check if next token is visibility modifier, and we can look for const after that
+	// Check if next token is visibility modifier
+	// This is the tricky case: final public const vs final public function
+	// We need 2-token lookahead but can't easily implement it without breaking lexer state
+	// For now, use a simple heuristic based on common patterns
 	if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
-		// For final + visibility, it could be either const or function
-		// We'll try const parsing first and let it handle the fallback
-		return true
+		// Since we can't do proper 2-token lookahead without complex lexer state management,
+		// and both cases (final public const and final public function) are valid PHP,
+		// we'll default to function parsing (more common case) 
+		// The constant parser will be made more robust to handle this when function parsing fails
+		return false
 	}
 	
 	// If it's not const or visibility, it's probably a function
 	return false
 }
 
+// isIdentifierChar checks if a character can be part of an identifier
+func isIdentifierChar(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_'
+}
+
+// isFinalVisibilityConst performs 2-token lookahead to determine if we have:
+// final public/private/protected const (returns true) vs 
+// final public/private/protected function (returns false)
+func isFinalVisibilityConst(p *Parser) bool {
+	// We need to look ahead 2 tokens: final -> visibility -> const|function
+	// Use the new GetInput() method to access lexer input
+	
+	// Find the position after the visibility keyword
+	visibilityEndPos := p.peekToken.Position.Offset + len(p.peekToken.Value)
+	
+	// Get remaining input after visibility keyword
+	input := p.lexer.GetInput()
+	if visibilityEndPos >= len(input) {
+		return false
+	}
+	remainingInput := input[visibilityEndPos:]
+	
+	// Skip whitespace
+	i := 0
+	for i < len(remainingInput) && (remainingInput[i] == ' ' || remainingInput[i] == '\t' || remainingInput[i] == '\n' || remainingInput[i] == '\r') {
+		i++
+	}
+	
+	// Check if next significant token is "const"
+	if i+4 < len(remainingInput) && remainingInput[i:i+5] == "const" {
+		// Make sure "const" is followed by a non-identifier character
+		if i+5 >= len(remainingInput) || !isIdentifierChar(remainingInput[i+5]) {
+			return true
+		}
+	}
+	
+	return false
+}
 
 // parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)
 func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
@@ -4881,6 +4924,18 @@ func parseClassStatement(p *Parser) ast.Statement {
 		return parseFunctionDeclaration(p)
 	case lexer.T_FINAL:
 		// Handle final methods/constants: final [visibility] function/const name() {}
+		
+		// Special handling for final public/private/protected ambiguity
+		if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
+			// Use a more sophisticated lookahead for: final visibility const|function
+			if isFinalVisibilityConst(p) {
+				return parseClassConstantDeclaration(p)
+			} else {
+				return parseFunctionDeclaration(p)
+			}
+		}
+		
+		// Handle simple cases: final const, final function
 		if isConstantDeclarationAfterModifiers(p) {
 			return parseClassConstantDeclaration(p)
 		} else {
