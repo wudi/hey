@@ -1502,32 +1502,28 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 		p.nextToken() // 移动到下一个token
 	}
 
-	// 检查是否有 abstract 修饰符
-	var isAbstract bool
-	if p.currentToken.Type == lexer.T_ABSTRACT {
-		isAbstract = true
-		p.nextToken() // 移动到下一个token (可能是static, visibility或function)
-	}
-
-	// 检查是否有 static 修饰符 (可能在 abstract/final 之后)
-	var isStatic bool
-	if p.currentToken.Type == lexer.T_STATIC {
-		isStatic = true
-		p.nextToken() // 移动到下一个token (可能是visibility或function)
-	}
-
-	// 检查是否有可见性修饰符 (public, private, protected)
+	// Parse method modifiers in any order
+	var isAbstract, isStatic bool
 	var visibility string
-	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
-		visibility = p.currentToken.Value
-		p.nextToken() // 移动到下一个token
 
-		// 检查是否有 static 修饰符 (如果之前没有)
-		if !isStatic && p.currentToken.Type == lexer.T_STATIC {
+	// Handle modifiers in flexible order
+	for {
+		switch p.currentToken.Type {
+		case lexer.T_ABSTRACT:
+			isAbstract = true
+			p.nextToken()
+		case lexer.T_STATIC:
 			isStatic = true
-			p.nextToken() // 移动到下一个token
+			p.nextToken()
+		case lexer.T_PUBLIC, lexer.T_PRIVATE, lexer.T_PROTECTED:
+			visibility = p.currentToken.Value
+			p.nextToken()
+		default:
+			// No more modifiers
+			goto done
 		}
 	}
+done:
 
 	// 现在应该是 function token
 	if p.currentToken.Type != lexer.T_FUNCTION {
@@ -5311,6 +5307,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 			return parsePropertyDeclaration(p)
 		} else if nextTokenType == lexer.T_CONST {
 			return parseClassConstantDeclaration(p)
+		} else if nextTokenType == lexer.T_ABSTRACT {
+			// visibility abstract function|property
+			return parseFunctionDeclaration(p)
 		} else if nextTokenType == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
 		} else if nextTokenType == lexer.T_STATIC {
