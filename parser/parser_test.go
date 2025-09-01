@@ -13775,4 +13775,241 @@ class Entity {
 			tt.validate(t, program)
 		})
 	}
+}// TestParsing_AsymmetricVisibility tests PHP 8.4 asymmetric visibility for properties
+func TestParsing_AsymmetricVisibility(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Basic asymmetric visibility - public private(set)",
+			input: `<?php
+class Test {
+	public private(set) string $prop1;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				// Get the class declaration
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Should be ExpressionStatement")
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Should be ClassExpression")
+				nameIdent, ok := classDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok, "Class name should be IdentifierNode")
+				assert.Equal(t, "Test", nameIdent.Name)
+				
+				// Check the property
+				require.Len(t, classDecl.Body, 1)
+				prop, ok := classDecl.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Should be PropertyDeclaration")
+				
+				assert.Equal(t, "public private(set)", prop.Visibility)
+				assert.Equal(t, "prop1", prop.Name)
+				assert.NotNil(t, prop.Type)
+				assert.Equal(t, "string", prop.Type.Name)
+			},
+		},
+		{
+			name: "Asymmetric visibility - protected private(set)",
+			input: `<?php
+class Test {
+	protected private(set) ?array $prop2 = [];
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Should be ExpressionStatement")
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Should be ClassExpression")
+				
+				require.Len(t, classDecl.Body, 1)
+				prop, ok := classDecl.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Should be PropertyDeclaration")
+				
+				assert.Equal(t, "protected private(set)", prop.Visibility)
+				assert.Equal(t, "prop2", prop.Name)
+				assert.NotNil(t, prop.Type)
+				assert.True(t, prop.Type.Nullable)
+				assert.Equal(t, "array", prop.Type.Name)
+				assert.NotNil(t, prop.DefaultValue)
+			},
+		},
+		{
+			name: "Asymmetric visibility - public protected(set)",
+			input: `<?php
+class Test {
+	public protected(set) mixed $prop3;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Should be ExpressionStatement")
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Should be ClassExpression")
+				
+				require.Len(t, classDecl.Body, 1)
+				prop, ok := classDecl.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Should be PropertyDeclaration")
+				
+				assert.Equal(t, "public protected(set)", prop.Visibility)
+				assert.Equal(t, "prop3", prop.Name)
+				assert.NotNil(t, prop.Type)
+				assert.Equal(t, "mixed", prop.Type.Name)
+			},
+		},
+		{
+			name: "Asymmetric visibility with readonly",
+			input: `<?php
+class Test {
+	public readonly private(set) int $prop4;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Should be ExpressionStatement")
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Should be ClassExpression")
+				
+				require.Len(t, classDecl.Body, 1)
+				prop, ok := classDecl.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Should be PropertyDeclaration")
+				
+				assert.Equal(t, "public private(set)", prop.Visibility)
+				assert.True(t, prop.ReadOnly)
+				assert.Equal(t, "prop4", prop.Name)
+				assert.NotNil(t, prop.Type)
+				assert.Equal(t, "int", prop.Type.Name)
+			},
+		},
+		{
+			name: "Multiple properties with asymmetric visibility",
+			input: `<?php
+namespace Symfony\Component\PropertyInfo\Tests\Fixtures;
+
+class AsymmetricVisibility {
+	public private(set) mixed $publicPrivate;
+	public protected(set) mixed $publicProtected;
+	protected private(set) mixed $protectedPrivate;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 2) // namespace and class
+				
+				// Check namespace
+				namespaceStmt, ok := program.Body[0].(*ast.NamespaceStatement)
+				require.True(t, ok, "First should be NamespaceStatement")
+				assert.Equal(t, []string{"Symfony", "Component", "PropertyInfo", "Tests", "Fixtures"}, namespaceStmt.Name.Parts)
+				
+				// Check class
+				exprStmt, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok, "Second should be ExpressionStatement")
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Should be ClassExpression")
+				nameIdent, ok := classDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok, "Class name should be IdentifierNode")
+				assert.Equal(t, "AsymmetricVisibility", nameIdent.Name)
+				
+				// Check all three properties
+				require.Len(t, classDecl.Body, 3)
+				
+				prop1, ok := classDecl.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "First should be PropertyDeclaration")
+				assert.Equal(t, "public private(set)", prop1.Visibility)
+				assert.Equal(t, "publicPrivate", prop1.Name)
+				
+				prop2, ok := classDecl.Body[1].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Second should be PropertyDeclaration")
+				assert.Equal(t, "public protected(set)", prop2.Visibility)
+				assert.Equal(t, "publicProtected", prop2.Name)
+				
+				prop3, ok := classDecl.Body[2].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Third should be PropertyDeclaration")
+				assert.Equal(t, "protected private(set)", prop3.Visibility)
+				assert.Equal(t, "protectedPrivate", prop3.Name)
+			},
+		},
+		{
+			name: "Asymmetric visibility with union types",
+			input: `<?php
+class Test {
+	public private(set) array|string $prop;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Should be ExpressionStatement")
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Should be ClassExpression")
+				
+				require.Len(t, classDecl.Body, 1)
+				prop, ok := classDecl.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Should be PropertyDeclaration")
+				
+				assert.Equal(t, "public private(set)", prop.Visibility)
+				assert.Equal(t, "prop", prop.Name)
+				assert.NotNil(t, prop.Type)
+				
+				// Check union type
+				require.Len(t, prop.Type.UnionTypes, 2)
+				assert.Equal(t, "array", prop.Type.UnionTypes[0].Name)
+				assert.Equal(t, "string", prop.Type.UnionTypes[1].Name)
+			},
+		},
+		{
+			name: "Asymmetric visibility with nullable object type",
+			input: `<?php
+class Test {
+	public protected(set) ?object $prop = null;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Should be ExpressionStatement")
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Should be ClassExpression")
+				
+				require.Len(t, classDecl.Body, 1)
+				prop, ok := classDecl.Body[0].(*ast.PropertyDeclaration)
+				require.True(t, ok, "Should be PropertyDeclaration")
+				
+				assert.Equal(t, "public protected(set)", prop.Visibility)
+				assert.Equal(t, "prop", prop.Name)
+				assert.NotNil(t, prop.Type)
+				assert.True(t, prop.Type.Nullable)
+				assert.Equal(t, "object", prop.Type.Name)
+				
+				// Check default value
+				assert.NotNil(t, prop.DefaultValue)
+				nullIdent, ok := prop.DefaultValue.(*ast.IdentifierNode)
+				require.True(t, ok, "Default should be IdentifierNode")
+				assert.Equal(t, "null", nullIdent.Name)
+			},
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
 }

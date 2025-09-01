@@ -5111,12 +5111,42 @@ func parseClassStatement(p *Parser) ast.Statement {
 	case lexer.T_ATTRIBUTE:
 		// Parse attributes for class members #[Attr] private $prop; #[Attr] public function() {}
 		return parseAttributedClassStatement(p)
-	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
-		// Visibility modifiers - let parseClassConstantDeclaration and parseFunctionDeclaration handle them
-		if p.peekToken.Type == lexer.T_CONST {
+	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC, lexer.T_PRIVATE_SET, lexer.T_PROTECTED_SET, lexer.T_PUBLIC_SET:
+		// Visibility modifiers (including asymmetric visibility for PHP 8.4)
+		// Need to check what follows to determine the type of declaration
+		
+		// For asymmetric visibility, there can be multiple modifiers
+		// e.g., "public private(set)" or "protected public(set)"
+		nextTokenType := p.peekToken.Type
+		
+		// Check if the next token is another visibility modifier (asymmetric case)
+		if nextTokenType == lexer.T_PRIVATE_SET || nextTokenType == lexer.T_PROTECTED_SET || nextTokenType == lexer.T_PUBLIC_SET ||
+		   nextTokenType == lexer.T_PRIVATE || nextTokenType == lexer.T_PROTECTED || nextTokenType == lexer.T_PUBLIC {
+			// This is asymmetric visibility for property
+			return parsePropertyDeclaration(p)
+		} else if nextTokenType == lexer.T_CONST {
 			return parseClassConstantDeclaration(p)
-		} else if p.peekToken.Type == lexer.T_FUNCTION {
+		} else if nextTokenType == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
+		} else if nextTokenType == lexer.T_STATIC {
+			// Need to look ahead one more token to decide between function and property
+			// Save current state for lookahead
+			savedCurrent := p.currentToken
+			savedPeek := p.peekToken
+			
+			// Advance to check what comes after static
+			p.nextToken() // Move to static
+			if p.peekToken.Type == lexer.T_FUNCTION {
+				// This is "visibility static function" - restore state and use function parser
+				p.currentToken = savedCurrent
+				p.peekToken = savedPeek
+				return parseFunctionDeclaration(p)
+			} else {
+				// This is "visibility static property" - restore state and use property parser
+				p.currentToken = savedCurrent
+				p.peekToken = savedPeek
+				return parsePropertyDeclaration(p)
+			}
 		} else {
 			// Property declaration
 			return parsePropertyDeclaration(p)
@@ -5376,54 +5406,51 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 	var static bool
 	var readOnly bool
 
-	// Parse modifiers in order: visibility, static, readonly
-	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
-		visibility = p.currentToken.Value
-
-		// Check for static modifier
-		if p.peekToken.Type == lexer.T_STATIC {
-			static = true
-			p.nextToken() // Move to static
-
-			// 检查 static 后面是否为 function
-			if p.peekToken.Type == lexer.T_FUNCTION {
-				// 这是静态方法：visibility static function
-				// 从当前位置（static token）开始解析，直接调用专门的函数
-				return parseVisibilityStaticFunction(p, visibility, pos)
-			}
-		}
-
-		// Check for readonly modifier
-		if p.peekToken.Type == lexer.T_READONLY {
+	// Parse modifiers in order: visibility (including asymmetric), static, readonly
+	// PHP 8.4 supports asymmetric visibility: public private(set), protected private(set), etc.
+	var visibilityParts []string
+	
+	// Collect all visibility modifiers (for asymmetric visibility)
+	// PHP allows readonly and static to appear between visibility modifiers: public readonly private(set), public static function
+	for p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC ||
+		p.currentToken.Type == lexer.T_PRIVATE_SET || p.currentToken.Type == lexer.T_PROTECTED_SET || p.currentToken.Type == lexer.T_PUBLIC_SET ||
+		p.currentToken.Type == lexer.T_READONLY || p.currentToken.Type == lexer.T_STATIC {
+		
+		if p.currentToken.Type == lexer.T_READONLY {
 			readOnly = true
-			p.nextToken() // Move to readonly
+		} else if p.currentToken.Type == lexer.T_STATIC {
+			static = true
+		} else {
+			visibilityParts = append(visibilityParts, p.currentToken.Value)
 		}
-	} else if p.currentToken.Type == lexer.T_STATIC {
-		// Static without visibility modifier (defaults to public)
-		visibility = "public"
-		static = true
-	} else if p.currentToken.Type == lexer.T_READONLY {
-		// Readonly without visibility modifier (defaults to public)
-		visibility = "public"
-		readOnly = true
+		p.nextToken()
+	}
+	
+	// Handle visibility, static, and readonly determined from the loop
+	if len(visibilityParts) > 0 {
+		visibility = strings.Join(visibilityParts, " ")
 	} else {
-		// Default visibility
+		// Default visibility when no explicit visibility was specified
 		visibility = "public"
 	}
+	
+	// Note: Static function delegation is now handled in parseClassStatement routing
 
 	// 检查下一个token是否为类型提示
 	var typeHint *ast.TypeHint
-	if p.peekToken.Type != lexer.T_VARIABLE {
-		p.nextToken()
+	if p.currentToken.Type != lexer.T_VARIABLE {
 		// 这是一个类型提示 (包括可空类型 ?Type 和带括号的复合类型 (Type1&Type2)|Type3)
 		if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION || p.currentToken.Type == lexer.TOKEN_LPAREN {
 			typeHint = parseTypeHint(p)
+			p.nextToken() // Move past the type hint
 		}
 	}
 
 	// 移动到变量名
-	if !p.expectPeek(lexer.T_VARIABLE) {
-		return nil
+	if p.currentToken.Type != lexer.T_VARIABLE {
+		if !p.expectPeek(lexer.T_VARIABLE) {
+			return nil
+		}
 	}
 
 	// 解析属性名（去掉$）
