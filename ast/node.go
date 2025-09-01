@@ -367,9 +367,10 @@ func (u *UseStatement) String() string {
 // InterfaceDeclaration 表示接口声明
 type InterfaceDeclaration struct {
 	BaseNode
-	Name       *IdentifierNode   `json:"name"`                // 接口名称
-	Extends    []*IdentifierNode `json:"extends,omitempty"`   // 继承的接口
+	Name       *IdentifierNode    `json:"name"`                // 接口名称
+	Extends    []*IdentifierNode  `json:"extends,omitempty"`   // 继承的接口
 	Methods    []*InterfaceMethod `json:"methods"`             // 接口方法
+	Attributes []*AttributeGroup  `json:"attributes,omitempty"` // 属性组
 }
 
 // InterfaceMethod 表示接口方法声明
@@ -465,6 +466,7 @@ type TraitDeclaration struct {
 	Properties []*PropertyDeclaration `json:"properties"` // trait 属性
 	Methods    []*FunctionDeclaration `json:"methods"`    // trait 方法
 	Body       []Statement           `json:"body"`       // trait 体的其他语句（如 use 语句、常量等）
+	Attributes []*AttributeGroup     `json:"attributes,omitempty"` // 属性组
 }
 
 func NewTraitDeclaration(pos lexer.Position, name *IdentifierNode) *TraitDeclaration {
@@ -801,6 +803,7 @@ type EnumDeclaration struct {
 	Cases       []*EnumCase       `json:"cases"`                 // enum 案例
 	Constants   []*ClassConstantDeclaration `json:"constants,omitempty"` // enum 常量
 	Methods     []*FunctionDeclaration `json:"methods,omitempty"` // enum 方法
+	Attributes  []*AttributeGroup `json:"attributes,omitempty"`  // 属性组
 }
 
 // EnumCase 表示 enum 案例

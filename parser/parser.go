@@ -3725,6 +3725,30 @@ func parseAttributedStatement(p *Parser) ast.Statement {
 		}
 		return classStmt
 
+	case lexer.T_INTERFACE:
+		// #[Attr] interface Foo {}
+		interfaceDecl := parseInterfaceDeclaration(p)
+		if interfaceDecl != nil {
+			interfaceDecl.Attributes = attributeGroups
+		}
+		return interfaceDecl
+
+	case lexer.T_TRAIT:
+		// #[Attr] trait Foo {}
+		traitDecl := parseTraitDeclaration(p)
+		if traitDecl != nil {
+			traitDecl.Attributes = attributeGroups
+		}
+		return traitDecl
+
+	case lexer.T_ENUM:
+		// #[Attr] enum Foo {}
+		enumDecl := parseEnumDeclaration(p)
+		if enumDecl != nil {
+			enumDecl.Attributes = attributeGroups
+		}
+		return enumDecl
+
 	case lexer.T_FUNCTION:
 		// #[Attr] function name() {} - 仅限命名函数
 		if p.peekToken.Type != lexer.TOKEN_LPAREN {

@@ -7125,6 +7125,155 @@ interface ServiceInterface {
 	}
 }
 
+func TestParsing_AttributesOnDeclarations(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+		validate       func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Attributes on interface",
+			input: `<?php
+#[Bind(ContainerScopedAttribute::class, environments: ['test'])]
+#[Bind(ContainerScopedAttribute::class, environments: ['test2'])]
+interface ContainerBindScopedTestInterface {
+}
+?>`,
+			expectedErrors: 0,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Equal(t, 1, len(program.Body), "Expected one statement")
+				interfaceDecl, ok := program.Body[0].(*ast.InterfaceDeclaration)
+				assert.True(t, ok, "Expected InterfaceDeclaration, got %T", program.Body[0])
+				assert.Equal(t, "ContainerBindScopedTestInterface", interfaceDecl.Name.Name)
+				assert.Equal(t, 2, len(interfaceDecl.Attributes), "Expected 2 attribute groups")
+				
+				// Check first attribute
+				attr1 := interfaceDecl.Attributes[0]
+				assert.Equal(t, 1, len(attr1.Attributes), "Expected 1 attribute in first group")
+				assert.Equal(t, "Bind", attr1.Attributes[0].Name.Name)
+				assert.Equal(t, 2, len(attr1.Attributes[0].Arguments), "Expected 2 arguments")
+				
+				// Check second attribute
+				attr2 := interfaceDecl.Attributes[1]
+				assert.Equal(t, 1, len(attr2.Attributes), "Expected 1 attribute in second group")
+				assert.Equal(t, "Bind", attr2.Attributes[0].Name.Name)
+				assert.Equal(t, 2, len(attr2.Attributes[0].Arguments), "Expected 2 arguments")
+			},
+		},
+		{
+			name: "Attributes on trait",
+			input: `<?php
+#[TraitAttribute]
+#[AnotherAttribute(param: 'value')]
+trait TestTrait {
+    public function traitMethod() {}
+}
+?>`,
+			expectedErrors: 0,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Equal(t, 1, len(program.Body), "Expected one statement")
+				traitDecl, ok := program.Body[0].(*ast.TraitDeclaration)
+				assert.True(t, ok, "Expected TraitDeclaration, got %T", program.Body[0])
+				assert.Equal(t, "TestTrait", traitDecl.Name.Name)
+				assert.Equal(t, 2, len(traitDecl.Attributes), "Expected 2 attribute groups")
+				
+				// Check first attribute
+				attr1 := traitDecl.Attributes[0]
+				assert.Equal(t, 1, len(attr1.Attributes), "Expected 1 attribute in first group")
+				assert.Equal(t, "TraitAttribute", attr1.Attributes[0].Name.Name)
+				assert.Equal(t, 0, len(attr1.Attributes[0].Arguments), "Expected no arguments")
+				
+				// Check second attribute
+				attr2 := traitDecl.Attributes[1]
+				assert.Equal(t, 1, len(attr2.Attributes), "Expected 1 attribute in second group")
+				assert.Equal(t, "AnotherAttribute", attr2.Attributes[0].Name.Name)
+				assert.Equal(t, 1, len(attr2.Attributes[0].Arguments), "Expected 1 argument")
+			},
+		},
+		{
+			name: "Attributes on enum",
+			input: `<?php
+#[EnumAttribute]
+enum TestEnum: string {
+    case CASE1 = 'value1';
+}
+?>`,
+			expectedErrors: 0,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Equal(t, 1, len(program.Body), "Expected one statement")
+				enumDecl, ok := program.Body[0].(*ast.EnumDeclaration)
+				assert.True(t, ok, "Expected EnumDeclaration, got %T", program.Body[0])
+				assert.Equal(t, "TestEnum", enumDecl.Name.Name)
+				assert.Equal(t, 1, len(enumDecl.Attributes), "Expected 1 attribute group")
+				
+				// Check attribute
+				attr := enumDecl.Attributes[0]
+				assert.Equal(t, 1, len(attr.Attributes), "Expected 1 attribute in group")
+				assert.Equal(t, "EnumAttribute", attr.Attributes[0].Name.Name)
+			},
+		},
+		{
+			name: "Multiple attributes on interface with methods",
+			input: `<?php
+#[Controller]
+#[Route('/api')]
+interface ApiControllerInterface {
+    public function index(): array;
+    public function show(int $id): ?object;
+}
+?>`,
+			expectedErrors: 0,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Equal(t, 1, len(program.Body), "Expected one statement")
+				interfaceDecl, ok := program.Body[0].(*ast.InterfaceDeclaration)
+				assert.True(t, ok, "Expected InterfaceDeclaration, got %T", program.Body[0])
+				assert.Equal(t, "ApiControllerInterface", interfaceDecl.Name.Name)
+				assert.Equal(t, 2, len(interfaceDecl.Attributes), "Expected 2 attribute groups")
+				assert.Equal(t, 2, len(interfaceDecl.Methods), "Expected 2 methods")
+				
+				// Check attributes
+				assert.Equal(t, "Controller", interfaceDecl.Attributes[0].Attributes[0].Name.Name)
+				assert.Equal(t, "Route", interfaceDecl.Attributes[1].Attributes[0].Name.Name)
+				assert.Equal(t, 1, len(interfaceDecl.Attributes[1].Attributes[0].Arguments), "Route should have 1 argument")
+			},
+		},
+		{
+			name: "Complex nested attributes",
+			input: `<?php
+#[Attribute(Target::CLASS | Target::INTERFACE)]
+#[ORM\Entity(table: 'users')]
+#[Cache(ttl: 3600, tags: ['user', 'entity'])]
+interface UserEntityInterface {
+}
+?>`,
+			expectedErrors: 0,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Equal(t, 1, len(program.Body), "Expected one statement")
+				interfaceDecl, ok := program.Body[0].(*ast.InterfaceDeclaration)
+				assert.True(t, ok, "Expected InterfaceDeclaration, got %T", program.Body[0])
+				assert.Equal(t, "UserEntityInterface", interfaceDecl.Name.Name)
+				assert.Equal(t, 3, len(interfaceDecl.Attributes), "Expected 3 attribute groups")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			
+			if tt.validate != nil {
+				tt.validate(t, program)
+			}
+		})
+	}
+}
+
 func TestParsing_TraitDeclarations(t *testing.T) {
 	tests := []struct {
 		name           string
