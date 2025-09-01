@@ -15691,3 +15691,158 @@ func TestParsing_NotEqualOperator(t *testing.T) {
 		})
 	}
 }
+func TestParsing_ArrayDestructuring(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Basic short array destructuring",
+			input: `<?php [$a, $b] = $array;`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				assign := stmt.Expression.(*ast.AssignmentExpression)
+				
+				assert.Equal(t, "=", assign.Operator)
+				
+				// Check left side (array destructuring)
+				leftArray, ok := assign.Left.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, leftArray.Elements, 2)
+				
+				// Check first element
+				firstVar, ok := leftArray.Elements[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$a", firstVar.Name)
+				
+				// Check second element
+				secondVar, ok := leftArray.Elements[1].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$b", secondVar.Name)
+				
+				// Check right side
+				rightVar, ok := assign.Right.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$array", rightVar.Name)
+			},
+		},
+		{
+			name:  "Associative array destructuring",
+			input: `<?php ['key1' => $x, 'key2' => $y] = $data;`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				assign := stmt.Expression.(*ast.AssignmentExpression)
+				
+				leftArray, ok := assign.Left.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, leftArray.Elements, 2)
+				
+				// Check first key-value pair
+				firstPair, ok := leftArray.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				
+				firstKey, ok := firstPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "key1", firstKey.Value)
+				
+				firstVar, ok := firstPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$x", firstVar.Name)
+				
+				// Check second key-value pair
+				secondPair, ok := leftArray.Elements[1].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				
+				secondKey, ok := secondPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "key2", secondKey.Value)
+				
+				secondVar, ok := secondPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$y", secondVar.Name)
+			},
+		},
+		{
+			name:  "Array destructuring with function call (original case)",
+			input: `<?php ['attributes' => $stateItemAttributes, 'iconBeforeHtml' => $stateItemIconBeforeHtml] = $getStateItem($stateItem);`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				assign := stmt.Expression.(*ast.AssignmentExpression)
+				
+				// Check left side
+				leftArray, ok := assign.Left.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, leftArray.Elements, 2)
+				
+				// Check first pair
+				firstPair, ok := leftArray.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				firstKey, ok := firstPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "attributes", firstKey.Value)
+				firstVar, ok := firstPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$stateItemAttributes", firstVar.Name)
+				
+				// Check second pair
+				secondPair, ok := leftArray.Elements[1].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				secondKey, ok := secondPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "iconBeforeHtml", secondKey.Value)
+				secondVar, ok := secondPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$stateItemIconBeforeHtml", secondVar.Name)
+				
+				// Check right side (function call)
+				funcCall, ok := assign.Right.(*ast.CallExpression)
+				require.True(t, ok)
+				callee, ok := funcCall.Callee.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$getStateItem", callee.Name)
+				require.Len(t, funcCall.Arguments, 1)
+				arg, ok := funcCall.Arguments[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$stateItem", arg.Name)
+			},
+		},
+		{
+			name:  "List syntax destructuring",
+			input: `<?php list($a, $b) = $array;`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0].(*ast.ExpressionStatement)
+				assign := stmt.Expression.(*ast.AssignmentExpression)
+				
+				// Should be parsed as array destructuring
+				leftArray, ok := assign.Left.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, leftArray.Elements, 2)
+				
+				firstVar, ok := leftArray.Elements[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$a", firstVar.Name)
+				
+				secondVar, ok := leftArray.Elements[1].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$b", secondVar.Name)
+			},
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.expected(t, program)
+		})
+	}
+}
