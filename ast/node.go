@@ -1874,15 +1874,16 @@ func (fs *ForStatement) String() string {
 // FunctionDeclaration 函数声明
 type FunctionDeclaration struct {
 	BaseNode
-	Name         Identifier  `json:"name"`
-	Parameters   []Parameter `json:"parameters"`
-	ReturnType   *TypeHint   `json:"returnType,omitempty"`
-	Body         []Statement `json:"body"`
-	ByReference  bool        `json:"byReference,omitempty"`   // function &foo()
-	Visibility   string      `json:"visibility,omitempty"`   // public, private, protected (for class methods)
-	IsStatic     bool        `json:"isStatic,omitempty"`     // static function
-	IsAbstract   bool        `json:"isAbstract,omitempty"`   // abstract function
-	IsFinal      bool        `json:"isFinal,omitempty"`      // final function
+	Name         Identifier         `json:"name"`
+	Parameters   []Parameter        `json:"parameters"`
+	ReturnType   *TypeHint          `json:"returnType,omitempty"`
+	Body         []Statement        `json:"body"`
+	ByReference  bool               `json:"byReference,omitempty"`   // function &foo()
+	Visibility   string             `json:"visibility,omitempty"`   // public, private, protected (for class methods)
+	IsStatic     bool               `json:"isStatic,omitempty"`     // static function
+	IsAbstract   bool               `json:"isAbstract,omitempty"`   // abstract function
+	IsFinal      bool               `json:"isFinal,omitempty"`      // final function
+	Attributes   []*AttributeGroup  `json:"attributes,omitempty"`   // #[...] attributes
 }
 
 type Parameter struct {
@@ -4310,12 +4311,13 @@ func (le *ListExpression) String() string {
 // AnonymousFunctionExpression 表示匿名函数表达式
 type AnonymousFunctionExpression struct {
 	BaseNode
-	Parameters  []Parameter  `json:"parameters"`
-	Body        []Statement  `json:"body"`
-	UseClause   []Expression `json:"useClause,omitempty"`
-	ByReference bool         `json:"byReference,omitempty"` // function &() returns by reference
-	Static      bool         `json:"static,omitempty"`      // static function
-	ReturnType  *TypeHint    `json:"returnType,omitempty"`  // : returnType
+	Parameters  []Parameter        `json:"parameters"`
+	Body        []Statement        `json:"body"`
+	UseClause   []Expression       `json:"useClause,omitempty"`
+	ByReference bool               `json:"byReference,omitempty"` // function &() returns by reference
+	Static      bool               `json:"static,omitempty"`      // static function
+	ReturnType  *TypeHint          `json:"returnType,omitempty"`  // : returnType
+	Attributes  []*AttributeGroup  `json:"attributes,omitempty"`  // #[...] attributes
 }
 
 func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression, byReference bool, static bool, returnType *TypeHint) *AnonymousFunctionExpression {
@@ -4536,12 +4538,13 @@ func (ce *CaseExpression) String() string {
 // ClassExpression 表示类声明表达式
 type ClassExpression struct {
 	BaseNode
-	Name       Expression   `json:"name"`
-	Final      bool         `json:"final,omitempty"`      // final class
-	ReadOnly   bool         `json:"readOnly,omitempty"`   // readonly class
-	Extends    Expression   `json:"extends"`
-	Implements []Expression `json:"implements"`
-	Body       []Statement  `json:"body"`
+	Name       Expression         `json:"name"`
+	Final      bool               `json:"final,omitempty"`      // final class
+	ReadOnly   bool               `json:"readOnly,omitempty"`   // readonly class
+	Extends    Expression         `json:"extends"`
+	Implements []Expression       `json:"implements"`
+	Body       []Statement        `json:"body"`
+	Attributes []*AttributeGroup  `json:"attributes,omitempty"` // class attributes #[Attr]
 }
 
 func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression, final, readOnly bool) *ClassExpression {

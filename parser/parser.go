@@ -771,6 +771,9 @@ func (p *Parser) noPrefixParseFnError(t lexer.TokenType) {
 // parseStatement 解析语句
 func parseStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
+	case lexer.T_ATTRIBUTE:
+		// Handle attributed statements: #[Attr] class/function/etc.
+		return parseAttributedStatement(p)
 	case lexer.T_ECHO:
 		return parseEchoStatement(p)
 	case lexer.T_OPEN_TAG_WITH_ECHO:
@@ -3598,16 +3601,124 @@ func parseEmptyExpression(p *Parser) ast.Expression {
 	return ast.NewEmptyExpression(pos, expr)
 }
 
+// parseAttributedStatement 解析带属性的语句 #[Attr] class/function/etc.
+// 简化版本：收集属性然后委托给合适的解析器
+func parseAttributedStatement(p *Parser) ast.Statement {
+	// 收集所有连续的属性组
+	var attributeGroups []*ast.AttributeGroup
+	
+	for p.currentToken.Type == lexer.T_ATTRIBUTE {
+		attributeGroup := parseAttributeGroup(p)
+		if attributeGroup == nil {
+			return nil
+		}
+		attributeGroups = append(attributeGroups, attributeGroup)
+		
+		// parseAttributeGroup结束后，currentToken是']'，检查下一个token
+		if p.peekToken.Type == lexer.T_ATTRIBUTE {
+			p.nextToken() // 前进到下一个attribute group
+		} else {
+			p.nextToken() // 前进到属性后的token
+			break
+		}
+	}
+	
+	// 根据属性后的token类型进行处理
+	switch p.currentToken.Type {
+	case lexer.T_CLASS:
+		// #[Attr] class Foo {}
+		classStmt := parseClassDeclaration(p)
+		if classStmt != nil {
+			if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
+				if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
+					classExpr.Attributes = attributeGroups
+				}
+			}
+		}
+		return classStmt
+		
+	case lexer.T_FUNCTION:
+		// #[Attr] function name() {} - 仅限命名函数
+		if p.peekToken.Type != lexer.TOKEN_LPAREN {
+			funcDecl := parseFunctionDeclaration(p)
+			if funcDecl != nil {
+				funcDecl.Attributes = attributeGroups
+			}
+			return funcDecl
+		}
+		// 匿名函数fallthrough到默认处理
+		fallthrough
+		
+	default:
+		// 对于其他情况，如果只有属性没有后续语句，作为表达式语句返回
+		if len(attributeGroups) == 1 {
+			// 单个属性组作为表达式语句
+			return ast.NewExpressionStatement(attributeGroups[0].Position, attributeGroups[0])
+		}
+		// 多个属性组或其他情况，委托给表达式解析
+		return parseExpressionStatement(p)
+	}
+}
+
 // parseAttributeExpression 解析属性表达式 #[AttributeName(args)] 或 #[Attr1, Attr2, ...]
+// 根据PHP语法，属性可以单独存在，也可以修饰函数：
+// - attributes (单独的属性)
+// - attributes inline_function (修饰匿名函数)  
+// - attributes T_STATIC inline_function (修饰静态匿名函数)
 func parseAttributeExpression(p *Parser) ast.Expression {
 	// 当前 token 是 T_ATTRIBUTE (#[)
-	// 解析属性组：可能包含多个属性，用逗号分隔
-	attributeGroup := parseAttributeGroup(p)
-	if attributeGroup == nil {
-		return nil
+	var attributeGroups []*ast.AttributeGroup
+	
+	// 收集所有连续的属性组
+	for p.currentToken.Type == lexer.T_ATTRIBUTE {
+		attributeGroup := parseAttributeGroup(p)
+		if attributeGroup == nil {
+			return nil
+		}
+		attributeGroups = append(attributeGroups, attributeGroup)
+		
+		// parseAttributeGroup结束后，currentToken是']'，检查下一个token
+		if p.peekToken.Type == lexer.T_ATTRIBUTE {
+			p.nextToken() // 前进到下一个attribute group
+		} else {
+			p.nextToken() // 前进到属性后的token
+			break
+		}
 	}
-
-	return attributeGroup
+	
+	// 检查属性后面跟的是什么
+	if p.currentToken.Type == lexer.T_STATIC && p.peekToken.Type == lexer.T_FUNCTION {
+		// attributes T_STATIC function - 静态匿名函数
+		p.nextToken() // 跳过 T_STATIC
+		
+		// 解析匿名函数
+		function := parseAnonymousFunctionExpression(p)
+		if function != nil {
+			// 将函数标记为静态并添加属性
+			if anonFunc, ok := function.(*ast.AnonymousFunctionExpression); ok {
+				anonFunc.Static = true
+				anonFunc.Attributes = attributeGroups
+			}
+			return function
+		}
+	} else if p.currentToken.Type == lexer.T_FUNCTION {
+		// attributes function - 匿名函数
+		function := parseAnonymousFunctionExpression(p)
+		if function != nil {
+			// 为函数添加属性
+			if anonFunc, ok := function.(*ast.AnonymousFunctionExpression); ok {
+				anonFunc.Attributes = attributeGroups
+			}
+			return function
+		}
+	}
+	
+	// 如果后面没有跟函数，则返回第一个属性组（兼容旧行为）
+	if len(attributeGroups) > 0 {
+		return attributeGroups[0]
+	}
+	
+	return nil
 }
 
 // parseAttributeGroup 解析单个属性组 #[Attr1, Attr2, ...]
