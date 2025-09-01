@@ -4671,6 +4671,8 @@ type ClassConstantDeclaration struct {
 	Visibility string              `json:"visibility"`   // private, protected, public
 	Type       *TypeHint           `json:"type,omitempty"` // PHP 8.3+ typed constants support
 	Constants  []ConstantDeclarator `json:"constants"`    // 支持一行声明多个常量
+	IsFinal    bool                `json:"isFinal,omitempty"`    // final const
+	IsAbstract bool                `json:"isAbstract,omitempty"` // abstract const
 }
 
 // ConstantDeclarator 单个常量声明
@@ -4725,7 +4727,7 @@ func (cd *ConstantDeclarator) String() string {
 	return result
 }
 
-func NewClassConstantDeclaration(pos lexer.Position, visibility string, constType *TypeHint, constants []ConstantDeclarator) *ClassConstantDeclaration {
+func NewClassConstantDeclaration(pos lexer.Position, visibility string, constType *TypeHint, constants []ConstantDeclarator, isFinal, isAbstract bool) *ClassConstantDeclaration {
 	return &ClassConstantDeclaration{
 		BaseNode: BaseNode{
 			Kind:     ASTClassConstGroup,
@@ -4735,6 +4737,8 @@ func NewClassConstantDeclaration(pos lexer.Position, visibility string, constTyp
 		Visibility: visibility,
 		Type:       constType,
 		Constants:  constants,
+		IsFinal:    isFinal,
+		IsAbstract: isAbstract,
 	}
 }
 

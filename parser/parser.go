@@ -2134,6 +2134,28 @@ func isConstantDeclaration(p *Parser) bool {
 	return false
 }
 
+
+// isConstantDeclarationAfterModifiers checks if we have a constant declaration after abstract/final
+// by looking at the token patterns without advancing the parser
+func isConstantDeclarationAfterModifiers(p *Parser) bool {
+	// Current token is abstract/final
+	// Check if next token is 'const' (simple case: abstract const, final const)
+	if p.peekToken.Type == lexer.T_CONST {
+		return true
+	}
+	
+	// Check if next token is visibility modifier, and we can look for const after that
+	if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
+		// For final + visibility, it could be either const or function
+		// We'll try const parsing first and let it handle the fallback
+		return true
+	}
+	
+	// If it's not const or visibility, it's probably a function
+	return false
+}
+
+
 // parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)
 func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
 	pos := p.currentToken.Position
@@ -4855,10 +4877,15 @@ func parseClassStatement(p *Parser) ast.Statement {
 		}
 	case lexer.T_ABSTRACT:
 		// Handle abstract methods: abstract [visibility] function name();
+		// Abstract constants are not valid in PHP, so always treat as function
 		return parseFunctionDeclaration(p)
 	case lexer.T_FINAL:
-		// Handle final methods: final [visibility] function name() {}
-		return parseFunctionDeclaration(p)
+		// Handle final methods/constants: final [visibility] function/const name() {}
+		if isConstantDeclarationAfterModifiers(p) {
+			return parseClassConstantDeclaration(p)
+		} else {
+			return parseFunctionDeclaration(p)
+		}
 	default:
 		// 跳过未识别的token
 		return nil
@@ -4869,8 +4896,23 @@ func parseClassStatement(p *Parser) ast.Statement {
 func parseClassConstantDeclaration(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
 
-	// Parse visibility modifier (if present)
+	// Parse modifiers: final, abstract, visibility
+	var isFinal, isAbstract bool
 	visibility := "" // Empty by default (implicitly public when not specified)
+	
+	// Check for final modifier
+	if p.currentToken.Type == lexer.T_FINAL {
+		isFinal = true
+		p.nextToken()
+	}
+	
+	// Check for abstract modifier
+	if p.currentToken.Type == lexer.T_ABSTRACT {
+		isAbstract = true
+		p.nextToken()
+	}
+	
+	// Check for visibility modifier
 	if p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC {
 		visibility = p.currentToken.Value
 		p.nextToken() // Move to 'const'
@@ -4935,7 +4977,7 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 		break
 	}
 
-	return ast.NewClassConstantDeclaration(pos, visibility, constType, constants)
+	return ast.NewClassConstantDeclaration(pos, visibility, constType, constants, isFinal, isAbstract)
 }
 
 // parsePropertyDeclaration 解析属性声明
