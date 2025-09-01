@@ -4869,73 +4869,59 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 func parseClassStatement(p *Parser) ast.Statement {
 	switch p.currentToken.Type {
 	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
-		// 可见性修饰符后可能跟着：const, function, static, readonly, 或直接是属性
+		// Visibility modifiers - let parseClassConstantDeclaration and parseFunctionDeclaration handle them
 		if p.peekToken.Type == lexer.T_CONST {
 			return parseClassConstantDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
-		} else if p.peekToken.Type == lexer.T_STATIC {
-			// visibility static 组合：统一让 parsePropertyDeclaration 处理
-			// parsePropertyDeclaration 内部会检查是否为函数并委派
-			return parsePropertyDeclaration(p)
-		} else if p.peekToken.Type == lexer.T_READONLY {
-			// visibility readonly property
-			return parsePropertyDeclaration(p)
 		} else {
-			// 默认为属性声明（可能有类型提示）
+			// Property declaration
 			return parsePropertyDeclaration(p)
 		}
 	case lexer.T_FUNCTION:
 		return parseFunctionDeclaration(p)
 	case lexer.T_CONST:
-		// const without visibility modifier (defaults to public)
 		return parseClassConstantDeclaration(p)
-	case lexer.T_READONLY:
-		// readonly without visibility modifier (defaults to public)
-		return parsePropertyDeclaration(p)
 	case lexer.T_USE:
 		return parseUseTraitStatement(p)
 	case lexer.T_STATIC:
-		// Handle static function or static property
-		// static can be followed by visibility modifiers (static public function) or directly by function/variable
+		// Static can precede visibility, function, or property
 		if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
-			// static visibility function/property
-			// Move to visibility modifier and let parseFunctionDeclaration or parsePropertyDeclaration handle it
 			return parseStaticVisibilityDeclaration(p)
 		} else {
-			// static property (e.g., static $var)
 			return parsePropertyDeclaration(p)
 		}
 	case lexer.T_ABSTRACT:
-		// Handle abstract methods: abstract [visibility] function name();
-		// Abstract constants are not valid in PHP, so always treat as function
+		// Abstract methods only (abstract constants don't exist in PHP)
 		return parseFunctionDeclaration(p)
 	case lexer.T_FINAL:
-		// Handle final methods/constants: final [visibility] function/const name() {}
-		
-		// Special handling for final public/private/protected ambiguity
-		if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
-			// Use a more sophisticated lookahead for: final visibility const|function
+		// Final can apply to both constants and methods
+		if p.peekToken.Type == lexer.T_CONST {
+			return parseClassConstantDeclaration(p)
+		} else if p.peekToken.Type == lexer.T_FUNCTION {
+			return parseFunctionDeclaration(p)
+		} else if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
+			// This is the tricky case: final visibility [const|function]
+			// Use lookahead to determine if it's a constant or function
 			if isFinalVisibilityConst(p) {
 				return parseClassConstantDeclaration(p)
 			} else {
 				return parseFunctionDeclaration(p)
 			}
-		}
-		
-		// Handle simple cases: final const, final function
-		if isConstantDeclarationAfterModifiers(p) {
-			return parseClassConstantDeclaration(p)
 		} else {
 			return parseFunctionDeclaration(p)
 		}
+	case lexer.T_READONLY:
+		// Readonly properties
+		return parsePropertyDeclaration(p)
 	default:
-		// 跳过未识别的token
+		// Skip unrecognized tokens
 		return nil
 	}
 }
+
 
 // parseClassConstantDeclaration 解析类常量声明
 func parseClassConstantDeclaration(p *Parser) ast.Statement {
