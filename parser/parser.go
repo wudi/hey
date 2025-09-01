@@ -364,7 +364,7 @@ func New(l *lexer.Lexer) *Parser {
 }
 
 func (p *Parser) addError(msg string) {
-	p.errors = append(p.errors, msg+" at "+p.currentToken.Position.String())
+	p.errors = append(p.errors, "syntax error, "+msg+" on "+p.currentToken.Position.String())
 }
 
 // nextToken 前进到下一个语法有意义的token，自动跳过注释等无意义token
@@ -1642,13 +1642,13 @@ func parseParameter(p *Parser) *ast.Parameter {
 	// 这些通常只在构造函数参数中使用
 	// PHP 8.4 支持多个修饰符：public private(set), protected public(set) 等
 	var visibilityModifiers []string
-	
+
 	for p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED ||
 		p.currentToken.Type == lexer.T_PUBLIC_SET || p.currentToken.Type == lexer.T_PRIVATE_SET || p.currentToken.Type == lexer.T_PROTECTED_SET {
 		visibilityModifiers = append(visibilityModifiers, p.currentToken.Value)
 		p.nextToken()
 	}
-	
+
 	// 合并多个可见性修饰符为单个字符串
 	if len(visibilityModifiers) > 0 {
 		param.Visibility = strings.Join(visibilityModifiers, " ")
@@ -2215,18 +2215,18 @@ func isFinalVisibilityConst(p *Parser) bool {
 func isVisibilityStaticFunction(p *Parser) bool {
 	// We're currently at visibility modifier, peekToken is T_STATIC
 	// We need to look at the token that comes after T_STATIC
-	
+
 	// Verify that peekToken is indeed T_STATIC
 	if p.peekToken.Type != lexer.T_STATIC {
 		return false
 	}
-	
+
 	// Use PeekTokensAhead(1) to get the token after T_STATIC
 	tokens := p.lexer.PeekTokensAhead(1)
 	if len(tokens) < 1 {
 		return false
 	}
-	
+
 	// Check if the token after static is 'function'
 	return tokens[0].Type == lexer.T_FUNCTION
 }
@@ -2237,16 +2237,16 @@ func isVisibilityStaticFunction(p *Parser) bool {
 func isAbstractProperty(p *Parser) bool {
 	// We're currently at 'abstract', need to look ahead to determine if it's a property with hooks
 	// Abstract properties MUST have property hooks, otherwise they're invalid
-	
+
 	// Possible patterns:
 	// abstract public string $prop { get; }
 	// abstract function foo() {}
-	
+
 	tokens := p.lexer.PeekTokensAhead(10) // Look ahead to find pattern
 	if len(tokens) == 0 {
 		return false
 	}
-	
+
 	// Skip visibility modifiers and type hints to find either T_FUNCTION or T_VARIABLE
 	i := 0
 	for i < len(tokens) {
@@ -2272,7 +2272,7 @@ func isAbstractProperty(p *Parser) bool {
 			return false // Unexpected token
 		}
 	}
-	
+
 	return false // Couldn't determine
 }
 
@@ -3694,14 +3694,14 @@ func parseEmptyExpression(p *Parser) ast.Expression {
 func parseAttributedStatement(p *Parser) ast.Statement {
 	// 收集所有连续的属性组
 	var attributeGroups []*ast.AttributeGroup
-	
+
 	for p.currentToken.Type == lexer.T_ATTRIBUTE {
 		attributeGroup := parseAttributeGroup(p)
 		if attributeGroup == nil {
 			return nil
 		}
 		attributeGroups = append(attributeGroups, attributeGroup)
-		
+
 		// parseAttributeGroup结束后，currentToken是']'，检查下一个token
 		if p.peekToken.Type == lexer.T_ATTRIBUTE {
 			p.nextToken() // 前进到下一个attribute group
@@ -3710,7 +3710,7 @@ func parseAttributedStatement(p *Parser) ast.Statement {
 			break
 		}
 	}
-	
+
 	// 根据属性后的token类型进行处理
 	switch p.currentToken.Type {
 	case lexer.T_CLASS:
@@ -3724,7 +3724,7 @@ func parseAttributedStatement(p *Parser) ast.Statement {
 			}
 		}
 		return classStmt
-		
+
 	case lexer.T_FUNCTION:
 		// #[Attr] function name() {} - 仅限命名函数
 		if p.peekToken.Type != lexer.TOKEN_LPAREN {
@@ -3736,7 +3736,7 @@ func parseAttributedStatement(p *Parser) ast.Statement {
 		}
 		// 匿名函数fallthrough到默认处理
 		fallthrough
-		
+
 	default:
 		// 对于其他情况，如果只有属性没有后续语句，作为表达式语句返回
 		if len(attributeGroups) == 1 {
@@ -3751,12 +3751,12 @@ func parseAttributedStatement(p *Parser) ast.Statement {
 // parseAttributeExpression 解析属性表达式 #[AttributeName(args)] 或 #[Attr1, Attr2, ...]
 // 根据PHP语法，属性可以单独存在，也可以修饰函数：
 // - attributes (单独的属性)
-// - attributes inline_function (修饰匿名函数)  
+// - attributes inline_function (修饰匿名函数)
 // - attributes T_STATIC inline_function (修饰静态匿名函数)
 func parseAttributeExpression(p *Parser) ast.Expression {
 	// 当前 token 是 T_ATTRIBUTE (#[)
 	var attributeGroups []*ast.AttributeGroup
-	
+
 	// 收集所有连续的属性组
 	for p.currentToken.Type == lexer.T_ATTRIBUTE {
 		attributeGroup := parseAttributeGroup(p)
@@ -3764,7 +3764,7 @@ func parseAttributeExpression(p *Parser) ast.Expression {
 			return nil
 		}
 		attributeGroups = append(attributeGroups, attributeGroup)
-		
+
 		// parseAttributeGroup结束后，currentToken是']'，检查下一个token
 		if p.peekToken.Type == lexer.T_ATTRIBUTE {
 			p.nextToken() // 前进到下一个attribute group
@@ -3773,12 +3773,12 @@ func parseAttributeExpression(p *Parser) ast.Expression {
 			break
 		}
 	}
-	
+
 	// 检查属性后面跟的是什么
 	if p.currentToken.Type == lexer.T_STATIC && p.peekToken.Type == lexer.T_FUNCTION {
 		// attributes T_STATIC function - 静态匿名函数
 		p.nextToken() // 跳过 T_STATIC
-		
+
 		// 解析匿名函数
 		function := parseAnonymousFunctionExpression(p)
 		if function != nil {
@@ -3821,12 +3821,12 @@ func parseAttributeExpression(p *Parser) ast.Expression {
 			return arrowFunc
 		}
 	}
-	
+
 	// 如果后面没有跟函数，则返回第一个属性组（兼容旧行为）
 	if len(attributeGroups) > 0 {
 		return attributeGroups[0]
 	}
-	
+
 	return nil
 }
 
@@ -3852,12 +3852,12 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 	// 解析可能的后续属性（用逗号分隔）
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
-		
+
 		// 支持尾随逗号：检查逗号后面是否是右括号
 		if p.peekToken.Type == lexer.TOKEN_RBRACKET {
 			break // 尾随逗号，跳出循环让expectPeek处理右括号
 		}
-		
+
 		p.nextToken() // 移动到下一个属性名
 		if !isClassNameToken(p.currentToken.Type) {
 			p.addError(fmt.Sprintf("expected attribute name, got `%s` instead", p.currentToken.Value))
@@ -4301,12 +4301,12 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 				}
 
 				p.nextToken() // 跳过逗号
-				
+
 				// 检查是否为尾随逗号（逗号后直接是右括号）
 				if p.peekToken.Type == lexer.TOKEN_RPAREN {
 					break
 				}
-				
+
 				p.nextToken() // 移动到下一个变量
 			}
 		}
@@ -4341,8 +4341,8 @@ func parseAnonymousFunctionWithStatic(p *Parser) ast.Expression {
 
 	// 检查是否为引用返回匿名函数 function &()
 	byReference := false
-	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG || 
-	   p.peekToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG ||
+		p.peekToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
 		byReference = true
 		p.nextToken() // 移动到 &
 	}
@@ -5267,14 +5267,14 @@ func parseClassStatement(p *Parser) ast.Statement {
 	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC, lexer.T_PRIVATE_SET, lexer.T_PROTECTED_SET, lexer.T_PUBLIC_SET:
 		// Visibility modifiers (including asymmetric visibility for PHP 8.4)
 		// Need to check what follows to determine the type of declaration
-		
+
 		// For asymmetric visibility, there can be multiple modifiers
 		// e.g., "public private(set)" or "protected public(set)"
 		nextTokenType := p.peekToken.Type
-		
+
 		// Check if the next token is another visibility modifier (asymmetric case)
 		if nextTokenType == lexer.T_PRIVATE_SET || nextTokenType == lexer.T_PROTECTED_SET || nextTokenType == lexer.T_PUBLIC_SET ||
-		   nextTokenType == lexer.T_PRIVATE || nextTokenType == lexer.T_PROTECTED || nextTokenType == lexer.T_PUBLIC {
+			nextTokenType == lexer.T_PRIVATE || nextTokenType == lexer.T_PROTECTED || nextTokenType == lexer.T_PUBLIC {
 			// This is asymmetric visibility for property
 			return parsePropertyDeclaration(p)
 		} else if nextTokenType == lexer.T_CONST {
@@ -5345,14 +5345,14 @@ func parseClassStatement(p *Parser) ast.Statement {
 func parseAttributedClassStatement(p *Parser) ast.Statement {
 	// Collect all consecutive attribute groups
 	var attributeGroups []*ast.AttributeGroup
-	
+
 	for p.currentToken.Type == lexer.T_ATTRIBUTE {
 		attributeGroup := parseAttributeGroup(p)
 		if attributeGroup == nil {
 			return nil
 		}
 		attributeGroups = append(attributeGroups, attributeGroup)
-		
+
 		// parseAttributeGroup ends with currentToken as ']', check next token
 		if p.peekToken.Type == lexer.T_ATTRIBUTE {
 			p.nextToken() // advance to next attribute group
@@ -5361,7 +5361,7 @@ func parseAttributedClassStatement(p *Parser) ast.Statement {
 			break
 		}
 	}
-	
+
 	// Parse the class member based on the token after attributes
 	switch p.currentToken.Type {
 	case lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_PUBLIC:
@@ -5572,13 +5572,13 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 	// Parse modifiers in order: abstract, visibility (including asymmetric), static, readonly
 	// PHP 8.4 supports asymmetric visibility: public private(set), protected private(set), etc.
 	var visibilityParts []string
-	
+
 	// Collect all modifiers including abstract for properties with hooks
 	// PHP allows readonly, static, and abstract to appear between visibility modifiers
 	for p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC ||
 		p.currentToken.Type == lexer.T_PRIVATE_SET || p.currentToken.Type == lexer.T_PROTECTED_SET || p.currentToken.Type == lexer.T_PUBLIC_SET ||
 		p.currentToken.Type == lexer.T_READONLY || p.currentToken.Type == lexer.T_STATIC || p.currentToken.Type == lexer.T_ABSTRACT {
-		
+
 		if p.currentToken.Type == lexer.T_READONLY {
 			readOnly = true
 		} else if p.currentToken.Type == lexer.T_STATIC {
@@ -5590,7 +5590,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		}
 		p.nextToken()
 	}
-	
+
 	// Handle visibility, static, and readonly determined from the loop
 	if len(visibilityParts) > 0 {
 		visibility = strings.Join(visibilityParts, " ")
@@ -5598,7 +5598,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		// Default visibility when no explicit visibility was specified
 		visibility = "public"
 	}
-	
+
 	// Note: Static function routing is handled in parseClassStatement
 
 	// 检查下一个token是否为类型提示
@@ -6351,7 +6351,7 @@ func parseStaticOrArrowFunctionExpression(p *Parser) ast.Expression {
 		// 这是静态箭头函数，委托给箭头函数解析器
 		return parseArrowFunctionExpression(p)
 	}
-	
+
 	// 检查是否是静态匿名函数 static function
 	if p.peekToken.Type == lexer.T_FUNCTION {
 		// 这是静态匿名函数，委托给匿名函数解析器，并标记为静态
