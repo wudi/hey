@@ -4084,28 +4084,13 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 		}
 	}
 
-	// 检查返回类型声明 - 支持多种类型格式
+	// 解析返回类型声明（支持 : type 语法）
+	var returnType *ast.TypeHint
 	if p.peekToken.Type == lexer.TOKEN_COLON {
 		p.nextToken() // 跳过 ':'
 		p.nextToken() // 移动到类型
 
-		// 处理可空类型 ?Type
-		if p.currentToken.Type == lexer.TOKEN_QUESTION {
-			p.nextToken() // 移动到实际类型
-		}
-
-		// 解析类型（可以是 T_STRING, T_ARRAY 等）
-		if p.currentToken.Type != lexer.T_STRING &&
-			p.currentToken.Type != lexer.T_ARRAY &&
-			p.currentToken.Type != lexer.T_CALLABLE {
-			// 对于其他类型，尝试继续解析
-		}
-
-		// 处理联合类型和交叉类型
-		for p.peekToken.Type == lexer.TOKEN_PIPE || p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
-			p.nextToken() // 跳过 | 或 &
-			p.nextToken() // 移动到下一个类型
-		}
+		returnType = parseTypeHint(p)
 	}
 
 	// 解析函数体
@@ -4115,7 +4100,118 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 
 	body := parseBlockStatements(p)
 
-	return ast.NewAnonymousFunctionExpression(pos, parameters, body, useClause, byReference)
+	return ast.NewAnonymousFunctionExpression(pos, parameters, body, useClause, byReference, false, returnType)
+}
+
+// parseAnonymousFunctionWithStatic 解析静态匿名函数表达式 (带 static)
+func parseAnonymousFunctionWithStatic(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+
+	// 检查是否为引用返回匿名函数 function &()
+	byReference := false
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG || 
+	   p.peekToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
+		byReference = true
+		p.nextToken() // 移动到 &
+	}
+
+	// 解析参数列表
+	if !p.expectToken(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+
+	var parameters []ast.Parameter
+
+	// 解析参数（支持类型提示）
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+
+		// 解析第一个参数
+		param := parseParameter(p)
+		if param != nil {
+			parameters = append(parameters, *param)
+		}
+
+		// 处理更多参数
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+
+			// 检查逗号后面是否直接是结束符（支持尾随逗号）
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				break
+			}
+
+			p.nextToken() // 移动到下一个参数
+			param := parseParameter(p)
+			if param != nil {
+				parameters = append(parameters, *param)
+			}
+		}
+	}
+
+	if !p.expectToken(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+
+	// 解析 use 子句
+	var useClause []ast.Expression
+	if p.peekToken.Type == lexer.T_USE {
+		p.nextToken() // 跳过 use
+		if !p.expectToken(lexer.TOKEN_LPAREN) {
+			return nil
+		}
+
+		if p.peekToken.Type != lexer.TOKEN_RPAREN {
+			p.nextToken()
+
+			for {
+				if p.currentToken.Type == lexer.T_VARIABLE {
+					useClause = append(useClause, parseVariable(p))
+				} else if p.currentToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
+					// 处理引用变量 &$var
+					refExpr := parseReferenceExpression(p)
+					useClause = append(useClause, refExpr)
+				}
+
+				if p.peekToken.Type == lexer.TOKEN_RPAREN {
+					break
+				}
+
+				if p.peekToken.Type != lexer.TOKEN_COMMA {
+					break
+				}
+
+				p.nextToken() // 跳过逗号
+				// 检查逗号后面是否直接是结束符（支持尾随逗号）
+				if p.peekToken.Type == lexer.TOKEN_RPAREN {
+					break
+				}
+				p.nextToken() // 移动到下一个变量
+			}
+		}
+
+		if !p.expectToken(lexer.TOKEN_RPAREN) {
+			return nil
+		}
+	}
+
+	// 解析返回类型声明（支持 : type 语法）
+	var returnType *ast.TypeHint
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // 跳过 ':'
+		p.nextToken() // 移动到类型
+
+		returnType = parseTypeHint(p)
+	}
+
+	// 解析函数体
+	if !p.expectToken(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	body := parseBlockStatements(p)
+
+	return ast.NewAnonymousFunctionExpression(pos, parameters, body, useClause, byReference, true, returnType)
 }
 
 // parseUseExpression 解析 use 表达式（在表达式上下文中）
@@ -5778,12 +5874,19 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 	return ast.NewArrowFunctionExpression(pos, parameters, returnType, body, static)
 }
 
-// parseStaticOrArrowFunctionExpression 处理 static 关键字（可能是静态箭头函数或其他静态表达式）
+// parseStaticOrArrowFunctionExpression 处理 static 关键字（可能是静态箭头函数、静态匿名函数或其他静态表达式）
 func parseStaticOrArrowFunctionExpression(p *Parser) ast.Expression {
 	// 检查是否是静态箭头函数 static fn
 	if p.peekToken.Type == lexer.T_FN {
 		// 这是静态箭头函数，委托给箭头函数解析器
 		return parseArrowFunctionExpression(p)
+	}
+	
+	// 检查是否是静态匿名函数 static function
+	if p.peekToken.Type == lexer.T_FUNCTION {
+		// 这是静态匿名函数，委托给匿名函数解析器，并标记为静态
+		p.nextToken() // 移动到 function 关键字
+		return parseAnonymousFunctionWithStatic(p)
 	}
 
 	// 否则使用原来的静态表达式解析

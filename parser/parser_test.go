@@ -12445,3 +12445,289 @@ func TestParsing_FinalPublicFunctionWithUnionTypesAndStaticReturn(t *testing.T) 
 		})
 	}
 }
+
+func TestParsing_Closures(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Simple closure without parameters",
+			input: `<?php $fn = function() { return 42; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.Len(t, closure.Parameters, 0)
+				require.False(t, closure.Static)
+				require.False(t, closure.ByReference)
+				require.Len(t, closure.UseClause, 0)
+				require.Nil(t, closure.ReturnType)
+				require.Len(t, closure.Body, 1)
+			},
+		},
+		{
+			name:  "Closure with parameters and type hints",
+			input: `<?php $fn = function(string $name, int $age) { return $name . $age; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.Len(t, closure.Parameters, 2)
+				
+				// First parameter: string $name
+				param1 := closure.Parameters[0]
+				require.Equal(t, "$name", param1.Name)
+				require.Equal(t, "string", param1.Type.Name)
+				
+				// Second parameter: int $age
+				param2 := closure.Parameters[1]
+				require.Equal(t, "$age", param2.Name)
+				require.Equal(t, "int", param2.Type.Name)
+				
+				require.False(t, closure.Static)
+				require.False(t, closure.ByReference)
+			},
+		},
+		{
+			name:  "Closure with use clause",
+			input: `<?php $fn = function($x) use ($y, $z) { return $x + $y + $z; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.Len(t, closure.Parameters, 1)
+				require.Len(t, closure.UseClause, 2)
+				
+				// Check use clause variables
+				useVar1, ok := closure.UseClause[0].(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$y", useVar1.Name)
+				
+				useVar2, ok := closure.UseClause[1].(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$z", useVar2.Name)
+			},
+		},
+		{
+			name:  "Closure with use clause and references",
+			input: `<?php $fn = function() use (&$x, $y) { $x++; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.Len(t, closure.UseClause, 2)
+				
+				// First use variable should be a reference
+				refExpr, ok := closure.UseClause[0].(*ast.UnaryExpression)
+				require.True(t, ok)
+				refVar, ok := refExpr.Operand.(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$x", refVar.Name)
+				
+				// Second use variable should be normal
+				useVar, ok := closure.UseClause[1].(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$y", useVar.Name)
+			},
+		},
+		{
+			name:  "Closure with return type",
+			input: `<?php $fn = function(): int { return 42; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.NotNil(t, closure.ReturnType)
+				require.Equal(t, "int", closure.ReturnType.Name)
+			},
+		},
+		{
+			name:  "Static closure",
+			input: `<?php $fn = static function() { return self::class; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.True(t, closure.Static)
+				require.False(t, closure.ByReference)
+			},
+		},
+		{
+			name:  "Complex closure with all features",
+			input: `<?php $id = $cancellation->subscribe(static function (\Throwable $exception) use (&$waiting, &$offset, $suspension,): void { foreach ($waiting as $key => $pending) { } });`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				call, ok := assignment.Right.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 1)
+				
+				closure, ok := call.Arguments[0].(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				
+				// Verify static modifier
+				require.True(t, closure.Static)
+				require.False(t, closure.ByReference)
+				
+				// Verify parameters
+				require.Len(t, closure.Parameters, 1)
+				param := closure.Parameters[0]
+				require.Equal(t, "$exception", param.Name)
+				require.Equal(t, "\\Throwable", param.Type.Name)
+				
+				// Verify use clause
+				require.Len(t, closure.UseClause, 3)
+				
+				// First use variable: &$waiting (reference)
+				refExpr1, ok := closure.UseClause[0].(*ast.UnaryExpression)
+				require.True(t, ok)
+				refVar1, ok := refExpr1.Operand.(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$waiting", refVar1.Name)
+				
+				// Second use variable: &$offset (reference)
+				refExpr2, ok := closure.UseClause[1].(*ast.UnaryExpression)
+				require.True(t, ok)
+				refVar2, ok := refExpr2.Operand.(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$offset", refVar2.Name)
+				
+				// Third use variable: $suspension (normal)
+				useVar, ok := closure.UseClause[2].(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$suspension", useVar.Name)
+				
+				// Verify return type
+				require.NotNil(t, closure.ReturnType)
+				require.Equal(t, "void", closure.ReturnType.Name)
+				
+				// Verify body contains foreach statement
+				require.Len(t, closure.Body, 1)
+				foreachStmt, ok := closure.Body[0].(*ast.ForeachStatement)
+				require.True(t, ok)
+				
+				iterVar, ok := foreachStmt.Iterable.(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$waiting", iterVar.Name)
+			},
+		},
+		{
+			name:  "By-reference closure",
+			input: `<?php $fn = function &() { return $this->value; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.True(t, closure.ByReference)
+				require.False(t, closure.Static)
+			},
+		},
+		{
+			name:  "Static by-reference closure with everything",
+			input: `<?php $fn = static function &(array $data) use (&$count): ?array { return $data ?: null; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.True(t, closure.Static)
+				require.True(t, closure.ByReference)
+				
+				// Verify parameter
+				require.Len(t, closure.Parameters, 1)
+				param := closure.Parameters[0]
+				require.Equal(t, "$data", param.Name)
+				require.Equal(t, "array", param.Type.Name)
+				
+				// Verify use clause
+				require.Len(t, closure.UseClause, 1)
+				refExpr, ok := closure.UseClause[0].(*ast.UnaryExpression)
+				require.True(t, ok)
+				refVar, ok := refExpr.Operand.(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$count", refVar.Name)
+				
+				// Verify nullable return type
+				require.NotNil(t, closure.ReturnType)
+				require.Equal(t, "array", closure.ReturnType.Name)
+				require.True(t, closure.ReturnType.Nullable)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

@@ -4314,9 +4314,11 @@ type AnonymousFunctionExpression struct {
 	Body        []Statement  `json:"body"`
 	UseClause   []Expression `json:"useClause,omitempty"`
 	ByReference bool         `json:"byReference,omitempty"` // function &() returns by reference
+	Static      bool         `json:"static,omitempty"`      // static function
+	ReturnType  *TypeHint    `json:"returnType,omitempty"`  // : returnType
 }
 
-func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression, byReference bool) *AnonymousFunctionExpression {
+func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression, byReference bool, static bool, returnType *TypeHint) *AnonymousFunctionExpression {
 	return &AnonymousFunctionExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTClosure, // PHP uses CLOSURE for anonymous functions
@@ -4327,11 +4329,13 @@ func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, 
 		Body:        body,
 		UseClause:   useClause,
 		ByReference: byReference,
+		Static:      static,
+		ReturnType:  returnType,
 	}
 }
 
 func (afe *AnonymousFunctionExpression) GetChildren() []Node {
-	children := make([]Node, 0, len(afe.Body)+len(afe.UseClause))
+	children := make([]Node, 0, len(afe.Body)+len(afe.UseClause)+1)
 	
 	for _, stmt := range afe.Body {
 		if stmt != nil {
@@ -4343,6 +4347,10 @@ func (afe *AnonymousFunctionExpression) GetChildren() []Node {
 		if use != nil {
 			children = append(children, use)
 		}
+	}
+	
+	if afe.ReturnType != nil {
+		children = append(children, afe.ReturnType)
 	}
 	
 	return children
@@ -4359,6 +4367,9 @@ func (afe *AnonymousFunctionExpression) Accept(visitor Visitor) {
 			if use != nil {
 				use.Accept(visitor)
 			}
+		}
+		if afe.ReturnType != nil {
+			afe.ReturnType.Accept(visitor)
 		}
 	}
 }
