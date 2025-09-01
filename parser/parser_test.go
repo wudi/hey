@@ -10449,7 +10449,7 @@ class TestClass {
 }
 
 func containsSubstring(str, substr string) bool {
-	return len(str) >= len(substr) && str[:len(substr)] == substr
+	return strings.Contains(str, substr)
 }
 
 func TestParsing_MixedAlternativeRegularSyntax(t *testing.T) {
