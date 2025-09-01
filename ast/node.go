@@ -375,10 +375,11 @@ type InterfaceDeclaration struct {
 
 // InterfaceMethod 表示接口方法声明
 type InterfaceMethod struct {
-	Name       *IdentifierNode `json:"name"`                // 方法名称
-	Parameters []Parameter     `json:"parameters"`          // 参数列表
-	ReturnType *TypeHint       `json:"returnType,omitempty"` // 返回类型
-	Visibility string          `json:"visibility"`          // 可见性 (通常是 public)
+	Name        *IdentifierNode `json:"name"`                 // 方法名称
+	Parameters  []Parameter     `json:"parameters"`           // 参数列表
+	ReturnType  *TypeHint       `json:"returnType,omitempty"` // 返回类型
+	Visibility  string          `json:"visibility"`           // 可见性 (通常是 public)
+	ByReference bool            `json:"byReference,omitempty"` // function &foo() - 引用返回
 }
 
 func NewInterfaceDeclaration(pos lexer.Position, name *IdentifierNode) *InterfaceDeclaration {

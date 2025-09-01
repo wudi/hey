@@ -1971,8 +1971,15 @@ func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
 		return nil
 	}
 
-	// 期望方法名 (allow reserved keywords)
+	// 检查是否有引用返回符号 &
+	byReference := false
 	p.nextToken()
+	if p.currentToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
+		byReference = true
+		p.nextToken()
+	}
+
+	// 期望方法名 (allow reserved keywords)
 	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.addError(fmt.Sprintf("expected method name, got %s", p.currentToken.Value))
 		return nil
@@ -1986,9 +1993,10 @@ func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
 	}
 
 	method := &ast.InterfaceMethod{
-		Name:       methodName,
-		Parameters: make([]ast.Parameter, 0),
-		Visibility: visibility,
+		Name:        methodName,
+		Parameters:  make([]ast.Parameter, 0),
+		Visibility:  visibility,
+		ByReference: byReference,
 	}
 
 	// 解析参数列表
