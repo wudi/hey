@@ -237,6 +237,47 @@ func (p *PrintStatement) String() string {
 	return "print " + strings.Join(args, ", ") + ";"
 }
 
+// PrintExpression 表示print表达式 (作为表达式使用的print)
+type PrintExpression struct {
+	BaseNode
+	Expression Expression `json:"expression"`
+}
+
+func NewPrintExpression(pos lexer.Position, expr Expression) *PrintExpression {
+	return &PrintExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTPrint,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Expression: expr,
+	}
+}
+
+// GetChildren 返回子节点
+func (p *PrintExpression) GetChildren() []Node {
+	if p.Expression != nil {
+		return []Node{p.Expression}
+	}
+	return []Node{}
+}
+
+// Accept 接受访问者
+func (p *PrintExpression) Accept(visitor Visitor) {
+	if visitor.Visit(p) && p.Expression != nil {
+		p.Expression.Accept(visitor)
+	}
+}
+
+func (p *PrintExpression) expressionNode() {}
+
+func (p *PrintExpression) String() string {
+	if p.Expression != nil {
+		return "print " + p.Expression.String()
+	}
+	return "print"
+}
+
 // NamespaceStatement 表示命名空间声明语句
 type NamespaceStatement struct {
 	BaseNode

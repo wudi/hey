@@ -15063,3 +15063,281 @@ class Test {
 		})
 	}
 }
+
+// TestParsing_PrintExpressions tests print expression parsing in various contexts
+func TestParsing_PrintExpressions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "simple print statement",
+			input: `<?php print($message); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				printStmt, ok := program.Body[0].(*ast.PrintStatement)
+				require.True(t, ok)
+				assert.Equal(t, ast.ASTPrint, printStmt.Kind)
+				assert.Len(t, printStmt.Arguments, 1)
+				
+				variable, ok := printStmt.Arguments[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$message", variable.Name)
+			},
+		},
+		{
+			name:  "print in logical OR expression",
+			input: `<?php $this->quietMode || print($message); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				binaryExpr, ok := exprStmt.Expression.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "||", binaryExpr.Operator)
+				
+				// Left side should be property access
+				propAccess, ok := binaryExpr.Left.(*ast.PropertyAccessExpression)
+				require.True(t, ok)
+				variable, ok := propAccess.Object.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$this", variable.Name)
+				ident, ok := propAccess.Property.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "quietMode", ident.Name)
+				
+				// Right side should be print expression
+				printExpr, ok := binaryExpr.Right.(*ast.PrintExpression)
+				require.True(t, ok)
+				assert.Equal(t, ast.ASTPrint, printExpr.Kind)
+				
+				messageVar, ok := printExpr.Expression.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$message", messageVar.Name)
+			},
+		},
+		{
+			name:  "print with string literal",
+			input: `<?php print("Hello World"); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				printStmt, ok := program.Body[0].(*ast.PrintStatement)
+				require.True(t, ok)
+				assert.Len(t, printStmt.Arguments, 1)
+				
+				stringLit, ok := printStmt.Arguments[0].(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "Hello World", stringLit.Value)
+			},
+		},
+		{
+			name:  "print as expression in assignment",
+			input: `<?php $result = (print($message)); ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				assert.Equal(t, "=", assignment.Operator)
+				
+				// Left side should be $result
+				variable, ok := assignment.Left.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$result", variable.Name)
+				
+				// Right side should be print expression
+				printExpr, ok := assignment.Right.(*ast.PrintExpression)
+				require.True(t, ok)
+				assert.Equal(t, ast.ASTPrint, printExpr.Kind)
+				
+				messageVar, ok := printExpr.Expression.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$message", messageVar.Name)
+			},
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+// TestParsing_AttributedMethods tests parsing of methods with attributes and modifiers
+func TestParsing_AttributedMethods(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "attribute with public final method",
+			input: `<?php 
+class Foo {
+    #[\ReturnTypeWillChange]
+    public final function offsetGet($index)
+    {
+        return $this->children[$index];
+    }
+} ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				className, ok := classDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Foo", className.Name)
+				assert.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				funcName, ok := funcDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "offsetGet", funcName.Name)
+				assert.Equal(t, "public", funcDecl.Visibility)
+				assert.True(t, funcDecl.IsFinal)
+				
+				// Check attributes
+				require.NotNil(t, funcDecl.Attributes)
+				assert.Len(t, funcDecl.Attributes, 1)
+				
+				attrGroup := funcDecl.Attributes[0]
+				assert.Len(t, attrGroup.Attributes, 1)
+				
+				attr := attrGroup.Attributes[0]
+				assert.Equal(t, "\\ReturnTypeWillChange", attr.Name.Name)
+				assert.Nil(t, attr.Arguments)
+				
+				// Check parameters
+				assert.Len(t, funcDecl.Parameters, 1)
+				assert.Equal(t, "$index", funcDecl.Parameters[0].Name)
+				
+				// Check method body
+				assert.Len(t, funcDecl.Body, 1)
+				returnStmt, ok := funcDecl.Body[0].(*ast.ReturnStatement)
+				require.True(t, ok)
+				assert.NotNil(t, returnStmt.Argument)
+			},
+		},
+		{
+			name: "attribute with public abstract method",
+			input: `<?php 
+abstract class Base {
+    #[Override]
+    public abstract function process($data);
+} ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				className, ok := classDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Base", className.Name)
+				assert.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				funcName, ok := funcDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "process", funcName.Name)
+				assert.Equal(t, "public", funcDecl.Visibility)
+				assert.True(t, funcDecl.IsAbstract)
+				
+				// Check attributes
+				require.NotNil(t, funcDecl.Attributes)
+				assert.Len(t, funcDecl.Attributes, 1)
+				
+				attrGroup := funcDecl.Attributes[0]
+				assert.Len(t, attrGroup.Attributes, 1)
+				
+				attr := attrGroup.Attributes[0]
+				assert.Equal(t, "Override", attr.Name.Name)
+			},
+		},
+		{
+			name: "multiple attributes with method",
+			input: `<?php 
+class Service {
+    #[Deprecated("Use newMethod instead")]
+    #[Internal]
+    protected function oldMethod() {
+        // deprecated method
+    }
+} ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				className, ok := classDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "Service", className.Name)
+				assert.Len(t, classDecl.Body, 1)
+				
+				funcDecl, ok := classDecl.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				funcName, ok := funcDecl.Name.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "oldMethod", funcName.Name)
+				assert.Equal(t, "protected", funcDecl.Visibility)
+				
+				// Check multiple attributes
+				require.NotNil(t, funcDecl.Attributes)
+				assert.Len(t, funcDecl.Attributes, 2)
+				
+				// First attribute: Deprecated with argument
+				attr1Group := funcDecl.Attributes[0]
+				assert.Len(t, attr1Group.Attributes, 1)
+				attr1 := attr1Group.Attributes[0]
+				assert.Equal(t, "Deprecated", attr1.Name.Name)
+				require.NotNil(t, attr1.Arguments)
+				assert.Len(t, attr1.Arguments, 1)
+				
+				// Second attribute: Internal without argument
+				attr2Group := funcDecl.Attributes[1]
+				assert.Len(t, attr2Group.Attributes, 1)
+				attr2 := attr2Group.Attributes[0]
+				assert.Equal(t, "Internal", attr2.Name.Name)
+				assert.Nil(t, attr2.Arguments)
+			},
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

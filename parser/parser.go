@@ -207,6 +207,7 @@ func init() {
 		lexer.T_UNSET_CAST:           parseTypeCast,
 		lexer.T_ATTRIBUTE:            parseAttributeExpression,
 		lexer.T_FN:                   parseArrowFunctionExpression,
+		lexer.T_PRINT:                parsePrintExpression,
 		lexer.T_YIELD:                parseYieldExpression,
 		lexer.T_YIELD_FROM:           parseYieldFromExpression,
 		lexer.T_THROW:                parseThrowExpression,
@@ -5454,6 +5455,20 @@ func parseAttributedClassStatement(p *Parser) ast.Statement {
 				funcDecl.Attributes = attributeGroups
 			}
 			return funcDecl
+		} else if p.peekToken.Type == lexer.T_FINAL {
+			// #[Attr] public final function foo() {}
+			funcDecl := parseFunctionDeclaration(p)
+			if funcDecl != nil {
+				funcDecl.Attributes = attributeGroups
+			}
+			return funcDecl
+		} else if p.peekToken.Type == lexer.T_ABSTRACT {
+			// #[Attr] public abstract function foo() {}
+			funcDecl := parseFunctionDeclaration(p)
+			if funcDecl != nil {
+				funcDecl.Attributes = attributeGroups
+			}
+			return funcDecl
 		} else if p.peekToken.Type == lexer.T_STATIC {
 			// #[Attr] public static function foo() {} or #[Attr] public static $property
 			// Use the same lookahead logic as non-attributed case
@@ -6187,6 +6202,21 @@ func parseFinalExpression(p *Parser) ast.Expression {
 	// final 通常用作类修饰符，防止类被继承
 	// 在这里作为标识符返回，实际的类声明解析会在其他地方处理
 	return ast.NewIdentifierNode(pos, "final")
+}
+
+// parsePrintExpression 解析 print 表达式
+func parsePrintExpression(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+
+	p.nextToken() // 跳过 print 关键字
+
+	// 解析要打印的表达式
+	expr := parseExpression(p, LOWEST)
+	if expr == nil {
+		return nil
+	}
+
+	return ast.NewPrintExpression(pos, expr)
 }
 
 // parseYieldExpression 解析 yield 表达式
