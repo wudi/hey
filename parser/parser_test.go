@@ -3503,6 +3503,280 @@ class Mixed {
 	}
 }
 
+func TestParsing_ClassModifiers(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Final class",
+			input: `<?php
+final class FinalClass {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "FinalClass", class.Name.(*ast.IdentifierNode).Name)
+				assert.True(t, class.Final, "Expected final modifier to be true")
+				assert.False(t, class.ReadOnly, "Expected readonly modifier to be false")
+				assert.False(t, class.Abstract, "Expected abstract modifier to be false")
+			},
+		},
+		{
+			name: "Readonly class",
+			input: `<?php
+readonly class ReadonlyClass {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "ReadonlyClass", class.Name.(*ast.IdentifierNode).Name)
+				assert.False(t, class.Final, "Expected final modifier to be false")
+				assert.True(t, class.ReadOnly, "Expected readonly modifier to be true")
+				assert.False(t, class.Abstract, "Expected abstract modifier to be false")
+			},
+		},
+		{
+			name: "Abstract class",
+			input: `<?php
+abstract class AbstractClass {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "AbstractClass", class.Name.(*ast.IdentifierNode).Name)
+				assert.False(t, class.Final, "Expected final modifier to be false")
+				assert.False(t, class.ReadOnly, "Expected readonly modifier to be false")
+				assert.True(t, class.Abstract, "Expected abstract modifier to be true")
+			},
+		},
+		{
+			name: "Final readonly class - original failing case",
+			input: `<?php
+final readonly class WithEnvironmentVariable {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "WithEnvironmentVariable", class.Name.(*ast.IdentifierNode).Name)
+				assert.True(t, class.Final, "Expected final modifier to be true")
+				assert.True(t, class.ReadOnly, "Expected readonly modifier to be true")
+				assert.False(t, class.Abstract, "Expected abstract modifier to be false")
+			},
+		},
+		{
+			name: "Readonly final class - reverse order",
+			input: `<?php
+readonly final class ReverseOrder {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "ReverseOrder", class.Name.(*ast.IdentifierNode).Name)
+				assert.True(t, class.Final, "Expected final modifier to be true")
+				assert.True(t, class.ReadOnly, "Expected readonly modifier to be true")
+				assert.False(t, class.Abstract, "Expected abstract modifier to be false")
+			},
+		},
+		{
+			name: "Class with extends and implements",
+			input: `<?php
+final class Child extends Parent implements Interface1, Interface2 {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "Child", class.Name.(*ast.IdentifierNode).Name)
+				assert.True(t, class.Final, "Expected final modifier to be true")
+				assert.False(t, class.ReadOnly, "Expected readonly modifier to be false")
+				assert.False(t, class.Abstract, "Expected abstract modifier to be false")
+				
+				// Check extends
+				require.NotNil(t, class.Extends)
+				assert.Equal(t, "Parent", class.Extends.(*ast.IdentifierNode).Name)
+				
+				// Check implements
+				require.Equal(t, 2, len(class.Implements))
+				assert.Equal(t, "Interface1", class.Implements[0].(*ast.IdentifierNode).Name)
+				assert.Equal(t, "Interface2", class.Implements[1].(*ast.IdentifierNode).Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			// Check for parsing errors
+			errors := p.Errors()
+			if len(errors) > 0 {
+				t.Fatalf("Parser errors: %v", errors)
+			}
+
+			tt.validate(t, program)
+		})
+	}
+}
+
+func TestParsing_AttributedClassModifiers(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "Attributed final readonly class - original failing case",
+			input: `<?php
+#[Attribute(Attribute::TARGET_CLASS | Attribute::TARGET_METHOD | Attribute::IS_REPEATABLE)]
+final readonly class WithEnvironmentVariable {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "WithEnvironmentVariable", class.Name.(*ast.IdentifierNode).Name)
+				assert.True(t, class.Final, "Expected final modifier to be true")
+				assert.True(t, class.ReadOnly, "Expected readonly modifier to be true")
+				assert.False(t, class.Abstract, "Expected abstract modifier to be false")
+				
+				// Check attributes
+				require.Equal(t, 1, len(class.Attributes))
+				attributeGroup := class.Attributes[0]
+				require.Equal(t, 1, len(attributeGroup.Attributes))
+				
+				attribute := attributeGroup.Attributes[0]
+				assert.Equal(t, "Attribute", attribute.Name.Name)
+				require.Equal(t, 1, len(attribute.Arguments))
+			},
+		},
+		{
+			name: "Attributed abstract class",
+			input: `<?php
+#[TestAttribute]
+abstract class AbstractTestClass {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "AbstractTestClass", class.Name.(*ast.IdentifierNode).Name)
+				assert.False(t, class.Final, "Expected final modifier to be false")
+				assert.False(t, class.ReadOnly, "Expected readonly modifier to be false")
+				assert.True(t, class.Abstract, "Expected abstract modifier to be true")
+				
+				// Check attributes
+				require.Equal(t, 1, len(class.Attributes))
+				attributeGroup := class.Attributes[0]
+				require.Equal(t, 1, len(attributeGroup.Attributes))
+				
+				attribute := attributeGroup.Attributes[0]
+				assert.Equal(t, "TestAttribute", attribute.Name.Name)
+			},
+		},
+		{
+			name: "Multiple attributes with modifiers",
+			input: `<?php
+#[Attr1]
+#[Attr2, Attr3]
+final class MultiAttributeClass {
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Equal(t, 1, len(program.Body))
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok, "Expected ExpressionStatement, got %T", program.Body[0])
+				
+				class, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok, "Expected ClassExpression, got %T", exprStmt.Expression)
+				
+				assert.Equal(t, "MultiAttributeClass", class.Name.(*ast.IdentifierNode).Name)
+				assert.True(t, class.Final, "Expected final modifier to be true")
+				assert.False(t, class.ReadOnly, "Expected readonly modifier to be false")
+				assert.False(t, class.Abstract, "Expected abstract modifier to be false")
+				
+				// Check attributes - should have 2 attribute groups
+				require.Equal(t, 2, len(class.Attributes))
+				
+				// First group: [Attr1]
+				group1 := class.Attributes[0]
+				require.Equal(t, 1, len(group1.Attributes))
+				assert.Equal(t, "Attr1", group1.Attributes[0].Name.Name)
+				
+				// Second group: [Attr2, Attr3]  
+				group2 := class.Attributes[1]
+				require.Equal(t, 2, len(group2.Attributes))
+				assert.Equal(t, "Attr2", group2.Attributes[0].Name.Name)
+				assert.Equal(t, "Attr3", group2.Attributes[1].Name.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			// Check for parsing errors
+			errors := p.Errors()
+			if len(errors) > 0 {
+				t.Fatalf("Parser errors: %v", errors)
+			}
+
+			tt.validate(t, program)
+		})
+	}
+}
+
 func TestParsing_StaticMethodsWithTypeHints(t *testing.T) {
 	tests := []struct {
 		name     string

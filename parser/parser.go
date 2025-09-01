@@ -169,7 +169,6 @@ func init() {
 		lexer.T_REQUIRE_ONCE:             parseIncludeOrEvalExpression,
 		lexer.T_STATIC:                   parseStaticOrArrowFunctionExpression,
 		lexer.T_ABSTRACT:                 parseAbstractExpression,
-		lexer.T_FINAL:                    parseFinalExpression,
 		lexer.T_CLOSE_TAG:                parseCloseTagExpression,
 		lexer.T_NS_SEPARATOR:             parseNamespaceExpression,
 		lexer.T_ELSEIF:                   parseFallback,
@@ -815,24 +814,10 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseTraitDeclaration(p)
 	case lexer.T_ENUM:
 		return parseEnumDeclaration(p)
-	case lexer.T_READONLY:
-		// Check if this is "readonly class"
-		if p.peekToken.Type == lexer.T_CLASS {
-			return parseReadonlyClassDeclaration(p)
-		}
-		// Otherwise fall through to expression statement
-		return parseExpressionStatement(p)
-	case lexer.T_ABSTRACT:
-		// Check if this is "abstract class"
-		if p.peekToken.Type == lexer.T_CLASS {
-			return parseAbstractClassDeclaration(p)
-		}
-		// Otherwise fall through to expression statement
-		return parseExpressionStatement(p)
-	case lexer.T_FINAL:
-		// Check if this is "final class"
-		if p.peekToken.Type == lexer.T_CLASS {
-			return parseFinalClassDeclaration(p)
+	case lexer.T_READONLY, lexer.T_ABSTRACT, lexer.T_FINAL:
+		// Check if this is a class declaration with modifiers
+		if isClassModifier(p.currentToken.Type) && willBeClassDeclaration(p) {
+			return parseClassDeclarationWithModifiers(p)
 		}
 		// Otherwise fall through to expression statement
 		return parseExpressionStatement(p)
@@ -3754,41 +3739,21 @@ func parseAttributedStatement(p *Parser) ast.Statement {
 		}
 		return classStmt
 
-	case lexer.T_READONLY:
-		// #[Attr] readonly class Foo {}
-		classStmt := parseReadonlyClassDeclaration(p)
-		if classStmt != nil {
-			if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
-				if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
-					classExpr.Attributes = attributeGroups
+	case lexer.T_FINAL, lexer.T_READONLY, lexer.T_ABSTRACT:
+		// #[Attr] final class Foo {} or #[Attr] readonly class Foo {} etc.
+		if isClassModifier(p.currentToken.Type) && willBeClassDeclaration(p) {
+			classStmt := parseClassDeclarationWithModifiers(p)
+			if classStmt != nil {
+				if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
+					if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
+						classExpr.Attributes = attributeGroups
+					}
 				}
 			}
+			return classStmt
 		}
-		return classStmt
-
-	case lexer.T_ABSTRACT:
-		// #[Attr] abstract class Foo {}
-		classStmt := parseAbstractClassDeclaration(p)
-		if classStmt != nil {
-			if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
-				if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
-					classExpr.Attributes = attributeGroups
-				}
-			}
-		}
-		return classStmt
-
-	case lexer.T_FINAL:
-		// #[Attr] final class Foo {}
-		classStmt := parseFinalClassDeclaration(p)
-		if classStmt != nil {
-			if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
-				if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
-					classExpr.Attributes = attributeGroups
-				}
-			}
-		}
-		return classStmt
+		// If it's not a class declaration, fall through to handle as other statement
+		return nil
 
 	case lexer.T_INTERFACE:
 		// #[Attr] interface Foo {}
@@ -6812,4 +6777,129 @@ func parseCurlyBraceExpression(p *Parser) ast.Expression {
 
 	// 根据 PHP 语法，直接返回内部表达式，不需要包装节点
 	return expr
+}
+
+// isClassModifier checks if a token type is a valid class modifier
+func isClassModifier(tokenType lexer.TokenType) bool {
+	switch tokenType {
+	case lexer.T_ABSTRACT, lexer.T_FINAL, lexer.T_READONLY:
+		return true
+	default:
+		return false
+	}
+}
+
+// willBeClassDeclaration checks if the current token sequence will lead to a class declaration
+// by looking ahead to find T_CLASS after potential modifiers
+func willBeClassDeclaration(p *Parser) bool {
+	// Simple check: if peek token is T_CLASS, then we have "modifier class"
+	if p.peekToken.Type == lexer.T_CLASS {
+		return true
+	}
+	
+	// If peek token is another class modifier, we might have "final readonly class" scenario
+	if isClassModifier(p.peekToken.Type) {
+		// We need to look further ahead. For now, let's assume it will be a class declaration
+		// This is a simplified implementation - we could improve this with proper lookahead
+		return true
+	}
+	
+	return false
+}
+
+// parseClassDeclarationWithModifiers parses a class declaration that starts with modifiers
+func parseClassDeclarationWithModifiers(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+	
+	// Parse class modifiers
+	var isFinal, isReadOnly, isAbstract bool
+	
+	for isClassModifier(p.currentToken.Type) {
+		switch p.currentToken.Type {
+		case lexer.T_FINAL:
+			isFinal = true
+		case lexer.T_READONLY:
+			isReadOnly = true
+		case lexer.T_ABSTRACT:
+			isAbstract = true
+		}
+		
+		// Move to next token
+		p.nextToken()
+	}
+	
+	// Now we should be at T_CLASS
+	if p.currentToken.Type != lexer.T_CLASS {
+		p.addError(fmt.Sprintf("expected `T_CLASS`, got `%s` instead", p.currentToken.Type))
+		return nil
+	}
+	
+	// Move to class name
+	p.nextToken()
+	
+	// Parse class name
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.addError("expected class name, got " + p.currentToken.Value)
+		return nil
+	}
+	
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	class := ast.NewClassExpression(pos, name, nil, nil, isFinal, isReadOnly, isAbstract)
+	
+	// Check for extends clause
+	if p.peekToken.Type == lexer.T_EXTENDS {
+		p.nextToken() // move to extends
+		p.nextToken() // move to class name
+		className, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		extends := ast.NewIdentifierNode(p.currentToken.Position, className)
+		class.Extends = extends
+	}
+	
+	// Check for implements clause
+	if p.peekToken.Type == lexer.T_IMPLEMENTS {
+		p.nextToken() // move to implements
+		
+		var implementsList []ast.Expression
+		p.nextToken() // move to first interface name
+		
+		for {
+			className, err := parseClassName(p)
+			if err != nil {
+				p.errors = append(p.errors, err.Error())
+				return nil
+			}
+			implementsInterface := ast.NewIdentifierNode(p.currentToken.Position, className)
+			implementsList = append(implementsList, implementsInterface)
+			
+			// Check if there are more interfaces
+			if p.peekToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // move to comma
+				p.nextToken() // move to next interface name
+			} else {
+				break
+			}
+		}
+		class.Implements = implementsList
+	}
+	
+	// Parse class body
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+	
+	// Enter class body
+	p.nextToken()
+	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		stmt := parseClassStatement(p)
+		if stmt != nil {
+			class.Body = append(class.Body, stmt)
+		}
+		p.nextToken()
+	}
+	
+	return ast.NewExpressionStatement(pos, class)
 }
