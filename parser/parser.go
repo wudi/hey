@@ -2146,14 +2146,14 @@ func isConstantDeclarationAfterModifiers(p *Parser) bool {
 	
 	// Check if next token is visibility modifier
 	// This is the tricky case: final public const vs final public function
-	// We need 2-token lookahead but can't easily implement it without breaking lexer state
-	// For now, use a simple heuristic based on common patterns
+	// Now that we have proper lookahead capability, use it!
 	if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
-		// Since we can't do proper 2-token lookahead without complex lexer state management,
-		// and both cases (final public const and final public function) are valid PHP,
-		// we'll default to function parsing (more common case) 
-		// The constant parser will be made more robust to handle this when function parsing fails
-		return false
+		// Use the 2-token lookahead to determine if it's const or function
+		tokens := p.lexer.PeekTokensAhead(2)
+		if len(tokens) >= 2 {
+			// tokens[0] is the visibility modifier, tokens[1] should be const or function
+			return tokens[1].Type == lexer.T_CONST
+		}
 	}
 	
 	// If it's not const or visibility, it's probably a function
@@ -2169,34 +2169,24 @@ func isIdentifierChar(ch byte) bool {
 // final public/private/protected const (returns true) vs 
 // final public/private/protected function (returns false)
 func isFinalVisibilityConst(p *Parser) bool {
-	// We need to look ahead 2 tokens: final -> visibility -> const|function
-	// Use the new GetInput() method to access lexer input
+	// We're currently at 'final', peekToken is the visibility modifier
+	// We need to look at the token that comes after the visibility modifier
 	
-	// Find the position after the visibility keyword
-	visibilityEndPos := p.peekToken.Position.Offset + len(p.peekToken.Value)
-	
-	// Get remaining input after visibility keyword
-	input := p.lexer.GetInput()
-	if visibilityEndPos >= len(input) {
+	// First verify that peekToken is indeed a visibility modifier
+	if p.peekToken.Type != lexer.T_PUBLIC && 
+		p.peekToken.Type != lexer.T_PRIVATE && 
+		p.peekToken.Type != lexer.T_PROTECTED {
 		return false
 	}
-	remainingInput := input[visibilityEndPos:]
 	
-	// Skip whitespace
-	i := 0
-	for i < len(remainingInput) && (remainingInput[i] == ' ' || remainingInput[i] == '\t' || remainingInput[i] == '\n' || remainingInput[i] == '\r') {
-		i++
+	// Use PeekTokensAhead(1) to get the token after the visibility modifier
+	tokens := p.lexer.PeekTokensAhead(1)
+	if len(tokens) < 1 {
+		return false
 	}
 	
-	// Check if next significant token is "const"
-	if i+4 < len(remainingInput) && remainingInput[i:i+5] == "const" {
-		// Make sure "const" is followed by a non-identifier character
-		if i+5 >= len(remainingInput) || !isIdentifierChar(remainingInput[i+5]) {
-			return true
-		}
-	}
-	
-	return false
+	// Check if the token after visibility is 'const'
+	return tokens[0].Type == lexer.T_CONST
 }
 
 // parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)

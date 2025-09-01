@@ -1471,7 +1471,50 @@ func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
 	
 	return false // 到达文件末尾
 }
-// GetInput returns the lexer input for lookahead purposes
-func (l *Lexer) GetInput() string {
-	return l.input
+
+// PeekTokensAhead performs n-token lookahead without modifying lexer state
+// Returns the tokens that would be generated starting from the current position
+func (l *Lexer) PeekTokensAhead(n int) []Token {
+	if n <= 0 {
+		return []Token{}
+	}
+	
+	// Save current lexer state
+	savedPosition := l.position
+	savedReadPosition := l.readPosition
+	savedCh := l.ch
+	savedLine := l.line
+	savedColumn := l.column
+	savedState := l.state
+	savedHeredocLabel := l.heredocLabel
+	
+	// Create a copy of the state stack
+	savedStateStack := &StateStack{
+		states: make([]LexerState, len(l.stateStack.states)),
+	}
+	copy(savedStateStack.states, l.stateStack.states)
+	
+	// Generate n tokens ahead
+	tokens := make([]Token, 0, n)
+	for i := 0; i < n; i++ {
+		token := l.NextToken()
+		tokens = append(tokens, token)
+		
+		// Stop at EOF
+		if token.Type == T_EOF {
+			break
+		}
+	}
+	
+	// Restore lexer state
+	l.position = savedPosition
+	l.readPosition = savedReadPosition
+	l.ch = savedCh
+	l.line = savedLine
+	l.column = savedColumn
+	l.state = savedState
+	l.heredocLabel = savedHeredocLabel
+	l.stateStack = savedStateStack
+	
+	return tokens
 }
