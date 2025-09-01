@@ -300,7 +300,7 @@ func (l *Lexer) readString(delimiter byte) (string, error) {
 
 	var result strings.Builder
 
-	for l.ch != delimiter && l.ch != 0 {
+	for l.ch != delimiter && l.position < len(l.input) {
 		if l.ch == '\\' {
 			// 处理转义字符
 			l.readChar()
@@ -354,7 +354,7 @@ func (l *Lexer) readBlockComment() string {
 	position := l.position
 
 	for {
-		if l.ch == 0 {
+		if l.position >= len(l.input) {
 			break
 		}
 		if l.ch == '*' && l.peekChar() == '/' {
@@ -662,7 +662,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 			l.readChar()
 			return Token{Type: T_AND_EQUAL, Value: "&=", Position: pos}
 		}
-		
+
 		// 实现PHP官方的上下文相关&符号区分
 		// 检查 & 后面是否跟着 $ (变量) 或 ... (可变参数)
 		// 这需要跳过空白字符和注释
@@ -851,7 +851,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 				}
 
 				// 检查特殊的属性钩子关键字 (PHP 8.4)
-				if name == "private" && l.ch == '(' && l.peekChar() == 's' && 
+				if name == "private" && l.ch == '(' && l.peekChar() == 's' &&
 					l.peekCharN(1) == 'e' && l.peekCharN(2) == 't' && l.peekCharN(3) == ')' {
 					// 读取 (set)
 					hookPart := ""
@@ -861,8 +861,8 @@ func (l *Lexer) nextTokenInScripting() Token {
 					}
 					return Token{Type: T_PRIVATE_SET, Value: name + hookPart, Position: pos}
 				}
-				
-				if name == "protected" && l.ch == '(' && l.peekChar() == 's' && 
+
+				if name == "protected" && l.ch == '(' && l.peekChar() == 's' &&
 					l.peekCharN(1) == 'e' && l.peekCharN(2) == 't' && l.peekCharN(3) == ')' {
 					// 读取 (set)
 					hookPart := ""
@@ -872,8 +872,8 @@ func (l *Lexer) nextTokenInScripting() Token {
 					}
 					return Token{Type: T_PROTECTED_SET, Value: name + hookPart, Position: pos}
 				}
-				
-				if name == "public" && l.ch == '(' && l.peekChar() == 's' && 
+
+				if name == "public" && l.ch == '(' && l.peekChar() == 's' &&
 					l.peekCharN(1) == 'e' && l.peekCharN(2) == 't' && l.peekCharN(3) == ')' {
 					// 读取 (set)
 					hookPart := ""
@@ -916,7 +916,7 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 		return Token{Type: TOKEN_QUOTE, Value: "\"", Position: pos}
 	}
 
-	if l.ch == 0 {
+	if l.position >= len(l.input) {
 		l.addError("unterminated string")
 		return Token{Type: T_EOF, Value: "", Position: pos}
 	}
@@ -992,7 +992,7 @@ func (l *Lexer) nextTokenInBackquote() Token {
 		return Token{Type: TOKEN_BACKTICK, Value: "`", Position: pos}
 	}
 
-	if l.ch == 0 {
+	if l.position >= len(l.input) {
 		l.addError("unterminated shell execution string")
 		return Token{Type: T_EOF, Value: "", Position: pos}
 	}
@@ -1387,10 +1387,6 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 	return tokenType, tokenValue, true
 }
 
-func isLetter(ch byte) bool {
-	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_'
-}
-
 func isLabelStart(ch byte) bool {
 	return 'a' <= ch && ch <= 'z' || 'A' <= ch && ch <= 'Z' || ch == '_' || ch >= 0x80
 }
@@ -1444,6 +1440,7 @@ func (l *Lexer) containsInterpolation(delimiter byte) bool {
 
 	return false
 }
+
 // isAmpersandFollowedByVarOrVararg 检查&符号后面是否跟着$变量或...可变参数
 // 实现PHP官方的OPTIONAL_WHITESPACE_OR_COMMENTS("$"|"...")逻辑
 func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
@@ -1452,13 +1449,13 @@ func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
 	// 跳过空白字符和注释
 	for pos < len(l.input) {
 		ch := l.input[pos]
-		
+
 		// 跳过空白字符
 		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
 			pos++
 			continue
 		}
-		
+
 		// 跳过单行注释 //
 		if ch == '/' && pos+1 < len(l.input) && l.input[pos+1] == '/' {
 			// 跳过到行尾
@@ -1467,7 +1464,7 @@ func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
 			}
 			continue
 		}
-		
+
 		// 跳过多行注释 /* */
 		if ch == '/' && pos+1 < len(l.input) && l.input[pos+1] == '*' {
 			pos += 2 // 跳过/*
@@ -1481,31 +1478,31 @@ func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
 			}
 			continue
 		}
-		
+
 		// 跳过# 风格注释
 		if ch == '#' {
-			// 跳过到行尾  
+			// 跳过到行尾
 			for pos < len(l.input) && l.input[pos] != '\n' {
 				pos++
 			}
 			continue
 		}
-		
+
 		// 检查第一个非空白/非注释字符
 		if ch == '$' {
 			return true // &后跟$变量
 		}
-		
+
 		// 检查...（可变参数）
-		if ch == '.' && pos+2 < len(l.input) && 
-		   l.input[pos+1] == '.' && l.input[pos+2] == '.' {
+		if ch == '.' && pos+2 < len(l.input) &&
+			l.input[pos+1] == '.' && l.input[pos+2] == '.' {
 			return true // &后跟...
 		}
-		
+
 		// 遇到其他字符，不是$或...
 		return false
 	}
-	
+
 	return false // 到达文件末尾
 }
 
@@ -1515,7 +1512,7 @@ func (l *Lexer) PeekTokensAhead(n int) []Token {
 	if n <= 0 {
 		return []Token{}
 	}
-	
+
 	// Save current lexer state
 	savedPosition := l.position
 	savedReadPosition := l.readPosition
@@ -1524,25 +1521,25 @@ func (l *Lexer) PeekTokensAhead(n int) []Token {
 	savedColumn := l.column
 	savedState := l.state
 	savedHeredocLabel := l.heredocLabel
-	
+
 	// Create a copy of the state stack
 	savedStateStack := &StateStack{
 		states: make([]LexerState, len(l.stateStack.states)),
 	}
 	copy(savedStateStack.states, l.stateStack.states)
-	
+
 	// Generate n tokens ahead
 	tokens := make([]Token, 0, n)
 	for i := 0; i < n; i++ {
 		token := l.NextToken()
 		tokens = append(tokens, token)
-		
+
 		// Stop at EOF
 		if token.Type == T_EOF {
 			break
 		}
 	}
-	
+
 	// Restore lexer state
 	l.position = savedPosition
 	l.readPosition = savedReadPosition
@@ -1552,6 +1549,6 @@ func (l *Lexer) PeekTokensAhead(n int) []Token {
 	l.state = savedState
 	l.heredocLabel = savedHeredocLabel
 	l.stateStack = savedStateStack
-	
+
 	return tokens
 }
