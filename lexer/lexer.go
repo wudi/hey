@@ -268,9 +268,12 @@ func (l *Lexer) readNumber() (string, TokenType) {
 	}
 
 	// 检查是否为浮点数
-	if l.ch == '.' && isDigit(l.peekChar()) {
+	// 根据 PHP 语法 DNUM = ({LNUM}?"."{LNUM})|({LNUM}"."{LNUM}?)
+	// 支持数字后跟小数点，小数点后的数字是可选的
+	if l.ch == '.' {
 		tokenType = T_DNUMBER
 		l.readChar() // 跳过 '.'
+		// 小数点后的数字是可选的
 		for isDigit(l.ch) || l.ch == '_' {
 			l.readChar()
 		}

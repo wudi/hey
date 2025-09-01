@@ -325,6 +325,88 @@ func TestParsing_FloatLiterals(t *testing.T) {
 	assert.Equal(t, "float", numberLit.Kind)
 }
 
+// TestParsing_FloatLiteralEdgeCases tests the specific float literal bug where numbers ending
+// with decimal point (like 1., 1.0) were incorrectly parsed due to lexer tokenization issues
+func TestParsing_FloatLiteralEdgeCases(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Float ending with decimal point",
+			input:    `<?php $x = 1.; ?>`,
+			expected: "1.",
+		},
+		{
+			name:     "Float with zero after decimal",
+			input:    `<?php $x = 1.0; ?>`,
+			expected: "1.0",
+		},
+		{
+			name:     "Float in array context (original failing case)",
+			input:    `<?php $arr = [1., 1.0, 1.23]; ?>`,
+			expected: "1.",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			l := lexer.New(tc.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+
+			if tc.name == "Float in array context (original failing case)" {
+				// Special handling for array case
+				stmt := program.Body[0]
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				assert.True(t, ok)
+
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok)
+
+				arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
+				assert.True(t, ok)
+				assert.Len(t, arrayExpr.Elements, 3)
+
+				// Check first element (1.)
+				firstElement, ok := arrayExpr.Elements[0].(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, tc.expected, firstElement.Value)
+				assert.Equal(t, "float", firstElement.Kind)
+
+				// Check second element (1.0)
+				secondElement, ok := arrayExpr.Elements[1].(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, "1.0", secondElement.Value)
+				assert.Equal(t, "float", secondElement.Kind)
+
+				// Check third element (1.23)
+				thirdElement, ok := arrayExpr.Elements[2].(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, "1.23", thirdElement.Value)
+				assert.Equal(t, "float", thirdElement.Kind)
+			} else {
+				// Handle simple assignment cases
+				stmt := program.Body[0]
+				exprStmt, ok := stmt.(*ast.ExpressionStatement)
+				assert.True(t, ok)
+
+				assignment, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				assert.True(t, ok)
+
+				numberLit, ok := assignment.Right.(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, tc.expected, numberLit.Value)
+				assert.Equal(t, "float", numberLit.Kind)
+			}
+		})
+	}
+}
+
 func TestParsing_BinaryExpressions(t *testing.T) {
 	tests := []struct {
 		input    string

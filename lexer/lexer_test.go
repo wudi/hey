@@ -216,6 +216,11 @@ func TestLexer_Numbers(t *testing.T) {
 		{"2.5e2", T_DNUMBER, "2.5e2"},
 		{"1E-3", T_DNUMBER, "1E-3"},
 		{".5", T_DNUMBER, ".5"},
+		// Float numbers ending with decimal point (fix for bug where 1. was tokenized as T_LNUMBER + .)
+		{"1.", T_DNUMBER, "1."},
+		{"1.0", T_DNUMBER, "1.0"},
+		{"42.", T_DNUMBER, "42."},
+		{"0.", T_DNUMBER, "0."},
 	}
 
 	for _, tt := range tests {
@@ -225,6 +230,37 @@ func TestLexer_Numbers(t *testing.T) {
 		tok := lexer.NextToken()
 		assert.Equal(t, tt.expectedType, tok.Type, "input=%q - tokentype wrong. expected=%q, got=%q", tt.input, TokenNames[tt.expectedType], TokenNames[tok.Type])
 		assert.Equal(t, tt.expectedValue, tok.Value, "input=%q - value wrong. expected=%q, got=%q", tt.input, tt.expectedValue, tok.Value)
+	}
+}
+
+// TestLexer_FloatInArray tests the specific bug where float literals ending with decimal point
+// were incorrectly tokenized in array context
+func TestLexer_FloatInArray(t *testing.T) {
+	input := `<?php [1., 1.0, 1.23] ?>`
+	lexer := New(input)
+	
+	// Expected tokens
+	expectedTokens := []struct {
+		tokenType TokenType
+		value     string
+	}{
+		{T_OPEN_TAG, "<?php "},
+		{TOKEN_LBRACKET, "["},
+		{T_DNUMBER, "1."},   // This was the bug - should be T_DNUMBER not T_LNUMBER + T_DOT
+		{TOKEN_COMMA, ","},
+		{T_DNUMBER, "1.0"},
+		{TOKEN_COMMA, ","},
+		{T_DNUMBER, "1.23"},
+		{TOKEN_RBRACKET, "]"},
+		{T_CLOSE_TAG, "?>"},
+	}
+	
+	for i, expected := range expectedTokens {
+		token := lexer.NextToken()
+		assert.Equal(t, expected.tokenType, token.Type, 
+			"Token %d: expected type %s, got %s", i, TokenNames[expected.tokenType], TokenNames[token.Type])
+		assert.Equal(t, expected.value, token.Value,
+			"Token %d: expected value %q, got %q", i, expected.value, token.Value)
 	}
 }
 
