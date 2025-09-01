@@ -4075,6 +4075,12 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 				}
 
 				p.nextToken() // 跳过逗号
+				
+				// 检查是否为尾随逗号（逗号后直接是右括号）
+				if p.peekToken.Type == lexer.TOKEN_RPAREN {
+					break
+				}
+				
 				p.nextToken() // 移动到下一个变量
 			}
 		}

@@ -12731,3 +12731,109 @@ func TestParsing_Closures(t *testing.T) {
 		})
 	}
 }
+
+func TestParsing_ClosuresTrailingCommaFix(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "Closure with trailing comma in use clause",
+			input: `<?php $fn = function() use ($x,) { return $x; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.Len(t, closure.UseClause, 1)
+				
+				// Check use clause variable
+				useVar, ok := closure.UseClause[0].(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$x", useVar.Name)
+			},
+		},
+		{
+			name:  "Closure with trailing comma and return type",
+			input: `<?php $fn = function() use ($x,): int { return $x; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				require.Len(t, closure.UseClause, 1)
+				require.NotNil(t, closure.ReturnType)
+				require.Equal(t, "int", closure.ReturnType.Name)
+				
+				// Check use clause variable
+				useVar, ok := closure.UseClause[0].(*ast.Variable)
+				require.True(t, ok)
+				require.Equal(t, "$x", useVar.Name)
+			},
+		},
+		{
+			name:  "Original failing case - complex closure with trailing comma",
+			input: `<?php $id = $cancellation->subscribe(static function (Exception $exception) use (&$waiting, &$offset, $suspension,): void { foreach ($waiting as $key => $pending) { } });`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				
+				call, ok := assignment.Right.(*ast.CallExpression)
+				require.True(t, ok)
+				require.Len(t, call.Arguments, 1)
+				
+				closure, ok := call.Arguments[0].(*ast.AnonymousFunctionExpression)
+				require.True(t, ok)
+				
+				// Verify static modifier
+				require.True(t, closure.Static)
+				
+				// Verify parameters
+				require.Len(t, closure.Parameters, 1)
+				param := closure.Parameters[0]
+				require.Equal(t, "$exception", param.Name)
+				
+				// Verify use clause (3 variables with trailing comma)
+				require.Len(t, closure.UseClause, 3)
+				
+				// Verify return type
+				require.NotNil(t, closure.ReturnType)
+				require.Equal(t, "void", closure.ReturnType.Name)
+				
+				// Verify body contains foreach statement
+				require.Len(t, closure.Body, 1)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
