@@ -3729,6 +3729,42 @@ func parseAttributedStatement(p *Parser) ast.Statement {
 		}
 		return classStmt
 
+	case lexer.T_READONLY:
+		// #[Attr] readonly class Foo {}
+		classStmt := parseReadonlyClassDeclaration(p)
+		if classStmt != nil {
+			if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
+				if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
+					classExpr.Attributes = attributeGroups
+				}
+			}
+		}
+		return classStmt
+
+	case lexer.T_ABSTRACT:
+		// #[Attr] abstract class Foo {}
+		classStmt := parseAbstractClassDeclaration(p)
+		if classStmt != nil {
+			if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
+				if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
+					classExpr.Attributes = attributeGroups
+				}
+			}
+		}
+		return classStmt
+
+	case lexer.T_FINAL:
+		// #[Attr] final class Foo {}
+		classStmt := parseFinalClassDeclaration(p)
+		if classStmt != nil {
+			if classDecl, ok := classStmt.(*ast.ExpressionStatement); ok {
+				if classExpr, ok := classDecl.Expression.(*ast.ClassExpression); ok {
+					classExpr.Attributes = attributeGroups
+				}
+			}
+		}
+		return classStmt
+
 	case lexer.T_INTERFACE:
 		// #[Attr] interface Foo {}
 		interfaceDecl := parseInterfaceDeclaration(p)
