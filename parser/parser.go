@@ -2197,6 +2197,28 @@ func isFinalVisibilityConst(p *Parser) bool {
 	return tokens[0].Type == lexer.T_CONST
 }
 
+// isVisibilityStaticFunction performs lookahead to determine if we have:
+// visibility static function (returns true) vs
+// visibility static property (returns false)
+func isVisibilityStaticFunction(p *Parser) bool {
+	// We're currently at visibility modifier, peekToken is T_STATIC
+	// We need to look at the token that comes after T_STATIC
+	
+	// Verify that peekToken is indeed T_STATIC
+	if p.peekToken.Type != lexer.T_STATIC {
+		return false
+	}
+	
+	// Use PeekTokensAhead(1) to get the token after T_STATIC
+	tokens := p.lexer.PeekTokensAhead(1)
+	if len(tokens) < 1 {
+		return false
+	}
+	
+	// Check if the token after static is 'function'
+	return tokens[0].Type == lexer.T_FUNCTION
+}
+
 // parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)
 func parseEnumDeclaration(p *Parser) *ast.EnumDeclaration {
 	pos := p.currentToken.Position
@@ -5129,22 +5151,11 @@ func parseClassStatement(p *Parser) ast.Statement {
 		} else if nextTokenType == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
 		} else if nextTokenType == lexer.T_STATIC {
-			// Need to look ahead one more token to decide between function and property
-			// Save current state for lookahead
-			savedCurrent := p.currentToken
-			savedPeek := p.peekToken
-			
-			// Advance to check what comes after static
-			p.nextToken() // Move to static
-			if p.peekToken.Type == lexer.T_FUNCTION {
-				// This is "visibility static function" - restore state and use function parser
-				p.currentToken = savedCurrent
-				p.peekToken = savedPeek
+			// Need to distinguish between "visibility static function" and "visibility static property"
+			// Use a helper to peek ahead without disrupting parser state
+			if isVisibilityStaticFunction(p) {
 				return parseFunctionDeclaration(p)
 			} else {
-				// This is "visibility static property" - restore state and use property parser
-				p.currentToken = savedCurrent
-				p.peekToken = savedPeek
 				return parsePropertyDeclaration(p)
 			}
 		} else {
@@ -5434,7 +5445,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		visibility = "public"
 	}
 	
-	// Note: Static function delegation is now handled in parseClassStatement routing
+	// Note: Static function routing is handled in parseClassStatement
 
 	// 检查下一个token是否为类型提示
 	var typeHint *ast.TypeHint
