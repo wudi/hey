@@ -15846,3 +15846,173 @@ func TestParsing_ArrayDestructuring(t *testing.T) {
 		})
 	}
 }
+
+func TestParsing_SemiReservedKeywordsInUnionTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Enum keyword in union type (original failing case)",
+			input: `<?php
+class Foo {
+    public function bar(): In | Enum | null
+    {
+        return null;
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+				
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "bar", method.Name.(*ast.IdentifierNode).Name)
+				require.NotNil(t, method.ReturnType)
+				require.Equal(t, ast.ASTTypeUnion, method.ReturnType.GetKind())
+				
+				unionTypes := method.ReturnType.UnionTypes
+				require.Len(t, unionTypes, 3)
+				require.Equal(t, "In", unionTypes[0].Name)
+				require.Equal(t, "Enum", unionTypes[1].Name)
+				require.Equal(t, "null", unionTypes[2].Name)
+			},
+		},
+		{
+			name: "Multiple reserved keywords in union types",
+			input: `<?php
+function test(): class|interface|trait|enum|function|const {
+    return null;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				funcDecl := program.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, ast.ASTTypeUnion, funcDecl.ReturnType.GetKind())
+				
+				unionTypes := funcDecl.ReturnType.UnionTypes
+				require.Len(t, unionTypes, 6)
+				require.Equal(t, "class", unionTypes[0].Name)
+				require.Equal(t, "interface", unionTypes[1].Name)
+				require.Equal(t, "trait", unionTypes[2].Name)
+				require.Equal(t, "enum", unionTypes[3].Name)
+				require.Equal(t, "function", unionTypes[4].Name)
+				require.Equal(t, "const", unionTypes[5].Name)
+			},
+		},
+		{
+			name: "Mixed regular types and keywords in union",
+			input: `<?php
+function test(): string|Enum|int|class|MyClass {
+    return null;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				funcDecl := program.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, ast.ASTTypeUnion, funcDecl.ReturnType.GetKind())
+				
+				unionTypes := funcDecl.ReturnType.UnionTypes
+				require.Len(t, unionTypes, 5)
+				require.Equal(t, "string", unionTypes[0].Name)
+				require.Equal(t, "Enum", unionTypes[1].Name)
+				require.Equal(t, "int", unionTypes[2].Name)
+				require.Equal(t, "class", unionTypes[3].Name)
+				require.Equal(t, "MyClass", unionTypes[4].Name)
+			},
+		},
+		{
+			name: "Control flow keywords in union types",
+			input: `<?php
+function test(): if|else|while|for|foreach|switch {
+    return null;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				funcDecl := program.Body[0].(*ast.FunctionDeclaration)
+				
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, ast.ASTTypeUnion, funcDecl.ReturnType.GetKind())
+				
+				unionTypes := funcDecl.ReturnType.UnionTypes
+				require.Len(t, unionTypes, 6)
+				require.Equal(t, "if", unionTypes[0].Name)
+				require.Equal(t, "else", unionTypes[1].Name)
+				require.Equal(t, "while", unionTypes[2].Name)
+				require.Equal(t, "for", unionTypes[3].Name)
+				require.Equal(t, "foreach", unionTypes[4].Name)
+				require.Equal(t, "switch", unionTypes[5].Name)
+			},
+		},
+		{
+			name: "Nullable union with keywords",
+			input: `<?php
+function test(): ?enum|?class {
+    return null;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				funcDecl := program.Body[0].(*ast.FunctionDeclaration)
+				
+				require.NotNil(t, funcDecl.ReturnType)
+				require.Equal(t, ast.ASTTypeUnion, funcDecl.ReturnType.GetKind())
+				
+				unionTypes := funcDecl.ReturnType.UnionTypes
+				require.Len(t, unionTypes, 2)
+				require.Equal(t, "enum", unionTypes[0].Name)
+				require.True(t, unionTypes[0].Nullable)
+				require.Equal(t, "class", unionTypes[1].Name)
+				require.True(t, unionTypes[1].Nullable)
+			},
+		},
+		{
+			name: "Method parameter with keyword union types",
+			input: `<?php
+class Test {
+    public function method(enum|interface|trait $param): void {
+    }
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+				
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Len(t, method.Parameters, 1)
+				param := method.Parameters[0]
+				
+				require.NotNil(t, param.Type)
+				require.Equal(t, ast.ASTTypeUnion, param.Type.GetKind())
+				
+				unionTypes := param.Type.UnionTypes
+				require.Len(t, unionTypes, 3)
+				require.Equal(t, "enum", unionTypes[0].Name)
+				require.Equal(t, "interface", unionTypes[1].Name)
+				require.Equal(t, "trait", unionTypes[2].Name)
+			},
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.expected(t, program)
+		})
+	}
+}

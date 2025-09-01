@@ -468,6 +468,21 @@ func isTypeToken(tokenType lexer.TokenType) bool {
 		lexer.T_NAME_FULLY_QUALIFIED, lexer.T_NAME_RELATIVE, lexer.T_NAME_QUALIFIED,
 		lexer.T_NS_SEPARATOR:
 		return true
+	// Semi-reserved keywords that can be used as type names (following PHP's semi_reserved grammar rule)
+	case lexer.T_ENUM, lexer.T_CLASS, lexer.T_INTERFACE, lexer.T_TRAIT,
+		lexer.T_FUNCTION, lexer.T_CONST, lexer.T_VAR, lexer.T_NAMESPACE,
+		lexer.T_USE, lexer.T_AS, lexer.T_GLOBAL, lexer.T_ISSET, lexer.T_EMPTY,
+		lexer.T_MATCH, lexer.T_FN, lexer.T_INCLUDE, lexer.T_INCLUDE_ONCE,
+		lexer.T_REQUIRE, lexer.T_REQUIRE_ONCE, lexer.T_ECHO, lexer.T_PRINT,
+		lexer.T_RETURN, lexer.T_YIELD, lexer.T_IF, lexer.T_ELSE, lexer.T_ELSEIF,
+		lexer.T_ENDIF, lexer.T_WHILE, lexer.T_ENDWHILE, lexer.T_FOR, lexer.T_ENDFOR,
+		lexer.T_FOREACH, lexer.T_ENDFOREACH, lexer.T_DO, lexer.T_SWITCH, lexer.T_ENDSWITCH,
+		lexer.T_CASE, lexer.T_DEFAULT, lexer.T_BREAK, lexer.T_CONTINUE, lexer.T_GOTO,
+		lexer.T_TRY, lexer.T_CATCH, lexer.T_FINALLY, lexer.T_THROW, lexer.T_EXIT,
+		lexer.T_NEW, lexer.T_CLONE, lexer.T_INSTANCEOF, lexer.T_DECLARE, lexer.T_ENDDECLARE,
+		lexer.T_EXTENDS, lexer.T_IMPLEMENTS, lexer.T_INSTEADOF, lexer.T_UNSET, lexer.T_LIST,
+		lexer.T_EVAL, lexer.T_LOGICAL_OR, lexer.T_LOGICAL_XOR, lexer.T_LOGICAL_AND:
+		return true
 	default:
 		return false
 	}
