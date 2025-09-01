@@ -4566,20 +4566,14 @@ func TestParsing_AbstractKeyword(t *testing.T) {
 			name:  "abstract class declaration",
 			input: `<?php abstract class BaseClass {}`,
 			validate: func(t *testing.T, program *ast.Program) {
-				assert.Len(t, program.Body, 2)
+				assert.Len(t, program.Body, 1)
 
-				// First should be abstract identifier
-				exprStmt1, ok := program.Body[0].(*ast.ExpressionStatement)
-				assert.True(t, ok, "First statement should be ExpressionStatement")
-				abstractIdent, ok := exprStmt1.Expression.(*ast.IdentifierNode)
-				assert.True(t, ok, "Expression should be IdentifierNode")
-				assert.Equal(t, "abstract", abstractIdent.Name)
-
-				// Second should be class declaration
-				exprStmt2, ok := program.Body[1].(*ast.ExpressionStatement)
-				assert.True(t, ok, "Second statement should be ExpressionStatement")
-				classExpr, ok := exprStmt2.Expression.(*ast.ClassExpression)
+				// Should be a single abstract class declaration
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				assert.True(t, ok, "Statement should be ExpressionStatement")
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
 				assert.True(t, ok, "Expression should be ClassExpression")
+				assert.True(t, classExpr.Abstract, "Class should be marked as abstract")
 				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
 				assert.True(t, ok, "Class name should be IdentifierNode")
 				assert.Equal(t, "BaseClass", nameIdent.Name)
@@ -13725,6 +13719,222 @@ func containsString(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func TestParsing_AbstractPropertiesWithHooks(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Simple abstract property with get hook",
+			input: `<?php
+abstract class Test {
+    abstract public string $prop { get; }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				property := class.Body[0].(*ast.HookedPropertyDeclaration)
+				
+				require.Equal(t, "prop", property.Name)
+				require.Equal(t, "public", property.Visibility)
+				require.True(t, property.Abstract, "Property should be abstract")
+				require.False(t, property.Static, "Property should not be static")
+				require.False(t, property.ReadOnly, "Property should not be readonly")
+				
+				// Check type
+				require.NotNil(t, property.Type)
+				require.Equal(t, "string", property.Type.Name)
+				
+				// Check hooks
+				require.Len(t, property.Hooks, 1)
+				getHook := property.Hooks[0]
+				require.Equal(t, "get", getHook.Type)
+				require.Nil(t, getHook.Body, "Abstract hook should have no body")
+				require.Nil(t, getHook.Statements, "Abstract hook should have no statements")
+			},
+		},
+		{
+			name: "Abstract property with both get and set hooks",
+			input: `<?php
+abstract class Test {
+    abstract protected int $value { get; set; }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				property := class.Body[0].(*ast.HookedPropertyDeclaration)
+				
+				require.Equal(t, "value", property.Name)
+				require.Equal(t, "protected", property.Visibility)
+				require.True(t, property.Abstract, "Property should be abstract")
+				
+				// Check type
+				require.NotNil(t, property.Type)
+				require.Equal(t, "int", property.Type.Name)
+				
+				// Check hooks
+				require.Len(t, property.Hooks, 2)
+				
+				getHook := property.Hooks[0]
+				require.Equal(t, "get", getHook.Type)
+				require.Nil(t, getHook.Body, "Abstract hook should have no body")
+				require.Nil(t, getHook.Statements, "Abstract hook should have no statements")
+				
+				setHook := property.Hooks[1]
+				require.Equal(t, "set", setHook.Type)
+				require.Nil(t, setHook.Body, "Abstract hook should have no body")
+				require.Nil(t, setHook.Statements, "Abstract hook should have no statements")
+			},
+		},
+		{
+			name: "Mixed abstract and concrete properties in same class",
+			input: `<?php
+abstract class AbstractHooked implements HookedInterface
+{
+    abstract public string $bar { get; }
+
+    public int $backed {
+        get { return $this->backed ??= 234; }
+        set { $this->backed = $value; }
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+				
+				require.Equal(t, "AbstractHooked", class.Name.(*ast.IdentifierNode).Name)
+				require.Len(t, class.Implements, 1)
+				require.Equal(t, "HookedInterface", class.Implements[0].(*ast.IdentifierNode).Name)
+
+				require.Len(t, class.Body, 2)
+				
+				// First property - abstract
+				abstractProp := class.Body[0].(*ast.HookedPropertyDeclaration)
+				require.Equal(t, "bar", abstractProp.Name)
+				require.Equal(t, "public", abstractProp.Visibility)
+				require.True(t, abstractProp.Abstract, "First property should be abstract")
+				require.Equal(t, "string", abstractProp.Type.Name)
+				require.Len(t, abstractProp.Hooks, 1)
+				require.Equal(t, "get", abstractProp.Hooks[0].Type)
+				require.Nil(t, abstractProp.Hooks[0].Body, "Abstract hook should have no body")
+				
+				// Second property - concrete
+				concreteProp := class.Body[1].(*ast.HookedPropertyDeclaration)
+				require.Equal(t, "backed", concreteProp.Name)
+				require.Equal(t, "public", concreteProp.Visibility)
+				require.False(t, concreteProp.Abstract, "Second property should not be abstract")
+				require.Equal(t, "int", concreteProp.Type.Name)
+				require.Len(t, concreteProp.Hooks, 2)
+				
+				// Check concrete hooks have implementations
+				getHook := concreteProp.Hooks[0]
+				require.Equal(t, "get", getHook.Type)
+				require.NotNil(t, getHook.Statements, "Concrete hook should have statements")
+				require.Len(t, getHook.Statements, 1)
+				
+				setHook := concreteProp.Hooks[1]
+				require.Equal(t, "set", setHook.Type)
+				require.NotNil(t, setHook.Statements, "Concrete hook should have statements")
+				require.Len(t, setHook.Statements, 1)
+			},
+		},
+		{
+			name: "Abstract static property with hooks",
+			input: `<?php
+abstract class Test {
+    abstract static public bool $flag { get; }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				property := class.Body[0].(*ast.HookedPropertyDeclaration)
+				
+				require.Equal(t, "flag", property.Name)
+				require.Equal(t, "public", property.Visibility)
+				require.True(t, property.Abstract, "Property should be abstract")
+				require.True(t, property.Static, "Property should be static")
+				require.False(t, property.ReadOnly, "Property should not be readonly")
+				
+				// Check type
+				require.NotNil(t, property.Type)
+				require.Equal(t, "bool", property.Type.Name)
+				
+				// Check hooks
+				require.Len(t, property.Hooks, 1)
+				getHook := property.Hooks[0]
+				require.Equal(t, "get", getHook.Type)
+				require.Nil(t, getHook.Body, "Abstract hook should have no body")
+				require.Nil(t, getHook.Statements, "Abstract hook should have no statements")
+			},
+		},
+		{
+			name: "Abstract property with reference hook",
+			input: `<?php
+abstract class Test {
+    abstract public array $data { &get; }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				property := class.Body[0].(*ast.HookedPropertyDeclaration)
+				
+				require.Equal(t, "data", property.Name)
+				require.Equal(t, "public", property.Visibility)
+				require.True(t, property.Abstract, "Property should be abstract")
+				
+				// Check type
+				require.NotNil(t, property.Type)
+				require.Equal(t, "array", property.Type.Name)
+				
+				// Check hooks
+				require.Len(t, property.Hooks, 1)
+				getHook := property.Hooks[0]
+				require.Equal(t, "get", getHook.Type)
+				require.True(t, getHook.ByRef, "Hook should be by reference")
+				require.Nil(t, getHook.Body, "Abstract hook should have no body")
+				require.Nil(t, getHook.Statements, "Abstract hook should have no statements")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
 }
 
 func TestParsing_ClosureAttributes(t *testing.T) {

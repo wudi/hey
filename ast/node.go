@@ -2384,12 +2384,13 @@ type HookedPropertyDeclaration struct {
 	Visibility string          `json:"visibility"`   // private, protected, public
 	Static     bool            `json:"static,omitempty"`       // static
 	ReadOnly   bool            `json:"readOnly,omitempty"`     // readonly
+	Abstract   bool            `json:"abstract,omitempty"`     // abstract (only for hooked properties)
 	Type       *TypeHint       `json:"type,omitempty"`
 	Name       string          `json:"name"`         // Property name without $
 	Hooks      []*PropertyHook `json:"hooks"`        // List of property hooks
 }
 
-func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly bool, typeHint *TypeHint, hooks []*PropertyHook) *HookedPropertyDeclaration {
+func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly, abstract bool, typeHint *TypeHint, hooks []*PropertyHook) *HookedPropertyDeclaration {
 	return &HookedPropertyDeclaration{
 		BaseNode: BaseNode{
 			Kind:     ASTPropElem, // PHP uses PROP_ELEM for hooked properties too
@@ -2399,6 +2400,7 @@ func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, s
 		Visibility: visibility,
 		Static:     static,
 		ReadOnly:   readOnly,
+		Abstract:   abstract,
 		Type:       typeHint,
 		Name:       name,
 		Hooks:      hooks,
@@ -4545,13 +4547,14 @@ type ClassExpression struct {
 	Name       Expression         `json:"name"`
 	Final      bool               `json:"final,omitempty"`      // final class
 	ReadOnly   bool               `json:"readOnly,omitempty"`   // readonly class
+	Abstract   bool               `json:"abstract,omitempty"`   // abstract class
 	Extends    Expression         `json:"extends"`
 	Implements []Expression       `json:"implements"`
 	Body       []Statement        `json:"body"`
 	Attributes []*AttributeGroup  `json:"attributes,omitempty"` // class attributes #[Attr]
 }
 
-func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression, final, readOnly bool) *ClassExpression {
+func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression, final, readOnly, abstract bool) *ClassExpression {
 	return &ClassExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTClass,
@@ -4561,6 +4564,7 @@ func NewClassExpression(pos lexer.Position, name, extends Expression, implements
 		Name:       name,
 		Final:      final,
 		ReadOnly:   readOnly,
+		Abstract:   abstract,
 		Extends:    extends,
 		Implements: implements,
 		Body:       make([]Statement, 0),

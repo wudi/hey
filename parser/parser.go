@@ -822,6 +822,20 @@ func parseStatement(p *Parser) ast.Statement {
 		}
 		// Otherwise fall through to expression statement
 		return parseExpressionStatement(p)
+	case lexer.T_ABSTRACT:
+		// Check if this is "abstract class"
+		if p.peekToken.Type == lexer.T_CLASS {
+			return parseAbstractClassDeclaration(p)
+		}
+		// Otherwise fall through to expression statement
+		return parseExpressionStatement(p)
+	case lexer.T_FINAL:
+		// Check if this is "final class"
+		if p.peekToken.Type == lexer.T_CLASS {
+			return parseFinalClassDeclaration(p)
+		}
+		// Otherwise fall through to expression statement
+		return parseExpressionStatement(p)
 	case lexer.T_RETURN:
 		return parseReturnStatement(p)
 	case lexer.T_GLOBAL:
@@ -860,13 +874,6 @@ func parseStatement(p *Parser) ast.Statement {
 		return parseHaltCompilerStatement(p)
 	case lexer.TOKEN_LBRACE:
 		return parseBlockStatement(p)
-	case lexer.T_FINAL:
-		// Check if this is "final class"
-		if p.peekToken.Type == lexer.T_CLASS {
-			return parseFinalClassDeclaration(p)
-		}
-		// Otherwise fall through to expression statement
-		return parseExpressionStatement(p)
 	case lexer.T_STRING:
 		// 检查是否是标签（T_STRING followed by :)
 		if p.peekToken.Type == lexer.TOKEN_COLON {
@@ -2222,6 +2229,51 @@ func isVisibilityStaticFunction(p *Parser) bool {
 	
 	// Check if the token after static is 'function'
 	return tokens[0].Type == lexer.T_FUNCTION
+}
+
+// isAbstractProperty performs lookahead to determine if we have:
+// abstract property with hooks (returns true) vs
+// abstract function (returns false)
+func isAbstractProperty(p *Parser) bool {
+	// We're currently at 'abstract', need to look ahead to determine if it's a property with hooks
+	// Abstract properties MUST have property hooks, otherwise they're invalid
+	
+	// Possible patterns:
+	// abstract public string $prop { get; }
+	// abstract function foo() {}
+	
+	tokens := p.lexer.PeekTokensAhead(10) // Look ahead to find pattern
+	if len(tokens) == 0 {
+		return false
+	}
+	
+	// Skip visibility modifiers and type hints to find either T_FUNCTION or T_VARIABLE
+	i := 0
+	for i < len(tokens) {
+		switch tokens[i].Type {
+		case lexer.T_PUBLIC, lexer.T_PRIVATE, lexer.T_PROTECTED, lexer.T_STATIC, lexer.T_READONLY:
+			i++ // Skip modifiers
+		case lexer.T_STRING, lexer.T_ARRAY, lexer.T_CALLABLE, lexer.TOKEN_QUESTION, lexer.TOKEN_PIPE, lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG:
+			i++ // Skip type hints
+		case lexer.T_FUNCTION:
+			return false // This is an abstract function
+		case lexer.T_VARIABLE:
+			// Found variable, check if it's followed by property hooks
+			// Look for opening brace after variable name
+			for j := i + 1; j < len(tokens); j++ {
+				if tokens[j].Type == lexer.TOKEN_LBRACE {
+					return true // Property with hooks
+				} else if tokens[j].Type == lexer.TOKEN_SEMICOLON || tokens[j].Type == lexer.TOKEN_EQUAL {
+					return false // Property without hooks (invalid for abstract)
+				}
+			}
+			return false
+		default:
+			return false // Unexpected token
+		}
+	}
+	
+	return false // Couldn't determine
 }
 
 // parseEnumDeclaration 解析 enum 声明 (PHP 8.1+)
@@ -4492,7 +4544,7 @@ func parseClassDeclaration(p *Parser) ast.Statement {
 	}
 
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	class := ast.NewClassExpression(pos, name, nil, nil, false, false) // final = false, readOnly = false
+	class := ast.NewClassExpression(pos, name, nil, nil, false, false, false) // final = false, readOnly = false, abstract = false
 
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
@@ -4568,7 +4620,7 @@ func parseReadonlyClassDeclaration(p *Parser) ast.Statement {
 
 	// 解析类名
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	class := ast.NewClassExpression(pos, name, nil, nil, false, true) // final = false, readOnly = true
+	class := ast.NewClassExpression(pos, name, nil, nil, false, true, false) // final = false, readOnly = true, abstract = false
 
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
@@ -4644,7 +4696,7 @@ func parseFinalClassDeclaration(p *Parser) ast.Statement {
 
 	// 解析类名
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
-	class := ast.NewClassExpression(pos, name, nil, nil, true, false) // final = true, readOnly = false
+	class := ast.NewClassExpression(pos, name, nil, nil, true, false, false) // final = true, readOnly = false, abstract = false
 
 	// 检查是否有 extends 子句
 	if p.peekToken.Type == lexer.T_EXTENDS {
@@ -4691,6 +4743,80 @@ func parseFinalClassDeclaration(p *Parser) ast.Statement {
 
 	p.nextToken() // 移动到类主体第一个token
 	for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.T_EOF {
+		stmt := parseClassStatement(p)
+		if stmt != nil {
+			class.Body = append(class.Body, stmt)
+		}
+		p.nextToken()
+	}
+
+	return ast.NewExpressionStatement(pos, class)
+}
+
+func parseAbstractClassDeclaration(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+
+	// 跳过 'abstract' 关键字，移动到 'class'
+	if !p.expectPeek(lexer.T_CLASS) {
+		return nil
+	}
+
+	// 跳过 'class' 关键字
+	if !p.expectPeek(lexer.T_STRING) {
+		return nil
+	}
+
+	// 解析类名
+	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	class := ast.NewClassExpression(pos, name, nil, nil, false, false, true) // final = false, readOnly = false, abstract = true
+	// Abstract classes are handled through dedicated function
+
+	// 检查是否有 extends 子句
+	if p.peekToken.Type == lexer.T_EXTENDS {
+		p.nextToken() // 跳过当前token移动到extends
+		p.nextToken() // 移动到类名
+		className, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		extends := ast.NewIdentifierNode(p.currentToken.Position, className)
+		class.Extends = extends
+	}
+
+	// 检查是否有 implements 子句
+	if p.peekToken.Type == lexer.T_IMPLEMENTS {
+		p.nextToken() // 移动到 implements
+		p.nextToken() // 移动到第一个接口名
+
+		interfaceName, err := parseClassName(p)
+		if err != nil {
+			p.errors = append(p.errors, err.Error())
+			return nil
+		}
+		class.Implements = append(class.Implements, ast.NewIdentifierNode(p.currentToken.Position, interfaceName))
+
+		// 处理多个接口
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // 移动到逗号
+			p.nextToken() // 移动到下一个接口名
+			interfaceName, err := parseClassName(p)
+			if err != nil {
+				p.errors = append(p.errors, err.Error())
+				return nil
+			}
+			class.Implements = append(class.Implements, ast.NewIdentifierNode(p.currentToken.Position, interfaceName))
+		}
+	}
+
+	// 期望开始大括号
+	if !p.expectPeek(lexer.TOKEN_LBRACE) {
+		return nil
+	}
+
+	// 解析类体
+	p.nextToken() // 进入类体
+	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
 		stmt := parseClassStatement(p)
 		if stmt != nil {
 			class.Body = append(class.Body, stmt)
@@ -4879,7 +5005,7 @@ func parseClassExpression(p *Parser) ast.Expression {
 		name = ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	}
 
-	return ast.NewClassExpression(pos, name, nil, nil, false, false) // final = false, readOnly = false
+	return ast.NewClassExpression(pos, name, nil, nil, false, false, false) // final = false, readOnly = false, abstract = false
 }
 
 // parseStaticVisibilityDeclaration 解析 static visibility function/property 声明
@@ -5018,7 +5144,7 @@ func parseStaticVisibilityProperty(p *Parser, visibility string, pos lexer.Posit
 	if p.peekToken.Type == lexer.TOKEN_LBRACE {
 		p.nextToken() // Move to {
 		hooks := parsePropertyHookList(p)
-		decl := ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, true, false, typeHint, hooks)
+		decl := ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, true, false, false, typeHint, hooks)
 		return decl
 	}
 
@@ -5183,8 +5309,12 @@ func parseClassStatement(p *Parser) ast.Statement {
 			return parsePropertyDeclaration(p)
 		}
 	case lexer.T_ABSTRACT:
-		// Abstract methods only (abstract constants don't exist in PHP)
-		return parseFunctionDeclaration(p)
+		// Abstract can apply to both methods and properties (but only properties with hooks)
+		if isAbstractProperty(p) {
+			return parsePropertyDeclaration(p)
+		} else {
+			return parseFunctionDeclaration(p)
+		}
 	case lexer.T_FINAL:
 		// Final can apply to both constants and methods
 		if p.peekToken.Type == lexer.T_CONST {
@@ -5437,21 +5567,24 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 	var visibility string
 	var static bool
 	var readOnly bool
+	var abstract bool
 
-	// Parse modifiers in order: visibility (including asymmetric), static, readonly
+	// Parse modifiers in order: abstract, visibility (including asymmetric), static, readonly
 	// PHP 8.4 supports asymmetric visibility: public private(set), protected private(set), etc.
 	var visibilityParts []string
 	
-	// Collect all visibility modifiers (for asymmetric visibility)
-	// PHP allows readonly and static to appear between visibility modifiers: public readonly private(set), public static function
+	// Collect all modifiers including abstract for properties with hooks
+	// PHP allows readonly, static, and abstract to appear between visibility modifiers
 	for p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED || p.currentToken.Type == lexer.T_PUBLIC ||
 		p.currentToken.Type == lexer.T_PRIVATE_SET || p.currentToken.Type == lexer.T_PROTECTED_SET || p.currentToken.Type == lexer.T_PUBLIC_SET ||
-		p.currentToken.Type == lexer.T_READONLY || p.currentToken.Type == lexer.T_STATIC {
+		p.currentToken.Type == lexer.T_READONLY || p.currentToken.Type == lexer.T_STATIC || p.currentToken.Type == lexer.T_ABSTRACT {
 		
 		if p.currentToken.Type == lexer.T_READONLY {
 			readOnly = true
 		} else if p.currentToken.Type == lexer.T_STATIC {
 			static = true
+		} else if p.currentToken.Type == lexer.T_ABSTRACT {
+			abstract = true
 		} else {
 			visibilityParts = append(visibilityParts, p.currentToken.Value)
 		}
@@ -5496,7 +5629,7 @@ func parsePropertyDeclaration(p *Parser) ast.Statement {
 		// 解析property hooks
 		p.nextToken() // 移动到 {
 		hooks := parsePropertyHookList(p)
-		return ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, static, readOnly, typeHint, hooks)
+		return ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, static, readOnly, abstract, typeHint, hooks)
 	}
 
 	var defaultValue ast.Expression
@@ -5529,13 +5662,9 @@ func parsePropertyHookList(p *Parser) []*ast.PropertyHook {
 			if hook != nil {
 				hooks = append(hooks, hook)
 			}
-		}
-
-		// 检查是否有分号分隔符
-		if p.currentToken.Type == lexer.TOKEN_SEMICOLON {
-			p.nextToken()
-		} else if p.currentToken.Type != lexer.TOKEN_RBRACE {
-			// 期望分号或结束符
+			// parsePropertyHook 已经将 parser 移动到正确位置，不需要额外的 nextToken()
+		} else {
+			// 跳过意外的token
 			p.nextToken()
 		}
 	}
@@ -5574,7 +5703,7 @@ func parsePropertyHook(p *Parser) *ast.PropertyHook {
 
 	p.nextToken() // 移动到下一个token
 
-	// 检查是arrow syntax (=>) 还是 block syntax ({})
+	// 检查是arrow syntax (=>) 还是 block syntax ({}) 还是 abstract syntax (;)
 	if p.currentToken.Type == lexer.T_DOUBLE_ARROW {
 		// Arrow syntax: get => expression;
 		p.nextToken() // 移动到表达式
@@ -5583,9 +5712,13 @@ func parsePropertyHook(p *Parser) *ast.PropertyHook {
 	} else if p.currentToken.Type == lexer.TOKEN_LBRACE {
 		// Block syntax: get { statements }
 		statements := parseBlockStatement(p).Body
+		p.nextToken() // 移动过闭合大括号
 		return ast.NewPropertyHook(pos, hookType, parameter, nil, statements, byRef)
+	} else if p.currentToken.Type == lexer.TOKEN_SEMICOLON {
+		// Abstract syntax: get; (no implementation, used in abstract properties)
+		return ast.NewPropertyHook(pos, hookType, parameter, nil, nil, byRef)
 	} else {
-		p.addError("expected '=>' or '{' after hook, got " + p.currentToken.Value)
+		p.addError("expected '=>', '{', or ';' after hook, got " + p.currentToken.Value)
 		return nil
 	}
 }
