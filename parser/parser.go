@@ -3773,6 +3773,12 @@ func parseAttributeGroup(p *Parser) *ast.AttributeGroup {
 	// 解析可能的后续属性（用逗号分隔）
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
+		
+		// 支持尾随逗号：检查逗号后面是否是右括号
+		if p.peekToken.Type == lexer.TOKEN_RBRACKET {
+			break // 尾随逗号，跳出循环让expectPeek处理右括号
+		}
+		
 		p.nextToken() // 移动到下一个属性名
 		if !isClassNameToken(p.currentToken.Type) {
 			p.addError(fmt.Sprintf("expected attribute name, got `%s` instead", p.currentToken.Value))

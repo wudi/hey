@@ -13622,3 +13622,157 @@ $instanceof = &\Closure::bind(fn &() => $this->instanceof, $kernelLoader, $kerne
 		})
 	}
 }
+
+func TestParsing_ComplexMultilineAttributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Complex multi-line attributes with all features",
+			input: `<?php
+class Entity {
+    #[
+        Assert\NotNull,
+        Assert\Range(min: 3),
+        Assert\All([
+            new Assert\NotNull(),
+            new Assert\Range(min: 3),
+        ]),
+        Assert\All(
+            constraints: [
+                new Assert\NotNull(),
+                new Assert\Range(min: 3),
+            ],
+        ),
+        Assert\Collection(
+            fields: [
+                'foo' => [
+                    new Assert\NotNull(),
+                    new Assert\Range(min: 3),
+                ],
+                'bar' => new Assert\Range(min: 5),
+                'baz' => new Assert\Required([new Assert\Email()]),
+                'qux' => new Assert\Optional([new Assert\NotBlank()]),
+            ],
+            allowExtraFields: true
+        ),
+        Assert\Choice(choices: ['A', 'B'], message: 'Must be one of %choices%'),
+        Assert\AtLeastOneOf(
+            constraints: [
+                new Assert\NotNull(),
+                new Assert\Range(min: 3),
+            ],
+            message: 'foo',
+            includeInternalMessages: false,
+        ),
+        Assert\Sequentially([
+            new Assert\NotBlank(),
+            new Assert\Range(min: 5),
+        ])
+    ]
+    public $firstName;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				classExpr := exprStmt.Expression.(*ast.ClassExpression)
+				
+				require.Len(t, classExpr.Body, 1)
+				
+				// Check the property declaration
+				propDecl := classExpr.Body[0].(*ast.PropertyDeclaration)
+				require.Equal(t, "firstName", propDecl.Name)
+				require.Equal(t, "public", propDecl.Visibility)
+				
+				// Check that all 8 attributes are parsed correctly
+				require.Len(t, propDecl.Attributes, 1)
+				attrGroup := propDecl.Attributes[0]
+				require.Len(t, attrGroup.Attributes, 8)
+				
+				// Verify specific attributes
+				attrs := attrGroup.Attributes
+				require.Equal(t, "Assert\\NotNull", attrs[0].Name.Name)
+				require.Equal(t, "Assert\\Range", attrs[1].Name.Name)
+				require.Equal(t, "Assert\\All", attrs[2].Name.Name)
+				require.Equal(t, "Assert\\All", attrs[3].Name.Name)
+				require.Equal(t, "Assert\\Collection", attrs[4].Name.Name)
+				require.Equal(t, "Assert\\Choice", attrs[5].Name.Name)
+				require.Equal(t, "Assert\\AtLeastOneOf", attrs[6].Name.Name)
+				require.Equal(t, "Assert\\Sequentially", attrs[7].Name.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+func TestParsing_AttributesWithTrailingComma(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Simple attributes with trailing comma",
+			input: `<?php
+class Entity {
+    #[
+        Assert\NotNull,
+        Assert\Range(min: 3),
+    ]
+    public $test;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				classExpr := exprStmt.Expression.(*ast.ClassExpression)
+				
+				require.Len(t, classExpr.Body, 1)
+				
+				// Check the property declaration
+				propDecl := classExpr.Body[0].(*ast.PropertyDeclaration)
+				require.Equal(t, "test", propDecl.Name)
+				require.Equal(t, "public", propDecl.Visibility)
+				
+				// Check that both attributes are parsed correctly
+				require.Len(t, propDecl.Attributes, 1)
+				attrGroup := propDecl.Attributes[0]
+				require.Len(t, attrGroup.Attributes, 2)
+				
+				// Verify specific attributes
+				attrs := attrGroup.Attributes
+				require.Equal(t, "Assert\\NotNull", attrs[0].Name.Name)
+				require.Equal(t, "Assert\\Range", attrs[1].Name.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
