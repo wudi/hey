@@ -467,6 +467,11 @@ func isTypeToken(tokenType lexer.TokenType) bool {
 	}
 }
 
+// isTypeHintStart checks if a token can start a type hint (including parenthesized intersection types)
+func isTypeHintStart(tokenType lexer.TokenType) bool {
+	return isTypeToken(tokenType) || tokenType == lexer.TOKEN_QUESTION || tokenType == lexer.TOKEN_LPAREN
+}
+
 // isClassNameToken 检查token是否为有效的类名token（根据 class_name 语法规则）
 func isClassNameToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
@@ -1647,8 +1652,8 @@ func parseParameter(p *Parser) *ast.Parameter {
 		p.nextToken()
 	}
 
-	// 检查是否有类型提示
-	if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION {
+	// 检查是否有类型提示 (including parenthesized intersection types like (A&B)|null)
+	if isTypeHintStart(p.currentToken.Type) {
 		typeHint := parseParameterTypeHint(p)
 		if typeHint == nil {
 			return nil
@@ -2079,7 +2084,7 @@ func parseTraitDeclaration(p *Parser) *ast.TraitDeclaration {
 func parseTraitProperty(p *Parser, visibility string) *ast.PropertyDeclaration {
 	// 检查类型提示
 	var typeHint *ast.TypeHint
-	if isTypeToken(p.currentToken.Type) {
+	if isTypeHintStart(p.currentToken.Type) {
 		typeHint = parseTypeHint(p)
 		if !p.expectPeek(lexer.T_VARIABLE) {
 			return nil
@@ -4993,7 +4998,7 @@ func parseStaticVisibilityProperty(p *Parser, visibility string, pos lexer.Posit
 	var typeHint *ast.TypeHint
 	if p.peekToken.Type != lexer.T_VARIABLE {
 		p.nextToken()
-		if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION {
+		if isTypeHintStart(p.currentToken.Type) {
 			typeHint = parseTypeHint(p)
 		}
 	}
@@ -5373,7 +5378,7 @@ func parseClassConstantDeclaration(p *Parser) ast.Statement {
 
 	// Check for optional type annotation (PHP 8.3+)
 	var constType *ast.TypeHint
-	if isTypeToken(p.currentToken.Type) && p.peekToken.Type != lexer.TOKEN_EQUAL {
+	if isTypeHintStart(p.currentToken.Type) && p.peekToken.Type != lexer.TOKEN_EQUAL {
 		// Only parse as type if the next token is not '=', meaning current token is type, not constant name
 		constType = parseTypeHint(p)
 		if constType == nil {
@@ -5591,7 +5596,7 @@ func parsePropertyHookParameter(p *Parser) *ast.Parameter {
 
 	// 可能有类型提示
 	var typeHint *ast.TypeHint
-	if isTypeToken(p.currentToken.Type) {
+	if isTypeHintStart(p.currentToken.Type) {
 		typeHint = parseTypeHint(p)
 		p.nextToken() // 移动到变量名
 	}

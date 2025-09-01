@@ -13500,6 +13500,233 @@ class Test {
 	}
 }
 
+func TestParsing_ParenthesizedIntersectionTypesInMethods(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Simple parenthesized intersection in parameter (original failing case)",
+			input: `<?php
+class AsymmetricVisibility
+{
+    public function setParent((NodeDefinition&ParentNodeDefinitionInterface)|null $parent): static
+    {
+        $this->parent = $parent;
+        return $this;
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "setParent", method.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "public", method.Visibility)
+				
+				// Check method parameters
+				require.Len(t, method.Parameters, 1)
+				param := method.Parameters[0]
+				require.Equal(t, "$parent", param.Name)
+				
+				// Verify union type parsing (parenthesized intersection | null)
+				require.NotNil(t, param.Type, "Parameter should have a type")
+				require.Equal(t, ast.ASTTypeUnion, param.Type.GetKind())
+				require.Len(t, param.Type.UnionTypes, 2, "Parameter should have union type with 2 types")
+				
+				// First element should be intersection type
+				intersectionType := param.Type.UnionTypes[0]
+				require.Equal(t, ast.ASTTypeIntersection, intersectionType.GetKind())
+				require.Len(t, intersectionType.IntersectionTypes, 2)
+				require.Equal(t, "NodeDefinition", intersectionType.IntersectionTypes[0].Name)
+				require.Equal(t, "ParentNodeDefinitionInterface", intersectionType.IntersectionTypes[1].Name)
+				
+				// Second element should be null
+				nullType := param.Type.UnionTypes[1]
+				require.Equal(t, ast.ASTType, nullType.GetKind())
+				require.Equal(t, "null", nullType.Name)
+				
+				// Check return type
+				require.NotNil(t, method.ReturnType)
+				require.Equal(t, "static", method.ReturnType.Name)
+			},
+		},
+		{
+			name: "Multiple parenthesized intersection types in union",
+			input: `<?php
+class Test {
+    public function complex((A&B)|(C&D)|null $param): void {}
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "complex", method.Name.(*ast.IdentifierNode).Name)
+				
+				// Check parameter type structure
+				require.Len(t, method.Parameters, 1)
+				param := method.Parameters[0]
+				require.NotNil(t, param.Type)
+				require.Equal(t, ast.ASTTypeUnion, param.Type.GetKind())
+				
+				// Should have union with multiple elements - the exact structure may vary
+				// but ensure it contains the expected intersection components
+				unionTypes := param.Type.UnionTypes
+				require.True(t, len(unionTypes) >= 2, "Should have at least 2 union elements")
+				
+				// Find intersection components in the union structure
+				hasABIntersection := false
+				hasCDIntersection := false
+				hasNull := false
+				
+				var checkUnionElement func(*ast.TypeHint)
+				checkUnionElement = func(typeHint *ast.TypeHint) {
+					switch typeHint.GetKind() {
+					case ast.ASTTypeIntersection:
+						if len(typeHint.IntersectionTypes) >= 2 {
+							names := []string{}
+							for _, t := range typeHint.IntersectionTypes {
+								names = append(names, t.Name)
+							}
+							if containsString(names, "A") && containsString(names, "B") {
+								hasABIntersection = true
+							}
+							if containsString(names, "C") && containsString(names, "D") {
+								hasCDIntersection = true
+							}
+						}
+					case ast.ASTType:
+						if typeHint.Name == "null" {
+							hasNull = true
+						}
+					case ast.ASTTypeUnion:
+						// Recursively check nested unions
+						for _, ut := range typeHint.UnionTypes {
+							checkUnionElement(ut)
+						}
+					}
+				}
+				
+				for _, ut := range unionTypes {
+					checkUnionElement(ut)
+				}
+				
+				require.True(t, hasABIntersection, "Should contain A&B intersection")
+				require.True(t, hasCDIntersection, "Should contain C&D intersection")
+				require.True(t, hasNull, "Should contain null type")
+			},
+		},
+		{
+			name: "Parenthesized intersection with three types",
+			input: `<?php
+class Test {
+    public function threeWay((A&B&C)|null $param): void {}
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "threeWay", method.Name.(*ast.IdentifierNode).Name)
+				
+				// Check parameter type
+				require.Len(t, method.Parameters, 1)
+				param := method.Parameters[0]
+				require.NotNil(t, param.Type)
+				require.Equal(t, ast.ASTTypeUnion, param.Type.GetKind())
+				require.Len(t, param.Type.UnionTypes, 2)
+				
+				// First element should be intersection type with 3 elements
+				intersectionType := param.Type.UnionTypes[0]
+				require.Equal(t, ast.ASTTypeIntersection, intersectionType.GetKind())
+				require.Len(t, intersectionType.IntersectionTypes, 3)
+				require.Equal(t, "A", intersectionType.IntersectionTypes[0].Name)
+				require.Equal(t, "B", intersectionType.IntersectionTypes[1].Name)
+				require.Equal(t, "C", intersectionType.IntersectionTypes[2].Name)
+				
+				// Second element should be null
+				nullType := param.Type.UnionTypes[1]
+				require.Equal(t, "null", nullType.Name)
+			},
+		},
+		{
+			name: "Parenthesized intersection in return type",
+			input: `<?php
+class Test {
+    public function returnIntersection(): (Iterator&Countable)|null {}
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "returnIntersection", method.Name.(*ast.IdentifierNode).Name)
+				
+				// Check return type
+				require.NotNil(t, method.ReturnType)
+				require.Equal(t, ast.ASTTypeUnion, method.ReturnType.GetKind())
+				require.Len(t, method.ReturnType.UnionTypes, 2)
+				
+				// First element should be intersection type
+				intersectionType := method.ReturnType.UnionTypes[0]
+				require.Equal(t, ast.ASTTypeIntersection, intersectionType.GetKind())
+				require.Len(t, intersectionType.IntersectionTypes, 2)
+				require.Equal(t, "Iterator", intersectionType.IntersectionTypes[0].Name)
+				require.Equal(t, "Countable", intersectionType.IntersectionTypes[1].Name)
+				
+				// Second element should be null
+				nullType := method.ReturnType.UnionTypes[1]
+				require.Equal(t, "null", nullType.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
+// Helper function for checking if slice contains a string
+func containsString(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 func TestParsing_ClosureAttributes(t *testing.T) {
 	tests := []struct {
 		name     string
