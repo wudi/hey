@@ -13458,3 +13458,167 @@ $arr = ['test' => #[\Closure(name: 'service')] fn () => 'value'];`,
 		})
 	}
 }
+func TestParsing_ReferenceArrowFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Simple reference arrow function",
+			input: `<?php
+$fn = fn &() => 'hello';`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.True(t, arrowFunc.ByReference)
+				require.False(t, arrowFunc.Static)
+				require.Nil(t, arrowFunc.Parameters)
+				
+				// Check body
+				stringLit := arrowFunc.Body.(*ast.StringLiteral)
+				require.Equal(t, "hello", stringLit.Value)
+			},
+		},
+		{
+			name: "Reference arrow function with parameter",
+			input: `<?php
+$fn = fn &($x) => $x;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.True(t, arrowFunc.ByReference)
+				require.Len(t, arrowFunc.Parameters, 1)
+				require.Equal(t, "$x", arrowFunc.Parameters[0].Name)
+			},
+		},
+		{
+			name: "Reference arrow function with typed parameters and return type",
+			input: `<?php
+$fn = fn &(int $x): string => (string)$x;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.True(t, arrowFunc.ByReference)
+				require.Len(t, arrowFunc.Parameters, 1)
+				require.Equal(t, "$x", arrowFunc.Parameters[0].Name)
+				require.NotNil(t, arrowFunc.Parameters[0].Type)
+				require.Equal(t, "int", arrowFunc.Parameters[0].Type.Name)
+				
+				// Check return type
+				require.NotNil(t, arrowFunc.ReturnType)
+				require.Equal(t, "string", arrowFunc.ReturnType.Name)
+				
+				// Check cast expression in body
+				castExpr := arrowFunc.Body.(*ast.CastExpression)
+				require.Equal(t, "(string)", castExpr.CastType)
+			},
+		},
+		{
+			name: "Static reference arrow function",
+			input: `<?php
+$fn = static fn &($x) => $x;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.True(t, arrowFunc.ByReference)
+				require.True(t, arrowFunc.Static)
+				require.Len(t, arrowFunc.Parameters, 1)
+			},
+		},
+		{
+			name: "Reference arrow function with attributes",
+			input: `<?php
+$fn = #[\Closure] fn &($x) => $x;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.True(t, arrowFunc.ByReference)
+				require.Len(t, arrowFunc.Attributes, 1)
+				
+				attr := arrowFunc.Attributes[0].Attributes[0]
+				require.Equal(t, `\Closure`, attr.Name.Name)
+			},
+		},
+		{
+			name: "Complex reference arrow function in method call (original failing case)",
+			input: `<?php
+$instanceof = &\Closure::bind(fn &() => $this->instanceof, $kernelLoader, $kernelLoader)();`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				
+				require.Equal(t, "=", assignExpr.Operator)
+				require.Equal(t, "$instanceof", assignExpr.Left.(*ast.Variable).Name)
+				
+				// Should be a unary expression with & operator
+				unaryExpr := assignExpr.Right.(*ast.UnaryExpression)
+				require.Equal(t, "\u0026", unaryExpr.Operator) // JSON shows unicode escape
+				
+				// The operand should be a function call
+				callExpr := unaryExpr.Operand.(*ast.CallExpression)
+				require.NotNil(t, callExpr)
+				
+				// The callee should be another function call (\Closure::bind(...))
+				bindCall := callExpr.Callee.(*ast.CallExpression)
+				require.Len(t, bindCall.Arguments, 3)
+				
+				// First argument should be our reference arrow function
+				arrowFunc := bindCall.Arguments[0].(*ast.ArrowFunctionExpression)
+				require.NotNil(t, arrowFunc)
+				require.True(t, arrowFunc.ByReference)
+				
+				// Check that arrow function body accesses $this->instanceof
+				memberAccess := arrowFunc.Body.(*ast.PropertyAccessExpression)
+				require.Equal(t, "$this", memberAccess.Object.(*ast.Variable).Name)
+				require.Equal(t, "instanceof", memberAccess.Property.(*ast.IdentifierNode).Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

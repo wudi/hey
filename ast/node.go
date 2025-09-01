@@ -2082,24 +2082,26 @@ func (fd *FunctionDeclaration) String() string {
 // ArrowFunctionExpression 箭头函数表达式 (PHP 7.4+)
 type ArrowFunctionExpression struct {
 	BaseNode
-	Parameters []Parameter       `json:"parameters"`
-	ReturnType *TypeHint         `json:"returnType,omitempty"`
-	Body       Expression        `json:"body"`
-	Static     bool              `json:"static,omitempty"`
-	Attributes []*AttributeGroup `json:"attributes,omitempty"` // #[...] attributes
+	Parameters  []Parameter       `json:"parameters"`
+	ReturnType  *TypeHint         `json:"returnType,omitempty"`
+	Body        Expression        `json:"body"`
+	Static      bool              `json:"static,omitempty"`
+	ByReference bool              `json:"byReference,omitempty"` // fn &() returns by reference
+	Attributes  []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
 }
 
-func NewArrowFunctionExpression(pos lexer.Position, parameters []Parameter, returnType *TypeHint, body Expression, static bool) *ArrowFunctionExpression {
+func NewArrowFunctionExpression(pos lexer.Position, parameters []Parameter, returnType *TypeHint, body Expression, static bool, byReference bool) *ArrowFunctionExpression {
 	return &ArrowFunctionExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTArrowFunc,
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Parameters: parameters,
-		ReturnType: returnType,
-		Body:       body,
-		Static:     static,
+		Parameters:  parameters,
+		ReturnType:  returnType,
+		Body:        body,
+		Static:      static,
+		ByReference: byReference,
 	}
 }
 

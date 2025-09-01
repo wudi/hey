@@ -6067,6 +6067,7 @@ func parseQualifiedName(p *Parser) ast.Expression {
 func parseArrowFunctionExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 	var static bool
+	var byReference bool
 
 	// 检查是否是静态箭头函数
 	if p.currentToken.Type == lexer.T_STATIC {
@@ -6076,7 +6077,13 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 		}
 	}
 
-	// 跳过 'fn'，期望左括号
+	// 检查是否是引用返回箭头函数 fn &()
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
+		byReference = true
+		p.nextToken() // 移动到 &
+	}
+
+	// 期望左括号
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
 	}
@@ -6136,7 +6143,7 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 		return nil
 	}
 
-	return ast.NewArrowFunctionExpression(pos, parameters, returnType, body, static)
+	return ast.NewArrowFunctionExpression(pos, parameters, returnType, body, static, byReference)
 }
 
 // parseStaticOrArrowFunctionExpression 处理 static 关键字（可能是静态箭头函数、静态匿名函数或其他静态表达式）
