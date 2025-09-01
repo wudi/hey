@@ -419,6 +419,7 @@ func TestParsing_BinaryExpressions(t *testing.T) {
 		{`<?php $result = 5 % 3; ?>`, "%"},
 		{`<?php $result = 5 == 3; ?>`, "=="},
 		{`<?php $result = 5 != 3; ?>`, "!="},
+		{`<?php $result = 5 <> 3; ?>`, "<>"},
 		{`<?php $result = 5 < 3; ?>`, "<"},
 		{`<?php $result = 5 > 3; ?>`, ">"},
 	}
@@ -15540,6 +15541,140 @@ class Service {
 				attr2 := attr2Group.Attributes[0]
 				assert.Equal(t, "Internal", attr2.Name.Name)
 				assert.Nil(t, attr2.Arguments)
+			},
+		},
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			require.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+func TestParsing_NotEqualOperator(t *testing.T) {
+	// Test that both != and <> operators are parsed correctly as binary expressions
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "simple <> comparison",
+			input: `<?php $result = $a <> $b; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				assert.Equal(t, "=", assignExpr.Operator)
+				
+				// Check the right side of assignment (the <> comparison)
+				comparisonExpr, ok := assignExpr.Right.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "<>", comparisonExpr.Operator)
+				
+				leftVar, ok := comparisonExpr.Left.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$a", leftVar.Name)
+				
+				rightVar, ok := comparisonExpr.Right.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$b", rightVar.Name)
+			},
+		},
+		{
+			name:  "complex expression with <> (bug case)",
+			input: `<?php if (strlen(trim($options->db_name)) <> strlen($options->db_name)) { echo "error"; } ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				ifStmt, ok := program.Body[0].(*ast.IfStatement)
+				require.True(t, ok)
+				
+				// Check the condition contains <> operator
+				comparisonExpr, ok := ifStmt.Test.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "<>", comparisonExpr.Operator)
+				
+				// Check left side is strlen(trim(...))
+				leftCall, ok := comparisonExpr.Left.(*ast.CallExpression)
+				require.True(t, ok)
+				
+				leftCallee, ok := leftCall.Callee.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "strlen", leftCallee.Name)
+				
+				// Check right side is strlen(...)
+				rightCall, ok := comparisonExpr.Right.(*ast.CallExpression)
+				require.True(t, ok)
+				
+				rightCallee, ok := rightCall.Callee.(*ast.IdentifierNode)
+				require.True(t, ok)
+				assert.Equal(t, "strlen", rightCallee.Name)
+			},
+		},
+		{
+			name:  "mixed != and <> operators",
+			input: `<?php $result1 = $a != $b; $result2 = $c <> $d; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 2)
+				
+				// First statement with !=
+				exprStmt1, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignExpr1, ok := exprStmt1.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				assert.Equal(t, "=", assignExpr1.Operator)
+				
+				comparisonExpr1, ok := assignExpr1.Right.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "!=", comparisonExpr1.Operator)
+				
+				// Second statement with <>
+				exprStmt2, ok := program.Body[1].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignExpr2, ok := exprStmt2.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				assert.Equal(t, "=", assignExpr2.Operator)
+				
+				comparisonExpr2, ok := assignExpr2.Right.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "<>", comparisonExpr2.Operator)
+			},
+		},
+		{
+			name:  "chained <> operators",
+			input: `<?php $result = $a <> $b <> $c; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
+				require.True(t, ok)
+				assert.Equal(t, "=", assignExpr.Operator)
+				
+				// The right side should be a chained <> expression
+				chainedExpr, ok := assignExpr.Right.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "<>", chainedExpr.Operator)
+				
+				// The left side of the chained expression should also be a <> expression
+				leftChain, ok := chainedExpr.Left.(*ast.BinaryExpression)
+				require.True(t, ok)
+				assert.Equal(t, "<>", leftChain.Operator)
 			},
 		},
 	}

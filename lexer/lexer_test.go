@@ -94,7 +94,7 @@ func TestLexer_Operators(t *testing.T) {
 }
 
 func TestLexer_ComparisonOperators(t *testing.T) {
-	input := `<?php $a == $b != $c === $d !== $e <= $f >= $g <=> $h; ?>`
+	input := `<?php $a == $b != $c <> $d === $e !== $f <= $g >= $h <=> $i; ?>`
 
 	tests := []struct {
 		expectedType  TokenType
@@ -106,16 +106,18 @@ func TestLexer_ComparisonOperators(t *testing.T) {
 		{T_VARIABLE, "$b"},
 		{T_IS_NOT_EQUAL, "!="},
 		{T_VARIABLE, "$c"},
-		{T_IS_IDENTICAL, "==="},
+		{T_IS_NOT_EQUAL, "<>"},
 		{T_VARIABLE, "$d"},
-		{T_IS_NOT_IDENTICAL, "!=="},
+		{T_IS_IDENTICAL, "==="},
 		{T_VARIABLE, "$e"},
-		{T_IS_SMALLER_OR_EQUAL, "<="},
+		{T_IS_NOT_IDENTICAL, "!=="},
 		{T_VARIABLE, "$f"},
-		{T_IS_GREATER_OR_EQUAL, ">="},
+		{T_IS_SMALLER_OR_EQUAL, "<="},
 		{T_VARIABLE, "$g"},
-		{T_SPACESHIP, "<=>"},
+		{T_IS_GREATER_OR_EQUAL, ">="},
 		{T_VARIABLE, "$h"},
+		{T_SPACESHIP, "<=>"},
+		{T_VARIABLE, "$i"},
 		{TOKEN_SEMICOLON, ";"},
 		{T_CLOSE_TAG, "?>"},
 		{T_EOF, ""},
@@ -1030,5 +1032,109 @@ func TestLexer_PropertyHooks(t *testing.T) {
 		tok := lexer.NextToken()
 		assert.Equal(t, tt.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[tt.expectedType], TokenNames[tok.Type])
 		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
+	}
+}
+
+func TestLexer_NotEqualOperator(t *testing.T) {
+	// Test that both != and <> are tokenized as T_IS_NOT_EQUAL
+	tests := []struct {
+		name  string
+		input string
+		expectedTokens []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "simple != comparison",
+			input: `<?php $a != $b; ?>`,
+			expectedTokens: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$a"},
+				{T_IS_NOT_EQUAL, "!="},
+				{T_VARIABLE, "$b"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "simple <> comparison",
+			input: `<?php $a <> $b; ?>`,
+			expectedTokens: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$a"},
+				{T_IS_NOT_EQUAL, "<>"},
+				{T_VARIABLE, "$b"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "complex expression with <> (bug case)",
+			input: `<?php strlen(trim($options->db_name)) <> strlen($options->db_name); ?>`,
+			expectedTokens: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_STRING, "strlen"},
+				{TOKEN_LPAREN, "("},
+				{T_STRING, "trim"},
+				{TOKEN_LPAREN, "("},
+				{T_VARIABLE, "$options"},
+				{T_OBJECT_OPERATOR, "->"},
+				{T_STRING, "db_name"},
+				{TOKEN_RPAREN, ")"},
+				{TOKEN_RPAREN, ")"},
+				{T_IS_NOT_EQUAL, "<>"},
+				{T_STRING, "strlen"},
+				{TOKEN_LPAREN, "("},
+				{T_VARIABLE, "$options"},
+				{T_OBJECT_OPERATOR, "->"},
+				{T_STRING, "db_name"},
+				{TOKEN_RPAREN, ")"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed != and <> operators",
+			input: `<?php $a != $b <> $c; ?>`,
+			expectedTokens: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_VARIABLE, "$a"},
+				{T_IS_NOT_EQUAL, "!="},
+				{T_VARIABLE, "$b"},
+				{T_IS_NOT_EQUAL, "<>"},
+				{T_VARIABLE, "$c"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+			
+			for i, expectedToken := range tt.expectedTokens {
+				tok := lexer.NextToken()
+				assert.Equal(t, expectedToken.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[expectedToken.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expectedToken.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, expectedToken.expectedValue, tok.Value)
+			}
+		})
 	}
 }

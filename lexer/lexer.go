@@ -619,6 +619,11 @@ func (l *Lexer) nextTokenInScripting() Token {
 				return Token{Type: T_SPACESHIP, Value: "<=>", Position: pos}
 			}
 			return Token{Type: T_IS_SMALLER_OR_EQUAL, Value: "<=", Position: pos}
+		} else if l.peekChar() == '>' {
+			// <> is an alias for != (T_IS_NOT_EQUAL)
+			l.readChar()
+			l.readChar()
+			return Token{Type: T_IS_NOT_EQUAL, Value: "<>", Position: pos}
 		} else if l.peekChar() == '<' {
 			if l.peekCharN(1) == '<' {
 				// Heredoc/Nowdoc 检测 <<<
