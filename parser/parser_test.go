@@ -4679,6 +4679,221 @@ try {
 	}
 }
 
+func TestParsing_SwitchCaseSeparators(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "case with semicolon separator",
+			input: `<?php
+switch ($type) {
+    case null;
+        break;
+    case 'string':
+        echo "string";
+        break;
+    default;
+        echo "default";
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				switchStmt, ok := program.Body[0].(*ast.SwitchStatement)
+				assert.True(t, ok, "Statement should be SwitchStatement")
+				assert.Len(t, switchStmt.Cases, 3, "Should have 3 cases")
+
+				// First case: case null;
+				case1 := switchStmt.Cases[0]
+				assert.NotNil(t, case1.Test, "First case should have test")
+				// null is parsed as an IdentifierNode with name "null"
+				identNode, ok := case1.Test.(*ast.IdentifierNode)
+				assert.True(t, ok, "First case test should be IdentifierNode")
+				assert.Equal(t, "null", identNode.Name)
+				assert.Len(t, case1.Body, 1, "First case should have 1 statement")
+
+				// Second case: case 'string':
+				case2 := switchStmt.Cases[1]
+				assert.NotNil(t, case2.Test, "Second case should have test")
+				strTest, ok := case2.Test.(*ast.StringLiteral)
+				assert.True(t, ok, "Second case test should be string")
+				assert.Equal(t, "string", strTest.Value)
+				assert.Len(t, case2.Body, 2, "Second case should have 2 statements")
+
+				// Third case: default;
+				case3 := switchStmt.Cases[2]
+				assert.Nil(t, case3.Test, "Default case should have nil test")
+				assert.Len(t, case3.Body, 1, "Default case should have 1 statement")
+			},
+		},
+		{
+			name: "instanceof with semicolon separator",
+			input: `<?php
+switch (true) {
+    case $type === null:
+        break;
+    case $type instanceof \ReflectionUnionType;
+        $types = $type->getTypes();
+        break;
+    default:
+        throw new \LogicException('Unexpected');
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				switchStmt, ok := program.Body[0].(*ast.SwitchStatement)
+				assert.True(t, ok, "Statement should be SwitchStatement")
+				assert.Len(t, switchStmt.Cases, 3, "Should have 3 cases")
+
+				// First case: case $type === null:
+				case1 := switchStmt.Cases[0]
+				assert.NotNil(t, case1.Test, "First case should have test")
+				binExpr, ok := case1.Test.(*ast.BinaryExpression)
+				assert.True(t, ok, "First case test should be binary expression")
+				assert.Equal(t, "===", binExpr.Operator)
+
+				// Second case: case $type instanceof \ReflectionUnionType;
+				case2 := switchStmt.Cases[1]
+				assert.NotNil(t, case2.Test, "Second case should have test")
+				_, ok = case2.Test.(*ast.InstanceofExpression)
+				assert.True(t, ok, "Second case test should be instanceof expression")
+				assert.Len(t, case2.Body, 2, "Second case should have 2 statements")
+
+				// Default case
+				case3 := switchStmt.Cases[2]
+				assert.Nil(t, case3.Test, "Default case should have nil test")
+				assert.Len(t, case3.Body, 1, "Default case should have 1 statement")
+			},
+		},
+		{
+			name: "mixed separators",
+			input: `<?php
+switch ($value) {
+    case 1:
+        echo "one";
+        break;
+    case 2;
+        echo "two";
+        break;
+    case 3:
+        echo "three";
+    default;
+        echo "default";
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				switchStmt, ok := program.Body[0].(*ast.SwitchStatement)
+				assert.True(t, ok, "Statement should be SwitchStatement")
+				assert.Len(t, switchStmt.Cases, 4, "Should have 4 cases")
+
+				// Case 1: with colon
+				case1 := switchStmt.Cases[0]
+				assert.NotNil(t, case1.Test)
+				int1, ok := case1.Test.(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, "1", int1.Value)
+
+				// Case 2: with semicolon
+				case2 := switchStmt.Cases[1]
+				assert.NotNil(t, case2.Test)
+				int2, ok := case2.Test.(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, "2", int2.Value)
+
+				// Case 3: with colon
+				case3 := switchStmt.Cases[2]
+				assert.NotNil(t, case3.Test)
+				int3, ok := case3.Test.(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, "3", int3.Value)
+
+				// Default: with semicolon
+				case4 := switchStmt.Cases[3]
+				assert.Nil(t, case4.Test, "Default case should have nil test")
+			},
+		},
+		{
+			name: "alternative syntax with semicolon",
+			input: `<?php
+switch ($x):
+    case 1;
+        echo "one";
+        break;
+    case 2:
+        echo "two";
+        break;
+    default;
+        echo "default";
+endswitch;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				switchStmt, ok := program.Body[0].(*ast.SwitchStatement)
+				assert.True(t, ok, "Statement should be SwitchStatement")
+				assert.Len(t, switchStmt.Cases, 3, "Should have 3 cases")
+
+				// Case 1: with semicolon in alternative syntax
+				case1 := switchStmt.Cases[0]
+				assert.NotNil(t, case1.Test)
+				int1, ok := case1.Test.(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, "1", int1.Value)
+
+				// Case 2: with colon in alternative syntax
+				case2 := switchStmt.Cases[1]
+				assert.NotNil(t, case2.Test)
+				int2, ok := case2.Test.(*ast.NumberLiteral)
+				assert.True(t, ok)
+				assert.Equal(t, "2", int2.Value)
+
+				// Default: with semicolon in alternative syntax
+				case3 := switchStmt.Cases[2]
+				assert.Nil(t, case3.Test, "Default case should have nil test")
+			},
+		},
+		{
+			name: "all semicolons",
+			input: `<?php
+switch ($type) {
+    case null;
+        break;
+    case 'string';
+        echo "string";
+        break;
+    default;
+        echo "other";
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+				switchStmt, ok := program.Body[0].(*ast.SwitchStatement)
+				assert.True(t, ok, "Statement should be SwitchStatement")
+				assert.Len(t, switchStmt.Cases, 3, "Should have 3 cases")
+
+				// All cases should be parsed correctly with semicolons
+				for i, caseStmt := range switchStmt.Cases {
+					if i < 2 {
+						assert.NotNil(t, caseStmt.Test, "Case %d should have test", i)
+					} else {
+						assert.Nil(t, caseStmt.Test, "Default case should have nil test")
+					}
+					assert.NotEmpty(t, caseStmt.Body, "Case %d should have body", i)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program, "Program should not be nil")
+
+			tt.validate(t, program)
+		})
+	}
+}
+
 func TestParsing_IncludeAndRequireStatements(t *testing.T) {
 	tests := []struct {
 		name     string

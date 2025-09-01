@@ -428,6 +428,12 @@ func (p *Parser) expectSemicolon() bool {
 	return p.expectPeek(lexer.TOKEN_SEMICOLON)
 }
 
+// expectCaseSeparator 期望case分隔符（: 或 ;）
+// PHP语法允许case后使用冒号或分号作为分隔符
+func (p *Parser) expectCaseSeparator() bool {
+	return p.expectPeekAny(lexer.TOKEN_COLON, lexer.TOKEN_SEMICOLON)
+}
+
 // peekPrecedence 获取下一个 token 的优先级
 func (p *Parser) peekPrecedence() Precedence {
 	if p, ok := precedences[p.peekToken.Type]; ok {
@@ -1132,7 +1138,7 @@ func parseAlternativeSwitchStatement(p *Parser, pos lexer.Position, discriminant
 			p.nextToken()
 			test := parseExpression(p, LOWEST)
 
-			if !p.expectPeek(lexer.TOKEN_COLON) {
+			if !p.expectCaseSeparator() {
 				continue
 			}
 
@@ -1153,7 +1159,7 @@ func parseAlternativeSwitchStatement(p *Parser, pos lexer.Position, discriminant
 		} else if p.currentToken.Type == lexer.T_DEFAULT {
 			defaultPos := p.currentToken.Position
 
-			if !p.expectPeek(lexer.TOKEN_COLON) {
+			if !p.expectCaseSeparator() {
 				continue
 			}
 
@@ -3362,7 +3368,7 @@ func parseSwitchStatement(p *Parser) ast.Statement {
 			p.nextToken()
 			test := parseExpression(p, LOWEST)
 
-			if !p.expectPeek(lexer.TOKEN_COLON) {
+			if !p.expectCaseSeparator() {
 				continue
 			}
 
@@ -3383,7 +3389,7 @@ func parseSwitchStatement(p *Parser) ast.Statement {
 		} else if p.currentToken.Type == lexer.T_DEFAULT {
 			casePos := p.currentToken.Position
 
-			if !p.expectPeek(lexer.TOKEN_COLON) {
+			if !p.expectCaseSeparator() {
 				continue
 			}
 
