@@ -1512,6 +1512,9 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 		case lexer.T_ABSTRACT:
 			isAbstract = true
 			p.nextToken()
+		case lexer.T_FINAL:
+			isFinal = true
+			p.nextToken()
 		case lexer.T_STATIC:
 			isStatic = true
 			p.nextToken()
@@ -2233,6 +2236,28 @@ func isVisibilityStaticFunction(p *Parser) bool {
 
 	// Check if the token after static is 'function'
 	return tokens[0].Type == lexer.T_FUNCTION
+}
+
+// isVisibilityStaticFinalFunction performs 3-token lookahead to determine if we have:
+// visibility static final function (returns true) vs
+// visibility static property (returns false)
+func isVisibilityStaticFinalFunction(p *Parser) bool {
+	// We're currently at visibility modifier, peekToken is T_STATIC
+	// We need to look ahead to see: static final function
+
+	// Verify that peekToken is indeed T_STATIC
+	if p.peekToken.Type != lexer.T_STATIC {
+		return false
+	}
+
+	// Use PeekTokensAhead(2) to get the tokens after T_STATIC
+	tokens := p.lexer.PeekTokensAhead(2)
+	if len(tokens) < 2 {
+		return false
+	}
+
+	// Check if the pattern is: static final function
+	return tokens[0].Type == lexer.T_FINAL && tokens[1].Type == lexer.T_FUNCTION
 }
 
 // isAbstractProperty performs lookahead to determine if we have:
@@ -5087,6 +5112,13 @@ func parseStaticVisibilityDeclaration(p *Parser) ast.Statement {
 	if p.peekToken.Type == lexer.T_FUNCTION {
 		// static visibility function
 		return parseStaticVisibilityFunction(p, visibility, pos)
+	} else if p.peekToken.Type == lexer.T_FINAL {
+		// static visibility final function - set current token back to static and delegate to parseFunctionDeclaration
+		// which can handle the full modifier sequence
+		p.currentToken.Type = lexer.T_STATIC
+		p.currentToken.Value = "static"  
+		p.currentToken.Position = pos
+		return parseFunctionDeclaration(p)
 	} else {
 		// static visibility property (or typed property)
 		return parseStaticVisibilityProperty(p, visibility, pos)
@@ -5346,12 +5378,16 @@ func parseClassStatement(p *Parser) ast.Statement {
 		} else if nextTokenType == lexer.T_ABSTRACT {
 			// visibility abstract function|property
 			return parseFunctionDeclaration(p)
+		} else if nextTokenType == lexer.T_FINAL {
+			// visibility final [static] function
+			return parseFunctionDeclaration(p)
 		} else if nextTokenType == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
 		} else if nextTokenType == lexer.T_STATIC {
 			// Need to distinguish between "visibility static function" and "visibility static property"
+			// Also need to handle "visibility static final function"
 			// Use a helper to peek ahead without disrupting parser state
-			if isVisibilityStaticFunction(p) {
+			if isVisibilityStaticFunction(p) || isVisibilityStaticFinalFunction(p) {
 				return parseFunctionDeclaration(p)
 			} else {
 				return parsePropertyDeclaration(p)
@@ -5369,6 +5405,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 	case lexer.T_STATIC:
 		// Static can precede visibility, function, or property
 		if p.peekToken.Type == lexer.T_FUNCTION {
+			return parseFunctionDeclaration(p)
+		} else if p.peekToken.Type == lexer.T_FINAL {
+			// static final [visibility] function
 			return parseFunctionDeclaration(p)
 		} else if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
 			return parseStaticVisibilityDeclaration(p)
@@ -5396,6 +5435,9 @@ func parseClassStatement(p *Parser) ast.Statement {
 			} else {
 				return parseFunctionDeclaration(p)
 			}
+		} else if p.peekToken.Type == lexer.T_STATIC {
+			// final static [visibility] function
+			return parseFunctionDeclaration(p)
 		} else {
 			return parseFunctionDeclaration(p)
 		}
