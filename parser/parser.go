@@ -1479,34 +1479,45 @@ func parseAlternativeForStatement(p *Parser, pos lexer.Position, initExprs, cond
 func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	pos := p.currentToken.Position
 
+	// 检查是否有 final 修饰符
+	var isFinal bool
+	if p.currentToken.Type == lexer.T_FINAL {
+		isFinal = true
+		p.nextToken() // 移动到下一个token
+	}
+	
 	// 检查是否有 abstract 修饰符
 	var isAbstract bool
 	if p.currentToken.Type == lexer.T_ABSTRACT {
 		isAbstract = true
+		p.nextToken() // 移动到下一个token (可能是static, visibility或function)
+	}
+	
+	// 检查是否有 static 修饰符 (可能在 abstract/final 之后)
+	var isStatic bool
+	if p.currentToken.Type == lexer.T_STATIC {
+		isStatic = true
 		p.nextToken() // 移动到下一个token (可能是visibility或function)
 	}
 
 	// 检查是否有可见性修饰符 (public, private, protected)
 	var visibility string
-	var isStatic bool
 	if p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED {
 		visibility = p.currentToken.Value
-		// 检查是否有 static 修饰符
-		if p.peekToken.Type == lexer.T_STATIC {
+		p.nextToken() // 移动到下一个token
+		
+		// 检查是否有 static 修饰符 (如果之前没有)
+		if !isStatic && p.currentToken.Type == lexer.T_STATIC {
 			isStatic = true
-			p.nextToken() // 移动到 static
-			if !p.expectPeek(lexer.T_FUNCTION) {
-				return nil
-			}
-		} else if !p.expectPeek(lexer.T_FUNCTION) {
-			return nil
+			p.nextToken() // 移动到下一个token
 		}
-	} else if p.currentToken.Type == lexer.T_STATIC {
-		// Handle static function without explicit visibility
-		isStatic = true
-		if !p.expectPeek(lexer.T_FUNCTION) {
-			return nil
-		}
+	}
+	
+	// 现在应该是 function token
+	if p.currentToken.Type != lexer.T_FUNCTION {
+		p.errors = append(p.errors, fmt.Sprintf("expected T_FUNCTION, got %s at position %s",
+			p.currentToken.Value, p.currentToken.Position))
+		return nil
 	}
 
 	// 检查是否为引用返回函数 function &foo()
@@ -1529,6 +1540,8 @@ func parseFunctionDeclaration(p *Parser) *ast.FunctionDeclaration {
 	funcDecl.ByReference = byReference
 	funcDecl.Visibility = visibility
 	funcDecl.IsStatic = isStatic
+	funcDecl.IsAbstract = isAbstract
+	funcDecl.IsFinal = isFinal
 
 	if !p.expectPeek(lexer.TOKEN_LPAREN) {
 		return nil
@@ -4545,6 +4558,164 @@ func parseClassExpression(p *Parser) ast.Expression {
 	return ast.NewClassExpression(pos, name, nil, nil, false, false) // final = false, readOnly = false
 }
 
+// parseStaticVisibilityDeclaration 解析 static visibility function/property 声明
+// 在调用时，currentToken 是 static，peekToken 是 visibility modifier
+func parseStaticVisibilityDeclaration(p *Parser) ast.Statement {
+	pos := p.currentToken.Position
+	
+	// Move to visibility modifier
+	p.nextToken()
+	
+	// Get visibility
+	visibility := p.currentToken.Value
+	
+	// Check what comes after visibility
+	if p.peekToken.Type == lexer.T_FUNCTION {
+		// static visibility function
+		return parseStaticVisibilityFunction(p, visibility, pos)
+	} else {
+		// static visibility property (or typed property)
+		return parseStaticVisibilityProperty(p, visibility, pos)
+	}
+}
+
+// parseStaticVisibilityFunction 解析 static visibility function 声明
+// 在调用时，currentToken 是 visibility，peekToken 是 function
+func parseStaticVisibilityFunction(p *Parser, visibility string, pos lexer.Position) ast.Statement {
+	// Move to function token
+	if !p.expectPeek(lexer.T_FUNCTION) {
+		return nil
+	}
+	
+	// 检查是否为引用返回函数 function &foo()
+	byReference := false
+	if p.peekToken.Type == lexer.T_AMPERSAND_NOT_FOLLOWED_BY_VAR_OR_VARARG {
+		byReference = true
+		p.nextToken() // 移动到 &
+	}
+	
+	// Expect method/function name (allow reserved keywords)
+	p.nextToken()
+	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
+		p.errors = append(p.errors, fmt.Sprintf("expected function name, got %s at position %s",
+			p.currentToken.Value, p.currentToken.Position))
+		return nil
+	}
+	
+	funcName := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
+	
+	// 创建函数声明，设置可见性和静态标志
+	funcDecl := ast.NewFunctionDeclaration(pos, funcName)
+	funcDecl.Visibility = visibility
+	funcDecl.IsStatic = true
+	funcDecl.ByReference = byReference
+	
+	// Parse the rest of the function (parameters, return type, body)
+	// This is the same as parseVisibilityStaticFunction from here on
+	
+	// Expect '('
+	if !p.expectPeek(lexer.TOKEN_LPAREN) {
+		return nil
+	}
+	
+	// 解析参数列表
+	if p.peekToken.Type != lexer.TOKEN_RPAREN {
+		p.nextToken()
+		
+		// Parse parameters (same logic as in parseVisibilityStaticFunction)
+		param := parseParameter(p)
+		if param != nil {
+			funcDecl.Parameters = append(funcDecl.Parameters, *param)
+		}
+		
+		// Parse remaining parameters
+		for p.peekToken.Type == lexer.TOKEN_COMMA {
+			p.nextToken() // Move to comma
+			p.nextToken() // Move to next parameter
+			
+			param := parseParameter(p)
+			if param != nil {
+				funcDecl.Parameters = append(funcDecl.Parameters, *param)
+			}
+		}
+	}
+	
+	// Expect ')'
+	if !p.expectPeek(lexer.TOKEN_RPAREN) {
+		return nil
+	}
+	
+	// Check for return type
+	if p.peekToken.Type == lexer.TOKEN_COLON {
+		p.nextToken() // Move to ':'
+		p.nextToken() // Move to return type
+		
+		returnType := parseTypeHint(p)
+		if returnType != nil {
+			funcDecl.ReturnType = returnType
+		}
+	}
+	
+	// Parse function body or semicolon (for abstract methods)
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+		// Abstract method without body
+	} else if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		p.nextToken()
+		funcDecl.Body = parseBlockStatements(p)
+	}
+	
+	return funcDecl
+}
+
+// parseStaticVisibilityProperty 解析 static visibility property 声明
+// 在调用时，currentToken 是 visibility
+func parseStaticVisibilityProperty(p *Parser, visibility string, pos lexer.Position) ast.Statement {
+	// Check for optional type hint
+	var typeHint *ast.TypeHint
+	if p.peekToken.Type != lexer.T_VARIABLE {
+		p.nextToken()
+		if isTypeToken(p.currentToken.Type) || p.currentToken.Type == lexer.TOKEN_QUESTION {
+			typeHint = parseTypeHint(p)
+		}
+	}
+	
+	// Expect variable
+	if !p.expectPeek(lexer.T_VARIABLE) {
+		return nil
+	}
+	
+	// Parse property name (remove $)
+	propertyName := p.currentToken.Value
+	if strings.HasPrefix(propertyName, "$") {
+		propertyName = propertyName[1:]
+	}
+	
+	// Check for property hooks
+	if p.peekToken.Type == lexer.TOKEN_LBRACE {
+		p.nextToken() // Move to {
+		hooks := parsePropertyHookList(p)
+		decl := ast.NewHookedPropertyDeclaration(pos, visibility, propertyName, true, false, typeHint, hooks)
+		return decl
+	}
+	
+	var defaultValue ast.Expression
+	
+	// Check for default value
+	if p.peekToken.Type == lexer.TOKEN_EQUAL {
+		p.nextToken() // Move to =
+		p.nextToken() // Move to value
+		defaultValue = parseExpression(p, LOWEST)
+	}
+	
+	// Expect semicolon
+	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
+		p.nextToken()
+	}
+	
+	return ast.NewPropertyDeclaration(pos, visibility, propertyName, true, false, typeHint, defaultValue)
+}
+
 // parseVisibilityStaticFunction 解析 visibility static function 声明
 // 在调用时，currentToken 是 static，peekToken 是 function
 func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Position) ast.Statement {
@@ -4671,14 +4842,22 @@ func parseClassStatement(p *Parser) ast.Statement {
 		return parseUseTraitStatement(p)
 	case lexer.T_STATIC:
 		// Handle static function or static property
+		// static can be followed by visibility modifiers (static public function) or directly by function/variable
 		if p.peekToken.Type == lexer.T_FUNCTION {
 			return parseFunctionDeclaration(p)
+		} else if p.peekToken.Type == lexer.T_PUBLIC || p.peekToken.Type == lexer.T_PRIVATE || p.peekToken.Type == lexer.T_PROTECTED {
+			// static visibility function/property
+			// Move to visibility modifier and let parseFunctionDeclaration or parsePropertyDeclaration handle it
+			return parseStaticVisibilityDeclaration(p)
 		} else {
 			// static property (e.g., static $var)
 			return parsePropertyDeclaration(p)
 		}
 	case lexer.T_ABSTRACT:
 		// Handle abstract methods: abstract [visibility] function name();
+		return parseFunctionDeclaration(p)
+	case lexer.T_FINAL:
+		// Handle final methods: final [visibility] function name() {}
 		return parseFunctionDeclaration(p)
 	default:
 		// 跳过未识别的token

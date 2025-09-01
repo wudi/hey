@@ -1881,6 +1881,8 @@ type FunctionDeclaration struct {
 	ByReference  bool        `json:"byReference,omitempty"`   // function &foo()
 	Visibility   string      `json:"visibility,omitempty"`   // public, private, protected (for class methods)
 	IsStatic     bool        `json:"isStatic,omitempty"`     // static function
+	IsAbstract   bool        `json:"isAbstract,omitempty"`   // abstract function
+	IsFinal      bool        `json:"isFinal,omitempty"`      // final function
 }
 
 type Parameter struct {
