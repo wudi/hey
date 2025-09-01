@@ -13309,3 +13309,152 @@ class Test {
 		})
 	}
 }
+
+func TestParsing_ClosureAttributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Arrow function with simple attribute",
+			input: `<?php
+$fn = #[\Closure] fn () => 'hello';`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.Len(t, arrowFunc.Attributes, 1)
+				
+				attr := arrowFunc.Attributes[0].Attributes[0]
+				require.Equal(t, `\Closure`, attr.Name.Name)
+				require.Nil(t, attr.Arguments)
+			},
+		},
+		{
+			name: "Arrow function with named arguments attribute",
+			input: `<?php
+$fn = #[\Closure(name: 'test', class: 'stdClass')] fn (): string => 'hello';`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.Len(t, arrowFunc.Attributes, 1)
+				
+				attr := arrowFunc.Attributes[0].Attributes[0]
+				require.Equal(t, `\Closure`, attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+				
+				// First named argument: name: 'test'
+				namedArg1 := attr.Arguments[0].(*ast.NamedArgument)
+				require.Equal(t, "name", namedArg1.Name.Name)
+				stringLit1 := namedArg1.Value.(*ast.StringLiteral)
+				require.Equal(t, "test", stringLit1.Value)
+				
+				// Second named argument: class: 'stdClass'
+				namedArg2 := attr.Arguments[1].(*ast.NamedArgument)
+				require.Equal(t, "class", namedArg2.Name.Name)
+				stringLit2 := namedArg2.Value.(*ast.StringLiteral)
+				require.Equal(t, "stdClass", stringLit2.Value)
+				
+				// Check return type
+				require.NotNil(t, arrowFunc.ReturnType)
+				require.Equal(t, "string", arrowFunc.ReturnType.Name)
+			},
+		},
+		{
+			name: "Anonymous function with attributes (ensure no regression)",
+			input: `<?php
+$fn = #[\Closure] function() { return 'hello'; };`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				anonFunc := assignExpr.Right.(*ast.AnonymousFunctionExpression)
+				
+				require.NotNil(t, anonFunc)
+				require.Len(t, anonFunc.Attributes, 1)
+				
+				attr := anonFunc.Attributes[0].Attributes[0]
+				require.Equal(t, `\Closure`, attr.Name.Name)
+				require.Nil(t, attr.Arguments)
+			},
+		},
+		{
+			name: "Static arrow function with attributes",
+			input: `<?php
+$fn = #[\Route] static fn ($x) => $x * 2;`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrowFunc := assignExpr.Right.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.True(t, arrowFunc.Static)
+				require.Len(t, arrowFunc.Attributes, 1)
+				require.Len(t, arrowFunc.Parameters, 1)
+				
+				attr := arrowFunc.Attributes[0].Attributes[0]
+				require.Equal(t, `\Route`, attr.Name.Name)
+			},
+		},
+		{
+			name: "Arrow function in array with attributes (original failing case)",
+			input: `<?php
+$arr = ['test' => #[\Closure(name: 'service')] fn () => 'value'];`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				assignExpr := exprStmt.Expression.(*ast.AssignmentExpression)
+				arrayExpr := assignExpr.Right.(*ast.ArrayExpression)
+				
+				require.Len(t, arrayExpr.Elements, 1)
+				
+				arrayElement := arrayExpr.Elements[0].(*ast.ArrayElementExpression)
+				arrowFunc := arrayElement.Value.(*ast.ArrowFunctionExpression)
+				
+				require.NotNil(t, arrowFunc)
+				require.Len(t, arrowFunc.Attributes, 1)
+				
+				attr := arrowFunc.Attributes[0].Attributes[0]
+				require.Equal(t, `\Closure`, attr.Name.Name)
+				require.Len(t, attr.Arguments, 1)
+				
+				namedArg := attr.Arguments[0].(*ast.NamedArgument)
+				require.Equal(t, "name", namedArg.Name.Name)
+				stringLit := namedArg.Value.(*ast.StringLiteral)
+				require.Equal(t, "service", stringLit.Value)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}

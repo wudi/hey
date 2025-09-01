@@ -3710,6 +3710,17 @@ func parseAttributeExpression(p *Parser) ast.Expression {
 			}
 			return function
 		}
+	} else if p.currentToken.Type == lexer.T_STATIC && p.peekToken.Type == lexer.T_FN {
+		// attributes T_STATIC fn - 静态箭头函数
+		// 解析静态箭头函数
+		arrowFunc := parseArrowFunctionExpression(p)
+		if arrowFunc != nil {
+			// 为箭头函数添加属性（静态标记已在parseArrowFunctionExpression中处理）
+			if arrowFunction, ok := arrowFunc.(*ast.ArrowFunctionExpression); ok {
+				arrowFunction.Attributes = attributeGroups
+			}
+			return arrowFunc
+		}
 	} else if p.currentToken.Type == lexer.T_FUNCTION {
 		// attributes function - 匿名函数
 		function := parseAnonymousFunctionExpression(p)
@@ -3719,6 +3730,16 @@ func parseAttributeExpression(p *Parser) ast.Expression {
 				anonFunc.Attributes = attributeGroups
 			}
 			return function
+		}
+	} else if p.currentToken.Type == lexer.T_FN {
+		// attributes fn - 箭头函数
+		arrowFunc := parseArrowFunctionExpression(p)
+		if arrowFunc != nil {
+			// 为箭头函数添加属性
+			if arrowFunction, ok := arrowFunc.(*ast.ArrowFunctionExpression); ok {
+				arrowFunction.Attributes = attributeGroups
+			}
+			return arrowFunc
 		}
 	}
 	

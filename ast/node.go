@@ -2082,10 +2082,11 @@ func (fd *FunctionDeclaration) String() string {
 // ArrowFunctionExpression 箭头函数表达式 (PHP 7.4+)
 type ArrowFunctionExpression struct {
 	BaseNode
-	Parameters []Parameter `json:"parameters"`
-	ReturnType *TypeHint   `json:"returnType,omitempty"`
-	Body       Expression  `json:"body"`
-	Static     bool        `json:"static,omitempty"`
+	Parameters []Parameter       `json:"parameters"`
+	ReturnType *TypeHint         `json:"returnType,omitempty"`
+	Body       Expression        `json:"body"`
+	Static     bool              `json:"static,omitempty"`
+	Attributes []*AttributeGroup `json:"attributes,omitempty"` // #[...] attributes
 }
 
 func NewArrowFunctionExpression(pos lexer.Position, parameters []Parameter, returnType *TypeHint, body Expression, static bool) *ArrowFunctionExpression {
