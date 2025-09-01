@@ -13195,3 +13195,117 @@ class Test {
 		})
 	}
 }
+
+func TestParsing_UnionIntersectionTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Parenthesized intersection type with union (original failing case)",
+			input: `<?php
+class Test {
+    public (\Traversable&\Countable)|null $a;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				propDecl := class.Body[0].(*ast.PropertyDeclaration)
+				
+				require.Equal(t, "a", propDecl.Name)
+				require.Equal(t, "public", propDecl.Visibility)
+				
+				// Check type is union
+				require.NotNil(t, propDecl.Type)
+				require.Equal(t, ast.ASTTypeUnion, propDecl.Type.GetKind())
+				require.Len(t, propDecl.Type.UnionTypes, 2)
+				
+				// First union component should be intersection type
+				intersectionType := propDecl.Type.UnionTypes[0]
+				require.Equal(t, ast.ASTTypeIntersection, intersectionType.GetKind())
+				require.Len(t, intersectionType.IntersectionTypes, 2)
+				require.Equal(t, `\Traversable`, intersectionType.IntersectionTypes[0].Name)
+				require.Equal(t, `\Countable`, intersectionType.IntersectionTypes[1].Name)
+				
+				// Second union component should be null
+				nullType := propDecl.Type.UnionTypes[1]
+				require.Equal(t, ast.ASTType, nullType.GetKind())
+				require.Equal(t, "null", nullType.Name)
+			},
+		},
+		{
+			name: "Simple intersection type without parentheses",
+			input: `<?php
+class Test {
+    public \Traversable&\Countable $intersection;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				propDecl := class.Body[0].(*ast.PropertyDeclaration)
+				
+				require.Equal(t, "intersection", propDecl.Name)
+				require.Equal(t, "public", propDecl.Visibility)
+				
+				// Check type is intersection
+				require.NotNil(t, propDecl.Type)
+				require.Equal(t, ast.ASTTypeIntersection, propDecl.Type.GetKind())
+				require.Len(t, propDecl.Type.IntersectionTypes, 2)
+				require.Equal(t, `\Traversable`, propDecl.Type.IntersectionTypes[0].Name)
+				require.Equal(t, `\Countable`, propDecl.Type.IntersectionTypes[1].Name)
+			},
+		},
+		{
+			name: "Union type with simple types",
+			input: `<?php
+class Test {
+    public string|int|null $union;
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				propDecl := class.Body[0].(*ast.PropertyDeclaration)
+				
+				require.Equal(t, "union", propDecl.Name)
+				require.Equal(t, "public", propDecl.Visibility)
+				
+				// Check type is union
+				require.NotNil(t, propDecl.Type)
+				require.Equal(t, ast.ASTTypeUnion, propDecl.Type.GetKind())
+				require.Len(t, propDecl.Type.UnionTypes, 3)
+				require.Equal(t, "string", propDecl.Type.UnionTypes[0].Name)
+				require.Equal(t, "int", propDecl.Type.UnionTypes[1].Name)
+				require.Equal(t, "null", propDecl.Type.UnionTypes[2].Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
