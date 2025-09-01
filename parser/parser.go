@@ -5245,6 +5245,22 @@ func parseAttributedClassStatement(p *Parser) ast.Statement {
 				funcDecl.Attributes = attributeGroups
 			}
 			return funcDecl
+		} else if p.peekToken.Type == lexer.T_STATIC {
+			// #[Attr] public static function foo() {} or #[Attr] public static $property
+			// Use the same lookahead logic as non-attributed case
+			if isVisibilityStaticFunction(p) {
+				funcDecl := parseFunctionDeclaration(p)
+				if funcDecl != nil {
+					funcDecl.Attributes = attributeGroups
+				}
+				return funcDecl
+			} else {
+				stmt := parsePropertyDeclaration(p)
+				if propDecl, ok := stmt.(*ast.PropertyDeclaration); ok {
+					propDecl.Attributes = attributeGroups
+				}
+				return stmt
+			}
 		} else {
 			// #[Attr] private $prop;
 			stmt := parsePropertyDeclaration(p)

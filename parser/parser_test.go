@@ -13196,6 +13196,196 @@ class Test {
 	}
 }
 
+func TestParsing_AttributesOnStaticMethods(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(*testing.T, *ast.Program)
+	}{
+		{
+			name: "Simple attribute on static method",
+			input: `<?php
+class Test {
+    #[Deprecated]
+    public static function createFromString(): self
+    {
+        return new self();
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "createFromString", method.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "public", method.Visibility)
+				require.True(t, method.IsStatic)
+				
+				// Check attributes
+				require.Len(t, method.Attributes, 1)
+				attr := method.Attributes[0].Attributes[0]
+				require.Equal(t, "Deprecated", attr.Name.Name)
+				require.Len(t, attr.Arguments, 0)
+			},
+		},
+		{
+			name: "Complex attribute with named arguments on static method",
+			input: `<?php
+class AsymmetricVisibility {
+    #[Deprecated(message:'use League\\Uri\\Components\\Domain::new() instead', since:'league/uri-components:7.0.0')]
+    public static function createFromString(Stringable|string $host): self
+    {
+        return self::new($host);
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "createFromString", method.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "public", method.Visibility)
+				require.True(t, method.IsStatic)
+				
+				// Check method parameters
+				require.Len(t, method.Parameters, 1)
+				param := method.Parameters[0]
+				require.Equal(t, "$host", param.Name)
+				
+				// Verify union type parsing (Stringable|string)
+				require.NotNil(t, param.Type, "Parameter should have a type")
+				require.Len(t, param.Type.UnionTypes, 2, "Parameter should have union type with 2 types")
+				
+				// Check attributes
+				require.Len(t, method.Attributes, 1)
+				attr := method.Attributes[0].Attributes[0]
+				require.Equal(t, "Deprecated", attr.Name.Name)
+				require.Len(t, attr.Arguments, 2)
+				
+				// Check first named argument (message)
+				namedArg1 := attr.Arguments[0].(*ast.NamedArgument)
+				require.Equal(t, "message", namedArg1.Name.Name)
+				stringLit1 := namedArg1.Value.(*ast.StringLiteral)
+				require.Equal(t, "use League\\Uri\\Components\\Domain::new() instead", stringLit1.Value)
+				
+				// Check second named argument (since)
+				namedArg2 := attr.Arguments[1].(*ast.NamedArgument)
+				require.Equal(t, "since", namedArg2.Name.Name)
+				stringLit2 := namedArg2.Value.(*ast.StringLiteral)
+				require.Equal(t, "league/uri-components:7.0.0", stringLit2.Value)
+			},
+		},
+		{
+			name: "Multiple attributes on static method with different visibility",
+			input: `<?php
+class Test {
+    #[Route("/api/test")]
+    #[Deprecated("Use new API instead")]
+    private static function oldApiMethod(): bool
+    {
+        return false;
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "oldApiMethod", method.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "private", method.Visibility)
+				require.True(t, method.IsStatic)
+				
+				// Check attributes - should have 2 attribute groups
+				require.Len(t, method.Attributes, 2)
+				
+				// First attribute
+				attr1 := method.Attributes[0].Attributes[0]
+				require.Equal(t, "Route", attr1.Name.Name)
+				require.Len(t, attr1.Arguments, 1)
+				stringLit1 := attr1.Arguments[0].(*ast.StringLiteral)
+				require.Equal(t, "/api/test", stringLit1.Value)
+				
+				// Second attribute
+				attr2 := method.Attributes[1].Attributes[0]
+				require.Equal(t, "Deprecated", attr2.Name.Name)
+				require.Len(t, attr2.Arguments, 1)
+				stringLit2 := attr2.Arguments[0].(*ast.StringLiteral)
+				require.Equal(t, "Use new API instead", stringLit2.Value)
+			},
+		},
+		{
+			name: "Attribute on protected static method with reference parameter",
+			input: `<?php
+class Test {
+    #[Internal("Only for internal use")]
+    protected static function processData(array &$data): void
+    {
+        array_walk($data, function(&$value) {
+            $value = trim($value);
+        });
+    }
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+
+				stmt := program.Body[0]
+				exprStmt := stmt.(*ast.ExpressionStatement)
+				class := exprStmt.Expression.(*ast.ClassExpression)
+
+				require.Len(t, class.Body, 1)
+				method := class.Body[0].(*ast.FunctionDeclaration)
+				
+				require.Equal(t, "processData", method.Name.(*ast.IdentifierNode).Name)
+				require.Equal(t, "protected", method.Visibility)
+				require.True(t, method.IsStatic)
+				
+				// Check method parameters
+				require.Len(t, method.Parameters, 1)
+				param := method.Parameters[0]
+				require.Equal(t, "$data", param.Name)
+				require.True(t, param.ByReference, "Parameter should be by reference")
+				
+				// Check attributes
+				require.Len(t, method.Attributes, 1)
+				attr := method.Attributes[0].Attributes[0]
+				require.Equal(t, "Internal", attr.Name.Name)
+				require.Len(t, attr.Arguments, 1)
+				
+				stringLit := attr.Arguments[0].(*ast.StringLiteral)
+				require.Equal(t, "Only for internal use", stringLit.Value)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {			
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
+
 func TestParsing_UnionIntersectionTypes(t *testing.T) {
 	tests := []struct {
 		name     string
