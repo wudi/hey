@@ -2613,6 +2613,30 @@ func parseBlockStatement(p *Parser) *ast.BlockStatement {
 			break
 		}
 
+		// Handle T_CLOSE_TAG: just skip it and continue parsing
+		if p.currentToken.Type == lexer.T_CLOSE_TAG {
+			p.nextToken()
+			continue
+		}
+
+		// Handle T_INLINE_HTML as a statement (like echo)
+		if p.currentToken.Type == lexer.T_INLINE_HTML {
+			// Create a statement from the inline HTML content
+			htmlExpr := parseInlineHTML(p)
+			if htmlExpr != nil {
+				htmlStmt := ast.NewExpressionStatement(p.currentToken.Position, htmlExpr)
+				block.Body = append(block.Body, htmlStmt)
+			}
+			p.nextToken()
+			continue
+		}
+
+		// Handle T_OPEN_TAG: skip and continue
+		if p.currentToken.Type == lexer.T_OPEN_TAG {
+			p.nextToken()
+			continue
+		}
+
 		stmt := parseStatement(p)
 		if stmt != nil {
 			block.Body = append(block.Body, stmt)

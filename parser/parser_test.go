@@ -15832,6 +15832,129 @@ func TestParsing_ArrayDestructuring(t *testing.T) {
 				assert.Equal(t, "$b", secondVar.Name)
 			},
 		},
+		{
+			name:  "Array destructuring with trailing comma in HTML context",
+			input: `<?php foreach ($state as $stateItem) { ?>
+    <?php [
+        'attributes' => $stateItemAttributes,
+        'badgeAttributes' => $stateItemBadgeAttributes,
+    ] = $getStateItem($stateItem); ?>
+<?php } ?>`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				// Should be a foreach statement
+				foreach := program.Body[0].(*ast.ForeachStatement)
+				require.NotNil(t, foreach)
+				
+				// Check iterable
+				iterable, ok := foreach.Iterable.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$state", iterable.Name)
+				
+				// Check value 
+				value, ok := foreach.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$stateItem", value.Name)
+				
+				// Check body - should be a block statement
+				body, ok := foreach.Body.(*ast.BlockStatement)
+				require.True(t, ok)
+				require.Len(t, body.Body, 3) // HTML + array assignment + HTML
+				
+				// The second statement should be the array destructuring assignment
+				assignStmt := body.Body[1].(*ast.ExpressionStatement)
+				assign := assignStmt.Expression.(*ast.AssignmentExpression)
+				
+				assert.Equal(t, "=", assign.Operator)
+				
+				// Check left side (array destructuring with trailing comma)
+				leftArray, ok := assign.Left.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, leftArray.Elements, 2)
+				
+				// Check first pair
+				firstPair, ok := leftArray.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				firstKey, ok := firstPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "attributes", firstKey.Value)
+				firstVar, ok := firstPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$stateItemAttributes", firstVar.Name)
+				
+				// Check second pair
+				secondPair, ok := leftArray.Elements[1].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				secondKey, ok := secondPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "badgeAttributes", secondKey.Value)
+				secondVar, ok := secondPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$stateItemBadgeAttributes", secondVar.Name)
+				
+				// Check right side (function call)
+				funcCall, ok := assign.Right.(*ast.CallExpression)
+				require.True(t, ok)
+				callee, ok := funcCall.Callee.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$getStateItem", callee.Name)
+				require.Len(t, funcCall.Arguments, 1)
+				arg, ok := funcCall.Arguments[0].(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$stateItem", arg.Name)
+			},
+		},
+		{
+			name:  "Array destructuring with trailing comma in simple block",
+			input: `<?php {
+    ['a' => $x, 'b' => $y,] = $data;
+}`,
+			expected: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				// Should be a block statement  
+				block := program.Body[0].(*ast.BlockStatement)
+				require.NotNil(t, block)
+				require.Len(t, block.Body, 1)
+				
+				// The statement should be the array destructuring assignment
+				assignStmt := block.Body[0].(*ast.ExpressionStatement)
+				assign := assignStmt.Expression.(*ast.AssignmentExpression)
+				
+				assert.Equal(t, "=", assign.Operator)
+				
+				// Check left side (array destructuring with trailing comma)
+				leftArray, ok := assign.Left.(*ast.ArrayExpression)
+				require.True(t, ok)
+				require.Len(t, leftArray.Elements, 2)
+				
+				// Check first pair
+				firstPair, ok := leftArray.Elements[0].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				firstKey, ok := firstPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "a", firstKey.Value)
+				firstVar, ok := firstPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$x", firstVar.Name)
+				
+				// Check second pair  
+				secondPair, ok := leftArray.Elements[1].(*ast.ArrayElementExpression)
+				require.True(t, ok)
+				secondKey, ok := secondPair.Key.(*ast.StringLiteral)
+				require.True(t, ok)
+				assert.Equal(t, "b", secondKey.Value)
+				secondVar, ok := secondPair.Value.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$y", secondVar.Name)
+				
+				// Check right side
+				rightVar, ok := assign.Right.(*ast.Variable)
+				require.True(t, ok)
+				assert.Equal(t, "$data", rightVar.Name)
+			},
+		},
 	}
 	
 	for _, tt := range tests {
