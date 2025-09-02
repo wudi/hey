@@ -372,9 +372,19 @@ func (p *Parser) nextToken() {
 	p.currentToken = p.peekToken
 	p.peekToken = p.lexer.NextToken()
 
-	// 自动跳过语法解析中无意义的token
+	// 自动跳过语法解析中无意义的token (仅对peekToken)
 	for isNonSyntacticToken(p.peekToken.Type) {
 		p.peekToken = p.lexer.NextToken()
+	}
+	
+	// 如果currentToken是注释，继续前进直到找到有意义的token
+	for isNonSyntacticToken(p.currentToken.Type) {
+		p.currentToken = p.peekToken
+		p.peekToken = p.lexer.NextToken()
+		// 继续跳过peekToken中的注释
+		for isNonSyntacticToken(p.peekToken.Type) {
+			p.peekToken = p.lexer.NextToken()
+		}
 	}
 }
 
@@ -1065,6 +1075,18 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 			return nil
 		}
 		p.nextToken()
+		
+		// Skip T_OPEN_TAG tokens in alternative syntax blocks
+		for p.currentToken.Type == lexer.T_OPEN_TAG {
+			p.nextToken()
+		}
+		
+		// Check if we've reached a control token after skipping open tags
+		if p.currentToken.Type == lexer.T_ELSEIF || p.currentToken.Type == lexer.T_ELSE || p.currentToken.Type == lexer.T_ENDIF {
+			// We've reached the end of this block, back up one token
+			break
+		}
+		
 		if stmt := parseStatement(p); stmt != nil {
 			altIfStmt.Then = append(altIfStmt.Then, stmt)
 		}
@@ -1127,9 +1149,11 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 		}
 	}
 
-	// 期望 endif
-	if !p.expectPeek(lexer.T_ENDIF) {
-		return nil
+	// 期望 endif - but we might already be at it if we broke from the loop
+	if p.currentToken.Type != lexer.T_ENDIF {
+		if !p.expectPeek(lexer.T_ENDIF) {
+			return nil
+		}
 	}
 
 	// 期望分号
@@ -2610,6 +2634,16 @@ func parseBlockStatement(p *Parser) *ast.BlockStatement {
 	p.nextToken() // 跳过 {
 
 	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		// Skip T_OPEN_TAG tokens - they're just PHP mode markers, not statements
+		for p.currentToken.Type == lexer.T_OPEN_TAG {
+			p.nextToken()
+		}
+		
+		// Check again after skipping open tags
+		if p.currentTokenIs(lexer.TOKEN_RBRACE) || p.isAtEnd() {
+			break
+		}
+		
 		stmt := parseStatement(p)
 		if stmt != nil {
 			block.Body = append(block.Body, stmt)
