@@ -16,7 +16,7 @@ func TestProgram_String(t *testing.T) {
 	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "Hello, World!", `"Hello, World!"`))
 	program.Body = append(program.Body, echo)
 
-	expected := `echo "Hello, World!";`
+	expected := `echo "Hello, World!";` + "\n"
 	assert.Equal(t, expected, program.String())
 }
 
@@ -224,6 +224,6 @@ func TestNodeJSON(t *testing.T) {
 
 	json, err := variable.ToJSON()
 	assert.NoError(t, err)
-	assert.Contains(t, string(json), `"kind": 256`)  // ASTVar = 256
+	assert.Contains(t, string(json), `"kind": 256`) // ASTVar = 256
 	assert.Contains(t, string(json), `"name": "$name"`)
 }

@@ -48,10 +48,10 @@ type Identifier interface {
 
 // BaseNode 基础节点，提供公共字段和方法
 type BaseNode struct {
-	Kind       ASTKind                    `json:"kind"`
-	Position   lexer.Position             `json:"position"`
-	Attributes map[string]interface{}     `json:"attributes,omitempty"`
-	LineNo     uint32                     `json:"lineno"`
+	Kind       ASTKind                `json:"kind"`
+	Position   lexer.Position         `json:"position"`
+	Attributes map[string]interface{} `json:"attributes,omitempty"`
+	LineNo     uint32                 `json:"lineno"`
 }
 
 // GetKind 返回节点的AST Kind类型
@@ -138,6 +138,7 @@ func (p *Program) String() string {
 	for _, stmt := range p.Body {
 		if stmt != nil {
 			out.WriteString(stmt.String())
+			out.WriteString("\n")
 		}
 	}
 	return out.String()
@@ -282,7 +283,7 @@ func (p *PrintExpression) String() string {
 type NamespaceStatement struct {
 	BaseNode
 	Name *NamespaceNameExpression `json:"name,omitempty"` // nil for global namespace
-	Body []Statement              `json:"body,omitempty"`  // 可选的命名空间主体
+	Body []Statement              `json:"body,omitempty"` // 可选的命名空间主体
 }
 
 func NewNamespaceStatement(pos lexer.Position, name *NamespaceNameExpression) *NamespaceStatement {
@@ -408,18 +409,18 @@ func (u *UseStatement) String() string {
 // InterfaceDeclaration 表示接口声明
 type InterfaceDeclaration struct {
 	BaseNode
-	Name       *IdentifierNode    `json:"name"`                // 接口名称
-	Extends    []*IdentifierNode  `json:"extends,omitempty"`   // 继承的接口
-	Methods    []*InterfaceMethod `json:"methods"`             // 接口方法
+	Name       *IdentifierNode    `json:"name"`                 // 接口名称
+	Extends    []*IdentifierNode  `json:"extends,omitempty"`    // 继承的接口
+	Methods    []*InterfaceMethod `json:"methods"`              // 接口方法
 	Attributes []*AttributeGroup  `json:"attributes,omitempty"` // 属性组
 }
 
 // InterfaceMethod 表示接口方法声明
 type InterfaceMethod struct {
-	Name        *IdentifierNode `json:"name"`                 // 方法名称
-	Parameters  []Parameter     `json:"parameters"`           // 参数列表
-	ReturnType  *TypeHint       `json:"returnType,omitempty"` // 返回类型
-	Visibility  string          `json:"visibility"`           // 可见性 (通常是 public)
+	Name        *IdentifierNode `json:"name"`                  // 方法名称
+	Parameters  []Parameter     `json:"parameters"`            // 参数列表
+	ReturnType  *TypeHint       `json:"returnType,omitempty"`  // 返回类型
+	Visibility  string          `json:"visibility"`            // 可见性 (通常是 public)
 	ByReference bool            `json:"byReference,omitempty"` // function &foo() - 引用返回
 }
 
@@ -465,7 +466,7 @@ func (i *InterfaceDeclaration) statementNode() {}
 
 func (i *InterfaceDeclaration) String() string {
 	result := "interface " + i.Name.String()
-	
+
 	if len(i.Extends) > 0 {
 		result += " extends "
 		extendNames := make([]string, len(i.Extends))
@@ -474,7 +475,7 @@ func (i *InterfaceDeclaration) String() string {
 		}
 		result += strings.Join(extendNames, ", ")
 	}
-	
+
 	result += " {\n"
 	for _, method := range i.Methods {
 		result += "  " + method.Visibility + " function " + method.Name.String() + "("
@@ -504,11 +505,11 @@ func (i *InterfaceDeclaration) String() string {
 // TraitDeclaration 表示 trait 声明
 type TraitDeclaration struct {
 	BaseNode
-	Name       *IdentifierNode       `json:"name"`       // trait 名称
-	Properties []*PropertyDeclaration `json:"properties"` // trait 属性
-	Methods    []*FunctionDeclaration `json:"methods"`    // trait 方法
-	Body       []Statement           `json:"body"`       // trait 体的其他语句（如 use 语句、常量等）
-	Attributes []*AttributeGroup     `json:"attributes,omitempty"` // 属性组
+	Name       *IdentifierNode        `json:"name"`                 // trait 名称
+	Properties []*PropertyDeclaration `json:"properties"`           // trait 属性
+	Methods    []*FunctionDeclaration `json:"methods"`              // trait 方法
+	Body       []Statement            `json:"body"`                 // trait 体的其他语句（如 use 语句、常量等）
+	Attributes []*AttributeGroup      `json:"attributes,omitempty"` // 属性组
 }
 
 func NewTraitDeclaration(pos lexer.Position, name *IdentifierNode) *TraitDeclaration {
@@ -565,22 +566,22 @@ func (t *TraitDeclaration) statementNode() {}
 
 func (t *TraitDeclaration) String() string {
 	result := "trait " + t.Name.String() + " {\n"
-	
+
 	// 添加属性
 	for _, prop := range t.Properties {
 		result += "  " + prop.String() + ";\n"
 	}
-	
+
 	// 添加方法
 	for _, method := range t.Methods {
 		result += "  " + method.String() + "\n"
 	}
-	
+
 	// 添加其他语句
 	for _, stmt := range t.Body {
 		result += "  " + stmt.String() + "\n"
 	}
-	
+
 	result += "}"
 	return result
 }
@@ -588,8 +589,8 @@ func (t *TraitDeclaration) String() string {
 // UseTraitStatement 表示 trait 使用语句 (use TraitA, TraitB { ... })
 type UseTraitStatement struct {
 	BaseNode
-	Traits      []*IdentifierNode  `json:"traits"`      // 使用的 traits
-	Adaptations []TraitAdaptation  `json:"adaptations"` // trait 适配规则
+	Traits      []*IdentifierNode `json:"traits"`      // 使用的 traits
+	Adaptations []TraitAdaptation `json:"adaptations"` // trait 适配规则
 }
 
 func NewUseTraitStatement(pos lexer.Position, traits []*IdentifierNode, adaptations []TraitAdaptation) *UseTraitStatement {
@@ -645,7 +646,7 @@ func (u *UseTraitStatement) String() string {
 		traitNames[i] = trait.String()
 	}
 	result += strings.Join(traitNames, ", ")
-	
+
 	if len(u.Adaptations) > 0 {
 		result += " {\n"
 		for _, adaptation := range u.Adaptations {
@@ -655,7 +656,7 @@ func (u *UseTraitStatement) String() string {
 	} else {
 		result += ";"
 	}
-	
+
 	return result
 }
 
@@ -668,8 +669,8 @@ type TraitAdaptation interface {
 // TraitPrecedenceStatement 表示 trait 优先级声明 (A::method insteadof B, C)
 type TraitPrecedenceStatement struct {
 	BaseNode
-	Method     *TraitMethodReference `json:"method"`     // 方法引用
-	InsteadOf  []*IdentifierNode     `json:"insteadOf"`  // 替代的 traits
+	Method    *TraitMethodReference `json:"method"`    // 方法引用
+	InsteadOf []*IdentifierNode     `json:"insteadOf"` // 替代的 traits
 }
 
 func NewTraitPrecedenceStatement(pos lexer.Position, method *TraitMethodReference, insteadOf []*IdentifierNode) *TraitPrecedenceStatement {
@@ -712,7 +713,7 @@ func (t *TraitPrecedenceStatement) Accept(visitor Visitor) {
 	}
 }
 
-func (t *TraitPrecedenceStatement) statementNode() {}
+func (t *TraitPrecedenceStatement) statementNode()  {}
 func (t *TraitPrecedenceStatement) adaptationNode() {}
 
 func (t *TraitPrecedenceStatement) String() string {
@@ -728,8 +729,8 @@ func (t *TraitPrecedenceStatement) String() string {
 // TraitAliasStatement 表示 trait 别名声明 (A::method as newName; A::method as public newName)
 type TraitAliasStatement struct {
 	BaseNode
-	Method     *TraitMethodReference `json:"method"`              // 方法引用
-	Alias      *IdentifierNode       `json:"alias,omitempty"`     // 新的方法名（可选）
+	Method     *TraitMethodReference `json:"method"`               // 方法引用
+	Alias      *IdentifierNode       `json:"alias,omitempty"`      // 新的方法名（可选）
 	Visibility string                `json:"visibility,omitempty"` // 可见性修饰符（可选）
 }
 
@@ -770,7 +771,7 @@ func (t *TraitAliasStatement) Accept(visitor Visitor) {
 	}
 }
 
-func (t *TraitAliasStatement) statementNode() {}
+func (t *TraitAliasStatement) statementNode()  {}
 func (t *TraitAliasStatement) adaptationNode() {}
 
 func (t *TraitAliasStatement) String() string {
@@ -787,8 +788,8 @@ func (t *TraitAliasStatement) String() string {
 // TraitMethodReference 表示 trait 方法引用 (TraitName::methodName or methodName)
 type TraitMethodReference struct {
 	BaseNode
-	Trait  *IdentifierNode `json:"trait,omitempty"`  // trait 名称（可选，如果为空表示当前方法）
-	Method *IdentifierNode `json:"method"`           // 方法名称
+	Trait  *IdentifierNode `json:"trait,omitempty"` // trait 名称（可选，如果为空表示当前方法）
+	Method *IdentifierNode `json:"method"`          // 方法名称
 }
 
 func NewTraitMethodReference(pos lexer.Position, trait *IdentifierNode, method *IdentifierNode) *TraitMethodReference {
@@ -839,13 +840,13 @@ func (t *TraitMethodReference) String() string {
 // EnumDeclaration 表示 enum 声明 (PHP 8.1+)
 type EnumDeclaration struct {
 	BaseNode
-	Name        *IdentifierNode   `json:"name"`                  // enum 名称
-	BackingType *TypeHint         `json:"backingType,omitempty"` // 可选的支撑类型 (string, int)
-	Implements  []*IdentifierNode `json:"implements,omitempty"`  // 实现的接口
-	Cases       []*EnumCase       `json:"cases"`                 // enum 案例
-	Constants   []*ClassConstantDeclaration `json:"constants,omitempty"` // enum 常量
-	Methods     []*FunctionDeclaration `json:"methods,omitempty"` // enum 方法
-	Attributes  []*AttributeGroup `json:"attributes,omitempty"`  // 属性组
+	Name        *IdentifierNode             `json:"name"`                  // enum 名称
+	BackingType *TypeHint                   `json:"backingType,omitempty"` // 可选的支撑类型 (string, int)
+	Implements  []*IdentifierNode           `json:"implements,omitempty"`  // 实现的接口
+	Cases       []*EnumCase                 `json:"cases"`                 // enum 案例
+	Constants   []*ClassConstantDeclaration `json:"constants,omitempty"`   // enum 常量
+	Methods     []*FunctionDeclaration      `json:"methods,omitempty"`     // enum 方法
+	Attributes  []*AttributeGroup           `json:"attributes,omitempty"`  // 属性组
 }
 
 // EnumCase 表示 enum 案例
@@ -916,12 +917,12 @@ func (e *EnumDeclaration) statementNode() {}
 
 func (e *EnumDeclaration) String() string {
 	result := "enum " + e.Name.String()
-	
+
 	// 添加支撑类型
 	if e.BackingType != nil {
 		result += ": " + e.BackingType.String()
 	}
-	
+
 	// 添加接口实现
 	if len(e.Implements) > 0 {
 		result += " implements "
@@ -931,9 +932,9 @@ func (e *EnumDeclaration) String() string {
 		}
 		result += strings.Join(implNames, ", ")
 	}
-	
+
 	result += " {\n"
-	
+
 	// 添加案例
 	for _, enumCase := range e.Cases {
 		result += "  case " + enumCase.Name.String()
@@ -942,7 +943,7 @@ func (e *EnumDeclaration) String() string {
 		}
 		result += ";\n"
 	}
-	
+
 	// 添加方法
 	if len(e.Methods) > 0 && len(e.Cases) > 0 {
 		result += "\n" // 在案例和方法之间添加空行
@@ -950,12 +951,12 @@ func (e *EnumDeclaration) String() string {
 	for _, method := range e.Methods {
 		result += "  " + method.String() + "\n"
 	}
-	
+
 	result += "}"
 	return result
 }
 
-// PropertyAccessExpression 表示属性访问表达式 
+// PropertyAccessExpression 表示属性访问表达式
 // Supports: $obj->property, $obj->$variable, $obj->{expression}
 type PropertyAccessExpression struct {
 	BaseNode
@@ -1919,35 +1920,35 @@ func (fs *ForStatement) String() string {
 // FunctionDeclaration 函数声明
 type FunctionDeclaration struct {
 	BaseNode
-	Name         Identifier         `json:"name"`
-	Parameters   []Parameter        `json:"parameters"`
-	ReturnType   *TypeHint          `json:"returnType,omitempty"`
-	Body         []Statement        `json:"body"`
-	ByReference  bool               `json:"byReference,omitempty"`   // function &foo()
-	Visibility   string             `json:"visibility,omitempty"`   // public, private, protected (for class methods)
-	IsStatic     bool               `json:"isStatic,omitempty"`     // static function
-	IsAbstract   bool               `json:"isAbstract,omitempty"`   // abstract function
-	IsFinal      bool               `json:"isFinal,omitempty"`      // final function
-	Attributes   []*AttributeGroup  `json:"attributes,omitempty"`   // #[...] attributes
+	Name        Identifier        `json:"name"`
+	Parameters  []Parameter       `json:"parameters"`
+	ReturnType  *TypeHint         `json:"returnType,omitempty"`
+	Body        []Statement       `json:"body"`
+	ByReference bool              `json:"byReference,omitempty"` // function &foo()
+	Visibility  string            `json:"visibility,omitempty"`  // public, private, protected (for class methods)
+	IsStatic    bool              `json:"isStatic,omitempty"`    // static function
+	IsAbstract  bool              `json:"isAbstract,omitempty"`  // abstract function
+	IsFinal     bool              `json:"isFinal,omitempty"`     // final function
+	Attributes  []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
 }
 
 type Parameter struct {
-	Name         string             `json:"name"`
-	DefaultValue Expression         `json:"defaultValue,omitempty"`
-	Type         *TypeHint          `json:"type,omitempty"`
-	ByReference  bool               `json:"byReference,omitempty"`   // &$param
-	Variadic     bool               `json:"variadic,omitempty"`      // ...$params
-	Visibility   string             `json:"visibility,omitempty"`   // public, private, protected
-	ReadOnly     bool               `json:"readOnly,omitempty"`     // readonly
-	Attributes   []*AttributeGroup  `json:"attributes,omitempty"`   // #[...] attributes
+	Name         string            `json:"name"`
+	DefaultValue Expression        `json:"defaultValue,omitempty"`
+	Type         *TypeHint         `json:"type,omitempty"`
+	ByReference  bool              `json:"byReference,omitempty"` // &$param
+	Variadic     bool              `json:"variadic,omitempty"`    // ...$params
+	Visibility   string            `json:"visibility,omitempty"`  // public, private, protected
+	ReadOnly     bool              `json:"readOnly,omitempty"`    // readonly
+	Attributes   []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
 }
 
 // TypeHint represents a PHP type hint
 type TypeHint struct {
 	BaseNode
-	Name         string      `json:"name"`                  // Simple type name
-	Nullable     bool        `json:"nullable,omitempty"`    // ?Type
-	UnionTypes   []*TypeHint `json:"unionTypes,omitempty"`  // Type1|Type2
+	Name              string      `json:"name"`                        // Simple type name
+	Nullable          bool        `json:"nullable,omitempty"`          // ?Type
+	UnionTypes        []*TypeHint `json:"unionTypes,omitempty"`        // Type1|Type2
 	IntersectionTypes []*TypeHint `json:"intersectionTypes,omitempty"` // Type1&Type2
 }
 
@@ -2096,32 +2097,89 @@ func (fd *FunctionDeclaration) Accept(visitor Visitor) {
 func (fd *FunctionDeclaration) statementNode() {}
 
 func (fd *FunctionDeclaration) String() string {
-	var out strings.Builder
-	out.WriteString("function ")
-	if fd.Name != nil {
-		out.WriteString(fd.Name.String())
-	}
-	out.WriteString("(")
+	var result strings.Builder
 
-	var params []string
-	for _, param := range fd.Parameters {
-		paramStr := param.Name
+	// Attributes
+	for _, attr := range fd.Attributes {
+		if attr != nil {
+			result.WriteString(attr.String())
+			result.WriteString("\n")
+		}
+	}
+
+	// Visibility (for class methods)
+	if fd.Visibility != "" {
+		result.WriteString(fd.Visibility)
+		result.WriteString(" ")
+	}
+
+	// Modifiers
+	if fd.IsStatic {
+		result.WriteString("static ")
+	}
+	if fd.IsAbstract {
+		result.WriteString("abstract ")
+	}
+	if fd.IsFinal {
+		result.WriteString("final ")
+	}
+
+	// Function keyword with reference modifier
+	result.WriteString("function ")
+	if fd.ByReference {
+		result.WriteString("&")
+	}
+
+	// Function name
+	if fd.Name != nil {
+		result.WriteString(fd.Name.String())
+	}
+
+	// Parameters
+	result.WriteString("(")
+	paramStrs := make([]string, len(fd.Parameters))
+	for i, param := range fd.Parameters {
+		paramStr := ""
+		if param.Type != nil {
+			paramStr += param.Type.String() + " "
+		}
+		if param.ByReference {
+			paramStr += "&"
+		}
+		if param.Variadic {
+			paramStr += "..."
+		}
+		paramStr += param.Name
 		if param.DefaultValue != nil {
 			paramStr += " = " + param.DefaultValue.String()
 		}
-		params = append(params, paramStr)
+		paramStrs[i] = paramStr
 	}
-	out.WriteString(strings.Join(params, ", "))
+	result.WriteString(strings.Join(paramStrs, ", "))
+	result.WriteString(")")
 
-	out.WriteString(") {\n")
-	for _, stmt := range fd.Body {
-		if stmt != nil {
-			out.WriteString("  " + stmt.String() + "\n")
+	// Return type
+	if fd.ReturnType != nil {
+		result.WriteString(": ")
+		result.WriteString(fd.ReturnType.String())
+	}
+
+	// Function body
+	if fd.IsAbstract {
+		result.WriteString(";")
+	} else {
+		result.WriteString(" {\n")
+		for _, stmt := range fd.Body {
+			if stmt != nil {
+				result.WriteString("  ")
+				result.WriteString(stmt.String())
+				result.WriteString("\n")
+			}
 		}
+		result.WriteString("}")
 	}
-	out.WriteString("}")
 
-	return out.String()
+	return result.String()
 }
 
 // ArrowFunctionExpression 箭头函数表达式 (PHP 7.4+)
@@ -2291,13 +2349,13 @@ func (n *NamespaceNameExpression) String() string {
 // PropertyDeclaration 属性声明语句
 type PropertyDeclaration struct {
 	BaseNode
-	Visibility   string             `json:"visibility"`   // private, protected, public
-	Static       bool               `json:"static,omitempty"`       // static
-	ReadOnly     bool               `json:"readOnly,omitempty"`     // readonly
-	Type         *TypeHint          `json:"type,omitempty"`
-	Name         string             `json:"name"`         // Property name without $
-	DefaultValue Expression         `json:"defaultValue,omitempty"`
-	Attributes   []*AttributeGroup  `json:"attributes,omitempty"`   // #[...] attributes
+	Visibility   string            `json:"visibility"`         // private, protected, public
+	Static       bool              `json:"static,omitempty"`   // static
+	ReadOnly     bool              `json:"readOnly,omitempty"` // readonly
+	Type         *TypeHint         `json:"type,omitempty"`
+	Name         string            `json:"name"` // Property name without $
+	DefaultValue Expression        `json:"defaultValue,omitempty"`
+	Attributes   []*AttributeGroup `json:"attributes,omitempty"` // #[...] attributes
 }
 
 func NewPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly bool, typeHint *TypeHint, defaultValue Expression) *PropertyDeclaration {
@@ -2358,11 +2416,11 @@ func (pd *PropertyDeclaration) String() string {
 // PropertyHook represents a single property hook (get or set)
 type PropertyHook struct {
 	BaseNode
-	Type       string      `json:"type"`         // "get" or "set"
-	Parameter  *Parameter  `json:"parameter,omitempty"` // For set hooks: set(Type $value)
-	Body       Expression  `json:"body,omitempty"`      // For arrow syntax: get => expr
+	Type       string      `json:"type"`                 // "get" or "set"
+	Parameter  *Parameter  `json:"parameter,omitempty"`  // For set hooks: set(Type $value)
+	Body       Expression  `json:"body,omitempty"`       // For arrow syntax: get => expr
 	Statements []Statement `json:"statements,omitempty"` // For block syntax: get { ... }
-	ByRef      bool        `json:"byRef,omitempty"`     // For &get
+	ByRef      bool        `json:"byRef,omitempty"`      // For &get
 }
 
 func NewPropertyHook(pos lexer.Position, hookType string, parameter *Parameter, body Expression, statements []Statement, byRef bool) *PropertyHook {
@@ -2426,13 +2484,13 @@ func (ph *PropertyHook) String() string {
 // HookedPropertyDeclaration represents a property with hooks
 type HookedPropertyDeclaration struct {
 	BaseNode
-	Visibility string          `json:"visibility"`   // private, protected, public
-	Static     bool            `json:"static,omitempty"`       // static
-	ReadOnly   bool            `json:"readOnly,omitempty"`     // readonly
-	Abstract   bool            `json:"abstract,omitempty"`     // abstract (only for hooked properties)
+	Visibility string          `json:"visibility"`         // private, protected, public
+	Static     bool            `json:"static,omitempty"`   // static
+	ReadOnly   bool            `json:"readOnly,omitempty"` // readonly
+	Abstract   bool            `json:"abstract,omitempty"` // abstract (only for hooked properties)
 	Type       *TypeHint       `json:"type,omitempty"`
-	Name       string          `json:"name"`         // Property name without $
-	Hooks      []*PropertyHook `json:"hooks"`        // List of property hooks
+	Name       string          `json:"name"`  // Property name without $
+	Hooks      []*PropertyHook `json:"hooks"` // List of property hooks
 }
 
 func NewHookedPropertyDeclaration(pos lexer.Position, visibility, name string, static, readOnly, abstract bool, typeHint *TypeHint, hooks []*PropertyHook) *HookedPropertyDeclaration {
@@ -2865,14 +2923,14 @@ func (f *ForeachStatement) String() string {
 // SwitchStatement switch 语句
 type SwitchStatement struct {
 	BaseNode
-	Discriminant Expression      `json:"discriminant"`
-	Cases        []*SwitchCase   `json:"cases"`
+	Discriminant Expression    `json:"discriminant"`
+	Cases        []*SwitchCase `json:"cases"`
 }
 
 type SwitchCase struct {
 	BaseNode
-	Test       Expression  `json:"test,omitempty"` // null for default case
-	Body       []Statement `json:"body"`
+	Test Expression  `json:"test,omitempty"` // null for default case
+	Body []Statement `json:"body"`
 }
 
 func NewSwitchStatement(pos lexer.Position, discriminant Expression) *SwitchStatement {
@@ -2985,9 +3043,9 @@ func (sc *SwitchCase) String() string {
 // TryStatement try-catch-finally 语句
 type TryStatement struct {
 	BaseNode
-	Body         []Statement   `json:"body"`
+	Body         []Statement    `json:"body"`
 	CatchClauses []*CatchClause `json:"catchClauses,omitempty"`
-	FinallyBlock []Statement   `json:"finallyBlock,omitempty"`
+	FinallyBlock []Statement    `json:"finallyBlock,omitempty"`
 }
 
 type CatchClause struct {
@@ -3069,14 +3127,14 @@ func (t *TryStatement) String() string {
 		}
 	}
 	result.WriteString("}")
-	
+
 	for _, catch := range t.CatchClauses {
 		if catch != nil {
 			result.WriteString(" ")
 			result.WriteString(catch.String())
 		}
 	}
-	
+
 	if len(t.FinallyBlock) > 0 {
 		result.WriteString(" finally {\n")
 		for _, stmt := range t.FinallyBlock {
@@ -3126,7 +3184,7 @@ func (c *CatchClause) Accept(visitor Visitor) {
 func (c *CatchClause) String() string {
 	var result strings.Builder
 	result.WriteString("catch (")
-	
+
 	// Types
 	var typeStrs []string
 	for _, t := range c.Types {
@@ -3135,13 +3193,13 @@ func (c *CatchClause) String() string {
 		}
 	}
 	result.WriteString(strings.Join(typeStrs, "|"))
-	
+
 	if c.Parameter != nil {
 		result.WriteString(" ")
 		result.WriteString(c.Parameter.String())
 	}
 	result.WriteString(") {\n")
-	
+
 	for _, stmt := range c.Body {
 		if stmt != nil {
 			result.WriteString("  ")
@@ -3499,14 +3557,14 @@ func (n *NewExpression) String() string {
 	if n.Class != nil {
 		class = n.Class.String()
 	}
-	
+
 	var args []string
 	for _, arg := range n.Arguments {
 		if arg != nil {
 			args = append(args, arg.String())
 		}
 	}
-	
+
 	if len(args) > 0 {
 		return "new " + class + "(" + strings.Join(args, ", ") + ")"
 	}
@@ -3710,7 +3768,7 @@ func (ma *MatchArm) String() string {
 	if ma.IsDefault {
 		return "default => " + ma.Body.String()
 	}
-	
+
 	result := ""
 	for i, condition := range ma.Conditions {
 		if i > 0 {
@@ -4362,13 +4420,13 @@ func (le *ListExpression) String() string {
 // AnonymousFunctionExpression 表示匿名函数表达式
 type AnonymousFunctionExpression struct {
 	BaseNode
-	Parameters  []Parameter        `json:"parameters"`
-	Body        []Statement        `json:"body"`
-	UseClause   []Expression       `json:"useClause,omitempty"`
-	ByReference bool               `json:"byReference,omitempty"` // function &() returns by reference
-	Static      bool               `json:"static,omitempty"`      // static function
-	ReturnType  *TypeHint          `json:"returnType,omitempty"`  // : returnType
-	Attributes  []*AttributeGroup  `json:"attributes,omitempty"`  // #[...] attributes
+	Parameters  []Parameter       `json:"parameters"`
+	Body        []Statement       `json:"body"`
+	UseClause   []Expression      `json:"useClause,omitempty"`
+	ByReference bool              `json:"byReference,omitempty"` // function &() returns by reference
+	Static      bool              `json:"static,omitempty"`      // static function
+	ReturnType  *TypeHint         `json:"returnType,omitempty"`  // : returnType
+	Attributes  []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
 }
 
 func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression, byReference bool, static bool, returnType *TypeHint) *AnonymousFunctionExpression {
@@ -4389,23 +4447,23 @@ func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, 
 
 func (afe *AnonymousFunctionExpression) GetChildren() []Node {
 	children := make([]Node, 0, len(afe.Body)+len(afe.UseClause)+1)
-	
+
 	for _, stmt := range afe.Body {
 		if stmt != nil {
 			children = append(children, stmt)
 		}
 	}
-	
+
 	for _, use := range afe.UseClause {
 		if use != nil {
 			children = append(children, use)
 		}
 	}
-	
+
 	if afe.ReturnType != nil {
 		children = append(children, afe.ReturnType)
 	}
-	
+
 	return children
 }
 
@@ -4456,7 +4514,7 @@ func NewTernaryExpression(pos lexer.Position, test, consequent, alternate Expres
 
 func (te *TernaryExpression) GetChildren() []Node {
 	children := make([]Node, 0, 3)
-	
+
 	if te.Test != nil {
 		children = append(children, te.Test)
 	}
@@ -4466,7 +4524,7 @@ func (te *TernaryExpression) GetChildren() []Node {
 	if te.Alternate != nil {
 		children = append(children, te.Alternate)
 	}
-	
+
 	return children
 }
 
@@ -4589,14 +4647,14 @@ func (ce *CaseExpression) String() string {
 // ClassExpression 表示类声明表达式
 type ClassExpression struct {
 	BaseNode
-	Name       Expression         `json:"name"`
-	Final      bool               `json:"final,omitempty"`      // final class
-	ReadOnly   bool               `json:"readOnly,omitempty"`   // readonly class
-	Abstract   bool               `json:"abstract,omitempty"`   // abstract class
-	Extends    Expression         `json:"extends"`
-	Implements []Expression       `json:"implements"`
-	Body       []Statement        `json:"body"`
-	Attributes []*AttributeGroup  `json:"attributes,omitempty"` // class attributes #[Attr]
+	Name       Expression        `json:"name"`
+	Final      bool              `json:"final,omitempty"`    // final class
+	ReadOnly   bool              `json:"readOnly,omitempty"` // readonly class
+	Abstract   bool              `json:"abstract,omitempty"` // abstract class
+	Extends    Expression        `json:"extends"`
+	Implements []Expression      `json:"implements"`
+	Body       []Statement       `json:"body"`
+	Attributes []*AttributeGroup `json:"attributes,omitempty"` // class attributes #[Attr]
 }
 
 func NewClassExpression(pos lexer.Position, name, extends Expression, implements []Expression, final, readOnly, abstract bool) *ClassExpression {
@@ -4661,21 +4719,64 @@ func (ce *ClassExpression) Accept(visitor Visitor) {
 func (ce *ClassExpression) expressionNode() {}
 
 func (ce *ClassExpression) String() string {
-	result := ""
+	var result strings.Builder
+
+	// Attributes
+	for _, attr := range ce.Attributes {
+		if attr != nil {
+			result.WriteString(attr.String())
+			result.WriteString("\n")
+		}
+	}
+
+	// Modifiers
 	if ce.Final {
-		result = "final "
+		result.WriteString("final ")
 	}
 	if ce.ReadOnly {
-		result += "readonly "
+		result.WriteString("readonly ")
 	}
-	result += "class"
+	if ce.Abstract {
+		result.WriteString("abstract ")
+	}
+
+	// Class keyword and name
+	result.WriteString("class")
 	if ce.Name != nil {
-		result += " " + ce.Name.String()
+		result.WriteString(" ")
+		result.WriteString(ce.Name.String())
 	}
+
+	// Extends clause
 	if ce.Extends != nil {
-		result += " extends " + ce.Extends.String()
+		result.WriteString(" extends ")
+		result.WriteString(ce.Extends.String())
 	}
-	return result
+
+	// Implements clause
+	if len(ce.Implements) > 0 {
+		result.WriteString(" implements ")
+		var implements []string
+		for _, impl := range ce.Implements {
+			if impl != nil {
+				implements = append(implements, impl.String())
+			}
+		}
+		result.WriteString(strings.Join(implements, ", "))
+	}
+
+	// Class body
+	result.WriteString(" {\n")
+	for _, stmt := range ce.Body {
+		if stmt != nil {
+			result.WriteString("  ")
+			result.WriteString(stmt.String())
+			result.WriteString("\n")
+		}
+	}
+	result.WriteString("}")
+
+	return result.String()
 }
 
 // ConstExpression 表示常量声明表达式
@@ -4735,12 +4836,12 @@ func (ce *ConstExpression) String() string {
 // ClassConstantDeclaration 类常量声明语句
 type ClassConstantDeclaration struct {
 	BaseNode
-	Visibility string              `json:"visibility"`   // private, protected, public
-	Type       *TypeHint           `json:"type,omitempty"` // PHP 8.3+ typed constants support
-	Constants  []ConstantDeclarator `json:"constants"`    // 支持一行声明多个常量
-	IsFinal    bool                `json:"isFinal,omitempty"`    // final const
-	IsAbstract bool                `json:"isAbstract,omitempty"` // abstract const
-	Attributes []*AttributeGroup   `json:"attributes,omitempty"`   // #[...] attributes
+	Visibility string               `json:"visibility"`           // private, protected, public
+	Type       *TypeHint            `json:"type,omitempty"`       // PHP 8.3+ typed constants support
+	Constants  []ConstantDeclarator `json:"constants"`            // 支持一行声明多个常量
+	IsFinal    bool                 `json:"isFinal,omitempty"`    // final const
+	IsAbstract bool                 `json:"isAbstract,omitempty"` // abstract const
+	Attributes []*AttributeGroup    `json:"attributes,omitempty"` // #[...] attributes
 }
 
 // ConstantDeclarator 单个常量声明
@@ -4890,7 +4991,7 @@ func (ee *EvalExpression) String() string {
 	return "eval()"
 }
 
-// StaticAccessExpression 表示静态访问表达式 Class::method 或 Class::$property  
+// StaticAccessExpression 表示静态访问表达式 Class::method 或 Class::$property
 type StaticAccessExpression struct {
 	BaseNode
 	Class    Expression `json:"class"`
@@ -4938,12 +5039,12 @@ func (sae *StaticAccessExpression) String() string {
 	if sae.Class != nil {
 		class = sae.Class.String()
 	}
-	
+
 	var property string
 	if sae.Property != nil {
 		property = sae.Property.String()
 	}
-	
+
 	return class + "::" + property
 }
 
@@ -5029,7 +5130,6 @@ func (ie *IncludeOrEvalExpression) String() string {
 	}
 }
 
-
 // CloseTagExpression 表示 PHP 结束标签
 type CloseTagExpression struct {
 	BaseNode
@@ -5106,10 +5206,10 @@ func (ne *NamespaceExpression) String() string {
 // AlternativeIfStatement 表示替代语法的if语句 (if: ... endif;)
 type AlternativeIfStatement struct {
 	BaseNode
-	Condition Expression   `json:"condition"`
-	Then      []Statement  `json:"then"`
+	Condition Expression      `json:"condition"`
+	Then      []Statement     `json:"then"`
 	ElseIfs   []*ElseIfClause `json:"elseIfs,omitempty"`
-	Else      []Statement  `json:"else,omitempty"`
+	Else      []Statement     `json:"else,omitempty"`
 }
 
 // ElseIfClause 表示elseif子句
@@ -5674,7 +5774,7 @@ func (ac *AnonymousClass) expressionNode() {}
 func (ac *AnonymousClass) String() string {
 	var out strings.Builder
 	out.WriteString("new class")
-	
+
 	if len(ac.Arguments) > 0 {
 		out.WriteString("(")
 		for i, arg := range ac.Arguments {
@@ -5685,12 +5785,12 @@ func (ac *AnonymousClass) String() string {
 		}
 		out.WriteString(")")
 	}
-	
+
 	if ac.Extends != nil {
 		out.WriteString(" extends ")
 		out.WriteString(ac.Extends.String())
 	}
-	
+
 	if len(ac.Implements) > 0 {
 		out.WriteString(" implements ")
 		for i, impl := range ac.Implements {
@@ -5700,16 +5800,15 @@ func (ac *AnonymousClass) String() string {
 			out.WriteString(impl.String())
 		}
 	}
-	
+
 	out.WriteString(" {\n")
 	for _, stmt := range ac.Body {
 		out.WriteString("  " + stmt.String() + "\n")
 	}
 	out.WriteString("}")
-	
+
 	return out.String()
 }
-
 
 // SpreadExpression 表示展开表达式 (...expr)
 type SpreadExpression struct {
@@ -5720,7 +5819,7 @@ type SpreadExpression struct {
 func NewSpreadExpression(pos lexer.Position, argument Expression) *SpreadExpression {
 	return &SpreadExpression{
 		BaseNode: BaseNode{
-			Kind:     ASTUnpack, // 使用PHP的ZEND_AST_UNPACK 
+			Kind:     ASTUnpack, // 使用PHP的ZEND_AST_UNPACK
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
