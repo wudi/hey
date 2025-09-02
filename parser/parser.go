@@ -378,6 +378,26 @@ func (p *Parser) nextToken() {
 	}
 }
 
+// peekTokenAt 查看指定位置的 token（不跳过任何 token）
+func (p *Parser) peekTokenAt(offset int) lexer.Token {
+	// 保存当前词法分析器状态
+	savedLexer := *p.lexer
+	defer func() {
+		*p.lexer = savedLexer
+	}()
+
+	// 跳过 offset 个 token
+	token := p.peekToken
+	for i := 1; i < offset; i++ {
+		token = p.lexer.NextToken()
+		// 跳过非语法 token
+		for isNonSyntacticToken(token.Type) {
+			token = p.lexer.NextToken()
+		}
+	}
+	return token
+}
+
 // 辅助方法
 
 // currentTokenIs 检查当前 token 是否为指定类型
@@ -1839,12 +1859,139 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 		return nil
 	}
 
-	// 解析命名空间名称
+	// 检查是否是分组使用声明 (use Namespace\{A, B, C})
+	// 需要在解析命名空间名称之前检查，因为分组使用的前缀不是完整的命名空间
+	isGroupedUse := false
+	var prefixParts []string
+	var prefixPos lexer.Position
+
+	if p.currentToken.Type == lexer.T_STRING && p.peekToken.Type == lexer.T_NS_SEPARATOR {
+		nextNext := p.peekTokenAt(2)
+		if nextNext.Type == lexer.TOKEN_LBRACE {
+			// Simple case: use App\{...}
+			isGroupedUse = true
+			prefixParts = []string{p.currentToken.Value}
+			prefixPos = p.currentToken.Position
+		}
+	} else if (p.currentToken.Type == lexer.T_NAME_QUALIFIED || 
+	           p.currentToken.Type == lexer.T_NAME_FULLY_QUALIFIED) && 
+	          p.peekToken.Type == lexer.T_NS_SEPARATOR {
+		nextNext := p.peekTokenAt(2)
+		if nextNext.Type == lexer.TOKEN_LBRACE {
+			// Qualified case: use App\Http\{...}
+			isGroupedUse = true
+			qualifiedName := p.currentToken.Value
+			if strings.HasPrefix(qualifiedName, "\\") {
+				qualifiedName = strings.TrimPrefix(qualifiedName, "\\")
+			}
+			prefixParts = strings.Split(qualifiedName, "\\")
+			// Filter empty parts
+			var filteredParts []string
+			for _, part := range prefixParts {
+				if part != "" {
+					filteredParts = append(filteredParts, part)
+				}
+			}
+			prefixParts = filteredParts
+			prefixPos = p.currentToken.Position
+		}
+	}
+
+	if isGroupedUse {
+		// 这是一个分组使用声明
+		namespaceName := ast.NewNamespaceNameExpression(prefixPos, prefixParts)
+		
+		p.nextToken() // 移动到 \
+		p.nextToken() // 移动到 {
+
+		// 解析分组中的项目
+		for p.peekToken.Type != lexer.TOKEN_RBRACE && p.peekToken.Type != lexer.T_EOF {
+			// 可能有内部的类型修饰符
+			innerUseType := useType
+			if p.peekToken.Type == lexer.T_FUNCTION || p.peekToken.Type == lexer.T_CONST {
+				p.nextToken()
+				innerUseType = p.currentToken.Value
+			}
+
+			// 期望项目名称
+			if !p.expectPeekAny(lexer.T_STRING, lexer.T_NAME_QUALIFIED) {
+				return nil
+			}
+
+			// 解析项目名称
+			itemName := p.currentToken.Value
+			var fullName *ast.NamespaceNameExpression
+			
+			// 构建完整名称 (前缀 + 项目名称)
+			var allParts []string
+			if strings.Contains(itemName, "\\") {
+				// 如果项目本身包含命名空间分隔符
+				itemParts := strings.Split(itemName, "\\")
+				allParts = make([]string, len(namespaceName.Parts)+len(itemParts))
+				copy(allParts, namespaceName.Parts)
+				copy(allParts[len(namespaceName.Parts):], itemParts)
+			} else {
+				// 简单名称
+				allParts = make([]string, len(namespaceName.Parts)+1)
+				copy(allParts, namespaceName.Parts)
+				allParts[len(namespaceName.Parts)] = itemName
+			}
+			fullName = ast.NewNamespaceNameExpression(p.currentToken.Position, allParts)
+
+			// 检查是否有别名
+			var alias string
+			if p.peekToken.Type == lexer.T_AS {
+				p.nextToken() // 移动到 as
+				if !p.expectPeek(lexer.T_STRING) {
+					return nil
+				}
+				alias = p.currentToken.Value
+			}
+
+			// 添加 use 子句
+			stmt.Uses = append(stmt.Uses, ast.UseClause{
+				Name:  fullName,
+				Alias: alias,
+				Type:  innerUseType,
+			})
+
+			// 检查逗号或结束
+			if p.peekToken.Type == lexer.TOKEN_COMMA {
+				p.nextToken() // 移动到逗号
+				// 允许尾随逗号
+				if p.peekToken.Type == lexer.TOKEN_RBRACE {
+					break
+				}
+			} else if p.peekToken.Type == lexer.TOKEN_RBRACE {
+				break
+			} else {
+				p.addError(fmt.Sprintf("expected ',' or '}' in grouped use declaration, got %s", p.peekToken.Type))
+				return nil
+			}
+		}
+
+		// 期望 }
+		if !p.expectPeek(lexer.TOKEN_RBRACE) {
+			return nil
+		}
+
+		// 期望分号
+		if !p.expectPeek(lexer.TOKEN_SEMICOLON) {
+			return nil
+		}
+
+		return stmt
+	}
+
+	// 非分组使用声明 - 解析命名空间名称
 	namespaceName, err := parseUseNamespaceName(p)
 	if err != nil {
 		p.errors = append(p.errors, err.Error())
 		return nil
 	}
+
+
+	// 非分组使用声明 - 原有逻辑
 
 	// 检查是否有别名 (as Alias)
 	var alias string

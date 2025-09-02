@@ -7826,6 +7826,138 @@ use const App\Http\SOME_CONSTANT;
 	}
 }
 
+func TestParsing_GroupedUseStatements(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		expectedErrors int
+		validateFunc   func(t *testing.T, useStmt *ast.UseStatement)
+	}{
+		{
+			name: "Simple grouped use statement",
+			input: `<?php
+use Livewire\{store};
+?>`,
+			expectedErrors: 0,
+			validateFunc: func(t *testing.T, useStmt *ast.UseStatement) {
+				assert.Equal(t, 1, len(useStmt.Uses), "Expected one use clause")
+				assert.Equal(t, []string{"Livewire", "store"}, useStmt.Uses[0].Name.Parts, "Expected namespace parts to match")
+				assert.Equal(t, "", useStmt.Uses[0].Alias, "Expected no alias")
+				assert.Equal(t, "", useStmt.Uses[0].Type, "Expected no type")
+			},
+		},
+		{
+			name: "Multiple grouped functions",
+			input: `<?php
+use function Livewire\{store, trigger, wrap};
+?>`,
+			expectedErrors: 0,
+			validateFunc: func(t *testing.T, useStmt *ast.UseStatement) {
+				assert.Equal(t, 3, len(useStmt.Uses), "Expected three use clauses")
+				assert.Equal(t, []string{"Livewire", "store"}, useStmt.Uses[0].Name.Parts)
+				assert.Equal(t, "function", useStmt.Uses[0].Type)
+				assert.Equal(t, []string{"Livewire", "trigger"}, useStmt.Uses[1].Name.Parts)
+				assert.Equal(t, "function", useStmt.Uses[1].Type)
+				assert.Equal(t, []string{"Livewire", "wrap"}, useStmt.Uses[2].Name.Parts)
+				assert.Equal(t, "function", useStmt.Uses[2].Type)
+			},
+		},
+		{
+			name: "Grouped use with aliases",
+			input: `<?php
+use App\Http\{Request as Req, Response as Resp};
+?>`,
+			expectedErrors: 0,
+			validateFunc: func(t *testing.T, useStmt *ast.UseStatement) {
+				assert.Equal(t, 2, len(useStmt.Uses), "Expected two use clauses")
+				assert.Equal(t, []string{"App", "Http", "Request"}, useStmt.Uses[0].Name.Parts)
+				assert.Equal(t, "Req", useStmt.Uses[0].Alias)
+				assert.Equal(t, []string{"App", "Http", "Response"}, useStmt.Uses[1].Name.Parts)
+				assert.Equal(t, "Resp", useStmt.Uses[1].Alias)
+			},
+		},
+		{
+			name: "Grouped const declarations",
+			input: `<?php
+use const App\{CONST_ONE, CONST_TWO};
+?>`,
+			expectedErrors: 0,
+			validateFunc: func(t *testing.T, useStmt *ast.UseStatement) {
+				assert.Equal(t, 2, len(useStmt.Uses), "Expected two use clauses")
+				assert.Equal(t, []string{"App", "CONST_ONE"}, useStmt.Uses[0].Name.Parts)
+				assert.Equal(t, "const", useStmt.Uses[0].Type)
+				assert.Equal(t, []string{"App", "CONST_TWO"}, useStmt.Uses[1].Name.Parts)
+				assert.Equal(t, "const", useStmt.Uses[1].Type)
+			},
+		},
+		{
+			name: "Grouped use with trailing comma",
+			input: `<?php
+use Laravel\{Http, Database, };
+?>`,
+			expectedErrors: 0,
+			validateFunc: func(t *testing.T, useStmt *ast.UseStatement) {
+				assert.Equal(t, 2, len(useStmt.Uses), "Expected two use clauses")
+				assert.Equal(t, []string{"Laravel", "Http"}, useStmt.Uses[0].Name.Parts)
+				assert.Equal(t, []string{"Laravel", "Database"}, useStmt.Uses[1].Name.Parts)
+			},
+		},
+		{
+			name: "Mixed grouped use with different types",
+			input: `<?php
+use App\{Http, function helper, const CONST_VAL};
+?>`,
+			expectedErrors: 0,
+			validateFunc: func(t *testing.T, useStmt *ast.UseStatement) {
+				assert.Equal(t, 3, len(useStmt.Uses), "Expected three use clauses")
+				assert.Equal(t, []string{"App", "Http"}, useStmt.Uses[0].Name.Parts)
+				assert.Equal(t, "", useStmt.Uses[0].Type, "First should be class")
+				assert.Equal(t, []string{"App", "helper"}, useStmt.Uses[1].Name.Parts)
+				assert.Equal(t, "function", useStmt.Uses[1].Type, "Second should be function")
+				assert.Equal(t, []string{"App", "CONST_VAL"}, useStmt.Uses[2].Name.Parts)
+				assert.Equal(t, "const", useStmt.Uses[2].Type, "Third should be const")
+			},
+		},
+		{
+			name: "Deeply nested namespace grouping",
+			input: `<?php
+use App\Http\Controllers\{UserController, AdminController as Admin};
+?>`,
+			expectedErrors: 0,
+			validateFunc: func(t *testing.T, useStmt *ast.UseStatement) {
+				assert.Equal(t, 2, len(useStmt.Uses), "Expected two use clauses")
+				assert.Equal(t, []string{"App", "Http", "Controllers", "UserController"}, useStmt.Uses[0].Name.Parts)
+				assert.Equal(t, "", useStmt.Uses[0].Alias)
+				assert.Equal(t, []string{"App", "Http", "Controllers", "AdminController"}, useStmt.Uses[1].Name.Parts)
+				assert.Equal(t, "Admin", useStmt.Uses[1].Alias)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			assert.Equal(t, tt.expectedErrors, len(p.Errors()), "Parser errors: %v", p.Errors())
+			assert.NotNil(t, program)
+			assert.Greater(t, len(program.Body), 0, "Expected at least one statement")
+
+			// Check that we have a UseStatement
+			stmt := program.Body[0]
+			useStmt, ok := stmt.(*ast.UseStatement)
+			assert.True(t, ok, "Expected UseStatement, got %T", stmt)
+			assert.Greater(t, len(useStmt.Uses), 0, "Expected at least one use clause")
+
+			// Run the validation function
+			if tt.validateFunc != nil {
+				tt.validateFunc(t, useStmt)
+			}
+		})
+	}
+}
+
 func TestParsing_InterfaceDeclarations(t *testing.T) {
 	tests := []struct {
 		name           string
