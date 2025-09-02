@@ -3696,10 +3696,6 @@ func parseArrayAccess(p *Parser, left ast.Expression) ast.Expression {
 		expr := parseExpression(p, LOWEST)
 		index = &expr
 
-		if p.peekTokenIs(lexer.TOKEN_COMMA) {
-			p.nextToken()
-		}
-
 		if !p.expectPeek(lexer.TOKEN_RBRACKET) {
 			return nil
 		}
