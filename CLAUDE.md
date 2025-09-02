@@ -224,7 +224,20 @@ This is a PHP parser implementation in Go with the following structure:
 
 ## Recent Improvements
 
-**100% WordPress Compatibility (Latest - 2024-12-28):**
+**Array Access and Destructuring Enhancements (Latest - 2025-09-02):**
+- Fixed ending with comma in array access expressions
+- Enhanced array destructuring with trailing comma support in inline HTML context
+- Added support for semi-reserved keywords in union types
+- Comprehensive array destructuring test coverage
+
+**Operator and Expression Support (2025-08-28):**
+- Added `<>` operator support as T_IS_NOT_EQUAL token
+- Semicolon support as case separator in switch statements  
+- Print expression parsing and attribute parsing improvements
+- Multiple class modifier support with any order combinations
+- Enhanced method modifier combinations in any order
+
+**100% WordPress Compatibility (2024-12-28):**
 - Fixed namespace parsing in implements clauses (`class A implements B\C\D`)
 - Added unary plus operator support (`+(expression)`)
 - Successfully parses all 1,648 PHP files in WordPress 6.7.1
