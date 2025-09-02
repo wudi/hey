@@ -4377,6 +4377,238 @@ class TestClass {
 	}
 }
 
+// TestParsing_ReadonlyFunctionParameters tests parsing readonly parameter modifiers in various combinations
+func TestParsing_ReadonlyFunctionParameters(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name: "readonly private parameter - original failing case",
+			input: `<?php
+final class SnapshotRepository
+{
+    public function __construct(
+        readonly private string $testsPath,
+        readonly private string $snapshotsPath,
+    ) {}
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				require.Equal(t, "SnapshotRepository", classExpr.Name.(*ast.IdentifierNode).Name)
+				require.True(t, classExpr.Final)
+				
+				// Check constructor
+				require.Len(t, classExpr.Body, 1)
+				constructor, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				require.Equal(t, "__construct", constructor.Name.(*ast.IdentifierNode).Name)
+				
+				// Check parameters
+				require.Len(t, constructor.Parameters, 2)
+				
+				// First parameter: readonly private string $testsPath
+				param1 := constructor.Parameters[0]
+				assert.Equal(t, "$testsPath", param1.Name)
+				assert.Equal(t, "private", param1.Visibility)
+				assert.True(t, param1.ReadOnly)
+				require.NotNil(t, param1.Type)
+				assert.Equal(t, "string", param1.Type.Name)
+				
+				// Second parameter: readonly private string $snapshotsPath
+				param2 := constructor.Parameters[1]
+				assert.Equal(t, "$snapshotsPath", param2.Name)
+				assert.Equal(t, "private", param2.Visibility)
+				assert.True(t, param2.ReadOnly)
+				require.NotNil(t, param2.Type)
+				assert.Equal(t, "string", param2.Type.Name)
+			},
+		},
+		{
+			name: "readonly parameter variations - all combinations",
+			input: `<?php
+class Test {
+    public function __construct(
+        readonly public string $publicReadonly,
+        public readonly int $readonlyPublic,
+        readonly private bool $privateReadonly,
+        private readonly float $readonlyPrivate,
+        protected readonly string $protectedReadonly,
+        readonly protected array $readonlyProtected,
+        string $normalParam,
+    ) {}
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				
+				// Check constructor
+				constructor, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				// Check parameters
+				require.Len(t, constructor.Parameters, 7)
+				
+				expectedParams := []struct {
+					name       string
+					visibility string
+					readonly   bool
+					typeName   string
+				}{
+					{"$publicReadonly", "public", true, "string"},
+					{"$readonlyPublic", "public", true, "int"},
+					{"$privateReadonly", "private", true, "bool"},
+					{"$readonlyPrivate", "private", true, "float"},
+					{"$protectedReadonly", "protected", true, "string"},
+					{"$readonlyProtected", "protected", true, "array"},
+					{"$normalParam", "", false, "string"},
+				}
+				
+				for i, expected := range expectedParams {
+					param := constructor.Parameters[i]
+					assert.Equal(t, expected.name, param.Name, "Parameter %d name", i)
+					assert.Equal(t, expected.visibility, param.Visibility, "Parameter %d visibility", i)
+					assert.Equal(t, expected.readonly, param.ReadOnly, "Parameter %d readonly", i)
+					require.NotNil(t, param.Type, "Parameter %d type", i)
+					assert.Equal(t, expected.typeName, param.Type.Name, "Parameter %d type name", i)
+				}
+			},
+		},
+		{
+			name: "readonly with nullable types",
+			input: `<?php
+class Test {
+    public function __construct(
+        readonly public ?string $nullableString,
+        private readonly ?array $nullableArray,
+    ) {}
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				
+				constructor, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				require.Len(t, constructor.Parameters, 2)
+				
+				// First parameter: readonly public ?string $nullableString
+				param1 := constructor.Parameters[0]
+				assert.Equal(t, "$nullableString", param1.Name)
+				assert.Equal(t, "public", param1.Visibility)
+				assert.True(t, param1.ReadOnly)
+				require.NotNil(t, param1.Type)
+				assert.Equal(t, "string", param1.Type.Name)
+				assert.True(t, param1.Type.Nullable)
+				
+				// Second parameter: private readonly ?array $nullableArray
+				param2 := constructor.Parameters[1]
+				assert.Equal(t, "$nullableArray", param2.Name)
+				assert.Equal(t, "private", param2.Visibility)
+				assert.True(t, param2.ReadOnly)
+				require.NotNil(t, param2.Type)
+				assert.Equal(t, "array", param2.Type.Name)
+				assert.True(t, param2.Type.Nullable)
+			},
+		},
+		{
+			name: "readonly with union types",
+			input: `<?php
+class Test {
+    public function __construct(
+        readonly public string|int $unionParam,
+        private readonly array|null $unionNullParam,
+    ) {}
+}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				exprStmt, ok := program.Body[0].(*ast.ExpressionStatement)
+				require.True(t, ok)
+				
+				classExpr, ok := exprStmt.Expression.(*ast.ClassExpression)
+				require.True(t, ok)
+				
+				constructor, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				require.Len(t, constructor.Parameters, 2)
+				
+				// First parameter: readonly public string|int $unionParam
+				param1 := constructor.Parameters[0]
+				assert.Equal(t, "$unionParam", param1.Name)
+				assert.Equal(t, "public", param1.Visibility)
+				assert.True(t, param1.ReadOnly)
+				require.NotNil(t, param1.Type)
+				require.NotNil(t, param1.Type.UnionTypes)
+				require.Len(t, param1.Type.UnionTypes, 2)
+				assert.Equal(t, "string", param1.Type.UnionTypes[0].Name)
+				assert.Equal(t, "int", param1.Type.UnionTypes[1].Name)
+				
+				// Second parameter: private readonly array|null $unionNullParam
+				param2 := constructor.Parameters[1]
+				assert.Equal(t, "$unionNullParam", param2.Name)
+				assert.Equal(t, "private", param2.Visibility)
+				assert.True(t, param2.ReadOnly)
+				require.NotNil(t, param2.Type)
+				require.NotNil(t, param2.Type.UnionTypes)
+				require.Len(t, param2.Type.UnionTypes, 2)
+				assert.Equal(t, "array", param2.Type.UnionTypes[0].Name)
+				assert.Equal(t, "null", param2.Type.UnionTypes[1].Name)
+			},
+		},
+		{
+			name: "readonly with reference parameters",
+			input: `<?php
+function test(readonly private array &$refParam) {}`,
+			validate: func(t *testing.T, program *ast.Program) {
+				require.Len(t, program.Body, 1)
+				
+				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
+				require.True(t, ok)
+				
+				require.Len(t, funcDecl.Parameters, 1)
+				
+				param := funcDecl.Parameters[0]
+				assert.Equal(t, "$refParam", param.Name)
+				assert.Equal(t, "private", param.Visibility)
+				assert.True(t, param.ReadOnly)
+				assert.True(t, param.ByReference)
+				require.NotNil(t, param.Type)
+				assert.Equal(t, "array", param.Type.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			checkParserErrors(t, p)
+
+			tt.validate(t, program)
+		})
+	}
+}
+
 // TestParsing_TryCatchWithStatements tests parsing try-catch blocks followed by statements
 func TestParsing_TryCatchWithStatements(t *testing.T) {
 	tests := []struct {

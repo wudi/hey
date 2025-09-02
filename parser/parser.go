@@ -1645,25 +1645,34 @@ func parseParameter(p *Parser) *ast.Parameter {
 	}
 	param.Attributes = attributes
 
-	// 检查可见性修饰符 (public, private, protected, readonly)
-	// 这些通常只在构造函数参数中使用
-	// PHP 8.4 支持多个修饰符：public private(set), protected public(set) 等
+	// 解析所有成员修饰符 (public, private, protected, readonly, static 等)
+	// 根据PHP语法 member_modifier，它们可以以任意顺序出现
+	// 例如: readonly private, private readonly, static public 等
 	var visibilityModifiers []string
-
-	for p.currentToken.Type == lexer.T_PUBLIC || p.currentToken.Type == lexer.T_PRIVATE || p.currentToken.Type == lexer.T_PROTECTED ||
-		p.currentToken.Type == lexer.T_PUBLIC_SET || p.currentToken.Type == lexer.T_PRIVATE_SET || p.currentToken.Type == lexer.T_PROTECTED_SET {
-		visibilityModifiers = append(visibilityModifiers, p.currentToken.Value)
-		p.nextToken()
+	
+	for {
+		switch p.currentToken.Type {
+		case lexer.T_PUBLIC, lexer.T_PRIVATE, lexer.T_PROTECTED,
+			 lexer.T_PUBLIC_SET, lexer.T_PRIVATE_SET, lexer.T_PROTECTED_SET:
+			visibilityModifiers = append(visibilityModifiers, p.currentToken.Value)
+			p.nextToken()
+		case lexer.T_READONLY:
+			param.ReadOnly = true
+			p.nextToken()
+		case lexer.T_STATIC:
+			// 静态修饰符在参数中通常不允许，但为了完整性我们记录它
+			visibilityModifiers = append(visibilityModifiers, p.currentToken.Value)
+			p.nextToken()
+		default:
+			// 不再是修饰符，退出循环
+			goto end_modifiers
+		}
 	}
+	end_modifiers:
 
 	// 合并多个可见性修饰符为单个字符串
 	if len(visibilityModifiers) > 0 {
 		param.Visibility = strings.Join(visibilityModifiers, " ")
-	}
-
-	if p.currentToken.Type == lexer.T_READONLY {
-		param.ReadOnly = true
-		p.nextToken()
 	}
 
 	// 检查是否有类型提示 (including parenthesized intersection types like (A&B)|null)
