@@ -1138,3 +1138,56 @@ func TestLexer_NotEqualOperator(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_BacktickWithCurlyBraces(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           string
+		expectedTokens  []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "Backtick with curly brace interpolation",
+			input: "<?php `{$path} : {$throwable->getMessage()}`; ?>",
+			expectedTokens: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{TOKEN_BACKTICK, "`"},
+				{T_CURLY_OPEN, "{"},
+				{T_VARIABLE, "$path"},
+				{TOKEN_RBRACE, "}"},
+				{T_ENCAPSED_AND_WHITESPACE, " : "},
+				{T_CURLY_OPEN, "{"},
+				{T_VARIABLE, "$throwable"},
+				{T_OBJECT_OPERATOR, "->"},
+				{T_STRING, "getMessage"},
+				{TOKEN_LPAREN, "("},
+				{TOKEN_RPAREN, ")"},
+				{TOKEN_RBRACE, "}"},
+				{TOKEN_BACKTICK, "`"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_CLOSE_TAG, "?>"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := New(tt.input)
+			for i, expected := range tt.expectedTokens {
+				tok := l.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"token %d - expected type %v, got %v (value: %q)",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type], tok.Value)
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"token %d - expected value %q, got %q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}

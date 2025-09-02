@@ -6141,33 +6141,44 @@ func parseShellExecExpression(p *Parser) ast.Expression {
 			// 变量插值
 			variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
 			parts = append(parts, variable)
+			p.nextToken()
 		case lexer.T_ENCAPSED_AND_WHITESPACE:
 			// 命令片段
 			if p.currentToken.Value != "" {
 				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 				parts = append(parts, stringPart)
 			}
+			p.nextToken()
 		case lexer.T_CURLY_OPEN:
 			// {$expression} 形式的复杂表达式
-			p.nextToken() // 跳过 {
+			p.nextToken() // 跳过 T_CURLY_OPEN，现在应该在表达式的第一个token上
+			
+			// 解析大括号内的表达式
 			expr := parseExpression(p, LOWEST)
 			if expr != nil {
 				parts = append(parts, expr)
 			}
-			// 期待右花括号
+			
+			// parseExpression 完成后，需要前进到下一个token
+			p.nextToken()
+			
+			// 现在期望这个token是 }
 			if p.currentToken.Type == lexer.TOKEN_RBRACE {
-				// 已经在正确位置，不需要额外移动
+				p.nextToken() // 跳过 }，继续处理后面的内容
 			} else {
 				p.addError("expected '}' after expression in shell execution")
+				// 尝试恢复，仍然前进
+				p.nextToken()
 			}
+			continue // 避免在switch后再次调用nextToken
 		default:
 			// 其他内容，当作命令片段处理
 			if p.currentToken.Value != "" {
 				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 				parts = append(parts, stringPart)
 			}
+			p.nextToken()
 		}
-		p.nextToken()
 	}
 
 	// 如果没有找到结束的反引号，报错

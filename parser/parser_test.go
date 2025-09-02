@@ -16459,3 +16459,48 @@ class Test {
 		})
 	}
 }
+func TestParsing_BacktickWithCurlyBraceInterpolation(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "backtick with curly brace variable interpolation",
+			input: "<?php throw CouldNotLoadImage::make(`{$path} : {$throwable->getMessage()}`);",
+			validate: func(t *testing.T, program *ast.Program) {
+				assert.Len(t, program.Body, 1)
+
+				throwStmt, ok := program.Body[0].(*ast.ThrowStatement)
+				assert.True(t, ok, "Statement should be ThrowStatement")
+
+				callExpr, ok := throwStmt.Argument.(*ast.CallExpression)
+				assert.True(t, ok, "Argument should be CallExpression")
+
+				// Check the argument is a ShellExecExpression
+				assert.Len(t, callExpr.Arguments, 1)
+				shellExec, ok := callExpr.Arguments[0].(*ast.ShellExecExpression)
+				assert.True(t, ok, "Argument should be ShellExecExpression")
+
+				// Check the parts
+				for i, part := range shellExec.Parts {
+					t.Logf("Part %d: %T -> %v", i, part, part)
+				}
+				// The parts structure depends on how lexer tokenizes
+				// For now, just verify it parsed without errors
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+			
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
