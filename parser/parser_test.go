@@ -91,6 +91,94 @@ func TestParsing_EchoMultipleArguments(t *testing.T) {
 	}
 }
 
+func TestParsing_EchoWithoutSemicolon(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected interface{}
+	}{
+		{
+			name:     "Simple string echo without semicolon",
+			input:    `<?php echo 'hello' ?>`,
+			expected: "hello",
+		},
+		{
+			name:     "Variable echo without semicolon", 
+			input:    `<?php echo $var ?>`,
+			expected: "$var",
+		},
+		{
+			name:     "Ternary expression echo without semicolon",
+			input:    `<?php echo $active_frames_tab == 'application' ? 'frames-container-application' : '' ?>`,
+			expected: "ternary",
+		},
+		{
+			name:     "Multiple arguments echo without semicolon",
+			input:    `<?php echo 'Hello', ' ', 'World' ?>`,
+			expected: []string{"Hello", " ", "World"},
+		},
+		{
+			name:     "Complex expression echo without semicolon",
+			input:    `<?php echo $a + $b * 2 ?>`,
+			expected: "binary_expression",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			assert.Len(t, program.Body, 1)
+
+			stmt := program.Body[0]
+			echoStmt, ok := stmt.(*ast.EchoStatement)
+			assert.True(t, ok, "Statement should be EchoStatement")
+
+			switch tt.expected {
+			case "hello":
+				assert.Len(t, echoStmt.Arguments, 1)
+				stringLit, ok := echoStmt.Arguments[0].(*ast.StringLiteral)
+				assert.True(t, ok, "Argument should be StringLiteral")
+				assert.Equal(t, "hello", stringLit.Value)
+				
+			case "$var":
+				assert.Len(t, echoStmt.Arguments, 1)
+				variable, ok := echoStmt.Arguments[0].(*ast.Variable)
+				assert.True(t, ok, "Argument should be Variable")
+				assert.Equal(t, "$var", variable.Name)
+				
+			case "ternary":
+				assert.Len(t, echoStmt.Arguments, 1)
+				ternary, ok := echoStmt.Arguments[0].(*ast.TernaryExpression)
+				assert.True(t, ok, "Argument should be TernaryExpression")
+				assert.NotNil(t, ternary.Test)
+				assert.NotNil(t, ternary.Consequent) 
+				assert.NotNil(t, ternary.Alternate)
+				
+			case "binary_expression":
+				assert.Len(t, echoStmt.Arguments, 1)
+				binary, ok := echoStmt.Arguments[0].(*ast.BinaryExpression)
+				assert.True(t, ok, "Argument should be BinaryExpression")
+				assert.Equal(t, "+", binary.Operator)
+				
+			default:
+				if args, ok := tt.expected.([]string); ok {
+					assert.Len(t, echoStmt.Arguments, len(args))
+					for i, expectedValue := range args {
+						stringLit, ok := echoStmt.Arguments[i].(*ast.StringLiteral)
+						assert.True(t, ok, "Argument %d should be StringLiteral", i)
+						assert.Equal(t, expectedValue, stringLit.Value)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestParsing_BitwiseOperators(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -26,6 +26,14 @@ type Lexer struct {
 	errors []string // 错误列表
 }
 
+// GetRemainingInput 返回从当前位置开始的剩余输入
+func (l *Lexer) GetRemainingInput() string {
+	if l.position >= len(l.input) {
+		return ""
+	}
+	return l.input[l.position:]
+}
+
 // New 创建新的词法分析器
 func New(input string) *Lexer {
 	l := &Lexer{

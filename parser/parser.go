@@ -290,9 +290,9 @@ func isNonSyntacticToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
 	case lexer.T_COMMENT,
 		lexer.T_DOC_COMMENT,
-		lexer.T_OPEN_TAG,
-		lexer.T_CLOSE_TAG:
+		lexer.T_OPEN_TAG:
 		// 注释token在语法解析中无意义，但保留在token流中供工具使用
+		// 注意：T_CLOSE_TAG不应该被跳过，因为它在语句结束时有语法意义
 		return true
 	default:
 		return false
@@ -879,6 +879,9 @@ func parseStatement(p *Parser) ast.Statement {
 			return ast.NewLabelStatement(pos, name)
 		}
 		return parseExpressionStatement(p)
+	case lexer.T_CLOSE_TAG:
+		// T_CLOSE_TAG should be handled by the main parsing loop, not as a statement
+		return nil
 	default:
 		return parseExpressionStatement(p)
 	}
