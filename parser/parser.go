@@ -143,7 +143,6 @@ func init() {
 		lexer.TOKEN_LBRACE:               parseCurlyBraceExpression,
 		lexer.T_ARRAY:                    parseArrayExpression,
 		lexer.T_INLINE_HTML:              parseInlineHTML,
-		lexer.T_OPEN_TAG:                 parseOpenTag,
 		lexer.T_COMMENT:                  parseComment,
 		lexer.T_DOC_COMMENT:              parseDocBlockComment,
 		lexer.T_START_HEREDOC:            parseHeredoc,
@@ -169,7 +168,6 @@ func init() {
 		lexer.T_REQUIRE_ONCE:             parseIncludeOrEvalExpression,
 		lexer.T_STATIC:                   parseStaticOrArrowFunctionExpression,
 		lexer.T_ABSTRACT:                 parseAbstractExpression,
-		lexer.T_CLOSE_TAG:                parseCloseTagExpression,
 		lexer.T_NS_SEPARATOR:             parseNamespaceExpression,
 		lexer.T_ELSEIF:                   parseFallback,
 		lexer.T_ELSE:                     parseFallback,
@@ -291,7 +289,9 @@ type InfixParseFn func(*Parser, ast.Expression) ast.Expression
 func isNonSyntacticToken(tokenType lexer.TokenType) bool {
 	switch tokenType {
 	case lexer.T_COMMENT,
-		lexer.T_DOC_COMMENT:
+		lexer.T_DOC_COMMENT,
+		lexer.T_OPEN_TAG,
+		lexer.T_CLOSE_TAG:
 		// 注释token在语法解析中无意义，但保留在token流中供工具使用
 		return true
 	default:
@@ -375,16 +375,6 @@ func (p *Parser) nextToken() {
 	// 自动跳过语法解析中无意义的token (仅对peekToken)
 	for isNonSyntacticToken(p.peekToken.Type) {
 		p.peekToken = p.lexer.NextToken()
-	}
-	
-	// 如果currentToken是注释，继续前进直到找到有意义的token
-	for isNonSyntacticToken(p.currentToken.Type) {
-		p.currentToken = p.peekToken
-		p.peekToken = p.lexer.NextToken()
-		// 继续跳过peekToken中的注释
-		for isNonSyntacticToken(p.peekToken.Type) {
-			p.peekToken = p.lexer.NextToken()
-		}
 	}
 }
 
@@ -627,7 +617,7 @@ func parseUnionType(p *Parser, firstType *ast.TypeHint) *ast.TypeHint {
 		} else if isTypeToken(p.currentToken.Type) {
 			typeHint = ast.NewSimpleTypeHint(p.currentToken.Position, p.currentToken.Value, nullable)
 		} else {
-			p.errors = append(p.errors, fmt.Sprintf("expected type name in union type, got `%s` instead", p.currentToken.Value))
+			p.addError(fmt.Sprintf("expected type name, got `%s` instead", p.currentToken.Value))
 			return nil
 		}
 
@@ -736,11 +726,6 @@ func parseComplexTypeHint(p *Parser) *ast.TypeHint {
 func (p *Parser) ParseProgram() *ast.Program {
 	program := ast.NewProgram(p.currentToken.Position)
 
-	// 跳过 PHP 开始标签
-	if p.currentToken.Type == lexer.T_OPEN_TAG {
-		p.nextToken()
-	}
-
 	for !p.isAtEnd() {
 		// Handle T_CLOSE_TAG: just skip it and continue parsing
 		if p.currentToken.Type == lexer.T_CLOSE_TAG {
@@ -756,12 +741,6 @@ func (p *Parser) ParseProgram() *ast.Program {
 				// Wrap inline HTML as an expression statement
 				program.Body = append(program.Body, ast.NewExpressionStatement(htmlExpr.(*ast.StringLiteral).Position, htmlExpr))
 			}
-			p.nextToken()
-			continue
-		}
-
-		// Skip T_OPEN_TAG tokens in the middle of the program
-		if p.currentToken.Type == lexer.T_OPEN_TAG {
 			p.nextToken()
 			continue
 		}
@@ -1075,18 +1054,13 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 			return nil
 		}
 		p.nextToken()
-		
-		// Skip T_OPEN_TAG tokens in alternative syntax blocks
-		for p.currentToken.Type == lexer.T_OPEN_TAG {
-			p.nextToken()
-		}
-		
+
 		// Check if we've reached a control token after skipping open tags
 		if p.currentToken.Type == lexer.T_ELSEIF || p.currentToken.Type == lexer.T_ELSE || p.currentToken.Type == lexer.T_ENDIF {
 			// We've reached the end of this block, back up one token
 			break
 		}
-		
+
 		if stmt := parseStatement(p); stmt != nil {
 			altIfStmt.Then = append(altIfStmt.Then, stmt)
 		}
@@ -2634,16 +2608,11 @@ func parseBlockStatement(p *Parser) *ast.BlockStatement {
 	p.nextToken() // 跳过 {
 
 	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
-		// Skip T_OPEN_TAG tokens - they're just PHP mode markers, not statements
-		for p.currentToken.Type == lexer.T_OPEN_TAG {
-			p.nextToken()
-		}
-		
 		// Check again after skipping open tags
 		if p.currentTokenIs(lexer.TOKEN_RBRACE) || p.isAtEnd() {
 			break
 		}
-		
+
 		stmt := parseStatement(p)
 		if stmt != nil {
 			block.Body = append(block.Body, stmt)
@@ -2701,7 +2670,7 @@ func parseExpression(p *Parser, precedence Precedence) ast.Expression {
 
 	leftExp := prefix(p)
 
-	for p.peekToken.Type != lexer.TOKEN_SEMICOLON && p.peekToken.Type != lexer.T_OPEN_TAG && precedence < p.peekPrecedence() {
+	for p.peekToken.Type != lexer.TOKEN_SEMICOLON && precedence < p.peekPrecedence() {
 		infix := globalInfixParseFns[p.peekToken.Type]
 		if infix == nil {
 			return leftExp
@@ -2968,12 +2937,6 @@ func parseNamedArgument(p *Parser) ast.Expression {
 // parseInlineHTML 解析内联HTML
 func parseInlineHTML(p *Parser) ast.Expression {
 	// 对于内联HTML，创建一个特殊的字面量表达式
-	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
-}
-
-// parseOpenTag 解析PHP开放标签
-func parseOpenTag(p *Parser) ast.Expression {
-	// PHP开放标签通常不作为表达式使用，但为了完整性，创建一个特殊节点
 	return ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 }
 
@@ -3732,6 +3695,10 @@ func parseArrayAccess(p *Parser, left ast.Expression) ast.Expression {
 	if p.currentToken.Type != lexer.TOKEN_RBRACKET {
 		expr := parseExpression(p, LOWEST)
 		index = &expr
+
+		if p.peekTokenIs(lexer.TOKEN_COMMA) {
+			p.nextToken()
+		}
 
 		if !p.expectPeek(lexer.TOKEN_RBRACKET) {
 			return nil
@@ -5137,7 +5104,7 @@ func parseStaticVisibilityDeclaration(p *Parser) ast.Statement {
 		// static visibility final function - set current token back to static and delegate to parseFunctionDeclaration
 		// which can handle the full modifier sequence
 		p.currentToken.Type = lexer.T_STATIC
-		p.currentToken.Value = "static"  
+		p.currentToken.Value = "static"
 		p.currentToken.Position = pos
 		return parseFunctionDeclaration(p)
 	} else {
@@ -6351,15 +6318,6 @@ func parseThrowExpression(p *Parser) ast.Expression {
 	return ast.NewThrowExpression(pos, expr)
 }
 
-// parseCloseTagExpression 解析 PHP 结束标签
-func parseCloseTagExpression(p *Parser) ast.Expression {
-	pos := p.currentToken.Position
-	content := p.currentToken.Value
-
-	// 结束标签后可能有HTML内容
-	return ast.NewCloseTagExpression(pos, content)
-}
-
 // parseNamespaceExpression 解析命名空间表达式（以 \ 开始）
 func parseNamespaceExpression(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
@@ -6881,24 +6839,24 @@ func willBeClassDeclaration(p *Parser) bool {
 	if p.peekToken.Type == lexer.T_CLASS {
 		return true
 	}
-	
+
 	// If peek token is another class modifier, we might have "final readonly class" scenario
 	if isClassModifier(p.peekToken.Type) {
 		// We need to look further ahead. For now, let's assume it will be a class declaration
 		// This is a simplified implementation - we could improve this with proper lookahead
 		return true
 	}
-	
+
 	return false
 }
 
 // parseClassDeclarationWithModifiers parses a class declaration that starts with modifiers
 func parseClassDeclarationWithModifiers(p *Parser) ast.Statement {
 	pos := p.currentToken.Position
-	
+
 	// Parse class modifiers
 	var isFinal, isReadOnly, isAbstract bool
-	
+
 	for isClassModifier(p.currentToken.Type) {
 		switch p.currentToken.Type {
 		case lexer.T_FINAL:
@@ -6908,29 +6866,29 @@ func parseClassDeclarationWithModifiers(p *Parser) ast.Statement {
 		case lexer.T_ABSTRACT:
 			isAbstract = true
 		}
-		
+
 		// Move to next token
 		p.nextToken()
 	}
-	
+
 	// Now we should be at T_CLASS
 	if p.currentToken.Type != lexer.T_CLASS {
 		p.addError(fmt.Sprintf("expected `T_CLASS`, got `%s` instead", p.currentToken.Type))
 		return nil
 	}
-	
+
 	// Move to class name
 	p.nextToken()
-	
+
 	// Parse class name
 	if p.currentToken.Type != lexer.T_STRING && !isSemiReserved(p.currentToken.Type) {
 		p.addError("expected class name, got " + p.currentToken.Value)
 		return nil
 	}
-	
+
 	name := ast.NewIdentifierNode(p.currentToken.Position, p.currentToken.Value)
 	class := ast.NewClassExpression(pos, name, nil, nil, isFinal, isReadOnly, isAbstract)
-	
+
 	// Check for extends clause
 	if p.peekToken.Type == lexer.T_EXTENDS {
 		p.nextToken() // move to extends
@@ -6943,14 +6901,14 @@ func parseClassDeclarationWithModifiers(p *Parser) ast.Statement {
 		extends := ast.NewIdentifierNode(p.currentToken.Position, className)
 		class.Extends = extends
 	}
-	
+
 	// Check for implements clause
 	if p.peekToken.Type == lexer.T_IMPLEMENTS {
 		p.nextToken() // move to implements
-		
+
 		var implementsList []ast.Expression
 		p.nextToken() // move to first interface name
-		
+
 		for {
 			className, err := parseClassName(p)
 			if err != nil {
@@ -6959,7 +6917,7 @@ func parseClassDeclarationWithModifiers(p *Parser) ast.Statement {
 			}
 			implementsInterface := ast.NewIdentifierNode(p.currentToken.Position, className)
 			implementsList = append(implementsList, implementsInterface)
-			
+
 			// Check if there are more interfaces
 			if p.peekToken.Type == lexer.TOKEN_COMMA {
 				p.nextToken() // move to comma
@@ -6970,12 +6928,12 @@ func parseClassDeclarationWithModifiers(p *Parser) ast.Statement {
 		}
 		class.Implements = implementsList
 	}
-	
+
 	// Parse class body
 	if !p.expectPeek(lexer.TOKEN_LBRACE) {
 		return nil
 	}
-	
+
 	// Enter class body
 	p.nextToken()
 	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
@@ -6985,6 +6943,6 @@ func parseClassDeclarationWithModifiers(p *Parser) ast.Statement {
 		}
 		p.nextToken()
 	}
-	
+
 	return ast.NewExpressionStatement(pos, class)
 }
