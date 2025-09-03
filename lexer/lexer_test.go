@@ -1742,3 +1742,91 @@ func TestLexer_TypeCasts(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_MagicConstantsCaseInsensitive(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "lowercase magic constants",
+			input: `<?php __file__ __line__ __class__ __method__ __function__ __trait__ __dir__ __namespace__ __property__`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_FILE, "__file__"},
+				{T_LINE, "__line__"},
+				{T_CLASS_C, "__class__"},
+				{T_METHOD_C, "__method__"},
+				{T_FUNC_C, "__function__"},
+				{T_TRAIT_C, "__trait__"},
+				{T_DIR, "__dir__"},
+				{T_NS_C, "__namespace__"},
+				{T_PROPERTY_C, "__property__"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "uppercase magic constants",
+			input: `<?php __FILE__ __LINE__ __CLASS__ __METHOD__ __FUNCTION__ __TRAIT__ __DIR__ __NAMESPACE__ __PROPERTY__`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_FILE, "__FILE__"},
+				{T_LINE, "__LINE__"},
+				{T_CLASS_C, "__CLASS__"},
+				{T_METHOD_C, "__METHOD__"},
+				{T_FUNC_C, "__FUNCTION__"},
+				{T_TRAIT_C, "__TRAIT__"},
+				{T_DIR, "__DIR__"},
+				{T_NS_C, "__NAMESPACE__"},
+				{T_PROPERTY_C, "__PROPERTY__"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed case magic constants",
+			input: `<?php __File__ __Line__ __Class__ __Method__ __Function__ __Trait__ __Dir__ __Namespace__ __Property__`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_FILE, "__File__"},
+				{T_LINE, "__Line__"},
+				{T_CLASS_C, "__Class__"},
+				{T_METHOD_C, "__Method__"},
+				{T_FUNC_C, "__Function__"},
+				{T_TRAIT_C, "__Trait__"},
+				{T_DIR, "__Dir__"},
+				{T_NS_C, "__Namespace__"},
+				{T_PROPERTY_C, "__Property__"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - token type wrong. expected=%s, got=%s",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
