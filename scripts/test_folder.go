@@ -70,11 +70,6 @@ func main() {
 
 			mu.Lock()
 			results = append(results, result)
-			if !result.Success {
-				fmt.Printf("FAIL: %s - %s\n", result.File, result.Error)
-			} else {
-				fmt.Printf("OK:   %s (%d tokens)\n", result.File, result.Tokens)
-			}
 			mu.Unlock()
 		}(file)
 	}
