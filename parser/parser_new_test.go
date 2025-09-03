@@ -38,6 +38,98 @@ func TestBasic_EchoStatement(t *testing.T) {
 		Run(t)
 }
 
+// TestBasic_EchoWithoutSemicolon echo语句无分号测试
+func TestBasic_EchoWithoutSemicolon(t *testing.T) {
+	suite := testutils.NewTestSuiteBuilder("EchoWithoutSemicolon", createParserFactory())
+	
+	suite.
+		AddSimple("simple_string_echo", `<?php echo 'hello' ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				echoStmt := assertions.AssertEchoStatement(body[0], 1)
+				assertions.AssertStringLiteral(echoStmt.Arguments.Arguments[0], "hello", "'hello'")
+			}).
+		AddSimple("variable_echo", `<?php echo $var ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				echoStmt := assertions.AssertEchoStatement(body[0], 1)
+				assertions.AssertVariable(echoStmt.Arguments.Arguments[0], "$var")
+			}).
+		AddSimple("ternary_expression_echo", `<?php echo $active_frames_tab == 'application' ? 'frames-container-application' : '' ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				echoStmt := assertions.AssertEchoStatement(body[0], 1)
+				assertions.AssertTernaryExpression(echoStmt.Arguments.Arguments[0])
+			}).
+		AddSimple("multiple_arguments_echo", `<?php echo 'Hello', ' ', 'World' ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				echoStmt := assertions.AssertEchoStatement(body[0], 3)
+				assertions.AssertStringLiteral(echoStmt.Arguments.Arguments[0], "Hello", "'Hello'")
+				assertions.AssertStringLiteral(echoStmt.Arguments.Arguments[1], " ", "' '")
+				assertions.AssertStringLiteral(echoStmt.Arguments.Arguments[2], "World", "'World'")
+			}).
+		AddSimple("complex_expression_echo", `<?php echo $a + $b * 2 ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				echoStmt := assertions.AssertEchoStatement(body[0], 1)
+				assertions.AssertBinaryExpression(echoStmt.Arguments.Arguments[0], "+")
+			}).
+		Run(t)
+}
+
+// TestBasic_FloatLiteralEdgeCases 浮点数字面量边界情况测试
+func TestBasic_FloatLiteralEdgeCases(t *testing.T) {
+	suite := testutils.NewTestSuiteBuilder("FloatLiteralEdgeCases", createParserFactory())
+	
+	suite.
+		AddSimple("float_ending_with_decimal", `<?php $x = 1.; ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				exprStmt := assertions.AssertExpressionStatement(body[0])
+				assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
+				assertions.AssertVariable(assignment.Left, "$x")
+				assertions.AssertNumberLiteral(assignment.Right, "1.")
+			}).
+		AddSimple("float_with_zero_decimal", `<?php $x = 1.0; ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				exprStmt := assertions.AssertExpressionStatement(body[0])
+				assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
+				assertions.AssertVariable(assignment.Left, "$x")
+				assertions.AssertNumberLiteral(assignment.Right, "1.0")
+			}).
+		AddSimple("float_in_array_context", `<?php $arr = [1., 1.0, 1.23]; ?>`,
+			func(ctx *testutils.TestContext) {
+				assertions := testutils.NewASTAssertions(ctx.T)
+				body := assertions.AssertProgramBody(ctx.Program, 1)
+				
+				exprStmt := assertions.AssertExpressionStatement(body[0])
+				assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
+				assertions.AssertVariable(assignment.Left, "$arr")
+				
+				arrayExpr := assertions.AssertArray(assignment.Right, 3)
+				assertions.AssertNumberLiteral(arrayExpr.Elements[0], "1.")
+				assertions.AssertNumberLiteral(arrayExpr.Elements[1], "1.0")
+				assertions.AssertNumberLiteral(arrayExpr.Elements[2], "1.23")
+			}).
+		Run(t)
+}
+
 // TestBasic_BinaryExpressions 基础二元表达式测试
 func TestBasic_BinaryExpressions(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("BinaryExpressions", createParserFactory())
