@@ -61,7 +61,7 @@ func TestParsing_EchoStatement(t *testing.T) {
 
 	assert.Len(t, echoStmt.Arguments.Arguments, 1)
 
-	stringLit, ok := echoStmt.Arguments[0].(*ast.StringLiteral)
+	stringLit, ok := echoStmt.Arguments.Arguments[0].(*ast.StringLiteral)
 	assert.True(t, ok, "Argument should be StringLiteral")
 	assert.Equal(t, "Hello, World!", stringLit.Value)
 }
@@ -141,19 +141,19 @@ func TestParsing_EchoWithoutSemicolon(t *testing.T) {
 			switch tt.expected {
 			case "hello":
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				stringLit, ok := echoStmt.Arguments[0].(*ast.StringLiteral)
+				stringLit, ok := echoStmt.Arguments.Arguments[0].(*ast.StringLiteral)
 				assert.True(t, ok, "Argument should be StringLiteral")
 				assert.Equal(t, "hello", stringLit.Value)
 				
 			case "$var":
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				variable, ok := echoStmt.Arguments[0].(*ast.Variable)
+				variable, ok := echoStmt.Arguments.Arguments[0].(*ast.Variable)
 				assert.True(t, ok, "Argument should be Variable")
 				assert.Equal(t, "$var", variable.Name)
 				
 			case "ternary":
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				ternary, ok := echoStmt.Arguments[0].(*ast.TernaryExpression)
+				ternary, ok := echoStmt.Arguments.Arguments[0].(*ast.TernaryExpression)
 				assert.True(t, ok, "Argument should be TernaryExpression")
 				assert.NotNil(t, ternary.Test)
 				assert.NotNil(t, ternary.Consequent) 
@@ -161,7 +161,7 @@ func TestParsing_EchoWithoutSemicolon(t *testing.T) {
 				
 			case "binary_expression":
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				binary, ok := echoStmt.Arguments[0].(*ast.BinaryExpression)
+				binary, ok := echoStmt.Arguments.Arguments[0].(*ast.BinaryExpression)
 				assert.True(t, ok, "Argument should be BinaryExpression")
 				assert.Equal(t, "+", binary.Operator)
 				
@@ -169,7 +169,7 @@ func TestParsing_EchoWithoutSemicolon(t *testing.T) {
 				if args, ok := tt.expected.([]string); ok {
 					assert.Len(t, echoStmt.Arguments.Arguments, len(args))
 					for i, expectedValue := range args {
-						stringLit, ok := echoStmt.Arguments[i].(*ast.StringLiteral)
+						stringLit, ok := echoStmt.Arguments.Arguments[i].(*ast.StringLiteral)
 						assert.True(t, ok, "Argument %d should be StringLiteral", i)
 						assert.Equal(t, expectedValue, stringLit.Value)
 					}
@@ -295,7 +295,7 @@ func TestParsing_BitwiseOperators(t *testing.T) {
 					assert.Equal(t, tt.expected["callee"], callee.Name)
 
 					require.Len(t, call.Arguments.Arguments, 1)
-					arg := call.Arguments[0]
+					arg := call.Arguments.Arguments[0]
 
 					binary, ok := arg.(*ast.BinaryExpression)
 					require.True(t, ok, "Argument should be BinaryExpression")
@@ -705,7 +705,7 @@ func TestParsing_IfStatement(t *testing.T) {
 	assert.True(t, ok, "Consequent should contain EchoStatement")
 
 	assert.Len(t, echoStmt.Arguments.Arguments, 1)
-	stringLit, ok := echoStmt.Arguments[0].(*ast.StringLiteral)
+	stringLit, ok := echoStmt.Arguments.Arguments[0].(*ast.StringLiteral)
 	assert.True(t, ok, "Echo argument should be StringLiteral")
 	assert.Equal(t, "big", stringLit.Value)
 }
@@ -733,7 +733,7 @@ func TestParsing_IfElseStatement(t *testing.T) {
 	echoStmt, ok := ifStmt.Alternate[0].(*ast.EchoStatement)
 	assert.True(t, ok, "Alternate should contain EchoStatement")
 
-	stringLit, ok := echoStmt.Arguments[0].(*ast.StringLiteral)
+	stringLit, ok := echoStmt.Arguments.Arguments[0].(*ast.StringLiteral)
 	assert.True(t, ok, "Echo argument should be StringLiteral")
 	assert.Equal(t, "small", stringLit.Value)
 }
@@ -898,39 +898,39 @@ function func_name(
 	assert.Equal(t, "func_name", identifier.Name)
 
 	// 检查参数
-	assert.Len(t, funcDecl.Parameters, 5)
+	assert.Len(t, funcDecl.Parameters.Parameters, 5)
 
 	// 第一个参数: string $commandline
 	param1 := funcDecl.Parameters.Parameters[0]
-	assert.Equal(t, "$commandline", param1.Name)
+	assert.Equal(t, "$commandline", param1.Name.(*ast.IdentifierNode).Name)
 	assert.NotNil(t, param1.Type)
 	assert.Equal(t, "string", param1.Type.String())
 	assert.Nil(t, param1.DefaultValue)
 
 	// 第二个参数: ?array $env = null
 	param2 := funcDecl.Parameters.Parameters[1]
-	assert.Equal(t, "$env", param2.Name)
+	assert.Equal(t, "$env", param2.Name.(*ast.IdentifierNode).Name)
 	assert.NotNil(t, param2.Type)
 	assert.Equal(t, "?array", param2.Type.String())
 	assert.NotNil(t, param2.DefaultValue)
 
 	// 第三个参数: ?string $stdin = null
 	param3 := funcDecl.Parameters.Parameters[2]
-	assert.Equal(t, "$stdin", param3.Name)
+	assert.Equal(t, "$stdin", param3.Name.(*ast.IdentifierNode).Name)
 	assert.NotNil(t, param3.Type)
 	assert.Equal(t, "?string", param3.Type.String())
 	assert.NotNil(t, param3.DefaultValue)
 
 	// 第四个参数: bool $captureStdIn = true
 	param4 := funcDecl.Parameters.Parameters[3]
-	assert.Equal(t, "$captureStdIn", param4.Name)
+	assert.Equal(t, "$captureStdIn", param4.Name.(*ast.IdentifierNode).Name)
 	assert.NotNil(t, param4.Type)
 	assert.Equal(t, "bool", param4.Type.String())
 	assert.NotNil(t, param4.DefaultValue)
 
 	// 第五个参数: bool $captureStdErr = true
 	param5 := funcDecl.Parameters.Parameters[4]
-	assert.Equal(t, "$captureStdErr", param5.Name)
+	assert.Equal(t, "$captureStdErr", param5.Name.(*ast.IdentifierNode).Name)
 	assert.NotNil(t, param5.Type)
 	assert.Equal(t, "bool", param5.Type.String())
 	assert.NotNil(t, param5.DefaultValue)
@@ -1041,14 +1041,20 @@ func TestParsing_FunctionReturnTypes(t *testing.T) {
 			assert.True(t, ok, "Statement should be FunctionDeclaration")
 
 			// Check parameters
-			assert.Len(t, funcDecl.Parameters, len(tt.expectedParams))
-			for i, expected := range tt.expectedParams {
-				assert.Equal(t, expected.name, funcDecl.Parameters.Parameters[i].Name.(*ast.IdentifierNode).Name, "Parameter %d name mismatch", i)
-				if expected.typ != "" {
-					assert.NotNil(t, funcDecl.Parameters.Parameters[i].Type, "Parameter %d should have a type", i)
-					assert.Equal(t, expected.typ, funcDecl.Parameters.Parameters[i].Type.String(), "Parameter %d type mismatch", i)
-				} else {
-					assert.Nil(t, funcDecl.Parameters.Parameters[i].Type, "Parameter %d should not have a type", i)
+			if funcDecl.Parameters != nil {
+				assert.Len(t, funcDecl.Parameters.Parameters, len(tt.expectedParams))
+			} else {
+				assert.Equal(t, 0, len(tt.expectedParams), "Expected no parameters but got nil")
+			}
+			if funcDecl.Parameters != nil {
+				for i, expected := range tt.expectedParams {
+					assert.Equal(t, expected.name, funcDecl.Parameters.Parameters[i].Name.(*ast.IdentifierNode).Name, "Parameter %d name mismatch", i)
+					if expected.typ != "" {
+						assert.NotNil(t, funcDecl.Parameters.Parameters[i].Type, "Parameter %d should have a type", i)
+						assert.Equal(t, expected.typ, funcDecl.Parameters.Parameters[i].Type.String(), "Parameter %d type mismatch", i)
+					} else {
+						assert.Nil(t, funcDecl.Parameters.Parameters[i].Type, "Parameter %d should not have a type", i)
+					}
 				}
 			}
 
@@ -2008,10 +2014,10 @@ register_post_type(
 				assert.Equal(t, "register_post_type", identifier.Name)
 
 				// Check arguments count
-				require.Len(t, callExpr.Arguments, 2)
+				require.Len(t, callExpr.Arguments.Arguments, 2)
 
 				// First argument: self::POST_TYPE
-				classConstExpr, ok := callExpr.Arguments[0].(*ast.ClassConstantAccessExpression)
+				classConstExpr, ok := callExpr.Arguments.Arguments[0].(*ast.ClassConstantAccessExpression)
 				require.True(t, ok, "First argument should be ClassConstantAccessExpression")
 
 				// Check self part
@@ -2025,7 +2031,7 @@ register_post_type(
 				assert.Equal(t, "POST_TYPE", postTypeIdent.Name)
 
 				// Second argument: array(...)
-				arrayExpr, ok := callExpr.Arguments[1].(*ast.ArrayExpression)
+				arrayExpr, ok := callExpr.Arguments.Arguments[1].(*ast.ArrayExpression)
 				require.True(t, ok, "Second argument should be ArrayExpression")
 				require.Len(t, arrayExpr.Elements, 3) // capabilities, map_meta_cap, supports
 
@@ -2204,10 +2210,12 @@ PHP); ?>`,
 
 			// 检查参数数量
 			if tt.argCount == 0 {
-				assert.Nil(t, callExpr.Arguments)
+				if callExpr.Arguments != nil {
+					assert.Len(t, callExpr.Arguments.Arguments, 0)
+				}
 			} else {
 				assert.NotNil(t, callExpr.Arguments)
-				assert.Len(t, callExpr.Arguments, tt.argCount)
+				assert.Len(t, callExpr.Arguments.Arguments, tt.argCount)
 			}
 		})
 	}
@@ -2288,19 +2296,19 @@ func TestParsing_TrailingCommaInFunctionCalls(t *testing.T) {
 				// Simple function call
 				assert.NotNil(t, callExpr.Callee)
 				if tt.name == "Simple function call with trailing comma" {
-					assert.Len(t, callExpr.Arguments, 2)
+					assert.Len(t, callExpr.Arguments.Arguments, 2)
 				} else if tt.name == "Nested function calls with trailing commas" {
-					assert.Len(t, callExpr.Arguments, 2)
+					assert.Len(t, callExpr.Arguments.Arguments, 2)
 					// Check that the first argument is also a call expression
-					innerCall, ok := callExpr.Arguments[0].(*ast.CallExpression)
+					innerCall, ok := callExpr.Arguments.Arguments[0].(*ast.CallExpression)
 					require.True(t, ok, "First argument should be a function call")
-					assert.Len(t, innerCall.Arguments, 1)
+					assert.Len(t, innerCall.Arguments.Arguments, 1)
 				} else if tt.name == "Function call with mixed argument types and trailing comma" {
-					assert.Len(t, callExpr.Arguments, 4)
+					assert.Len(t, callExpr.Arguments.Arguments, 4)
 				} else if tt.name == "Array function with trailing comma" {
-					assert.Len(t, callExpr.Arguments, 2)
+					assert.Len(t, callExpr.Arguments.Arguments, 2)
 				} else if tt.name == "Static method call with trailing comma" {
-					assert.Len(t, callExpr.Arguments, 2)
+					assert.Len(t, callExpr.Arguments.Arguments, 2)
 				}
 			default:
 				// For more complex expressions, just ensure they parsed without error
@@ -2357,7 +2365,7 @@ func TestParsing_TrailingCommaInFunctionParameters(t *testing.T) {
 			funcDecl, ok := stmt.(*ast.FunctionDeclaration)
 			require.True(t, ok, "Statement should be FunctionDeclaration")
 			
-			assert.Len(t, funcDecl.Parameters, tt.paramCount, "Function should have correct number of parameters")
+			if funcDecl.Parameters != nil { assert.Len(t, funcDecl.Parameters.Parameters, tt.paramCount, "Function should have correct number of parameters") } else { assert.Equal(t, 0, tt.paramCount, "Function should have correct number of parameters") }
 			
 			// Verify parameter names are correctly parsed
 			if tt.paramCount >= 1 {
@@ -2465,22 +2473,28 @@ func TestParsing_AnonymousFunctions(t *testing.T) {
 			} else if callExpr, ok := exprStmt.Expression.(*ast.CallExpression); ok {
 				// Function call: foo(function(...) {...})
 				assert.NotNil(t, callExpr.Arguments)
-				assert.Len(t, callExpr.Arguments, 1)
-				anonFunc, ok = callExpr.Arguments[0].(*ast.AnonymousFunctionExpression)
+				assert.Len(t, callExpr.Arguments.Arguments, 1)
+				anonFunc, ok = callExpr.Arguments.Arguments[0].(*ast.AnonymousFunctionExpression)
 				assert.True(t, ok, "Argument should be AnonymousFunctionExpression")
 			} else {
 				t.Fatal("Expression should be either AssignmentExpression or CallExpression")
 			}
 
 			// Verify parameters
-			assert.Len(t, anonFunc.Parameters, len(tt.expectedParams))
-			for i, expectedParam := range tt.expectedParams {
-				assert.Equal(t, expectedParam.name, anonFunc.Parameters.Parameters[i].Name.(*ast.IdentifierNode).Name)
-				if expectedParam.typ != "" {
-					assert.NotNil(t, anonFunc.Parameters.Parameters[i].Type, "Parameter %d should have a type", i)
+			if anonFunc.Parameters != nil { 
+				assert.Len(t, anonFunc.Parameters.Parameters, len(tt.expectedParams))
+			} else { 
+				assert.Equal(t, 0, len(tt.expectedParams))
+			}
+			if anonFunc.Parameters != nil {
+				for i, expectedParam := range tt.expectedParams {
+					assert.Equal(t, expectedParam.name, anonFunc.Parameters.Parameters[i].Name.(*ast.IdentifierNode).Name)
+					if expectedParam.typ != "" {
+						assert.NotNil(t, anonFunc.Parameters.Parameters[i].Type, "Parameter %d should have a type", i)
 					assert.Equal(t, expectedParam.typ, anonFunc.Parameters.Parameters[i].Type.String())
-				} else {
-					assert.Nil(t, anonFunc.Parameters.Parameters[i].Type, "Parameter %d should not have a type", i)
+					} else {
+						assert.Nil(t, anonFunc.Parameters.Parameters[i].Type, "Parameter %d should not have a type", i)
+					}
 				}
 			}
 
@@ -2571,8 +2585,8 @@ $complex = function ($param) use ($var1, &$ref1, $var2, &$ref2) {
 				// Direct assignment: $var = function(...) {...}
 				if callExpr, ok := assignment.Right.(*ast.CallExpression); ok {
 					// preg_replace_callback case
-					assert.Len(t, callExpr.Arguments, 3)
-					anonFunc, ok = callExpr.Arguments[1].(*ast.AnonymousFunctionExpression)
+					assert.Len(t, callExpr.Arguments.Arguments, 3)
+					anonFunc, ok = callExpr.Arguments.Arguments[1].(*ast.AnonymousFunctionExpression)
 					assert.True(t, ok, "Second argument should be AnonymousFunctionExpression")
 				} else {
 					anonFunc, ok = assignment.Right.(*ast.AnonymousFunctionExpression)
@@ -2692,20 +2706,20 @@ func TestParsing_ArrowFunctions(t *testing.T) {
 				assert.True(t, ok, "right side should be arrow function")
 			} else if callExpr, ok := stmt.Expression.(*ast.CallExpression); ok {
 				// Method call with arrow function as argument
-				assert.Len(t, callExpr.Arguments, 2, "should have 2 arguments")
-				arrowFunc, ok = callExpr.Arguments[1].(*ast.ArrowFunctionExpression)
+				assert.Len(t, callExpr.Arguments.Arguments, 2, "should have 2 arguments")
+				arrowFunc, ok = callExpr.Arguments.Arguments[1].(*ast.ArrowFunctionExpression)
 				assert.True(t, ok, "second argument should be arrow function")
 			} else if methodCallExpr, ok := stmt.Expression.(*ast.MethodCallExpression); ok {
 				// Method call with arrow function as argument
-				assert.Len(t, methodCallExpr.Arguments, 2, "should have 2 arguments")
-				arrowFunc, ok = methodCallExpr.Arguments[1].(*ast.ArrowFunctionExpression)
+				assert.Len(t, methodCallExpr.Arguments.Arguments, 2, "should have 2 arguments")
+				arrowFunc, ok = methodCallExpr.Arguments.Arguments[1].(*ast.ArrowFunctionExpression)
 				assert.True(t, ok, "second argument should be arrow function")
 			} else {
 				t.Fatalf("unexpected expression type: %T", stmt.Expression)
 			}
 
 			assert.NotNil(t, arrowFunc, "arrow function should not be nil")
-			assert.Len(t, arrowFunc.Parameters, tt.expectedParamCount, "parameter count should match")
+			if arrowFunc.Parameters != nil { assert.Len(t, arrowFunc.Parameters.Parameters, tt.expectedParamCount, "parameter count should match") } else { assert.Equal(t, 0, tt.expectedParamCount, "parameter count should match") }
 			assert.Equal(t, tt.expectedStatic, arrowFunc.Static, "static flag should match")
 			assert.NotNil(t, arrowFunc.Body, "body should not be nil")
 		})
@@ -4418,11 +4432,12 @@ final class SnapshotRepository
 				require.Equal(t, "__construct", constructor.Name.(*ast.IdentifierNode).Name)
 				
 				// Check parameters
-				require.Len(t, constructor.Parameters, 2)
+				require.NotNil(t, constructor.Parameters)
+				require.Len(t, constructor.Parameters.Parameters, 2)
 				
 				// First parameter: readonly private string $testsPath
 				param1 := constructor.Parameters.Parameters[0]
-				assert.Equal(t, "$testsPath", param1.Name)
+				assert.Equal(t, "$testsPath", param1.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "private", param1.Visibility)
 				assert.True(t, param1.ReadOnly)
 				require.NotNil(t, param1.Type)
@@ -4430,7 +4445,7 @@ final class SnapshotRepository
 				
 				// Second parameter: readonly private string $snapshotsPath
 				param2 := constructor.Parameters.Parameters[1]
-				assert.Equal(t, "$snapshotsPath", param2.Name)
+				assert.Equal(t, "$snapshotsPath", param2.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "private", param2.Visibility)
 				assert.True(t, param2.ReadOnly)
 				require.NotNil(t, param2.Type)
@@ -4465,7 +4480,8 @@ class Test {
 				require.True(t, ok)
 				
 				// Check parameters
-				require.Len(t, constructor.Parameters, 7)
+				require.NotNil(t, constructor.Parameters)
+				require.Len(t, constructor.Parameters.Parameters, 7)
 				
 				expectedParams := []struct {
 					name       string
@@ -4484,7 +4500,7 @@ class Test {
 				
 				for i, expected := range expectedParams {
 					param := constructor.Parameters.Parameters[i]
-					assert.Equal(t, expected.name, param.Name, "Parameter %d name", i)
+					assert.Equal(t, expected.name, param.Name.(*ast.IdentifierNode).Name, "Parameter %d name", i)
 					assert.Equal(t, expected.visibility, param.Visibility, "Parameter %d visibility", i)
 					assert.Equal(t, expected.readonly, param.ReadOnly, "Parameter %d readonly", i)
 					require.NotNil(t, param.Type, "Parameter %d type", i)
@@ -4513,11 +4529,12 @@ class Test {
 				constructor, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				
-				require.Len(t, constructor.Parameters, 2)
+				require.NotNil(t, constructor.Parameters)
+				require.Len(t, constructor.Parameters.Parameters, 2)
 				
 				// First parameter: readonly public ?string $nullableString
 				param1 := constructor.Parameters.Parameters[0]
-				assert.Equal(t, "$nullableString", param1.Name)
+				assert.Equal(t, "$nullableString", param1.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "public", param1.Visibility)
 				assert.True(t, param1.ReadOnly)
 				require.NotNil(t, param1.Type)
@@ -4526,7 +4543,7 @@ class Test {
 				
 				// Second parameter: private readonly ?array $nullableArray
 				param2 := constructor.Parameters.Parameters[1]
-				assert.Equal(t, "$nullableArray", param2.Name)
+				assert.Equal(t, "$nullableArray", param2.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "private", param2.Visibility)
 				assert.True(t, param2.ReadOnly)
 				require.NotNil(t, param2.Type)
@@ -4555,11 +4572,12 @@ class Test {
 				constructor, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				
-				require.Len(t, constructor.Parameters, 2)
+				require.NotNil(t, constructor.Parameters)
+				require.Len(t, constructor.Parameters.Parameters, 2)
 				
 				// First parameter: readonly public string|int $unionParam
 				param1 := constructor.Parameters.Parameters[0]
-				assert.Equal(t, "$unionParam", param1.Name)
+				assert.Equal(t, "$unionParam", param1.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "public", param1.Visibility)
 				assert.True(t, param1.ReadOnly)
 				require.NotNil(t, param1.Type)
@@ -4570,7 +4588,7 @@ class Test {
 				
 				// Second parameter: private readonly array|null $unionNullParam
 				param2 := constructor.Parameters.Parameters[1]
-				assert.Equal(t, "$unionNullParam", param2.Name)
+				assert.Equal(t, "$unionNullParam", param2.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "private", param2.Visibility)
 				assert.True(t, param2.ReadOnly)
 				require.NotNil(t, param2.Type)
@@ -4590,10 +4608,11 @@ function test(readonly private array &$refParam) {}`,
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 				
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$refParam", param.Name)
+				assert.Equal(t, "$refParam", param.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "private", param.Visibility)
 				assert.True(t, param.ReadOnly)
 				assert.True(t, param.ByReference)
@@ -4698,7 +4717,7 @@ $result = $obj->process();`,
 				assert.Len(t, catch.Body, 1, "Catch block should have one statement")
 				echoStmt, ok := catch.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Catch statement should be echo")
-				assert.Len(t, echoStmt.Arguments, 1)
+				assert.Len(t, echoStmt.Arguments.Arguments, 1)
 
 				// Check statement after try-catch
 				exprStmt, ok := program.Body[1].(*ast.ExpressionStatement)
@@ -6022,8 +6041,8 @@ func TestParsing_YieldFromExpressions(t *testing.T) {
 				assert.True(t, ok, "Callee should be IdentifierNode")
 				assert.Equal(t, "getOuterGenerator", funcName.Name)
 
-				assert.Len(t, callExpr.Arguments, 1, "Should have one argument")
-				innerVar, ok := callExpr.Arguments[0].(*ast.Variable)
+				assert.Len(t, callExpr.Arguments.Arguments, 1, "Should have one argument")
+				innerVar, ok := callExpr.Arguments.Arguments[0].(*ast.Variable)
 				assert.True(t, ok, "Argument should be Variable")
 				assert.Equal(t, "$inner", innerVar.Name)
 			},
@@ -6609,33 +6628,29 @@ func TestParsing_PropertyAccessInComplexExpressions(t *testing.T) {
 				require.True(t, ok, "Statement should be ExpressionStatement")
 
 				// This should be a method call
-				call, ok := exprStmt.Expression.(*ast.CallExpression)
-				require.True(t, ok, "Expression should be CallExpression")
+				methodCall, ok := exprStmt.Expression.(*ast.MethodCallExpression)
+				require.True(t, ok, "Expression should be MethodCallExpression")
 
-				// Callee should be property access ($this->assertSame)
-				propAccess, ok := call.Callee.(*ast.PropertyAccessExpression)
-				require.True(t, ok, "Callee should be PropertyAccessExpression")
-
-				// Validate object ($this)
-				thisVar, ok := propAccess.Object.(*ast.Variable)
+				// Object should be $this
+				thisVar, ok := methodCall.Object.(*ast.Variable)
 				require.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$this", thisVar.Name)
 
 				// Validate method name (assertSame)
-				methodIdent, ok := propAccess.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Property should be IdentifierNode")
+				methodIdent, ok := methodCall.Method.(*ast.IdentifierNode)
+				require.True(t, ok, "Method should be IdentifierNode")
 				assert.Equal(t, "assertSame", methodIdent.Name)
 
 				// Validate arguments - should have 2 arguments
-				require.Len(t, call.Arguments, 2, "Call should have 2 arguments")
+				require.Len(t, methodCall.Arguments.Arguments, 2, "Call should have 2 arguments")
 
 				// First argument should be a variable ($expected_property_value)
-				arg1, ok := call.Arguments[0].(*ast.Variable)
+				arg1, ok := methodCall.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok, "First argument should be Variable")
 				assert.Equal(t, "$expected_property_value", arg1.Name)
 
 				// Second argument should be property access ($post_type->$property_name)
-				arg2PropAccess, ok := call.Arguments[1].(*ast.PropertyAccessExpression)
+				arg2PropAccess, ok := methodCall.Arguments.Arguments[1].(*ast.PropertyAccessExpression)
 				require.True(t, ok, "Second argument should be PropertyAccessExpression")
 
 				// Validate second argument object ($post_type)
@@ -6665,13 +6680,13 @@ func TestParsing_PropertyAccessInComplexExpressions(t *testing.T) {
 				require.True(t, ok, "Property should be Variable")
 				assert.Equal(t, "$variable_property", propVar.Name)
 
-				// Object should be a call expression (method2())
-				call, ok := propAccess.Object.(*ast.CallExpression)
-				require.True(t, ok, "Object should be CallExpression")
+				// Object should be a method call expression (method2())
+				methodCall, ok := propAccess.Object.(*ast.MethodCallExpression)
+				require.True(t, ok, "Object should be MethodCallExpression")
 
-				// The callee of method2() should be property access (obj.method1().method2)
-				_, ok = call.Callee.(*ast.PropertyAccessExpression)
-				require.True(t, ok, "Callee should be PropertyAccessExpression")
+				// The object of method2() should be another method call (obj.method1())
+				_, ok = methodCall.Object.(*ast.MethodCallExpression)
+				require.True(t, ok, "Object should be MethodCallExpression")
 			},
 		},
 	}
@@ -6764,7 +6779,7 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 				// Check the single statement in body
 				echoStmt, ok := forStmt.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Body should contain EchoStatement")
-				require.Len(t, echoStmt.Arguments, 1)
+				require.Len(t, echoStmt.Arguments.Arguments, 1)
 			},
 		},
 		{
@@ -6785,7 +6800,7 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 				callee, ok := callExpr.Callee.(*ast.IdentifierNode)
 				require.True(t, ok, "Callee should be identifier")
 				assert.Equal(t, "preg_match", callee.Name)
-				require.Len(t, callExpr.Arguments, 3, "preg_match should have 3 arguments")
+				require.Len(t, callExpr.Arguments.Arguments, 3, "preg_match should have 3 arguments")
 
 				// Check the single assignment statement in consequent
 				exprStmt, ok := ifStmt.Consequent[0].(*ast.ExpressionStatement)
@@ -6849,8 +6864,8 @@ func TestParsing_SingleLineControlStructures(t *testing.T) {
 				echoStmt2, ok := ifStmt.Alternate[0].(*ast.EchoStatement)
 				require.True(t, ok, "Alternate should be EchoStatement")
 
-				assert.Len(t, echoStmt1.Arguments, 1)
-				assert.Len(t, echoStmt2.Arguments, 1)
+				assert.Len(t, echoStmt1.Arguments.Arguments, 1)
+				assert.Len(t, echoStmt2.Arguments.Arguments, 1)
 			},
 		},
 		{
@@ -6915,10 +6930,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$password", param.Name)
+				assert.Equal(t, "$password", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 1)
 
 				attrGroup := param.Attributes[0]
@@ -6937,10 +6953,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 1)
 
 				attr := param.Attributes[0].Attributes[0]
@@ -6955,10 +6972,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$request", param.Name)
+				assert.Equal(t, "$request", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 1)
 
 				attr := param.Attributes[0].Attributes[0]
@@ -6974,10 +6992,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 1)
 
 				attrGroup := param.Attributes[0]
@@ -6994,10 +7013,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 2)
 
 				assert.Equal(t, "Attr1", param.Attributes[0].Attributes[0].Name.Name)
@@ -7017,10 +7037,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 				funcDecl, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Equal(t, "__construct", funcDecl.Name.(*ast.IdentifierNode).Name)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$password", param.Name)
+				assert.Equal(t, "$password", param.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "public", param.Visibility)
 				assert.NotNil(t, param.Type)
 				assert.Equal(t, "string", param.Type.Name)
@@ -7039,17 +7060,18 @@ func TestParsing_AttributeParameters(t *testing.T) {
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
 				require.Equal(t, "authenticate", funcDecl.Name.(*ast.IdentifierNode).Name)
-				require.Len(t, funcDecl.Parameters, 3)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 3)
 
 				// First parameter: no attributes
 				param1 := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$username", param1.Name)
+				assert.Equal(t, "$username", param1.Name.(*ast.IdentifierNode).Name)
 				assert.Len(t, param1.Attributes, 0)
 				assert.Equal(t, "string", param1.Type.Name)
 
 				// Second parameter: SensitiveParameter attribute
 				param2 := funcDecl.Parameters.Parameters[1]
-				assert.Equal(t, "$password", param2.Name)
+				assert.Equal(t, "$password", param2.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param2.Attributes, 1)
 				attr2 := param2.Attributes[0].Attributes[0]
 				assert.Equal(t, "\\SensitiveParameter", attr2.Name.Name)
@@ -7057,7 +7079,7 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				// Third parameter: Optional attribute with default value
 				param3 := funcDecl.Parameters.Parameters[2]
-				assert.Equal(t, "$options", param3.Name)
+				assert.Equal(t, "$options", param3.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param3.Attributes, 1)
 				attr3 := param3.Attributes[0].Attributes[0]
 				assert.Equal(t, "Optional", attr3.Name.Name)
@@ -7073,10 +7095,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$data", param.Name)
+				assert.Equal(t, "$data", param.Name.(*ast.IdentifierNode).Name)
 				assert.True(t, param.ByReference)
 				assert.Equal(t, "array", param.Type.Name)
 
@@ -7093,10 +7116,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$args", param.Name)
+				assert.Equal(t, "$args", param.Name.(*ast.IdentifierNode).Name)
 				assert.True(t, param.Variadic)
 
 				require.Len(t, param.Attributes, 1)
@@ -7112,10 +7136,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 1)
 
 				attr := param.Attributes[0].Attributes[0]
@@ -7130,10 +7155,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 1)
 
 				attr := param.Attributes[0].Attributes[0]
@@ -7148,10 +7174,11 @@ func TestParsing_AttributeParameters(t *testing.T) {
 
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				require.True(t, ok)
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param.Attributes, 1)
 
 				attrGroup := param.Attributes[0]
@@ -8933,7 +8960,11 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				anonClass, ok := assign.Right.(*ast.AnonymousClass)
 				require.True(t, ok)
 
-				assert.Empty(t, anonClass.Arguments)
+				if anonClass.Arguments == nil {
+					assert.Nil(t, anonClass.Arguments)
+				} else {
+					assert.Empty(t, anonClass.Arguments.Arguments)
+				}
 				assert.Nil(t, anonClass.Extends)
 				assert.Empty(t, anonClass.Implements)
 				assert.Empty(t, anonClass.Body)
@@ -8955,13 +8986,13 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				anonClass, ok := assign.Right.(*ast.AnonymousClass)
 				require.True(t, ok)
 
-				require.Len(t, anonClass.Arguments, 2)
+				require.Len(t, anonClass.Arguments.Arguments, 2)
 
-				arg1, ok := anonClass.Arguments[0].(*ast.Variable)
+				arg1, ok := anonClass.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$arg1", arg1.Name)
 
-				arg2, ok := anonClass.Arguments[1].(*ast.Variable)
+				arg2, ok := anonClass.Arguments.Arguments[1].(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$arg2", arg2.Name)
 			},
@@ -9060,7 +9091,11 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				require.True(t, ok)
 
 				assert.Equal(t, []string{"final"}, anonClass.Modifiers)
-				assert.Empty(t, anonClass.Arguments)
+				if anonClass.Arguments == nil {
+				assert.Nil(t, anonClass.Arguments)
+			} else {
+				assert.Empty(t, anonClass.Arguments.Arguments)
+			}
 				assert.Nil(t, anonClass.Extends)
 				assert.Empty(t, anonClass.Implements)
 				assert.Empty(t, anonClass.Body)
@@ -9083,7 +9118,11 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				require.True(t, ok)
 
 				assert.Equal(t, []string{"readonly"}, anonClass.Modifiers)
-				assert.Empty(t, anonClass.Arguments)
+				if anonClass.Arguments == nil {
+				assert.Nil(t, anonClass.Arguments)
+			} else {
+				assert.Empty(t, anonClass.Arguments.Arguments)
+			}
 				assert.Nil(t, anonClass.Extends)
 				assert.Empty(t, anonClass.Implements)
 				assert.Empty(t, anonClass.Body)
@@ -9106,7 +9145,11 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				require.True(t, ok)
 
 				assert.Equal(t, []string{"abstract"}, anonClass.Modifiers)
-				assert.Empty(t, anonClass.Arguments)
+				if anonClass.Arguments == nil {
+				assert.Nil(t, anonClass.Arguments)
+			} else {
+				assert.Empty(t, anonClass.Arguments.Arguments)
+			}
 				assert.Nil(t, anonClass.Extends)
 				assert.Empty(t, anonClass.Implements)
 				assert.Empty(t, anonClass.Body)
@@ -9131,8 +9174,8 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				assert.Equal(t, []string{"final", "readonly"}, anonClass.Modifiers)
 
 				// Check constructor argument
-				require.Len(t, anonClass.Arguments, 1)
-				arg, ok := anonClass.Arguments[0].(*ast.Variable)
+				require.Len(t, anonClass.Arguments.Arguments, 1)
+				arg, ok := anonClass.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$param", arg.Name)
 
@@ -9177,7 +9220,11 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				assert.Empty(t, attr.Arguments)
 
 				assert.Empty(t, anonClass.Modifiers)
-				assert.Empty(t, anonClass.Arguments)
+				if anonClass.Arguments == nil {
+				assert.Nil(t, anonClass.Arguments)
+			} else {
+				assert.Empty(t, anonClass.Arguments.Arguments)
+			}
 				assert.Nil(t, anonClass.Extends)
 				assert.Empty(t, anonClass.Implements)
 				assert.Empty(t, anonClass.Body)
@@ -9197,9 +9244,9 @@ func TestParsing_AnonymousClass(t *testing.T) {
 				require.True(t, ok)
 
 				// Check variadic argument
-				require.Len(t, anonClass.Arguments, 1)
-				spreadExpr, ok := anonClass.Arguments[0].(*ast.SpreadExpression)
-				require.True(t, ok, "Expected SpreadExpression for ...%arguments, got %T", anonClass.Arguments[0])
+				require.Len(t, anonClass.Arguments.Arguments, 1)
+				spreadExpr, ok := anonClass.Arguments.Arguments[0].(*ast.SpreadExpression)
+				require.True(t, ok, "Expected SpreadExpression for ...%arguments, got %T", anonClass.Arguments.Arguments[0])
 
 				variable, ok := spreadExpr.Argument.(*ast.Variable)
 				require.True(t, ok)
@@ -9330,7 +9377,7 @@ func TestParsing_AttributesEnhanced(t *testing.T) {
 				assert.Equal(t, "Method", attrGroup.Attributes[1].Name.Name)
 				require.Len(t, attrGroup.Attributes[1].Arguments, 1)
 
-				arg2, ok := attrGroup.Attributes[0].Arguments[0].(*ast.StringLiteral)
+				arg2, ok := attrGroup.Attributes[1].Arguments[0].(*ast.StringLiteral)
 				require.True(t, ok)
 				assert.Equal(t, "GET", arg2.Value)
 			},
@@ -9571,8 +9618,8 @@ func TestParsing_InternalFunctions(t *testing.T) {
 				assert.Len(t, program.Body, 1)
 				exprStmt := program.Body[0].(*ast.ExpressionStatement)
 				issetExpr := exprStmt.Expression.(*ast.IssetExpression)
-				assert.Len(t, issetExpr.Arguments, 1)
-				varExpr := issetExpr.Arguments[0].(*ast.Variable)
+				assert.Len(t, issetExpr.Arguments.Arguments, 1)
+				varExpr := issetExpr.Arguments.Arguments[0].(*ast.Variable)
 				assert.Equal(t, "$x", varExpr.Name)
 			},
 		},
@@ -9594,20 +9641,20 @@ func TestParsing_InternalFunctions(t *testing.T) {
 
 				// Check the innermost isset($x)
 				issetX := leftBinary.Left.(*ast.IssetExpression)
-				assert.Len(t, issetX.Arguments, 1)
-				varX := issetX.Arguments[0].(*ast.Variable)
+				assert.Len(t, issetX.Arguments.Arguments, 1)
+				varX := issetX.Arguments.Arguments[0].(*ast.Variable)
 				assert.Equal(t, "$x", varX.Name)
 
 				// Check isset($y)
 				issetY := leftBinary.Right.(*ast.IssetExpression)
-				assert.Len(t, issetY.Arguments, 1)
-				varY := issetY.Arguments[0].(*ast.Variable)
+				assert.Len(t, issetY.Arguments.Arguments, 1)
+				varY := issetY.Arguments.Arguments[0].(*ast.Variable)
 				assert.Equal(t, "$y", varY.Name)
 
 				// Check isset($z) on the right side
 				issetZ := binaryExpr.Right.(*ast.IssetExpression)
-				assert.Len(t, issetZ.Arguments, 1)
-				varZ := issetZ.Arguments[0].(*ast.Variable)
+				assert.Len(t, issetZ.Arguments.Arguments, 1)
+				varZ := issetZ.Arguments.Arguments[0].(*ast.Variable)
 				assert.Equal(t, "$z", varZ.Name)
 			},
 		},
@@ -9781,9 +9828,9 @@ func TestParsing_NamedArguments(t *testing.T) {
 
 				call, ok := exprStmt.Expression.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 1)
+				require.Len(t, call.Arguments.Arguments, 1)
 
-				namedArg, ok := call.Arguments[0].(*ast.NamedArgument)
+				namedArg, ok := call.Arguments.Arguments[0].(*ast.NamedArgument)
 				require.True(t, ok)
 
 				assert.Equal(t, "name", namedArg.Name.Name)
@@ -9805,10 +9852,10 @@ func TestParsing_NamedArguments(t *testing.T) {
 
 				call, ok := exprStmt.Expression.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 3)
+				require.Len(t, call.Arguments.Arguments, 3)
 
 				// First argument: x: 10
-				namedArg1, ok := call.Arguments[0].(*ast.NamedArgument)
+				namedArg1, ok := call.Arguments.Arguments[0].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "x", namedArg1.Name.Name)
 
@@ -9817,7 +9864,7 @@ func TestParsing_NamedArguments(t *testing.T) {
 				assert.Equal(t, "10", num1.Value)
 
 				// Second argument: y: 20
-				namedArg2, ok := call.Arguments[1].(*ast.NamedArgument)
+				namedArg2, ok := call.Arguments.Arguments[1].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "y", namedArg2.Name.Name)
 
@@ -9826,7 +9873,7 @@ func TestParsing_NamedArguments(t *testing.T) {
 				assert.Equal(t, "20", num2.Value)
 
 				// Third argument: operation: "add"
-				namedArg3, ok := call.Arguments[2].(*ast.NamedArgument)
+				namedArg3, ok := call.Arguments.Arguments[2].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "operation", namedArg3.Name.Name)
 
@@ -9847,20 +9894,20 @@ func TestParsing_NamedArguments(t *testing.T) {
 
 				call, ok := exprStmt.Expression.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 4)
+				require.Len(t, call.Arguments.Arguments, 4)
 
 				// First argument: 1 (positional)
-				num1, ok := call.Arguments[0].(*ast.NumberLiteral)
+				num1, ok := call.Arguments.Arguments[0].(*ast.NumberLiteral)
 				require.True(t, ok)
 				assert.Equal(t, "1", num1.Value)
 
 				// Second argument: 2 (positional)
-				num2, ok := call.Arguments[1].(*ast.NumberLiteral)
+				num2, ok := call.Arguments.Arguments[1].(*ast.NumberLiteral)
 				require.True(t, ok)
 				assert.Equal(t, "2", num2.Value)
 
 				// Third argument: name: "Alice" (named)
-				namedArg1, ok := call.Arguments[2].(*ast.NamedArgument)
+				namedArg1, ok := call.Arguments.Arguments[2].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "name", namedArg1.Name.Name)
 
@@ -9869,7 +9916,7 @@ func TestParsing_NamedArguments(t *testing.T) {
 				assert.Equal(t, "Alice", str.Value)
 
 				// Fourth argument: value: 42 (named)
-				namedArg2, ok := call.Arguments[3].(*ast.NamedArgument)
+				namedArg2, ok := call.Arguments.Arguments[3].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "value", namedArg2.Name.Name)
 
@@ -9890,9 +9937,9 @@ func TestParsing_NamedArguments(t *testing.T) {
 
 				call, ok := exprStmt.Expression.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 1)
+				require.Len(t, call.Arguments.Arguments, 1)
 
-				namedArg, ok := call.Arguments[0].(*ast.NamedArgument)
+				namedArg, ok := call.Arguments.Arguments[0].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "name", namedArg.Name.Name)
 
@@ -9913,9 +9960,9 @@ func TestParsing_NamedArguments(t *testing.T) {
 
 				call, ok := exprStmt.Expression.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 1)
+				require.Len(t, call.Arguments.Arguments, 1)
 
-				namedArg, ok := call.Arguments[0].(*ast.NamedArgument)
+				namedArg, ok := call.Arguments.Arguments[0].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "result", namedArg.Name.Name)
 
@@ -9937,10 +9984,10 @@ func TestParsing_NamedArguments(t *testing.T) {
 
 				call, ok := exprStmt.Expression.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 4)
+				require.Len(t, call.Arguments.Arguments, 4)
 
 				// First argument: class: $class
-				namedArg1, ok := call.Arguments[0].(*ast.NamedArgument)
+				namedArg1, ok := call.Arguments.Arguments[0].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "class", namedArg1.Name.Name)
 
@@ -9949,7 +9996,7 @@ func TestParsing_NamedArguments(t *testing.T) {
 				assert.Equal(t, "$class", var1.Name)
 
 				// Second argument: function: $callback
-				namedArg2, ok := call.Arguments[1].(*ast.NamedArgument)
+				namedArg2, ok := call.Arguments.Arguments[1].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "function", namedArg2.Name.Name)
 
@@ -9958,12 +10005,12 @@ func TestParsing_NamedArguments(t *testing.T) {
 				assert.Equal(t, "$callback", var2.Name)
 
 				// Third argument: new: true
-				namedArg3, ok := call.Arguments[2].(*ast.NamedArgument)
+				namedArg3, ok := call.Arguments.Arguments[2].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "new", namedArg3.Name.Name)
 
 				// Fourth argument: array: $data  
-				namedArg4, ok := call.Arguments[3].(*ast.NamedArgument)
+				namedArg4, ok := call.Arguments.Arguments[3].(*ast.NamedArgument)
 				require.True(t, ok)
 				assert.Equal(t, "array", namedArg4.Name.Name)
 
@@ -10318,19 +10365,16 @@ Sleep::for(600)->milliseconds();`,
 				require.True(t, ok)
 
 				// The outer call: ->milliseconds()
-				outerCall, ok := exprStmt.Expression.(*ast.CallExpression)
+				outerCall, ok := exprStmt.Expression.(*ast.MethodCallExpression)
 				require.True(t, ok)
 
-				// The property access: ->milliseconds
-				propAccess, ok := outerCall.Callee.(*ast.PropertyAccessExpression)
+				// The method should be milliseconds
+				methodName, ok := outerCall.Method.(*ast.IdentifierNode)
 				require.True(t, ok)
-				
-				propName, ok := propAccess.Property.(*ast.IdentifierNode)
-				require.True(t, ok)
-				assert.Equal(t, "milliseconds", propName.Name)
+				assert.Equal(t, "milliseconds", methodName.Name)
 
-				// The inner static call: Sleep::for(600)
-				innerCall, ok := propAccess.Object.(*ast.CallExpression)
+				// The inner static call: Sleep::for(600) 
+				innerCall, ok := outerCall.Object.(*ast.CallExpression)
 				require.True(t, ok)
 				
 				staticAccess, ok := innerCall.Callee.(*ast.StaticAccessExpression)
@@ -10340,13 +10384,13 @@ Sleep::for(600)->milliseconds();`,
 				require.True(t, ok)
 				assert.Equal(t, "Sleep", className.Name)
 				
-				methodName, ok := staticAccess.Property.(*ast.IdentifierNode)
+				staticMethodName, ok := staticAccess.Property.(*ast.IdentifierNode)
 				require.True(t, ok)
-				assert.Equal(t, "for", methodName.Name)
+				assert.Equal(t, "for", staticMethodName.Name)
 				
 				// Check the argument (600)
-				require.Len(t, innerCall.Arguments, 1)
-				arg, ok := innerCall.Arguments[0].(*ast.NumberLiteral)
+				require.Len(t, innerCall.Arguments.Arguments, 1)
+				arg, ok := innerCall.Arguments.Arguments[0].(*ast.NumberLiteral)
 				require.True(t, ok)
 				assert.Equal(t, "600", arg.Value)
 			},
@@ -10431,12 +10475,10 @@ Database::table('users')->where('id', 1)->for($user)->do($action);`,
 				require.True(t, ok)
 				
 				// Navigate through the chain and verify 'if' and 'else' are parsed correctly
-				finalCall, ok := exprStmt1.Expression.(*ast.CallExpression)
+				finalCall, ok := exprStmt1.Expression.(*ast.MethodCallExpression)
 				require.True(t, ok)
 				
-				finalProp, ok := finalCall.Callee.(*ast.PropertyAccessExpression)
-				require.True(t, ok)
-				finalName, ok := finalProp.Property.(*ast.IdentifierNode)
+				finalName, ok := finalCall.Method.(*ast.IdentifierNode)
 				require.True(t, ok)
 				assert.Equal(t, "finally", finalName.Name)
 				
@@ -10569,7 +10611,8 @@ interface TestInterface {
 				// Second method: case($arg)
 				method2 := interfaceDecl.Methods[1]
 				assert.Equal(t, "case", method2.Name.Name)
-				require.Len(t, method2.Parameters, 1)
+				require.NotNil(t, method2.Parameters)
+				require.Len(t, method2.Parameters.Parameters, 1)
 				assert.Equal(t, "$arg", method2.Parameters.Parameters[0].Name.(*ast.IdentifierNode).Name)
 			},
 		},
@@ -10740,9 +10783,9 @@ func TestParsing_SpreadSyntax(t *testing.T) {
 
 				call, ok := assign.Right.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 1)
+				require.Len(t, call.Arguments.Arguments, 1)
 
-				spread, ok := call.Arguments[0].(*ast.SpreadExpression)
+				spread, ok := call.Arguments.Arguments[0].(*ast.SpreadExpression)
 				require.True(t, ok)
 
 				variable, ok := spread.Argument.(*ast.Variable)
@@ -10766,15 +10809,15 @@ func TestParsing_SpreadSyntax(t *testing.T) {
 
 				call, ok := assign.Right.(*ast.CallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 2)
+				require.Len(t, call.Arguments.Arguments, 2)
 
 				// First argument: number 1
-				num1, ok := call.Arguments[0].(*ast.NumberLiteral)
+				num1, ok := call.Arguments.Arguments[0].(*ast.NumberLiteral)
 				require.True(t, ok)
 				assert.Equal(t, "1", num1.Value)
 
 				// Second argument: spread of array literal
-				spread, ok := call.Arguments[1].(*ast.SpreadExpression)
+				spread, ok := call.Arguments.Arguments[1].(*ast.SpreadExpression)
 				require.True(t, ok)
 
 				arrayExpr, ok := spread.Argument.(*ast.ArrayExpression)
@@ -11642,12 +11685,12 @@ func TestParsing_ComplexVariableProperties(t *testing.T) {
 				require.True(t, ok)
 				assert.Equal(t, "wp_set_current_user", callExpr.Callee.(*ast.IdentifierNode).Name)
 				
-				require.Len(t, callExpr.Arguments, 1)
-				staticAccess, ok := callExpr.Arguments[0].(*ast.StaticAccessExpression)
+				require.Len(t, callExpr.Arguments.Arguments, 1)
+				staticProp, ok := callExpr.Arguments.Arguments[0].(*ast.StaticPropertyAccessExpression)
 				require.True(t, ok)
 				
-				assert.Equal(t, "static", staticAccess.Class.(*ast.IdentifierNode).Name)
-				assert.Equal(t, "${$user_property}", staticAccess.Property.(*ast.Variable).Name)
+				assert.Equal(t, "static", staticProp.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "${$user_property}", staticProp.Property.(*ast.Variable).Name)
 			},
 		},
 		{
@@ -11659,12 +11702,12 @@ func TestParsing_ComplexVariableProperties(t *testing.T) {
 				echoStmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok)
 				
-				require.Len(t, echoStmt.Arguments, 1)
-				staticAccess, ok := echoStmt.Arguments[0].(*ast.StaticAccessExpression)
+				require.Len(t, echoStmt.Arguments.Arguments, 1)
+				staticProp, ok := echoStmt.Arguments.Arguments[0].(*ast.StaticPropertyAccessExpression)
 				require.True(t, ok)
 				
-				assert.Equal(t, "static", staticAccess.Class.(*ast.IdentifierNode).Name)
-				assert.Equal(t, "$$prop", staticAccess.Property.(*ast.Variable).Name)
+				assert.Equal(t, "static", staticProp.Class.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "$$prop", staticProp.Property.(*ast.Variable).Name)
 			},
 		},
 		{
@@ -11676,8 +11719,8 @@ func TestParsing_ComplexVariableProperties(t *testing.T) {
 				echoStmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok)
 				
-				require.Len(t, echoStmt.Arguments, 1)
-				variable, ok := echoStmt.Arguments[0].(*ast.Variable)
+				require.Len(t, echoStmt.Arguments.Arguments, 1)
+				variable, ok := echoStmt.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "${$var}", variable.Name)
 			},
@@ -11736,30 +11779,30 @@ func TestParsing_ComplexVariableProperties(t *testing.T) {
 				// First: static::$property
 				echo1, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok)
-				static1, ok := echo1.Arguments[0].(*ast.StaticAccessExpression)
+				static1, ok := echo1.Arguments.Arguments[0].(*ast.StaticPropertyAccessExpression)
 				require.True(t, ok)
 				assert.Equal(t, "$property", static1.Property.(*ast.Variable).Name)
 				
 				// Second: static::${$prop}
 				echo2, ok := program.Body[1].(*ast.EchoStatement)
 				require.True(t, ok)
-				static2, ok := echo2.Arguments[0].(*ast.StaticAccessExpression)
+				static2, ok := echo2.Arguments.Arguments[0].(*ast.StaticPropertyAccessExpression)
 				require.True(t, ok)
 				assert.Equal(t, "${$prop}", static2.Property.(*ast.Variable).Name)
 				
 				// Third: static::$$prop
 				echo3, ok := program.Body[2].(*ast.EchoStatement)
 				require.True(t, ok)
-				static3, ok := echo3.Arguments[0].(*ast.StaticAccessExpression)
+				static3, ok := echo3.Arguments.Arguments[0].(*ast.StaticPropertyAccessExpression)
 				require.True(t, ok)
 				assert.Equal(t, "$$prop", static3.Property.(*ast.Variable).Name)
 				
 				// Fourth: static::CONSTANT
 				echo4, ok := program.Body[3].(*ast.EchoStatement)
 				require.True(t, ok)
-				static4, ok := echo4.Arguments[0].(*ast.StaticAccessExpression)
+				static4, ok := echo4.Arguments.Arguments[0].(*ast.ClassConstantAccessExpression)
 				require.True(t, ok)
-				assert.Equal(t, "CONSTANT", static4.Property.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "CONSTANT", static4.Constant.(*ast.IdentifierNode).Name)
 			},
 		},
 	}
@@ -12406,9 +12449,9 @@ func TestParsing_DynamicStaticMethodCalls(t *testing.T) {
 				callExpr := exprStmt.Expression.(*ast.CallExpression)
 				
 				// Check arguments
-				assert.Len(t, callExpr.Arguments, 2)
-				param1 := callExpr.Arguments[0].(*ast.Variable)
-				param2 := callExpr.Arguments[1].(*ast.Variable)
+				assert.Len(t, callExpr.Arguments.Arguments, 2)
+				param1 := callExpr.Arguments.Arguments[0].(*ast.Variable)
+				param2 := callExpr.Arguments.Arguments[1].(*ast.Variable)
 				assert.Equal(t, "$param1", param1.Name)
 				assert.Equal(t, "$param2", param2.Name)
 				
@@ -12530,15 +12573,15 @@ func TestParsing_MatchExpressionWithComplexConditions(t *testing.T) {
 				// Left side should be is_array($x) function call
 				leftCall := condition.Left.(*ast.CallExpression)
 				assert.Equal(t, "is_array", leftCall.Callee.(*ast.IdentifierNode).Name)
-				assert.Len(t, leftCall.Arguments, 1)
-				assert.Equal(t, "$x", leftCall.Arguments[0].(*ast.Variable).Name)
+				assert.Len(t, leftCall.Arguments.Arguments, 1)
+				assert.Equal(t, "$x", leftCall.Arguments.Arguments[0].(*ast.Variable).Name)
 				
 				// Right side should be str_contains($x, 'y') function call
 				rightCall := condition.Right.(*ast.CallExpression)
 				assert.Equal(t, "str_contains", rightCall.Callee.(*ast.IdentifierNode).Name)
-				assert.Len(t, rightCall.Arguments, 2)
-				assert.Equal(t, "$x", rightCall.Arguments[0].(*ast.Variable).Name)
-				assert.Equal(t, "y", rightCall.Arguments[1].(*ast.StringLiteral).Value)
+				assert.Len(t, rightCall.Arguments.Arguments, 2)
+				assert.Equal(t, "$x", rightCall.Arguments.Arguments[0].(*ast.Variable).Name)
+				assert.Equal(t, "y", rightCall.Arguments.Arguments[1].(*ast.StringLiteral).Value)
 				
 				// Body should be 'action' string
 				assert.Equal(t, "action", arm.Body.(*ast.StringLiteral).Value)
@@ -13069,17 +13112,17 @@ func TestParsing_SemiReservedAsIdentifiers(t *testing.T) {
 				assert.Equal(t, "Enum", ident.Name)
 				
 				// Check the argument: StringStatus::class
-				require.Len(t, callExpr.Arguments, 1)
-				staticAccess, ok := callExpr.Arguments[0].(*ast.StaticAccessExpression)
-				require.True(t, ok, "Expected static access expression")
+				require.Len(t, callExpr.Arguments.Arguments, 1)
+				classConst, ok := callExpr.Arguments.Arguments[0].(*ast.ClassConstantAccessExpression)
+				require.True(t, ok, "Expected class constant access expression")
 				
-				classIdent, ok := staticAccess.Class.(*ast.IdentifierNode)
+				classIdent, ok := classConst.Class.(*ast.IdentifierNode)
 				require.True(t, ok, "Expected class identifier")
 				assert.Equal(t, "StringStatus", classIdent.Name)
 				
-				propIdent, ok := staticAccess.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Expected property identifier")
-				assert.Equal(t, "class", propIdent.Name)
+				constantIdent, ok := classConst.Constant.(*ast.IdentifierNode)
+				require.True(t, ok, "Expected constant identifier")
+				assert.Equal(t, "class", constantIdent.Name)
 			},
 		},
 		{
@@ -13121,8 +13164,8 @@ $v = new Validator(
 				assert.Equal(t, "Validator", validatorIdent.Name)
 				
 				// The third argument should be an array with Enum instantiations
-				require.Len(t, validatorCall.Arguments, 3)
-				thirdArg, ok := validatorCall.Arguments[2].(*ast.ArrayExpression)
+				require.Len(t, validatorCall.Arguments.Arguments, 3)
+				thirdArg, ok := validatorCall.Arguments.Arguments[2].(*ast.ArrayExpression)
 				require.True(t, ok, "Expected array expression for third argument")
 				
 				// Check both array elements have new Enum(...) as values
@@ -13171,15 +13214,16 @@ $v = new Validator(
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				require.True(t, ok, "Expected expression statement")
 				
-				callExpr, ok := stmt.Expression.(*ast.CallExpression)
-				require.True(t, ok, "Expected call expression")
+				methodCall, ok := stmt.Expression.(*ast.MethodCallExpression)
+				require.True(t, ok, "Expected method call expression")
 				
-				methodCallExpr, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
-				require.True(t, ok, "Expected property access expression")
+				objVar, ok := methodCall.Object.(*ast.Variable)
+				require.True(t, ok, "Expected variable")
+				assert.Equal(t, "$obj", objVar.Name)
 				
-				ident, ok := methodCallExpr.Property.(*ast.IdentifierNode)
+				methodIdent, ok := methodCall.Method.(*ast.IdentifierNode)
 				require.True(t, ok, "Expected identifier for method name")
-				assert.Equal(t, "match", ident.Name)
+				assert.Equal(t, "match", methodIdent.Name)
 			},
 		},
 	}
@@ -13214,9 +13258,9 @@ func TestParsing_IntersectionTypeParameters(t *testing.T) {
 				assert.True(t, ok, "Expected FunctionDeclaration")
 				assert.Equal(t, "test", funcDecl.Name.(*ast.IdentifierNode).Name)
 
-				assert.Len(t, funcDecl.Parameters, 1)
+				if funcDecl.Parameters != nil { assert.Len(t, funcDecl.Parameters.Parameters, 1) } else { assert.Equal(t, 0, 1) }
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 
 				assert.NotNil(t, param.Type)
 				assert.Equal(t, ast.ASTTypeIntersection, param.Type.GetKind())
@@ -13234,9 +13278,9 @@ func TestParsing_IntersectionTypeParameters(t *testing.T) {
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				assert.True(t, ok, "Expected FunctionDeclaration")
 
-				assert.Len(t, funcDecl.Parameters, 1)
+				if funcDecl.Parameters != nil { assert.Len(t, funcDecl.Parameters.Parameters, 1) } else { assert.Equal(t, 0, 1) }
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$param", param.Name)
+				assert.Equal(t, "$param", param.Name.(*ast.IdentifierNode).Name)
 
 				assert.NotNil(t, param.Type)
 				assert.Equal(t, ast.ASTTypeIntersection, param.Type.GetKind())
@@ -13272,9 +13316,9 @@ func TestParsing_IntersectionTypeParameters(t *testing.T) {
 				assert.Equal(t, "__construct", constructor.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "public", constructor.Visibility)
 
-				assert.Len(t, constructor.Parameters, 1)
+				if constructor.Parameters != nil { assert.Len(t, constructor.Parameters.Parameters, 1) } else { assert.Equal(t, 0, 1) }
 				param := constructor.Parameters.Parameters[0]
-				assert.Equal(t, "$translator", param.Name)
+				assert.Equal(t, "$translator", param.Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "private", param.Visibility)
 
 				assert.NotNil(t, param.Type)
@@ -13294,9 +13338,9 @@ func TestParsing_IntersectionTypeParameters(t *testing.T) {
 				funcDecl, ok := program.Body[0].(*ast.FunctionDeclaration)
 				assert.True(t, ok, "Expected FunctionDeclaration")
 
-				assert.Len(t, funcDecl.Parameters, 1)
+				if funcDecl.Parameters != nil { assert.Len(t, funcDecl.Parameters.Parameters, 1) } else { assert.Equal(t, 0, 1) }
 				param := funcDecl.Parameters.Parameters[0]
-				assert.Equal(t, "$params", param.Name)
+				assert.Equal(t, "$params", param.Name.(*ast.IdentifierNode).Name)
 				assert.True(t, param.Variadic)
 
 				assert.NotNil(t, param.Type)
@@ -13352,9 +13396,10 @@ func TestParsing_FinalPublicFunctionWithUnionTypesAndStaticReturn(t *testing.T) 
 				require.False(t, funcDecl.IsAbstract)
 				
 				// Check parameter with union type
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 				param := funcDecl.Parameters.Parameters[0]
-				require.Equal(t, "$host", param.Name)
+				require.Equal(t, "$host", param.Name.(*ast.IdentifierNode).Name)
 				require.NotNil(t, param.Type)
 				
 				require.Len(t, param.Type.UnionTypes, 2, "Parameter should have union type with 2 types")
@@ -13387,9 +13432,10 @@ func TestParsing_FinalPublicFunctionWithUnionTypesAndStaticReturn(t *testing.T) 
 				require.True(t, funcDecl.IsFinal)
 				
 				// Check parameter with 3-type union
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 				param := funcDecl.Parameters.Parameters[0]
-				require.Equal(t, "$value", param.Name)
+				require.Equal(t, "$value", param.Name.(*ast.IdentifierNode).Name)
 				
 				require.Len(t, param.Type.UnionTypes, 3, "Parameter should have union type with 3 types")
 				require.Equal(t, "int", param.Type.UnionTypes[0].Name)
@@ -13422,9 +13468,10 @@ func TestParsing_FinalPublicFunctionWithUnionTypesAndStaticReturn(t *testing.T) 
 				require.True(t, funcDecl.IsFinal)
 				
 				// Check parameter union type with class names
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 				param := funcDecl.Parameters.Parameters[0]
-				require.Equal(t, "$obj", param.Name)
+				require.Equal(t, "$obj", param.Name.(*ast.IdentifierNode).Name)
 				
 				require.Len(t, param.Type.UnionTypes, 3, "Parameter should have union type with 3 class types")
 				require.Equal(t, "MyClass", param.Type.UnionTypes[0].Name)
@@ -13460,7 +13507,8 @@ func TestParsing_FinalPublicFunctionWithUnionTypesAndStaticReturn(t *testing.T) 
 				require.True(t, funcDecl.IsStatic)
 				
 				// Check union parameter
-				require.Len(t, funcDecl.Parameters, 1)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 1)
 				param := funcDecl.Parameters.Parameters[0]
 				require.Len(t, param.Type.UnionTypes, 2, "Parameter should have union type")
 				require.Equal(t, "string", param.Type.UnionTypes[0].Name)
@@ -13492,23 +13540,24 @@ func TestParsing_FinalPublicFunctionWithUnionTypesAndStaticReturn(t *testing.T) 
 				require.True(t, funcDecl.IsFinal)
 				
 				// Check all parameters
-				require.Len(t, funcDecl.Parameters, 3)
+				require.NotNil(t, funcDecl.Parameters)
+				require.Len(t, funcDecl.Parameters.Parameters, 3)
 				
 				// First parameter: string $name
 				param1 := funcDecl.Parameters.Parameters[0]
-				require.Equal(t, "$name", param1.Name)
+				require.Equal(t, "$name", param1.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "string", param1.Type.Name)
 				
 				// Second parameter: int|float $number
 				param2 := funcDecl.Parameters.Parameters[1]
-				require.Equal(t, "$number", param2.Name)
+				require.Equal(t, "$number", param2.Name.(*ast.IdentifierNode).Name)
 				require.Len(t, param2.Type.UnionTypes, 2, "Second parameter should have union type")
 				require.Equal(t, "int", param2.Type.UnionTypes[0].Name)
 				require.Equal(t, "float", param2.Type.UnionTypes[1].Name)
 				
 				// Third parameter: bool $flag
 				param3 := funcDecl.Parameters.Parameters[2]
-				require.Equal(t, "$flag", param3.Name)
+				require.Equal(t, "$flag", param3.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "bool", param3.Type.Name)
 				
 				// Check void return type
@@ -13552,7 +13601,8 @@ func TestParsing_Closures(t *testing.T) {
 				
 				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
 				require.True(t, ok)
-				require.Len(t, closure.Parameters, 0)
+				require.NotNil(t, closure.Parameters)
+				require.Len(t, closure.Parameters.Parameters, 0)
 				require.False(t, closure.Static)
 				require.False(t, closure.ByReference)
 				require.Len(t, closure.UseClause, 0)
@@ -13574,16 +13624,17 @@ func TestParsing_Closures(t *testing.T) {
 				
 				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
 				require.True(t, ok)
-				require.Len(t, closure.Parameters, 2)
+				require.NotNil(t, closure.Parameters)
+				require.Len(t, closure.Parameters.Parameters, 2)
 				
 				// First parameter: string $name
 				param1 := closure.Parameters.Parameters[0]
-				require.Equal(t, "$name", param1.Name)
+				require.Equal(t, "$name", param1.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "string", param1.Type.Name)
 				
 				// Second parameter: int $age
 				param2 := closure.Parameters.Parameters[1]
-				require.Equal(t, "$age", param2.Name)
+				require.Equal(t, "$age", param2.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "int", param2.Type.Name)
 				
 				require.False(t, closure.Static)
@@ -13604,7 +13655,8 @@ func TestParsing_Closures(t *testing.T) {
 				
 				closure, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
 				require.True(t, ok)
-				require.Len(t, closure.Parameters, 1)
+				require.NotNil(t, closure.Parameters)
+				require.Len(t, closure.Parameters.Parameters, 1)
 				require.Len(t, closure.UseClause, 2)
 				
 				// Check use clause variables
@@ -13694,11 +13746,11 @@ func TestParsing_Closures(t *testing.T) {
 				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok)
 				
-				call, ok := assignment.Right.(*ast.CallExpression)
+				methodCall, ok := assignment.Right.(*ast.MethodCallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 1)
+				require.Len(t, methodCall.Arguments.Arguments, 1)
 				
-				closure, ok := call.Arguments[0].(*ast.AnonymousFunctionExpression)
+				closure, ok := methodCall.Arguments.Arguments[0].(*ast.AnonymousFunctionExpression)
 				require.True(t, ok)
 				
 				// Verify static modifier
@@ -13706,9 +13758,10 @@ func TestParsing_Closures(t *testing.T) {
 				require.False(t, closure.ByReference)
 				
 				// Verify parameters
-				require.Len(t, closure.Parameters, 1)
+				require.NotNil(t, closure.Parameters)
+				require.Len(t, closure.Parameters.Parameters, 1)
 				param := closure.Parameters.Parameters[0]
-				require.Equal(t, "$exception", param.Name)
+				require.Equal(t, "$exception", param.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "\\Throwable", param.Type.Name)
 				
 				// Verify use clause
@@ -13783,9 +13836,10 @@ func TestParsing_Closures(t *testing.T) {
 				require.True(t, closure.ByReference)
 				
 				// Verify parameter
-				require.Len(t, closure.Parameters, 1)
+				require.NotNil(t, closure.Parameters)
+				require.Len(t, closure.Parameters.Parameters, 1)
 				param := closure.Parameters.Parameters[0]
-				require.Equal(t, "$data", param.Name)
+				require.Equal(t, "$data", param.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "array", param.Type.Name)
 				
 				// Verify use clause
@@ -13882,20 +13936,21 @@ func TestParsing_ClosuresTrailingCommaFix(t *testing.T) {
 				assignment, ok := stmt.Expression.(*ast.AssignmentExpression)
 				require.True(t, ok)
 				
-				call, ok := assignment.Right.(*ast.CallExpression)
+				methodCall, ok := assignment.Right.(*ast.MethodCallExpression)
 				require.True(t, ok)
-				require.Len(t, call.Arguments, 1)
+				require.Len(t, methodCall.Arguments.Arguments, 1)
 				
-				closure, ok := call.Arguments[0].(*ast.AnonymousFunctionExpression)
+				closure, ok := methodCall.Arguments.Arguments[0].(*ast.AnonymousFunctionExpression)
 				require.True(t, ok)
 				
 				// Verify static modifier
 				require.True(t, closure.Static)
 				
 				// Verify parameters
-				require.Len(t, closure.Parameters, 1)
+				require.NotNil(t, closure.Parameters)
+				require.Len(t, closure.Parameters.Parameters, 1)
 				param := closure.Parameters.Parameters[0]
-				require.Equal(t, "$exception", param.Name)
+				require.Equal(t, "$exception", param.Name.(*ast.IdentifierNode).Name)
 				
 				// Verify use clause (3 variables with trailing comma)
 				require.Len(t, closure.UseClause, 3)
@@ -13955,25 +14010,26 @@ class Test {
 
 				method := class.Body[0].(*ast.FunctionDeclaration)
 				require.Equal(t, "__construct", method.Name.(*ast.IdentifierNode).Name)
-				require.Len(t, method.Parameters, 3)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 3)
 
 				// Test first parameter: public private(set) string $title
 				param1 := method.Parameters.Parameters[0]
-				require.Equal(t, "$title", param1.Name)
+				require.Equal(t, "$title", param1.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "public private(set)", param1.Visibility)
 				require.NotNil(t, param1.Type)
 				require.Equal(t, "string", param1.Type.Name)
 
 				// Test second parameter: public protected(set) string $author
 				param2 := method.Parameters.Parameters[1]
-				require.Equal(t, "$author", param2.Name)
+				require.Equal(t, "$author", param2.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "public protected(set)", param2.Visibility)
 				require.NotNil(t, param2.Type)
 				require.Equal(t, "string", param2.Type.Name)
 
 				// Test third parameter: protected private(set) int $pubYear
 				param3 := method.Parameters.Parameters[2]
-				require.Equal(t, "$pubYear", param3.Name)
+				require.Equal(t, "$pubYear", param3.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "protected private(set)", param3.Visibility)
 				require.NotNil(t, param3.Type)
 				require.Equal(t, "int", param3.Type.Name)
@@ -13996,10 +14052,11 @@ class Test {
 				class := exprStmt.Expression.(*ast.ClassExpression)
 
 				method := class.Body[0].(*ast.FunctionDeclaration)
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 
 				param := method.Parameters.Parameters[0]
-				require.Equal(t, "$value", param.Name)
+				require.Equal(t, "$value", param.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "private(set)", param.Visibility)
 				require.Equal(t, "string", param.Type.Name)
 			},
@@ -14022,17 +14079,18 @@ class Test {
 				class := exprStmt.Expression.(*ast.ClassExpression)
 
 				method := class.Body[0].(*ast.FunctionDeclaration)
-				require.Len(t, method.Parameters, 2)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 2)
 
 				// Test first parameter: protected(set) public string $title
 				param1 := method.Parameters.Parameters[0]
-				require.Equal(t, "$title", param1.Name)
+				require.Equal(t, "$title", param1.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "protected(set) public", param1.Visibility)
 				require.Equal(t, "string", param1.Type.Name)
 
 				// Test second parameter: private(set) protected string $author
 				param2 := method.Parameters.Parameters[1]
-				require.Equal(t, "$author", param2.Name)
+				require.Equal(t, "$author", param2.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "private(set) protected", param2.Visibility)
 				require.Equal(t, "string", param2.Type.Name)
 			},
@@ -14054,10 +14112,11 @@ class Test {
 				class := exprStmt.Expression.(*ast.ClassExpression)
 
 				method := class.Body[0].(*ast.FunctionDeclaration)
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 
 				param := method.Parameters.Parameters[0]
-				require.Equal(t, "$title", param.Name)
+				require.Equal(t, "$title", param.Name.(*ast.IdentifierNode).Name)
 				require.Equal(t, "public private(set)", param.Visibility)
 				require.True(t, param.ReadOnly)
 				require.Equal(t, "string", param.Type.Name)
@@ -14344,9 +14403,10 @@ class AsymmetricVisibility {
 				require.True(t, method.IsStatic)
 				
 				// Check method parameters
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 				param := method.Parameters.Parameters[0]
-				require.Equal(t, "$host", param.Name)
+				require.Equal(t, "$host", param.Name.(*ast.IdentifierNode).Name)
 				
 				// Verify union type parsing (Stringable|string)
 				require.NotNil(t, param.Type, "Parameter should have a type")
@@ -14441,9 +14501,10 @@ class Test {
 				require.True(t, method.IsStatic)
 				
 				// Check method parameters
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 				param := method.Parameters.Parameters[0]
-				require.Equal(t, "$data", param.Name)
+				require.Equal(t, "$data", param.Name.(*ast.IdentifierNode).Name)
 				require.True(t, param.ByReference, "Parameter should be by reference")
 				
 				// Check attributes
@@ -14617,9 +14678,10 @@ class AsymmetricVisibility
 				require.Equal(t, "public", method.Visibility)
 				
 				// Check method parameters
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 				param := method.Parameters.Parameters[0]
-				require.Equal(t, "$parent", param.Name)
+				require.Equal(t, "$parent", param.Name.(*ast.IdentifierNode).Name)
 				
 				// Verify union type parsing (parenthesized intersection | null)
 				require.NotNil(t, param.Type, "Parameter should have a type")
@@ -14662,7 +14724,8 @@ class Test {
 				require.Equal(t, "complex", method.Name.(*ast.IdentifierNode).Name)
 				
 				// Check parameter type structure
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 				param := method.Parameters.Parameters[0]
 				require.NotNil(t, param.Type)
 				require.Equal(t, ast.ASTTypeUnion, param.Type.GetKind())
@@ -14733,7 +14796,8 @@ class Test {
 				require.Equal(t, "threeWay", method.Name.(*ast.IdentifierNode).Name)
 				
 				// Check parameter type
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 				param := method.Parameters.Parameters[0]
 				require.NotNil(t, param.Type)
 				require.Equal(t, ast.ASTTypeUnion, param.Type.GetKind())
@@ -15126,7 +15190,8 @@ $fn = #[\Route] static fn ($x) => $x * 2;`,
 				require.NotNil(t, arrowFunc)
 				require.True(t, arrowFunc.Static)
 				require.Len(t, arrowFunc.Attributes, 1)
-				require.Len(t, arrowFunc.Parameters, 1)
+				require.NotNil(t, arrowFunc.Parameters)
+				require.Len(t, arrowFunc.Parameters.Parameters, 1)
 				
 				attr := arrowFunc.Attributes[0].Attributes[0]
 				require.Equal(t, `\Route`, attr.Name.Name)
@@ -15198,7 +15263,8 @@ $fn = fn &() => 'hello';`,
 				require.NotNil(t, arrowFunc)
 				require.True(t, arrowFunc.ByReference)
 				require.False(t, arrowFunc.Static)
-				require.Nil(t, arrowFunc.Parameters)
+				require.NotNil(t, arrowFunc.Parameters)
+				require.Len(t, arrowFunc.Parameters.Parameters, 0)
 				
 				// Check body
 				stringLit := arrowFunc.Body.(*ast.StringLiteral)
@@ -15219,7 +15285,9 @@ $fn = fn &($x) => $x;`,
 				
 				require.NotNil(t, arrowFunc)
 				require.True(t, arrowFunc.ByReference)
-				require.Len(t, arrowFunc.Parameters, 1)
+				require.NotNil(t, arrowFunc.Parameters)
+				require.NotNil(t, arrowFunc.Parameters.Parameters)
+				require.Len(t, arrowFunc.Parameters.Parameters, 1)
 				require.Equal(t, "$x", arrowFunc.Parameters.Parameters[0].Name.(*ast.IdentifierNode).Name)
 			},
 		},
@@ -15237,7 +15305,9 @@ $fn = fn &(int $x): string => (string)$x;`,
 				
 				require.NotNil(t, arrowFunc)
 				require.True(t, arrowFunc.ByReference)
-				require.Len(t, arrowFunc.Parameters, 1)
+				require.NotNil(t, arrowFunc.Parameters)
+				require.NotNil(t, arrowFunc.Parameters.Parameters)
+				require.Len(t, arrowFunc.Parameters.Parameters, 1)
 				require.Equal(t, "$x", arrowFunc.Parameters.Parameters[0].Name.(*ast.IdentifierNode).Name)
 				require.NotNil(t, arrowFunc.Parameters.Parameters[0].Type)
 				require.Equal(t, "int", arrowFunc.Parameters.Parameters[0].Type.Name)
@@ -15266,7 +15336,9 @@ $fn = static fn &($x) => $x;`,
 				require.NotNil(t, arrowFunc)
 				require.True(t, arrowFunc.ByReference)
 				require.True(t, arrowFunc.Static)
-				require.Len(t, arrowFunc.Parameters, 1)
+				require.NotNil(t, arrowFunc.Parameters)
+				require.NotNil(t, arrowFunc.Parameters.Parameters)
+				require.Len(t, arrowFunc.Parameters.Parameters, 1)
 			},
 		},
 		{
@@ -15313,10 +15385,10 @@ $instanceof = &\Closure::bind(fn &() => $this->instanceof, $kernelLoader, $kerne
 				
 				// The callee should be another function call (\Closure::bind(...))
 				bindCall := callExpr.Callee.(*ast.CallExpression)
-				require.Len(t, bindCall.Arguments, 3)
+				require.Len(t, bindCall.Arguments.Arguments, 3)
 				
 				// First argument should be our reference arrow function
-				arrowFunc := bindCall.Arguments[0].(*ast.ArrowFunctionExpression)
+				arrowFunc := bindCall.Arguments.Arguments[0].(*ast.ArrowFunctionExpression)
 				require.NotNil(t, arrowFunc)
 				require.True(t, arrowFunc.ByReference)
 				
@@ -15749,9 +15821,9 @@ func TestParsing_PrintExpressions(t *testing.T) {
 				printStmt, ok := program.Body[0].(*ast.PrintStatement)
 				require.True(t, ok)
 				assert.Equal(t, ast.ASTPrint, printStmt.Kind)
-				assert.Len(t, printStmt.Arguments, 1)
+				assert.Len(t, printStmt.Arguments.Arguments, 1)
 				
-				variable, ok := printStmt.Arguments[0].(*ast.Variable)
+				variable, ok := printStmt.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$message", variable.Name)
 			},
@@ -15797,9 +15869,9 @@ func TestParsing_PrintExpressions(t *testing.T) {
 				
 				printStmt, ok := program.Body[0].(*ast.PrintStatement)
 				require.True(t, ok)
-				assert.Len(t, printStmt.Arguments, 1)
+				assert.Len(t, printStmt.Arguments.Arguments, 1)
 				
-				stringLit, ok := printStmt.Arguments[0].(*ast.StringLiteral)
+				stringLit, ok := printStmt.Arguments.Arguments[0].(*ast.StringLiteral)
 				require.True(t, ok)
 				assert.Equal(t, "Hello World", stringLit.Value)
 			},
@@ -15897,7 +15969,7 @@ class Foo {
 				assert.Nil(t, attr.Arguments)
 				
 				// Check parameters
-				assert.Len(t, funcDecl.Parameters, 1)
+				if funcDecl.Parameters != nil { assert.Len(t, funcDecl.Parameters.Parameters, 1) } else { assert.Equal(t, 0, 1) }
 				assert.Equal(t, "$index", funcDecl.Parameters.Parameters[0].Name.(*ast.IdentifierNode).Name)
 				
 				// Check method body
@@ -16257,8 +16329,8 @@ func TestParsing_ArrayDestructuring(t *testing.T) {
 				callee, ok := funcCall.Callee.(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$getStateItem", callee.Name)
-				require.Len(t, funcCall.Arguments, 1)
-				arg, ok := funcCall.Arguments[0].(*ast.Variable)
+				require.Len(t, funcCall.Arguments.Arguments, 1)
+				arg, ok := funcCall.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$stateItem", arg.Name)
 			},
@@ -16352,8 +16424,8 @@ func TestParsing_ArrayDestructuring(t *testing.T) {
 				callee, ok := funcCall.Callee.(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$getStateItem", callee.Name)
-				require.Len(t, funcCall.Arguments, 1)
-				arg, ok := funcCall.Arguments[0].(*ast.Variable)
+				require.Len(t, funcCall.Arguments.Arguments, 1)
+				arg, ok := funcCall.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok)
 				assert.Equal(t, "$stateItem", arg.Name)
 			},
@@ -16565,7 +16637,9 @@ class Test {
 				require.Len(t, class.Body, 1)
 				method := class.Body[0].(*ast.FunctionDeclaration)
 				
-				require.Len(t, method.Parameters, 1)
+				require.NotNil(t, method.Parameters)
+				require.NotNil(t, method.Parameters.Parameters)
+				require.Len(t, method.Parameters.Parameters, 1)
 				param := method.Parameters.Parameters[0]
 				
 				require.NotNil(t, param.Type)
@@ -16611,8 +16685,8 @@ func TestParsing_BacktickWithCurlyBraceInterpolation(t *testing.T) {
 				assert.True(t, ok, "Argument should be CallExpression")
 
 				// Check the argument is a ShellExecExpression
-				assert.Len(t, callExpr.Arguments, 1)
-				shellExec, ok := callExpr.Arguments[0].(*ast.ShellExecExpression)
+				assert.Len(t, callExpr.Arguments.Arguments, 1)
+				shellExec, ok := callExpr.Arguments.Arguments[0].(*ast.ShellExecExpression)
 				assert.True(t, ok, "Argument should be ShellExecExpression")
 
 				// Check the parts
@@ -16655,10 +16729,10 @@ func TestParsing_MagicConstants(t *testing.T) {
 				echoStmt, ok := program.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Should be EchoStatement")
 				
-				assert.Len(t, echoStmt.Arguments, 1)
+				assert.Len(t, echoStmt.Arguments.Arguments, 1)
 				
 				// Check the argument is a magic constant with __METHOD__
-				magicConst, ok := echoStmt.Arguments[0].(*ast.MagicConstantExpression)
+				magicConst, ok := echoStmt.Arguments.Arguments[0].(*ast.MagicConstantExpression)
 				assert.True(t, ok, "Should be MagicConstantExpression")
 				assert.Equal(t, "__METHOD__", magicConst.Name)
 				assert.Equal(t, lexer.T_METHOD_C, magicConst.TokenType)
@@ -16689,9 +16763,9 @@ func TestParsing_MagicConstants(t *testing.T) {
 					echoStmt, ok := program.Body[i].(*ast.EchoStatement)
 					assert.True(t, ok, "Statement %d should be EchoStatement", i)
 					
-					assert.Len(t, echoStmt.Arguments, 1, "Statement %d should have 1 argument", i)
+					assert.Len(t, echoStmt.Arguments.Arguments, 1, "Statement %d should have 1 argument", i)
 					
-					magicConst, ok := echoStmt.Arguments[0].(*ast.MagicConstantExpression)
+					magicConst, ok := echoStmt.Arguments.Arguments[0].(*ast.MagicConstantExpression)
 					assert.True(t, ok, "Statement %d argument should be MagicConstantExpression", i)
 					assert.Equal(t, expected.name, magicConst.Name, "Statement %d should have correct magic constant name", i)
 					assert.Equal(t, expected.tokenType, magicConst.TokenType, "Statement %d should have correct token type", i)
@@ -16718,9 +16792,9 @@ func TestParsing_MagicConstants(t *testing.T) {
 					echoStmt, ok := program.Body[i].(*ast.EchoStatement)
 					assert.True(t, ok, "Statement %d should be EchoStatement", i)
 					
-					assert.Len(t, echoStmt.Arguments, 1, "Statement %d should have 1 argument", i)
+					assert.Len(t, echoStmt.Arguments.Arguments, 1, "Statement %d should have 1 argument", i)
 					
-					magicConst, ok := echoStmt.Arguments[0].(*ast.MagicConstantExpression)
+					magicConst, ok := echoStmt.Arguments.Arguments[0].(*ast.MagicConstantExpression)
 					assert.True(t, ok, "Statement %d argument should be MagicConstantExpression", i)
 					assert.Equal(t, expected.name, magicConst.Name, "Statement %d should have correct magic constant name", i)
 					assert.Equal(t, expected.tokenType, magicConst.TokenType, "Statement %d should have correct token type", i)

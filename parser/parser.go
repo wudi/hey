@@ -2685,11 +2685,28 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 
 	// 检查是否是方法调用 (后面跟着括号)
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
-		// 这是一个方法调用: $obj->method()
+		// 移动到括号
+		p.nextToken() // 移动到 (
+		
+		// 检查第一类可调用语法 $obj->method(...)
+		if p.peekToken.Type == lexer.T_ELLIPSIS {
+			// 检查是否为 (...) 模式
+			p.nextToken() // 移动到 ...
+			if p.peekToken.Type == lexer.TOKEN_RPAREN {
+				// 确实是 $obj->method(...) 语法
+				p.nextToken() // 跳过 )
+				// 创建 PropertyAccessExpression 作为 callable
+				propAccess := ast.NewPropertyAccessExpression(pos, left, property)
+				return ast.NewFirstClassCallable(pos, propAccess)
+			}
+			// 如果不是 (...) 模式，需要回退处理
+		}
+		
+		// 这是一个普通方法调用: $obj->method()
 		methodCall := ast.NewMethodCallExpression(pos, left, property)
 		
-		// 移动到括号并解析参数
-		p.nextToken() // 移动到 (
+		// 解析参数 (注意：如果上面检测到了T_ELLIPSIS但不是FirstClassCallable模式，
+		// parseExpressionList会正确处理剩余的tokens)
 		args := parseExpressionList(p, lexer.TOKEN_RPAREN)
 		if len(args) > 0 {
 			methodCall.Arguments = ast.NewArgumentList(p.currentToken.Position, args)
