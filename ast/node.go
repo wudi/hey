@@ -2313,6 +2313,42 @@ func (i *IdentifierNode) String() string {
 	return i.Name
 }
 
+// MagicConstantExpression 魔术常量表达式节点 (0 child nodes)
+// 对应 PHP 的 ZEND_AST_MAGIC_CONST，用于 __FILE__, __LINE__, __METHOD__ 等魔术常量
+type MagicConstantExpression struct {
+	BaseNode
+	Name      string           `json:"name"`      // 魔术常量名称，如 "__FILE__", "__METHOD__"
+	TokenType lexer.TokenType  `json:"tokenType"` // 对应的 token 类型，如 T_FILE, T_METHOD_C
+}
+
+func NewMagicConstantExpression(pos lexer.Position, name string, tokenType lexer.TokenType) *MagicConstantExpression {
+	return &MagicConstantExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTMagicConst, // 使用正确的 ZEND_AST_MAGIC_CONST 类型
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name:      name,
+		TokenType: tokenType,
+	}
+}
+
+// GetChildren 返回子节点 - 魔术常量是0子节点的叶子节点
+func (m *MagicConstantExpression) GetChildren() []Node {
+	return nil
+}
+
+// Accept 接受访问者
+func (m *MagicConstantExpression) Accept(visitor Visitor) {
+	visitor.Visit(m)
+}
+
+func (m *MagicConstantExpression) expressionNode() {}
+
+func (m *MagicConstantExpression) String() string {
+	return fmt.Sprintf("MagicConstant(%s)", m.Name)
+}
+
 // NamespaceNameExpression 表示命名空间名称表达式
 type NamespaceNameExpression struct {
 	BaseNode

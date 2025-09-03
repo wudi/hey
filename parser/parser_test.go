@@ -16656,10 +16656,11 @@ func TestParsing_MagicConstants(t *testing.T) {
 				
 				assert.Len(t, echoStmt.Arguments, 1)
 				
-				// Check the argument is an identifier with __METHOD__
-				identifier, ok := echoStmt.Arguments[0].(*ast.IdentifierNode)
-				assert.True(t, ok, "Should be IdentifierNode")
-				assert.Equal(t, "__METHOD__", identifier.Name)
+				// Check the argument is a magic constant with __METHOD__
+				magicConst, ok := echoStmt.Arguments[0].(*ast.MagicConstantExpression)
+				assert.True(t, ok, "Should be MagicConstantExpression")
+				assert.Equal(t, "__METHOD__", magicConst.Name)
+				assert.Equal(t, lexer.T_METHOD_C, magicConst.TokenType)
 			},
 		},
 		{
@@ -16669,17 +16670,30 @@ func TestParsing_MagicConstants(t *testing.T) {
 				// Check that all 8 statements parse successfully
 				assert.Len(t, program.Body, 8)
 				
-				expectedConstants := []string{"__FILE__", "__LINE__", "__DIR__", "__CLASS__", "__TRAIT__", "__FUNCTION__", "__METHOD__", "__NAMESPACE__"}
+				expectedConstants := []struct{
+					name string
+					tokenType lexer.TokenType
+				}{
+					{"__FILE__", lexer.T_FILE},
+					{"__LINE__", lexer.T_LINE},
+					{"__DIR__", lexer.T_DIR},
+					{"__CLASS__", lexer.T_CLASS_C},
+					{"__TRAIT__", lexer.T_TRAIT_C},
+					{"__FUNCTION__", lexer.T_FUNC_C},
+					{"__METHOD__", lexer.T_METHOD_C},
+					{"__NAMESPACE__", lexer.T_NS_C},
+				}
 				
-				for i, expectedConstant := range expectedConstants {
+				for i, expected := range expectedConstants {
 					echoStmt, ok := program.Body[i].(*ast.EchoStatement)
 					assert.True(t, ok, "Statement %d should be EchoStatement", i)
 					
 					assert.Len(t, echoStmt.Arguments, 1, "Statement %d should have 1 argument", i)
 					
-					identifier, ok := echoStmt.Arguments[0].(*ast.IdentifierNode)
-					assert.True(t, ok, "Statement %d argument should be IdentifierNode", i)
-					assert.Equal(t, expectedConstant, identifier.Name, "Statement %d should have correct magic constant", i)
+					magicConst, ok := echoStmt.Arguments[0].(*ast.MagicConstantExpression)
+					assert.True(t, ok, "Statement %d argument should be MagicConstantExpression", i)
+					assert.Equal(t, expected.name, magicConst.Name, "Statement %d should have correct magic constant name", i)
+					assert.Equal(t, expected.tokenType, magicConst.TokenType, "Statement %d should have correct token type", i)
 				}
 			},
 		},
@@ -16690,17 +16704,25 @@ func TestParsing_MagicConstants(t *testing.T) {
 				// Check that all 3 statements parse successfully
 				assert.Len(t, program.Body, 3)
 				
-				expectedConstants := []string{"__method__", "__file__", "__class__"}
+				expectedConstants := []struct{
+					name string
+					tokenType lexer.TokenType
+				}{
+					{"__method__", lexer.T_METHOD_C},
+					{"__file__", lexer.T_FILE},
+					{"__class__", lexer.T_CLASS_C},
+				}
 				
-				for i, expectedConstant := range expectedConstants {
+				for i, expected := range expectedConstants {
 					echoStmt, ok := program.Body[i].(*ast.EchoStatement)
 					assert.True(t, ok, "Statement %d should be EchoStatement", i)
 					
 					assert.Len(t, echoStmt.Arguments, 1, "Statement %d should have 1 argument", i)
 					
-					identifier, ok := echoStmt.Arguments[0].(*ast.IdentifierNode)
-					assert.True(t, ok, "Statement %d argument should be IdentifierNode", i)
-					assert.Equal(t, expectedConstant, identifier.Name, "Statement %d should have correct magic constant", i)
+					magicConst, ok := echoStmt.Arguments[0].(*ast.MagicConstantExpression)
+					assert.True(t, ok, "Statement %d argument should be MagicConstantExpression", i)
+					assert.Equal(t, expected.name, magicConst.Name, "Statement %d should have correct magic constant name", i)
+					assert.Equal(t, expected.tokenType, magicConst.TokenType, "Statement %d should have correct token type", i)
 				}
 			},
 		},

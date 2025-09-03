@@ -211,15 +211,15 @@ func init() {
 		lexer.T_THROW:                parseThrowExpression,
 		lexer.T_POW:                  parseFallback, // ** 作为前缀时是无效的，但需要处理
 		// Magic constants
-		lexer.T_FILE:                 parseIdentifier,
-		lexer.T_LINE:                 parseIdentifier,
-		lexer.T_DIR:                  parseIdentifier,
-		lexer.T_CLASS_C:              parseIdentifier,
-		lexer.T_TRAIT_C:              parseIdentifier,
-		lexer.T_FUNC_C:               parseIdentifier,
-		lexer.T_METHOD_C:             parseIdentifier,
-		lexer.T_NS_C:                 parseIdentifier,
-		lexer.T_PROPERTY_C:           parseIdentifier,
+		lexer.T_FILE:                 parseMagicConstant,
+		lexer.T_LINE:                 parseMagicConstant,
+		lexer.T_DIR:                  parseMagicConstant,
+		lexer.T_CLASS_C:              parseMagicConstant,
+		lexer.T_TRAIT_C:              parseMagicConstant,
+		lexer.T_FUNC_C:               parseMagicConstant,
+		lexer.T_METHOD_C:             parseMagicConstant,
+		lexer.T_NS_C:                 parseMagicConstant,
+		lexer.T_PROPERTY_C:           parseMagicConstant,
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
 		// 二元运算符
@@ -2900,6 +2900,16 @@ func parseIdentifier(p *Parser) ast.Expression {
 
 	// Simple identifier
 	return ast.NewIdentifierNode(pos, p.currentToken.Value)
+}
+
+// parseMagicConstant 解析魔术常量 (__FILE__, __LINE__, __METHOD__ 等)
+// 对应 PHP 语法: T_FILE { $$ = zend_ast_create_ex(ZEND_AST_MAGIC_CONST, T_FILE); }
+func parseMagicConstant(p *Parser) ast.Expression {
+	pos := p.currentToken.Position
+	name := p.currentToken.Value
+	tokenType := p.currentToken.Type
+	
+	return ast.NewMagicConstantExpression(pos, name, tokenType)
 }
 
 // isReservedNonModifier 检查是否为保留非修饰符关键字
