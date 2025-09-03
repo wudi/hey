@@ -13,7 +13,7 @@ func TestProgram_String(t *testing.T) {
 
 	// 添加一个 echo 语句
 	echo := NewEchoStatement(pos)
-	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "Hello, World!", `"Hello, World!"`))
+	echo.Arguments = NewArgumentList(pos, []Expression{NewStringLiteral(pos, "Hello, World!", `"Hello, World!"`)})
 	program.Body = append(program.Body, echo)
 
 	expected := `echo "Hello, World!";` + "\n"
@@ -25,11 +25,11 @@ func TestEchoStatement_String(t *testing.T) {
 	echo := NewEchoStatement(pos)
 
 	// 测试单个参数
-	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "Hello", `"Hello"`))
+	echo.Arguments = NewArgumentList(pos, []Expression{NewStringLiteral(pos, "Hello", `"Hello"`)})
 	assert.Equal(t, `echo "Hello";`, echo.String())
 
 	// 测试多个参数
-	echo.Arguments = append(echo.Arguments, NewVariable(pos, "$name"))
+	echo.Arguments = NewArgumentList(pos, []Expression{NewStringLiteral(pos, "Hello", `"Hello"`), NewVariable(pos, "$name")})
 	assert.Equal(t, `echo "Hello", $name;`, echo.String())
 }
 
@@ -142,7 +142,7 @@ func TestIfStatement_String(t *testing.T) {
 
 	// 添加 consequent 语句
 	echo := NewEchoStatement(pos)
-	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "x is greater than 5", `"x is greater than 5"`))
+	echo.Arguments = NewArgumentList(pos, []Expression{NewStringLiteral(pos, "x is greater than 5", `"x is greater than 5"`)})
 	ifStmt.Consequent = append(ifStmt.Consequent, echo)
 
 	expected := `if (($x > 5)) {
@@ -179,14 +179,13 @@ func TestFunctionDeclaration_String(t *testing.T) {
 	funcDecl := NewFunctionDeclaration(pos, funcName)
 
 	// 添加参数
-	funcDecl.Parameters = append(funcDecl.Parameters, Parameter{
-		Name: "$name",
-	})
+	paramName := NewIdentifierNode(pos, "$name")
+	param := NewParameterNode(pos, paramName)
+	funcDecl.Parameters = NewParameterList(pos, []*ParameterNode{param})
 
 	// 添加函数体
 	echo := NewEchoStatement(pos)
-	echo.Arguments = append(echo.Arguments, NewStringLiteral(pos, "Hello, ", `"Hello, "`))
-	echo.Arguments = append(echo.Arguments, NewVariable(pos, "$name"))
+	echo.Arguments = NewArgumentList(pos, []Expression{NewStringLiteral(pos, "Hello, ", `"Hello, "`), NewVariable(pos, "$name")})
 	funcDecl.Body = append(funcDecl.Body, echo)
 
 	expected := `function greet($name) {

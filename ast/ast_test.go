@@ -147,7 +147,7 @@ func TestVisitorPattern(t *testing.T) {
 	str := NewStringLiteral(pos, "hello", "\"hello\"")
 	binExpr := NewBinaryExpression(pos, variable, "+", str)
 	echo := NewEchoStatement(pos)
-	echo.Arguments = append(echo.Arguments, binExpr)
+	echo.Arguments = NewArgumentList(pos, []Expression{binExpr})
 
 	program := NewProgram(pos)
 	program.Body = append(program.Body, echo)
@@ -159,7 +159,7 @@ func TestVisitorPattern(t *testing.T) {
 		return true
 	}), program)
 
-	expectedCount := 5 // Program, EchoStatement, BinaryExpression, Variable, StringLiteral
+	expectedCount := 6 // Program, EchoStatement, ArgumentList, BinaryExpression, Variable, StringLiteral
 	if nodeCount != expectedCount {
 		t.Errorf("Expected %d nodes, got %d", expectedCount, nodeCount)
 	}

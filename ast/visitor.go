@@ -31,12 +31,12 @@ func Walk(visitor Visitor, node Node) {
 			Walk(visitor, stmt)
 		}
 	case *EchoStatement:
-		for _, arg := range n.Arguments {
-			Walk(visitor, arg)
+		if n.Arguments != nil {
+			Walk(visitor, n.Arguments)
 		}
 	case *PrintStatement:
-		for _, arg := range n.Arguments {
-			Walk(visitor, arg)
+		if n.Arguments != nil {
+			Walk(visitor, n.Arguments)
 		}
 	case *ExpressionStatement:
 		Walk(visitor, n.Expression)
@@ -74,8 +74,11 @@ func Walk(visitor Visitor, node Node) {
 		}
 	case *FunctionDeclaration:
 		Walk(visitor, n.Name)
-		for _, param := range n.Parameters {
-			Walk(visitor, param.DefaultValue)
+		if n.Parameters != nil {
+			Walk(visitor, n.Parameters)
+		}
+		if n.ReturnType != nil {
+			Walk(visitor, n.ReturnType)
 		}
 		for _, stmt := range n.Body {
 			Walk(visitor, stmt)
@@ -88,6 +91,27 @@ func Walk(visitor Visitor, node Node) {
 		}
 	case *CallExpression:
 		Walk(visitor, n.Callee)
+		if n.Arguments != nil {
+			Walk(visitor, n.Arguments)
+		}
+	case *ParameterNode:
+		Walk(visitor, n.Name)
+		if n.DefaultValue != nil {
+			Walk(visitor, n.DefaultValue)
+		}
+		if n.Type != nil {
+			Walk(visitor, n.Type)
+		}
+		for _, attr := range n.Attributes {
+			if attr != nil {
+				Walk(visitor, attr)
+			}
+		}
+	case *ParameterList:
+		for _, param := range n.Parameters {
+			Walk(visitor, param)
+		}
+	case *ArgumentList:
 		for _, arg := range n.Arguments {
 			Walk(visitor, arg)
 		}
@@ -149,12 +173,12 @@ func Transform(node Node, transformer Transformer) Node {
 			n.Body[i] = Transform(stmt, transformer).(Statement)
 		}
 	case *EchoStatement:
-		for i, arg := range n.Arguments {
-			n.Arguments[i] = Transform(arg, transformer).(Expression)
+		if n.Arguments != nil {
+			n.Arguments = Transform(n.Arguments, transformer).(*ArgumentList)
 		}
 	case *PrintStatement:
-		for i, arg := range n.Arguments {
-			n.Arguments[i] = Transform(arg, transformer).(Expression)
+		if n.Arguments != nil {
+			n.Arguments = Transform(n.Arguments, transformer).(*ArgumentList)
 		}
 	case *ExpressionStatement:
 		n.Expression = Transform(n.Expression, transformer).(Expression)
@@ -198,10 +222,11 @@ func Transform(node Node, transformer Transformer) Node {
 		}
 	case *FunctionDeclaration:
 		n.Name = Transform(n.Name, transformer).(Identifier)
-		for i, param := range n.Parameters {
-			if param.DefaultValue != nil {
-				n.Parameters[i].DefaultValue = Transform(param.DefaultValue, transformer).(Expression)
-			}
+		if n.Parameters != nil {
+			n.Parameters = Transform(n.Parameters, transformer).(*ParameterList)
+		}
+		if n.ReturnType != nil {
+			n.ReturnType = Transform(n.ReturnType, transformer).(*TypeHint)
 		}
 		for i, stmt := range n.Body {
 			n.Body[i] = Transform(stmt, transformer).(Statement)
@@ -216,8 +241,8 @@ func Transform(node Node, transformer Transformer) Node {
 		}
 	case *CallExpression:
 		n.Callee = Transform(n.Callee, transformer).(Expression)
-		for i, arg := range n.Arguments {
-			n.Arguments[i] = Transform(arg, transformer).(Expression)
+		if n.Arguments != nil {
+			n.Arguments = Transform(n.Arguments, transformer).(*ArgumentList)
 		}
 	}
 

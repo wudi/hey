@@ -25,7 +25,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments, 1)
 				
-				stringLit, ok := stmt.Arguments[0].(*ast.StringLiteral)
+				stringLit, ok := stmt.Arguments.Arguments[0].(*ast.StringLiteral)
 				require.True(t, ok, "Argument should be StringLiteral")
 				assert.Equal(t, "hello", stringLit.Value)
 			},
@@ -40,7 +40,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments, 1)
 				
-				variable, ok := stmt.Arguments[0].(*ast.Variable)
+				variable, ok := stmt.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok, "Argument should be Variable")
 				assert.Equal(t, "$name", variable.Name)
 			},
@@ -55,7 +55,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments, 1)
 				
-				objAccess, ok := stmt.Arguments[0].(*ast.PropertyAccessExpression)
+				objAccess, ok := stmt.Arguments.Arguments[0].(*ast.PropertyAccessExpression)
 				require.True(t, ok, "Argument should be PropertyAccessExpression")
 				
 				variable, ok := objAccess.Object.(*ast.Variable)
@@ -77,7 +77,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments, 1)
 				
-				stringLit, ok := stmt.Arguments[0].(*ast.StringLiteral)
+				stringLit, ok := stmt.Arguments.Arguments[0].(*ast.StringLiteral)
 				require.True(t, ok, "Argument should be StringLiteral")
 				assert.Equal(t, "hello", stringLit.Value)
 			},
@@ -93,7 +93,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 				require.Len(t, stmt.Arguments, 1)
 				
 				// Should be a binary expression for string concatenation
-				binExpr, ok := stmt.Arguments[0].(*ast.BinaryExpression)
+				binExpr, ok := stmt.Arguments.Arguments[0].(*ast.BinaryExpression)
 				require.True(t, ok, "Argument should be BinaryExpression")
 				assert.Equal(t, ".", binExpr.Operator)
 			},
@@ -110,7 +110,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 				require.Len(t, echoStmt.Arguments, 1)
 				
 				// Verify it's parsing the property access correctly
-				objAccess, ok := echoStmt.Arguments[0].(*ast.PropertyAccessExpression)
+				objAccess, ok := echoStmt.Arguments.Arguments[0].(*ast.PropertyAccessExpression)
 				require.True(t, ok, "Echo argument should be PropertyAccessExpression")
 				
 				variable, ok := objAccess.Object.(*ast.Variable)
@@ -128,7 +128,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments, 1)
 				
-				intLit, ok := stmt.Arguments[0].(*ast.NumberLiteral)
+				intLit, ok := stmt.Arguments.Arguments[0].(*ast.NumberLiteral)
 				require.True(t, ok, "Argument should be NumberLiteral")
 				assert.Equal(t, "42", intLit.Value)
 			},

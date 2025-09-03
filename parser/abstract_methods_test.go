@@ -65,15 +65,19 @@ abstract class SeekableFileContent implements FileContent {
 				// Check specific method names
 				method1 := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.Equal(t, "doRead", getMethodName(t, method1))
-				assert.Equal(t, 2, len(method1.Parameters))
+				assert.Equal(t, 2, len(method1.Parameters.Parameters))
 				
 				method2 := classExpr.Body[1].(*ast.FunctionDeclaration)
 				assert.Equal(t, "getDefaultPermissions", getMethodName(t, method2))
-				assert.Equal(t, 0, len(method2.Parameters))
+				if method2.Parameters != nil {
+					assert.Equal(t, 0, len(method2.Parameters.Parameters))
+				} else {
+					assert.Equal(t, 0, 0) // No parameters
+				}
 				
 				method3 := classExpr.Body[2].(*ast.FunctionDeclaration)
 				assert.Equal(t, "doWrite", getMethodName(t, method3))
-				assert.Equal(t, 3, len(method3.Parameters))
+				assert.Equal(t, 3, len(method3.Parameters.Parameters))
 			},
 		},
 	}

@@ -156,7 +156,7 @@ func Example_complexAST() {
 	fmt.Printf("Echo statements: %d\n", len(echoNodes))
 
 	// Output:
-	// Total nodes: 8
+	// Total nodes: 10
 	// AST Kind: IF
 	// Echo statements: 2
 }

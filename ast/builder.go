@@ -77,10 +77,14 @@ func (b *ASTBuilder) CreateCall(pos lexer.Position, callee Node, args []Node) No
 	}
 	
 	call := NewCallExpression(pos, calleeExpr)
+	var expressions []Expression
 	for _, arg := range args {
 		if argExpr, ok := arg.(Expression); ok {
-			call.Arguments = append(call.Arguments, argExpr)
+			expressions = append(expressions, argExpr)
 		}
+	}
+	if len(expressions) > 0 {
+		call.Arguments = NewArgumentList(pos, expressions)
 	}
 	
 	return call
@@ -101,10 +105,14 @@ func (b *ASTBuilder) CreateArray(pos lexer.Position, elements []Node) Node {
 // CreateEcho 创建echo语句节点
 func (b *ASTBuilder) CreateEcho(pos lexer.Position, args []Node) Node {
 	echo := NewEchoStatement(pos)
+	var expressions []Expression
 	for _, arg := range args {
 		if argExpr, ok := arg.(Expression); ok {
-			echo.Arguments = append(echo.Arguments, argExpr)
+			expressions = append(expressions, argExpr)
 		}
+	}
+	if len(expressions) > 0 {
+		echo.Arguments = NewArgumentList(pos, expressions)
 	}
 	
 	return echo
@@ -197,14 +205,16 @@ func (b *ASTBuilder) CreateFor(pos lexer.Position, init, test, update Node, body
 }
 
 // CreateFuncDecl 创建函数声明节点
-func (b *ASTBuilder) CreateFuncDecl(pos lexer.Position, name Node, params []Parameter, body []Node) Node {
+func (b *ASTBuilder) CreateFuncDecl(pos lexer.Position, name Node, params []*ParameterNode, body []Node) Node {
 	nameId, ok := name.(Identifier)
 	if !ok {
 		return nil
 	}
 	
 	funcDecl := NewFunctionDeclaration(pos, nameId)
-	funcDecl.Parameters = params
+	if len(params) > 0 {
+		funcDecl.Parameters = NewParameterList(pos, params)
+	}
 	
 	for _, stmt := range body {
 		if s, ok := stmt.(Statement); ok {

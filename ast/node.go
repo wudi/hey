@@ -147,7 +147,7 @@ func (p *Program) String() string {
 // Echo 语句
 type EchoStatement struct {
 	BaseNode
-	Arguments []Expression `json:"arguments"`
+	Arguments *ArgumentList `json:"arguments,omitempty"`
 }
 
 func NewEchoStatement(pos lexer.Position) *EchoStatement {
@@ -157,24 +157,22 @@ func NewEchoStatement(pos lexer.Position) *EchoStatement {
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Arguments: make([]Expression, 0),
 	}
 }
 
 // GetChildren 返回子节点
 func (e *EchoStatement) GetChildren() []Node {
-	children := make([]Node, len(e.Arguments))
-	for i, arg := range e.Arguments {
-		children[i] = arg
+	if e.Arguments != nil {
+		return []Node{e.Arguments}
 	}
-	return children
+	return []Node{}
 }
 
 // Accept 接受访问者
 func (e *EchoStatement) Accept(visitor Visitor) {
 	if visitor.Visit(e) {
-		for _, arg := range e.Arguments {
-			arg.Accept(visitor)
+		if e.Arguments != nil {
+			e.Arguments.Accept(visitor)
 		}
 	}
 }
@@ -182,19 +180,22 @@ func (e *EchoStatement) Accept(visitor Visitor) {
 func (e *EchoStatement) statementNode() {}
 
 func (e *EchoStatement) String() string {
-	var args []string
-	for _, arg := range e.Arguments {
-		if arg != nil {
-			args = append(args, arg.String())
+	if e.Arguments != nil && len(e.Arguments.Arguments) > 0 {
+		var args []string
+		for _, arg := range e.Arguments.Arguments {
+			if arg != nil {
+				args = append(args, arg.String())
+			}
 		}
+		return "echo " + strings.Join(args, ", ") + ";"
 	}
-	return "echo " + strings.Join(args, ", ") + ";"
+	return "echo;"
 }
 
 // PrintStatement 表示print语句
 type PrintStatement struct {
 	BaseNode
-	Arguments []Expression `json:"arguments"`
+	Arguments *ArgumentList `json:"arguments,omitempty"`
 }
 
 func NewPrintStatement(pos lexer.Position) *PrintStatement {
@@ -204,24 +205,22 @@ func NewPrintStatement(pos lexer.Position) *PrintStatement {
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Arguments: make([]Expression, 0),
 	}
 }
 
 // GetChildren 返回子节点
 func (p *PrintStatement) GetChildren() []Node {
-	children := make([]Node, len(p.Arguments))
-	for i, arg := range p.Arguments {
-		children[i] = arg
+	if p.Arguments != nil {
+		return []Node{p.Arguments}
 	}
-	return children
+	return []Node{}
 }
 
 // Accept 接受访问者
 func (p *PrintStatement) Accept(visitor Visitor) {
 	if visitor.Visit(p) {
-		for _, arg := range p.Arguments {
-			arg.Accept(visitor)
+		if p.Arguments != nil {
+			p.Arguments.Accept(visitor)
 		}
 	}
 }
@@ -229,13 +228,16 @@ func (p *PrintStatement) Accept(visitor Visitor) {
 func (p *PrintStatement) statementNode() {}
 
 func (p *PrintStatement) String() string {
-	var args []string
-	for _, arg := range p.Arguments {
-		if arg != nil {
-			args = append(args, arg.String())
+	if p.Arguments != nil && len(p.Arguments.Arguments) > 0 {
+		var args []string
+		for _, arg := range p.Arguments.Arguments {
+			if arg != nil {
+				args = append(args, arg.String())
+			}
 		}
+		return "print " + strings.Join(args, ", ") + ";"
 	}
-	return "print " + strings.Join(args, ", ") + ";"
+	return "print;"
 }
 
 // PrintExpression 表示print表达式 (作为表达式使用的print)
@@ -418,7 +420,7 @@ type InterfaceDeclaration struct {
 // InterfaceMethod 表示接口方法声明
 type InterfaceMethod struct {
 	Name        *IdentifierNode `json:"name"`                  // 方法名称
-	Parameters  []Parameter     `json:"parameters"`            // 参数列表
+	Parameters  *ParameterList  `json:"parameters,omitempty"` // 参数列表
 	ReturnType  *TypeHint       `json:"returnType,omitempty"`  // 返回类型
 	Visibility  string          `json:"visibility"`            // 可见性 (通常是 public)
 	ByReference bool            `json:"byReference,omitempty"` // function &foo() - 引用返回
@@ -479,8 +481,10 @@ func (i *InterfaceDeclaration) String() string {
 	result += " {\n"
 	for _, method := range i.Methods {
 		result += "  " + method.Visibility + " function " + method.Name.String() + "("
-		paramStrs := make([]string, len(method.Parameters))
-		for idx, param := range method.Parameters {
+		var paramStrs []string
+		if method.Parameters != nil {
+			paramStrs = make([]string, len(method.Parameters.Parameters))
+			for idx, param := range method.Parameters.Parameters {
 			paramStr := ""
 			if param.Type != nil {
 				paramStr += param.Type.String() + " "
@@ -488,8 +492,9 @@ func (i *InterfaceDeclaration) String() string {
 			if param.ByReference {
 				paramStr += "&"
 			}
-			paramStr += "$" + param.Name
+			paramStr += "$" + param.Name.String()
 			paramStrs[idx] = paramStr
+			}
 		}
 		result += strings.Join(paramStrs, ", ")
 		result += ")"
@@ -1921,7 +1926,7 @@ func (fs *ForStatement) String() string {
 type FunctionDeclaration struct {
 	BaseNode
 	Name        Identifier        `json:"name"`
-	Parameters  []Parameter       `json:"parameters"`
+	Parameters  *ParameterList    `json:"parameters,omitempty"`
 	ReturnType  *TypeHint         `json:"returnType,omitempty"`
 	Body        []Statement       `json:"body"`
 	ByReference bool              `json:"byReference,omitempty"` // function &foo()
@@ -1960,7 +1965,6 @@ func NewFunctionDeclaration(pos lexer.Position, name Identifier) *FunctionDeclar
 			LineNo:   uint32(pos.Line),
 		},
 		Name:       name,
-		Parameters: make([]Parameter, 0),
 		Body:       make([]Statement, 0),
 	}
 }
@@ -2059,19 +2063,210 @@ func (th *TypeHint) String() string {
 	return result
 }
 
+// ParameterNode represents a function/method parameter as AST node
+type ParameterNode struct {
+	BaseNode
+	Name         Identifier        `json:"name"`
+	DefaultValue Expression        `json:"defaultValue,omitempty"`
+	Type         *TypeHint         `json:"type,omitempty"`
+	ByReference  bool              `json:"byReference,omitempty"` // &$param
+	Variadic     bool              `json:"variadic,omitempty"`    // ...$params  
+	Visibility   string            `json:"visibility,omitempty"`  // public, private, protected
+	ReadOnly     bool              `json:"readOnly,omitempty"`    // readonly
+	Attributes   []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
+}
+
+func NewParameterNode(pos lexer.Position, name Identifier) *ParameterNode {
+	return &ParameterNode{
+		BaseNode: BaseNode{
+			Kind:     ASTParam,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Name: name,
+	}
+}
+
+func (p *ParameterNode) GetChildren() []Node {
+	children := []Node{p.Name}
+	if p.DefaultValue != nil {
+		children = append(children, p.DefaultValue)
+	}
+	if p.Type != nil {
+		children = append(children, p.Type)
+	}
+	for _, attr := range p.Attributes {
+		if attr != nil {
+			children = append(children, attr)
+		}
+	}
+	return children
+}
+
+func (p *ParameterNode) Accept(visitor Visitor) {
+	if visitor.Visit(p) {
+		p.Name.Accept(visitor)
+		if p.DefaultValue != nil {
+			p.DefaultValue.Accept(visitor)
+		}
+		if p.Type != nil {
+			p.Type.Accept(visitor)
+		}
+		for _, attr := range p.Attributes {
+			if attr != nil {
+				attr.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (p *ParameterNode) statementNode() {}
+
+func (p *ParameterNode) String() string {
+	var result strings.Builder
+	
+	// Attributes
+	for _, attr := range p.Attributes {
+		if attr != nil {
+			result.WriteString(attr.String())
+			result.WriteString(" ")
+		}
+	}
+	
+	// Visibility (for promoted properties)
+	if p.Visibility != "" {
+		result.WriteString(p.Visibility)
+		result.WriteString(" ")
+	}
+	
+	// Readonly modifier
+	if p.ReadOnly {
+		result.WriteString("readonly ")
+	}
+	
+	// Type hint
+	if p.Type != nil {
+		result.WriteString(p.Type.String())
+		result.WriteString(" ")
+	}
+	
+	// Reference
+	if p.ByReference {
+		result.WriteString("&")
+	}
+	
+	// Variadic
+	if p.Variadic {
+		result.WriteString("...")
+	}
+	
+	// Parameter name
+	result.WriteString(p.Name.String())
+	
+	// Default value
+	if p.DefaultValue != nil {
+		result.WriteString(" = ")
+		result.WriteString(p.DefaultValue.String())
+	}
+	
+	return result.String()
+}
+
+
+// ParameterList represents a list of function/method parameters
+type ParameterList struct {
+	BaseNode
+	Parameters []*ParameterNode `json:"parameters"`
+}
+
+func NewParameterList(pos lexer.Position, parameters []*ParameterNode) *ParameterList {
+	return &ParameterList{
+		BaseNode: BaseNode{
+			Kind:     ASTParamList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Parameters: parameters,
+	}
+}
+
+func (pl *ParameterList) GetChildren() []Node {
+	children := make([]Node, len(pl.Parameters))
+	for i, param := range pl.Parameters {
+		children[i] = param
+	}
+	return children
+}
+
+func (pl *ParameterList) Accept(visitor Visitor) {
+	if visitor.Visit(pl) {
+		for _, param := range pl.Parameters {
+			param.Accept(visitor)
+		}
+	}
+}
+
+func (pl *ParameterList) expressionNode() {}
+
+func (pl *ParameterList) String() string {
+	var params []string
+	for _, param := range pl.Parameters {
+		params = append(params, param.String())
+	}
+	return "(" + strings.Join(params, ", ") + ")"
+}
+
+// ArgumentList represents a list of function/method call arguments
+type ArgumentList struct {
+	BaseNode
+	Arguments []Expression `json:"arguments"`
+}
+
+func NewArgumentList(pos lexer.Position, arguments []Expression) *ArgumentList {
+	return &ArgumentList{
+		BaseNode: BaseNode{
+			Kind:     ASTArgList,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Arguments: arguments,
+	}
+}
+
+func (al *ArgumentList) GetChildren() []Node {
+	children := make([]Node, len(al.Arguments))
+	for i, arg := range al.Arguments {
+		children[i] = arg
+	}
+	return children
+}
+
+func (al *ArgumentList) Accept(visitor Visitor) {
+	if visitor.Visit(al) {
+		for _, arg := range al.Arguments {
+			arg.Accept(visitor)
+		}
+	}
+}
+
+func (al *ArgumentList) expressionNode() {}
+
+func (al *ArgumentList) String() string {
+	var args []string
+	for _, arg := range al.Arguments {
+		args = append(args, arg.String())
+	}
+	return "(" + strings.Join(args, ", ") + ")"
+}
+
 // GetChildren 返回子节点
 func (fd *FunctionDeclaration) GetChildren() []Node {
 	children := []Node{fd.Name}
+	if fd.Parameters != nil {
+		children = append(children, fd.Parameters)
+	}
 	if fd.ReturnType != nil {
 		children = append(children, fd.ReturnType)
-	}
-	for _, param := range fd.Parameters {
-		if param.Type != nil {
-			children = append(children, param.Type)
-		}
-		if param.DefaultValue != nil {
-			children = append(children, param.DefaultValue)
-		}
 	}
 	for _, stmt := range fd.Body {
 		children = append(children, stmt)
@@ -2083,10 +2278,11 @@ func (fd *FunctionDeclaration) GetChildren() []Node {
 func (fd *FunctionDeclaration) Accept(visitor Visitor) {
 	if visitor.Visit(fd) {
 		fd.Name.Accept(visitor)
-		for _, param := range fd.Parameters {
-			if param.DefaultValue != nil {
-				param.DefaultValue.Accept(visitor)
-			}
+		if fd.Parameters != nil {
+			fd.Parameters.Accept(visitor)
+		}
+		if fd.ReturnType != nil {
+			fd.ReturnType.Accept(visitor)
 		}
 		for _, stmt := range fd.Body {
 			stmt.Accept(visitor)
@@ -2136,27 +2332,11 @@ func (fd *FunctionDeclaration) String() string {
 	}
 
 	// Parameters
-	result.WriteString("(")
-	paramStrs := make([]string, len(fd.Parameters))
-	for i, param := range fd.Parameters {
-		paramStr := ""
-		if param.Type != nil {
-			paramStr += param.Type.String() + " "
-		}
-		if param.ByReference {
-			paramStr += "&"
-		}
-		if param.Variadic {
-			paramStr += "..."
-		}
-		paramStr += param.Name
-		if param.DefaultValue != nil {
-			paramStr += " = " + param.DefaultValue.String()
-		}
-		paramStrs[i] = paramStr
+	if fd.Parameters != nil {
+		result.WriteString(fd.Parameters.String())
+	} else {
+		result.WriteString("()")
 	}
-	result.WriteString(strings.Join(paramStrs, ", "))
-	result.WriteString(")")
 
 	// Return type
 	if fd.ReturnType != nil {
@@ -2185,7 +2365,7 @@ func (fd *FunctionDeclaration) String() string {
 // ArrowFunctionExpression 箭头函数表达式 (PHP 7.4+)
 type ArrowFunctionExpression struct {
 	BaseNode
-	Parameters  []Parameter       `json:"parameters"`
+	Parameters  *ParameterList    `json:"parameters,omitempty"`
 	ReturnType  *TypeHint         `json:"returnType,omitempty"`
 	Body        Expression        `json:"body"`
 	Static      bool              `json:"static,omitempty"`
@@ -2193,14 +2373,14 @@ type ArrowFunctionExpression struct {
 	Attributes  []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
 }
 
-func NewArrowFunctionExpression(pos lexer.Position, parameters []Parameter, returnType *TypeHint, body Expression, static bool, byReference bool) *ArrowFunctionExpression {
+func NewArrowFunctionExpression(pos lexer.Position, parameters []*ParameterNode, returnType *TypeHint, body Expression, static bool, byReference bool) *ArrowFunctionExpression {
 	return &ArrowFunctionExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTArrowFunc,
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Parameters:  parameters,
+		Parameters:  NewParameterList(pos, parameters),
 		ReturnType:  returnType,
 		Body:        body,
 		Static:      static,
@@ -2214,13 +2394,8 @@ func (af *ArrowFunctionExpression) GetChildren() []Node {
 	if af.ReturnType != nil {
 		children = append(children, af.ReturnType)
 	}
-	for _, param := range af.Parameters {
-		if param.Type != nil {
-			children = append(children, param.Type)
-		}
-		if param.DefaultValue != nil {
-			children = append(children, param.DefaultValue)
-		}
+	if af.Parameters != nil {
+		children = append(children, af.Parameters)
 	}
 	if af.Body != nil {
 		children = append(children, af.Body)
@@ -2234,10 +2409,8 @@ func (af *ArrowFunctionExpression) Accept(visitor Visitor) {
 		if af.ReturnType != nil {
 			af.ReturnType.Accept(visitor)
 		}
-		for _, param := range af.Parameters {
-			if param.DefaultValue != nil {
-				param.DefaultValue.Accept(visitor)
-			}
+		if af.Parameters != nil {
+			af.Parameters.Accept(visitor)
 		}
 		if af.Body != nil {
 			af.Body.Accept(visitor)
@@ -2252,32 +2425,19 @@ func (af *ArrowFunctionExpression) String() string {
 	if af.Static {
 		out.WriteString("static ")
 	}
-	out.WriteString("fn(")
-	for i, param := range af.Parameters {
-		if i > 0 {
-			out.WriteString(", ")
-		}
-		if param.Type != nil {
-			out.WriteString(param.Type.String() + " ")
-		}
-		if param.ByReference {
-			out.WriteString("&")
-		}
-		out.WriteString("$" + param.Name)
-		if param.DefaultValue != nil {
-			out.WriteString(" = " + param.DefaultValue.String())
-		}
+	out.WriteString("fn")
+	if af.Parameters != nil {
+		out.WriteString(af.Parameters.String())
+	} else {
+		out.WriteString("()")
 	}
-	out.WriteString(")")
 	if af.ReturnType != nil {
 		out.WriteString(": " + af.ReturnType.String())
 	}
-	out.WriteString(" => ")
-	if af.Body != nil {
-		out.WriteString(af.Body.String())
-	}
+	out.WriteString(" => " + af.Body.String())
 	return out.String()
 }
+
 
 // IdentifierNode 标识符节点
 type IdentifierNode struct {
@@ -3547,7 +3707,7 @@ func (l *LabelStatement) String() string {
 type NewExpression struct {
 	BaseNode
 	Class     Expression   `json:"class"`
-	Arguments []Expression `json:"arguments"`
+	Arguments *ArgumentList `json:"arguments,omitempty"`
 }
 
 func NewNewExpression(pos lexer.Position, class Expression) *NewExpression {
@@ -3558,17 +3718,16 @@ func NewNewExpression(pos lexer.Position, class Expression) *NewExpression {
 			LineNo:   uint32(pos.Line),
 		},
 		Class:     class,
-		Arguments: make([]Expression, 0),
 	}
 }
 
 func (n *NewExpression) GetChildren() []Node {
-	children := make([]Node, 0, len(n.Arguments)+1)
+	children := make([]Node, 0)
 	if n.Class != nil {
 		children = append(children, n.Class)
 	}
-	for _, arg := range n.Arguments {
-		children = append(children, arg)
+	if n.Arguments != nil {
+		children = append(children, n.Arguments)
 	}
 	return children
 }
@@ -3578,10 +3737,8 @@ func (n *NewExpression) Accept(visitor Visitor) {
 		if n.Class != nil {
 			n.Class.Accept(visitor)
 		}
-		for _, arg := range n.Arguments {
-			if arg != nil {
-				arg.Accept(visitor)
-			}
+		if n.Arguments != nil {
+			n.Arguments.Accept(visitor)
 		}
 	}
 }
@@ -3594,15 +3751,8 @@ func (n *NewExpression) String() string {
 		class = n.Class.String()
 	}
 
-	var args []string
-	for _, arg := range n.Arguments {
-		if arg != nil {
-			args = append(args, arg.String())
-		}
-	}
-
-	if len(args) > 0 {
-		return "new " + class + "(" + strings.Join(args, ", ") + ")"
+	if n.Arguments != nil {
+		return "new " + class + n.Arguments.String()
 	}
 	return "new " + class
 }
@@ -4030,7 +4180,7 @@ func (al *AttributeList) String() string {
 type CallExpression struct {
 	BaseNode
 	Callee    Expression   `json:"callee"`
-	Arguments []Expression `json:"arguments"`
+	Arguments *ArgumentList `json:"arguments,omitempty"`
 }
 
 func NewCallExpression(pos lexer.Position, callee Expression) *CallExpression {
@@ -4041,15 +4191,14 @@ func NewCallExpression(pos lexer.Position, callee Expression) *CallExpression {
 			LineNo:   uint32(pos.Line),
 		},
 		Callee:    callee,
-		Arguments: make([]Expression, 0),
 	}
 }
 
 // GetChildren 返回子节点
 func (ce *CallExpression) GetChildren() []Node {
 	children := []Node{ce.Callee}
-	for _, arg := range ce.Arguments {
-		children = append(children, arg)
+	if ce.Arguments != nil {
+		children = append(children, ce.Arguments)
 	}
 	return children
 }
@@ -4058,10 +4207,8 @@ func (ce *CallExpression) GetChildren() []Node {
 func (ce *CallExpression) Accept(visitor Visitor) {
 	if visitor.Visit(ce) {
 		ce.Callee.Accept(visitor)
-		for _, arg := range ce.Arguments {
-			if arg != nil {
-				arg.Accept(visitor)
-			}
+		if ce.Arguments != nil {
+			ce.Arguments.Accept(visitor)
 		}
 	}
 }
@@ -4069,13 +4216,10 @@ func (ce *CallExpression) Accept(visitor Visitor) {
 func (ce *CallExpression) expressionNode() {}
 
 func (ce *CallExpression) String() string {
-	var args []string
-	for _, arg := range ce.Arguments {
-		if arg != nil {
-			args = append(args, arg.String())
-		}
+	if ce.Arguments != nil {
+		return ce.Callee.String() + ce.Arguments.String()
 	}
-	return ce.Callee.String() + "(" + strings.Join(args, ", ") + ")"
+	return ce.Callee.String() + "()"
 }
 
 // MethodCallExpression 方法调用表达式 - $obj->method(args)
@@ -4084,7 +4228,7 @@ type MethodCallExpression struct {
 	BaseNode
 	Object    Expression   `json:"object"`    // 对象表达式
 	Method    Expression   `json:"method"`    // 方法名表达式  
-	Arguments []Expression `json:"arguments"` // 参数列表
+	Arguments *ArgumentList `json:"arguments,omitempty"` // 参数列表
 }
 
 func NewMethodCallExpression(pos lexer.Position, object Expression, method Expression) *MethodCallExpression {
@@ -4096,15 +4240,14 @@ func NewMethodCallExpression(pos lexer.Position, object Expression, method Expre
 		},
 		Object:    object,
 		Method:    method,
-		Arguments: make([]Expression, 0),
 	}
 }
 
 // GetChildren 返回子节点
 func (mce *MethodCallExpression) GetChildren() []Node {
 	children := []Node{mce.Object, mce.Method}
-	for _, arg := range mce.Arguments {
-		children = append(children, arg)
+	if mce.Arguments != nil {
+		children = append(children, mce.Arguments)
 	}
 	return children
 }
@@ -4118,10 +4261,8 @@ func (mce *MethodCallExpression) Accept(visitor Visitor) {
 		if mce.Method != nil {
 			mce.Method.Accept(visitor)
 		}
-		for _, arg := range mce.Arguments {
-			if arg != nil {
-				arg.Accept(visitor)
-			}
+		if mce.Arguments != nil {
+			mce.Arguments.Accept(visitor)
 		}
 	}
 }
@@ -4129,13 +4270,11 @@ func (mce *MethodCallExpression) Accept(visitor Visitor) {
 func (mce *MethodCallExpression) expressionNode() {}
 
 func (mce *MethodCallExpression) String() string {
-	var args []string
-	for _, arg := range mce.Arguments {
-		if arg != nil {
-			args = append(args, arg.String())
-		}
+	args := "()"
+	if mce.Arguments != nil {
+		args = mce.Arguments.String()
 	}
-	return mce.Object.String() + "->" + mce.Method.String() + "(" + strings.Join(args, ", ") + ")"
+	return mce.Object.String() + "->" + mce.Method.String() + args
 }
 
 // NullsafeMethodCallExpression 空安全方法调用表达式 - $obj?->method(args)
@@ -4144,7 +4283,7 @@ type NullsafeMethodCallExpression struct {
 	BaseNode
 	Object    Expression   `json:"object"`    // 对象表达式
 	Method    Expression   `json:"method"`    // 方法名表达式
-	Arguments []Expression `json:"arguments"` // 参数列表
+	Arguments *ArgumentList `json:"arguments,omitempty"` // 参数列表
 }
 
 func NewNullsafeMethodCallExpression(pos lexer.Position, object Expression, method Expression) *NullsafeMethodCallExpression {
@@ -4156,15 +4295,14 @@ func NewNullsafeMethodCallExpression(pos lexer.Position, object Expression, meth
 		},
 		Object:    object,
 		Method:    method,
-		Arguments: make([]Expression, 0),
 	}
 }
 
 // GetChildren 返回子节点
 func (nmce *NullsafeMethodCallExpression) GetChildren() []Node {
 	children := []Node{nmce.Object, nmce.Method}
-	for _, arg := range nmce.Arguments {
-		children = append(children, arg)
+	if nmce.Arguments != nil {
+		children = append(children, nmce.Arguments)
 	}
 	return children
 }
@@ -4178,10 +4316,8 @@ func (nmce *NullsafeMethodCallExpression) Accept(visitor Visitor) {
 		if nmce.Method != nil {
 			nmce.Method.Accept(visitor)
 		}
-		for _, arg := range nmce.Arguments {
-			if arg != nil {
-				arg.Accept(visitor)
-			}
+		if nmce.Arguments != nil {
+			nmce.Arguments.Accept(visitor)
 		}
 	}
 }
@@ -4189,13 +4325,11 @@ func (nmce *NullsafeMethodCallExpression) Accept(visitor Visitor) {
 func (nmce *NullsafeMethodCallExpression) expressionNode() {}
 
 func (nmce *NullsafeMethodCallExpression) String() string {
-	var args []string
-	for _, arg := range nmce.Arguments {
-		if arg != nil {
-			args = append(args, arg.String())
-		}
+	args := "()"
+	if nmce.Arguments != nil {
+		args = nmce.Arguments.String()
 	}
-	return nmce.Object.String() + "?->" + nmce.Method.String() + "(" + strings.Join(args, ", ") + ")"
+	return nmce.Object.String() + "?->" + nmce.Method.String() + args
 }
 
 // DocBlockComment 文档块注释
@@ -4478,7 +4612,7 @@ func (ee *ExitExpression) String() string {
 // IssetExpression 表示 isset() 表达式
 type IssetExpression struct {
 	BaseNode
-	Arguments []Expression `json:"arguments"`
+	Arguments *ArgumentList `json:"arguments,omitempty"`
 }
 
 func NewIssetExpression(pos lexer.Position, arguments []Expression) *IssetExpression {
@@ -4488,24 +4622,21 @@ func NewIssetExpression(pos lexer.Position, arguments []Expression) *IssetExpres
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Arguments: arguments,
+		Arguments: NewArgumentList(pos, arguments),
 	}
 }
 
 func (ie *IssetExpression) GetChildren() []Node {
-	children := make([]Node, len(ie.Arguments))
-	for i, arg := range ie.Arguments {
-		children[i] = arg
+	if ie.Arguments != nil {
+		return []Node{ie.Arguments}
 	}
-	return children
+	return []Node{}
 }
 
 func (ie *IssetExpression) Accept(visitor Visitor) {
 	if visitor.Visit(ie) {
-		for _, arg := range ie.Arguments {
-			if arg != nil {
-				arg.Accept(visitor)
-			}
+		if ie.Arguments != nil {
+			ie.Arguments.Accept(visitor)
 		}
 	}
 }
@@ -4513,13 +4644,10 @@ func (ie *IssetExpression) Accept(visitor Visitor) {
 func (ie *IssetExpression) expressionNode() {}
 
 func (ie *IssetExpression) String() string {
-	args := make([]string, len(ie.Arguments))
-	for i, arg := range ie.Arguments {
-		if arg != nil {
-			args[i] = arg.String()
-		}
+	if ie.Arguments != nil {
+		return "isset" + ie.Arguments.String()
 	}
-	return "isset(" + strings.Join(args, ", ") + ")"
+	return "isset()"
 }
 
 // ListExpression 表示 list() 表达式
@@ -4576,7 +4704,7 @@ func (le *ListExpression) String() string {
 // AnonymousFunctionExpression 表示匿名函数表达式
 type AnonymousFunctionExpression struct {
 	BaseNode
-	Parameters  []Parameter       `json:"parameters"`
+	Parameters  *ParameterList    `json:"parameters,omitempty"`
 	Body        []Statement       `json:"body"`
 	UseClause   []Expression      `json:"useClause,omitempty"`
 	ByReference bool              `json:"byReference,omitempty"` // function &() returns by reference
@@ -4585,14 +4713,14 @@ type AnonymousFunctionExpression struct {
 	Attributes  []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
 }
 
-func NewAnonymousFunctionExpression(pos lexer.Position, parameters []Parameter, body []Statement, useClause []Expression, byReference bool, static bool, returnType *TypeHint) *AnonymousFunctionExpression {
+func NewAnonymousFunctionExpression(pos lexer.Position, parameters []*ParameterNode, body []Statement, useClause []Expression, byReference bool, static bool, returnType *TypeHint) *AnonymousFunctionExpression {
 	return &AnonymousFunctionExpression{
 		BaseNode: BaseNode{
 			Kind:     ASTClosure, // PHP uses CLOSURE for anonymous functions
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Parameters:  parameters,
+		Parameters:  NewParameterList(pos, parameters),
 		Body:        body,
 		UseClause:   useClause,
 		ByReference: byReference,
@@ -5967,7 +6095,7 @@ type AnonymousClass struct {
 	BaseNode
 	Attributes []*AttributeGroup `json:"attributes,omitempty"` // 类属性 #[Attr]
 	Modifiers  []string          `json:"modifiers,omitempty"`  // 类修饰符 (final, abstract, readonly)
-	Arguments  []Expression      `json:"arguments,omitempty"`  // 构造函数参数
+	Arguments  *ArgumentList     `json:"arguments,omitempty"`  // 构造函数参数
 	Extends    Expression        `json:"extends,omitempty"`    // 继承的类
 	Implements []Expression      `json:"implements,omitempty"` // 实现的接口
 	Body       []Statement       `json:"body"`                 // 类体
@@ -5982,7 +6110,7 @@ func NewAnonymousClass(pos lexer.Position, attributes []*AttributeGroup, modifie
 		},
 		Attributes: attributes,
 		Modifiers:  modifiers,
-		Arguments:  args,
+		Arguments:  NewArgumentList(pos, args),
 		Extends:    extends,
 		Implements: implements,
 		Body:       body,
@@ -5992,8 +6120,8 @@ func NewAnonymousClass(pos lexer.Position, attributes []*AttributeGroup, modifie
 // GetChildren 返回子节点
 func (ac *AnonymousClass) GetChildren() []Node {
 	children := make([]Node, 0)
-	for _, arg := range ac.Arguments {
-		children = append(children, arg)
+	if ac.Arguments != nil {
+		children = append(children, ac.Arguments)
 	}
 	if ac.Extends != nil {
 		children = append(children, ac.Extends)
@@ -6010,8 +6138,8 @@ func (ac *AnonymousClass) GetChildren() []Node {
 // Accept 接受访问者
 func (ac *AnonymousClass) Accept(visitor Visitor) {
 	if visitor.Visit(ac) {
-		for _, arg := range ac.Arguments {
-			arg.Accept(visitor)
+		if ac.Arguments != nil {
+			ac.Arguments.Accept(visitor)
 		}
 		if ac.Extends != nil {
 			ac.Extends.Accept(visitor)
@@ -6031,15 +6159,8 @@ func (ac *AnonymousClass) String() string {
 	var out strings.Builder
 	out.WriteString("new class")
 
-	if len(ac.Arguments) > 0 {
-		out.WriteString("(")
-		for i, arg := range ac.Arguments {
-			if i > 0 {
-				out.WriteString(", ")
-			}
-			out.WriteString(arg.String())
-		}
-		out.WriteString(")")
+	if ac.Arguments != nil {
+		out.WriteString(ac.Arguments.String())
 	}
 
 	if ac.Extends != nil {

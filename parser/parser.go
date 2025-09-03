@@ -8,6 +8,7 @@ import (
 	"github.com/wudi/php-parser/lexer"
 )
 
+
 // Precedence 操作符优先级 - 根据 PHP 官方优先级顺序
 type Precedence int
 
@@ -922,14 +923,20 @@ func parseEchoStatement(p *Parser) *ast.EchoStatement {
 	stmt := ast.NewEchoStatement(p.currentToken.Position)
 
 	// 解析 echo 的参数
+	var arguments []ast.Expression
 	p.nextToken()
-	stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+	arguments = append(arguments, parseExpression(p, LOWEST))
 
 	// 处理多个参数（用逗号分隔）
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
 		p.nextToken() // 移动到下一个表达式
-		stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+		arguments = append(arguments, parseExpression(p, LOWEST))
+	}
+	
+	// 创建 ArgumentList
+	if len(arguments) > 0 {
+		stmt.Arguments = ast.NewArgumentList(p.currentToken.Position, arguments)
 	}
 
 	if !p.expectSemicolon() {
@@ -945,7 +952,8 @@ func parseShortEchoStatement(p *Parser) *ast.EchoStatement {
 
 	// 解析表达式 (<?= 之后的内容)
 	p.nextToken()
-	stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+	expr := parseExpression(p, LOWEST)
+	stmt.Arguments = ast.NewArgumentList(p.currentToken.Position, []ast.Expression{expr})
 
 	// 处理可选的分号（在短回声标签中可以有分号）
 	if p.peekToken.Type == lexer.TOKEN_SEMICOLON {
@@ -960,14 +968,20 @@ func parsePrintStatement(p *Parser) *ast.PrintStatement {
 	stmt := ast.NewPrintStatement(p.currentToken.Position)
 
 	// 解析 print 的参数
+	var arguments []ast.Expression
 	p.nextToken()
-	stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+	arguments = append(arguments, parseExpression(p, LOWEST))
 
 	// 处理多个参数（用逗号分隔）
 	for p.peekToken.Type == lexer.TOKEN_COMMA {
 		p.nextToken() // 移动到逗号
 		p.nextToken() // 移动到下一个表达式
-		stmt.Arguments = append(stmt.Arguments, parseExpression(p, LOWEST))
+		arguments = append(arguments, parseExpression(p, LOWEST))
+	}
+	
+	// 创建 ArgumentList
+	if len(arguments) > 0 {
+		stmt.Arguments = ast.NewArgumentList(p.currentToken.Position, arguments)
 	}
 
 	if !p.expectSemicolon() {
@@ -1599,13 +1613,14 @@ done:
 	}
 
 	// 解析参数列表
+	var parameters []*ast.ParameterNode
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
 
 		// 解析第一个参数（支持类型提示）
 		param := parseParameter(p)
 		if param != nil {
-			funcDecl.Parameters = append(funcDecl.Parameters, *param)
+			parameters = append(parameters, param)
 		}
 
 		// 处理更多参数
@@ -1620,9 +1635,14 @@ done:
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
-				funcDecl.Parameters = append(funcDecl.Parameters, *param)
+				parameters = append(parameters, param)
 			}
 		}
+	}
+	
+	// 创建 ParameterList
+	if len(parameters) > 0 {
+		funcDecl.Parameters = ast.NewParameterList(p.currentToken.Position, parameters)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
@@ -1660,8 +1680,8 @@ done:
 }
 
 // parseParameter 解析函数参数（支持类型提示、引用、可变参数、可见性修饰符等）
-func parseParameter(p *Parser) *ast.Parameter {
-	var param ast.Parameter
+func parseParameter(p *Parser) *ast.ParameterNode {
+	pos := p.currentToken.Position
 
 	// 首先解析属性 (attributes) #[...]
 	// 根据PHP语法：attributed_parameter: attributes parameter | parameter
@@ -1673,12 +1693,12 @@ func parseParameter(p *Parser) *ast.Parameter {
 		}
 		p.nextToken() // 移动到下一个token
 	}
-	param.Attributes = attributes
 
 	// 解析所有成员修饰符 (public, private, protected, readonly, static 等)
 	// 根据PHP语法 member_modifier，它们可以以任意顺序出现
 	// 例如: readonly private, private readonly, static public 等
 	var visibilityModifiers []string
+	var readOnly bool
 	
 	for {
 		switch p.currentToken.Type {
@@ -1687,7 +1707,7 @@ func parseParameter(p *Parser) *ast.Parameter {
 			visibilityModifiers = append(visibilityModifiers, p.currentToken.Value)
 			p.nextToken()
 		case lexer.T_READONLY:
-			param.ReadOnly = true
+			readOnly = true
 			p.nextToken()
 		case lexer.T_STATIC:
 			// 静态修饰符在参数中通常不允许，但为了完整性我们记录它
@@ -1701,48 +1721,61 @@ func parseParameter(p *Parser) *ast.Parameter {
 	end_modifiers:
 
 	// 合并多个可见性修饰符为单个字符串
+	var visibility string
 	if len(visibilityModifiers) > 0 {
-		param.Visibility = strings.Join(visibilityModifiers, " ")
+		visibility = strings.Join(visibilityModifiers, " ")
 	}
 
 	// 检查是否有类型提示 (including parenthesized intersection types like (A&B)|null)
+	var typeHint *ast.TypeHint
 	if isTypeHintStart(p.currentToken.Type) {
-		typeHint := parseParameterTypeHint(p)
+		typeHint = parseParameterTypeHint(p)
 		if typeHint == nil {
 			return nil
 		}
-		param.Type = typeHint
 		p.nextToken() // 移动到下一个token
 	}
 
 	// 检查引用参数 &$param
+	var byReference bool
 	if p.currentToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
-		param.ByReference = true
+		byReference = true
 		p.nextToken()
 	}
 
 	// 检查可变参数 ...$params
+	var variadic bool
 	if p.currentToken.Type == lexer.T_ELLIPSIS {
-		param.Variadic = true
+		variadic = true
 		p.nextToken()
 	}
 
 	// 解析参数名
+	var name ast.Identifier
 	if p.currentToken.Type == lexer.T_VARIABLE {
-		param.Name = p.currentToken.Value
+		name = ast.NewIdentifierNode(pos, p.currentToken.Value)
 	} else {
 		p.addError(fmt.Sprintf("expected variable name, got `%s` instead", p.currentToken.Value))
 		return nil
 	}
 
 	// 检查是否有默认值
+	var defaultValue ast.Expression
 	if p.peekToken.Type == lexer.TOKEN_EQUAL {
 		p.nextToken() // 移动到 '='
 		p.nextToken() // 移动到默认值
-		param.DefaultValue = parseExpression(p, LOWEST)
+		defaultValue = parseExpression(p, LOWEST)
 	}
 
-	return &param
+	param := ast.NewParameterNode(pos, name)
+	param.DefaultValue = defaultValue
+	param.Type = typeHint
+	param.ByReference = byReference
+	param.Variadic = variadic
+	param.Visibility = visibility
+	param.ReadOnly = readOnly
+	param.Attributes = attributes
+	return param
 }
 
 // parseNamespaceStatement 解析命名空间声明语句
@@ -2167,19 +2200,19 @@ func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
 
 	method := &ast.InterfaceMethod{
 		Name:        methodName,
-		Parameters:  make([]ast.Parameter, 0),
 		Visibility:  visibility,
 		ByReference: byReference,
 	}
 
 	// 解析参数列表
+	var parameters []*ast.ParameterNode
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
 
 		// 解析第一个参数
 		param := parseParameter(p)
 		if param != nil {
-			method.Parameters = append(method.Parameters, *param)
+			parameters = append(parameters, param)
 		}
 
 		// 处理更多参数
@@ -2194,9 +2227,14 @@ func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
-				method.Parameters = append(method.Parameters, *param)
+				parameters = append(parameters, param)
 			}
 		}
+	}
+	
+	// 创建 ParameterList
+	if len(parameters) > 0 {
+		method.Parameters = ast.NewParameterList(p.currentToken.Position, parameters)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
@@ -2652,7 +2690,10 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 		
 		// 移动到括号并解析参数
 		p.nextToken() // 移动到 (
-		methodCall.Arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
+		args := parseExpressionList(p, lexer.TOKEN_RPAREN)
+		if len(args) > 0 {
+			methodCall.Arguments = ast.NewArgumentList(p.currentToken.Position, args)
+		}
 		
 		return methodCall
 	}
@@ -2703,7 +2744,10 @@ func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression 
 		
 		// 移动到括号并解析参数
 		p.nextToken() // 移动到 (
-		methodCall.Arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
+		args := parseExpressionList(p, lexer.TOKEN_RPAREN)
+		if len(args) > 0 {
+			methodCall.Arguments = ast.NewArgumentList(p.currentToken.Position, args)
+		}
 		
 		return methodCall
 	}
@@ -3132,7 +3176,10 @@ func parseCallExpression(p *Parser, fn ast.Expression) ast.Expression {
 	call := ast.NewCallExpression(pos, fn)
 
 	// 解析参数列表
-	call.Arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
+	args := parseExpressionList(p, lexer.TOKEN_RPAREN)
+	if len(args) > 0 {
+		call.Arguments = ast.NewArgumentList(p.currentToken.Position, args)
+	}
 
 	return call
 }
@@ -3841,9 +3888,10 @@ func parseNewExpression(p *Parser) ast.Expression {
 		p.nextToken() // 进入括号内部
 
 		// 解析参数列表
+		var arguments []ast.Expression
 		for p.currentToken.Type != lexer.TOKEN_RPAREN && p.currentToken.Type != lexer.T_EOF {
 			arg := parseExpression(p, LOWEST)
-			newExpr.Arguments = append(newExpr.Arguments, arg)
+			arguments = append(arguments, arg)
 
 			p.nextToken()
 			if p.currentToken.Type == lexer.TOKEN_COMMA {
@@ -3853,6 +3901,11 @@ func parseNewExpression(p *Parser) ast.Expression {
 					break // 允许trailing comma
 				}
 			}
+		}
+		
+		// 创建 ArgumentList
+		if len(arguments) > 0 {
+			newExpr.Arguments = ast.NewArgumentList(p.currentToken.Position, arguments)
 		}
 	}
 
@@ -4539,7 +4592,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 		return nil
 	}
 
-	var parameters []ast.Parameter
+	var parameters []*ast.ParameterNode
 
 	// 解析参数（支持类型提示）
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
@@ -4548,7 +4601,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 		// 解析第一个参数
 		param := parseParameter(p)
 		if param != nil {
-			parameters = append(parameters, *param)
+			parameters = append(parameters, param)
 		}
 
 		// 处理更多参数
@@ -4563,7 +4616,7 @@ func parseAnonymousFunctionExpression(p *Parser) ast.Expression {
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
-				parameters = append(parameters, *param)
+				parameters = append(parameters, param)
 			}
 		}
 	}
@@ -4652,7 +4705,7 @@ func parseAnonymousFunctionWithStatic(p *Parser) ast.Expression {
 		return nil
 	}
 
-	var parameters []ast.Parameter
+	var parameters []*ast.ParameterNode
 
 	// 解析参数（支持类型提示）
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
@@ -4661,7 +4714,7 @@ func parseAnonymousFunctionWithStatic(p *Parser) ast.Expression {
 		// 解析第一个参数
 		param := parseParameter(p)
 		if param != nil {
-			parameters = append(parameters, *param)
+			parameters = append(parameters, param)
 		}
 
 		// 处理更多参数
@@ -4676,7 +4729,7 @@ func parseAnonymousFunctionWithStatic(p *Parser) ast.Expression {
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
-				parameters = append(parameters, *param)
+				parameters = append(parameters, param)
 			}
 		}
 	}
@@ -5375,13 +5428,14 @@ func parseStaticVisibilityFunction(p *Parser, visibility string, pos lexer.Posit
 	}
 
 	// 解析参数列表
+	var parameters []*ast.ParameterNode
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
 
 		// Parse parameters (same logic as in parseVisibilityStaticFunction)
 		param := parseParameter(p)
 		if param != nil {
-			funcDecl.Parameters = append(funcDecl.Parameters, *param)
+			parameters = append(parameters, param)
 		}
 
 		// Parse remaining parameters
@@ -5391,9 +5445,14 @@ func parseStaticVisibilityFunction(p *Parser, visibility string, pos lexer.Posit
 
 			param := parseParameter(p)
 			if param != nil {
-				funcDecl.Parameters = append(funcDecl.Parameters, *param)
+				parameters = append(parameters, param)
 			}
 		}
+	}
+	
+	// 创建 ParameterList
+	if len(parameters) > 0 {
+		funcDecl.Parameters = ast.NewParameterList(pos, parameters)
 	}
 
 	// Expect ')'
@@ -5510,13 +5569,14 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 	}
 
 	// 解析参数列表
+	var parameters []*ast.ParameterNode
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
 		p.nextToken()
 
 		// 解析第一个参数（支持类型提示）
 		param := parseParameter(p)
 		if param != nil {
-			funcDecl.Parameters = append(funcDecl.Parameters, *param)
+			parameters = append(parameters, param)
 		}
 
 		// 处理更多参数
@@ -5531,9 +5591,14 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
-				funcDecl.Parameters = append(funcDecl.Parameters, *param)
+				parameters = append(parameters, param)
 			}
 		}
+	}
+	
+	// 创建 ParameterList
+	if len(parameters) > 0 {
+		funcDecl.Parameters = ast.NewParameterList(pos, parameters)
 	}
 
 	if !p.expectPeek(lexer.TOKEN_RPAREN) {
@@ -6664,7 +6729,7 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 	}
 
 	// 解析参数列表
-	var parameters []ast.Parameter
+	var parameters []*ast.ParameterNode
 
 	// 解析参数列表
 	if p.peekToken.Type != lexer.TOKEN_RPAREN {
@@ -6673,7 +6738,7 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 		// 解析第一个参数
 		param := parseParameter(p)
 		if param != nil {
-			parameters = append(parameters, *param)
+			parameters = append(parameters, param)
 		}
 
 		// 处理更多参数
@@ -6688,7 +6753,7 @@ func parseArrowFunctionExpression(p *Parser) ast.Expression {
 			p.nextToken() // 移动到下一个参数
 			param := parseParameter(p)
 			if param != nil {
-				parameters = append(parameters, *param)
+				parameters = append(parameters, param)
 			}
 		}
 	}
@@ -6796,7 +6861,9 @@ func parseAnonymousClass(p *Parser, pos lexer.Position) ast.Expression {
 			// 创建一个普通的new表达式
 			class := ast.NewIdentifierNode(p.currentToken.Position, "class")
 			newExpr := ast.NewNewExpression(savedPos, class)
-			newExpr.Arguments = arguments
+			if len(arguments) > 0 {
+				newExpr.Arguments = ast.NewArgumentList(savedPos, arguments)
+			}
 			return newExpr
 		}
 

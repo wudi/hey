@@ -31,8 +31,8 @@ interface EntityInterface {
 				assert.Equal(t, "get", method.Name.Name)
 				assert.Equal(t, "public", method.Visibility)
 				assert.True(t, method.ByReference, "Expected method to have reference return")
-				assert.Equal(t, 1, len(method.Parameters))
-				assert.Equal(t, "$field", method.Parameters[0].Name)
+				assert.Equal(t, 1, len(method.Parameters.Parameters))
+				assert.Equal(t, "$field", method.Parameters.Parameters[0].Name.(*ast.IdentifierNode).Name)
 				assert.NotNil(t, method.ReturnType)
 				assert.Equal(t, "mixed", method.ReturnType.Name)
 			},
@@ -104,19 +104,23 @@ interface ProcessorInterface {
 				method1 := interfaceDecl.Methods[0]
 				assert.Equal(t, "process", method1.Name.Name)
 				assert.True(t, method1.ByReference)
-				assert.Equal(t, 2, len(method1.Parameters))
-				assert.Equal(t, "$data", method1.Parameters[0].Name)
-				assert.True(t, method1.Parameters[0].ByReference)
-				assert.Equal(t, "$key", method1.Parameters[1].Name)
-				assert.NotNil(t, method1.Parameters[1].Type)
-				assert.True(t, method1.Parameters[1].Type.Nullable)
-				assert.NotNil(t, method1.Parameters[1].DefaultValue)
+				assert.Equal(t, 2, len(method1.Parameters.Parameters))
+				assert.Equal(t, "$data", method1.Parameters.Parameters[0].Name.(*ast.IdentifierNode).Name)
+				assert.True(t, method1.Parameters.Parameters[0].ByReference)
+				assert.Equal(t, "$key", method1.Parameters.Parameters[1].Name.(*ast.IdentifierNode).Name)
+				assert.NotNil(t, method1.Parameters.Parameters[1].Type)
+				assert.True(t, method1.Parameters.Parameters[1].Type.Nullable)
+				assert.NotNil(t, method1.Parameters.Parameters[1].DefaultValue)
 				
 				// Second method
 				method2 := interfaceDecl.Methods[1]
 				assert.Equal(t, "transform", method2.Name.Name)
 				assert.True(t, method2.ByReference)
-				assert.Equal(t, 1, len(method2.Parameters))
+				if method2.Parameters != nil {
+					assert.Equal(t, 1, len(method2.Parameters.Parameters))
+				} else {
+					assert.Equal(t, 0, 1) // This will fail if expected 1 but got nil
+				}
 			},
 		},
 		{
