@@ -144,9 +144,14 @@ func (l *Lexer) getCurrentPosition() Position {
 	}
 }
 
+// isWhitespace 检查字符是否为 PHP 定义的空白字符
+func isWhitespace(ch byte) bool {
+	return ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r'
+}
+
 // skipWhitespace 跳过空白字符
 func (l *Lexer) skipWhitespace() {
-	for l.ch == ' ' || l.ch == '\t' || l.ch == '\n' || l.ch == '\r' {
+	for isWhitespace(l.ch) {
 		l.readChar()
 	}
 }
@@ -564,8 +569,7 @@ func (l *Lexer) nextTokenInScripting() Token {
 			// 块注释 - 先检查是否为文档注释
 			// PHP only considers /** as doc comment if followed by whitespace or content
 			isDocComment := l.peekChar() == '*' && l.peekCharN(1) == '*' && 
-				(l.peekCharN(2) == ' ' || l.peekCharN(2) == '\t' || l.peekCharN(2) == '\n' || l.peekCharN(2) == '\r' || 
-				 (l.peekCharN(2) != '/' && l.peekCharN(2) != 0))
+				(isWhitespace(l.peekCharN(2)) || (l.peekCharN(2) != '/' && l.peekCharN(2) != 0))
 			l.readChar()                                                 // 跳过 /
 			l.readChar()                                                 // 跳过 *
 			comment := l.readBlockComment()
