@@ -2317,8 +2317,8 @@ func (i *IdentifierNode) String() string {
 // 对应 PHP 的 ZEND_AST_MAGIC_CONST，用于 __FILE__, __LINE__, __METHOD__ 等魔术常量
 type MagicConstantExpression struct {
 	BaseNode
-	Name      string           `json:"name"`      // 魔术常量名称，如 "__FILE__", "__METHOD__"
-	TokenType lexer.TokenType  `json:"tokenType"` // 对应的 token 类型，如 T_FILE, T_METHOD_C
+	Name      string          `json:"name"`      // 魔术常量名称，如 "__FILE__", "__METHOD__"
+	TokenType lexer.TokenType `json:"tokenType"` // 对应的 token 类型，如 T_FILE, T_METHOD_C
 }
 
 func NewMagicConstantExpression(pos lexer.Position, name string, tokenType lexer.TokenType) *MagicConstantExpression {
@@ -2346,7 +2346,7 @@ func (m *MagicConstantExpression) Accept(visitor Visitor) {
 func (m *MagicConstantExpression) expressionNode() {}
 
 func (m *MagicConstantExpression) String() string {
-	return fmt.Sprintf("MagicConstant(%s)", m.Name)
+	return m.Name
 }
 
 // NamespaceNameExpression 表示命名空间名称表达式
