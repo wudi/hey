@@ -210,6 +210,16 @@ func init() {
 		lexer.T_YIELD_FROM:           parseYieldFromExpression,
 		lexer.T_THROW:                parseThrowExpression,
 		lexer.T_POW:                  parseFallback, // ** 作为前缀时是无效的，但需要处理
+		// Magic constants
+		lexer.T_FILE:                 parseIdentifier,
+		lexer.T_LINE:                 parseIdentifier,
+		lexer.T_DIR:                  parseIdentifier,
+		lexer.T_CLASS_C:              parseIdentifier,
+		lexer.T_TRAIT_C:              parseIdentifier,
+		lexer.T_FUNC_C:               parseIdentifier,
+		lexer.T_METHOD_C:             parseIdentifier,
+		lexer.T_NS_C:                 parseIdentifier,
+		lexer.T_PROPERTY_C:           parseIdentifier,
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
 		// 二元运算符

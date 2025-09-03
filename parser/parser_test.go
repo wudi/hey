@@ -16636,3 +16636,85 @@ func TestParsing_BacktickWithCurlyBraceInterpolation(t *testing.T) {
 		})
 	}
 }
+
+func TestParsing_MagicConstants(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		validate func(t *testing.T, program *ast.Program)
+	}{
+		{
+			name:  "T_METHOD_C parsing - basic test",
+			input: `<?php echo __METHOD__; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				// Just check that parsing succeeds without errors
+				assert.Len(t, program.Body, 1)
+				
+				// Check it's an echo statement
+				echoStmt, ok := program.Body[0].(*ast.EchoStatement)
+				assert.True(t, ok, "Should be EchoStatement")
+				
+				assert.Len(t, echoStmt.Arguments, 1)
+				
+				// Check the argument is an identifier with __METHOD__
+				identifier, ok := echoStmt.Arguments[0].(*ast.IdentifierNode)
+				assert.True(t, ok, "Should be IdentifierNode")
+				assert.Equal(t, "__METHOD__", identifier.Name)
+			},
+		},
+		{
+			name:  "All magic constants parsing",
+			input: `<?php echo __FILE__; echo __LINE__; echo __DIR__; echo __CLASS__; echo __TRAIT__; echo __FUNCTION__; echo __METHOD__; echo __NAMESPACE__; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				// Check that all 8 statements parse successfully
+				assert.Len(t, program.Body, 8)
+				
+				expectedConstants := []string{"__FILE__", "__LINE__", "__DIR__", "__CLASS__", "__TRAIT__", "__FUNCTION__", "__METHOD__", "__NAMESPACE__"}
+				
+				for i, expectedConstant := range expectedConstants {
+					echoStmt, ok := program.Body[i].(*ast.EchoStatement)
+					assert.True(t, ok, "Statement %d should be EchoStatement", i)
+					
+					assert.Len(t, echoStmt.Arguments, 1, "Statement %d should have 1 argument", i)
+					
+					identifier, ok := echoStmt.Arguments[0].(*ast.IdentifierNode)
+					assert.True(t, ok, "Statement %d argument should be IdentifierNode", i)
+					assert.Equal(t, expectedConstant, identifier.Name, "Statement %d should have correct magic constant", i)
+				}
+			},
+		},
+		{
+			name:  "Case insensitive magic constants",
+			input: `<?php echo __method__; echo __file__; echo __class__; ?>`,
+			validate: func(t *testing.T, program *ast.Program) {
+				// Check that all 3 statements parse successfully
+				assert.Len(t, program.Body, 3)
+				
+				expectedConstants := []string{"__method__", "__file__", "__class__"}
+				
+				for i, expectedConstant := range expectedConstants {
+					echoStmt, ok := program.Body[i].(*ast.EchoStatement)
+					assert.True(t, ok, "Statement %d should be EchoStatement", i)
+					
+					assert.Len(t, echoStmt.Arguments, 1, "Statement %d should have 1 argument", i)
+					
+					identifier, ok := echoStmt.Arguments[0].(*ast.IdentifierNode)
+					assert.True(t, ok, "Statement %d argument should be IdentifierNode", i)
+					assert.Equal(t, expectedConstant, identifier.Name, "Statement %d should have correct magic constant", i)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := lexer.New(tt.input)
+			p := New(l)
+			program := p.ParseProgram()
+
+			checkParserErrors(t, p)
+			assert.NotNil(t, program)
+			tt.validate(t, program)
+		})
+	}
+}
