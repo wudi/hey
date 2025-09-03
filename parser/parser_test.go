@@ -1298,9 +1298,9 @@ class TestClass {
 
 				// Check first element structure (complex nested)
 				elem1 := arr.Elements[0].(*ast.ArrayElementExpression)
-				classConst1 := elem1.Key.(*ast.StaticAccessExpression)
+				classConst1 := elem1.Key.(*ast.ClassConstantAccessExpression)
 				assert.Equal(t, "self", classConst1.Class.(*ast.IdentifierNode).Name)
-				assert.Equal(t, "KEY1", classConst1.Property.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "KEY1", classConst1.Constant.(*ast.IdentifierNode).Name)
 
 				nestedArr1 := elem1.Value.(*ast.ArrayExpression)
 				assert.Len(t, nestedArr1.Elements, 2)
@@ -1356,9 +1356,9 @@ class Foo extends Boo {
 
 				// Check the main array element with self::ANCHOR_BLOCK_TYPE key
 				mainElem := arr.Elements[0].(*ast.ArrayElementExpression)
-				selfConst := mainElem.Key.(*ast.StaticAccessExpression)
+				selfConst := mainElem.Key.(*ast.ClassConstantAccessExpression)
 				assert.Equal(t, "self", selfConst.Class.(*ast.IdentifierNode).Name)
-				assert.Equal(t, "ANCHOR_BLOCK_TYPE", selfConst.Property.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "ANCHOR_BLOCK_TYPE", selfConst.Constant.(*ast.IdentifierNode).Name)
 
 				// Check the nested array value
 				nestedArr := mainElem.Value.(*ast.ArrayExpression)
@@ -1372,9 +1372,9 @@ class Foo extends Boo {
 				afterArr := afterElem.Value.(*ast.ArrayExpression)
 				assert.Len(t, afterArr.Elements, 1)
 
-				afterValue := afterArr.Elements[0].(*ast.StaticAccessExpression)
+				afterValue := afterArr.Elements[0].(*ast.ClassConstantAccessExpression)
 				assert.Equal(t, "self", afterValue.Class.(*ast.IdentifierNode).Name)
-				assert.Equal(t, "HOOKED_BLOCK_TYPE", afterValue.Property.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "HOOKED_BLOCK_TYPE", afterValue.Constant.(*ast.IdentifierNode).Name)
 
 				// Check 'before' element
 				beforeElem := nestedArr.Elements[1].(*ast.ArrayElementExpression)
@@ -1384,9 +1384,9 @@ class Foo extends Boo {
 				beforeArr := beforeElem.Value.(*ast.ArrayExpression)
 				assert.Len(t, beforeArr.Elements, 1)
 
-				beforeValue := beforeArr.Elements[0].(*ast.StaticAccessExpression)
+				beforeValue := beforeArr.Elements[0].(*ast.ClassConstantAccessExpression)
 				assert.Equal(t, "self", beforeValue.Class.(*ast.IdentifierNode).Name)
-				assert.Equal(t, "OTHER_HOOKED_BLOCK_TYPE", beforeValue.Property.(*ast.IdentifierNode).Name)
+				assert.Equal(t, "OTHER_HOOKED_BLOCK_TYPE", beforeValue.Constant.(*ast.IdentifierNode).Name)
 			},
 		},
 	}
@@ -2011,17 +2011,17 @@ register_post_type(
 				require.Len(t, callExpr.Arguments, 2)
 
 				// First argument: self::POST_TYPE
-				staticAccessExpr, ok := callExpr.Arguments[0].(*ast.StaticAccessExpression)
-				require.True(t, ok, "First argument should be StaticAccessExpression")
+				classConstExpr, ok := callExpr.Arguments[0].(*ast.ClassConstantAccessExpression)
+				require.True(t, ok, "First argument should be ClassConstantAccessExpression")
 
 				// Check self part
-				selfIdent, ok := staticAccessExpr.Class.(*ast.IdentifierNode)
+				selfIdent, ok := classConstExpr.Class.(*ast.IdentifierNode)
 				require.True(t, ok, "Class should be IdentifierNode")
 				assert.Equal(t, "self", selfIdent.Name)
 
 				// Check POST_TYPE part
-				postTypeIdent, ok := staticAccessExpr.Property.(*ast.IdentifierNode)
-				require.True(t, ok, "Property should be IdentifierNode")
+				postTypeIdent, ok := classConstExpr.Constant.(*ast.IdentifierNode)
+				require.True(t, ok, "Constant should be IdentifierNode")
 				assert.Equal(t, "POST_TYPE", postTypeIdent.Name)
 
 				// Second argument: array(...)
@@ -2695,6 +2695,11 @@ func TestParsing_ArrowFunctions(t *testing.T) {
 				assert.Len(t, callExpr.Arguments, 2, "should have 2 arguments")
 				arrowFunc, ok = callExpr.Arguments[1].(*ast.ArrowFunctionExpression)
 				assert.True(t, ok, "second argument should be arrow function")
+			} else if methodCallExpr, ok := stmt.Expression.(*ast.MethodCallExpression); ok {
+				// Method call with arrow function as argument
+				assert.Len(t, methodCallExpr.Arguments, 2, "should have 2 arguments")
+				arrowFunc, ok = methodCallExpr.Arguments[1].(*ast.ArrowFunctionExpression)
+				assert.True(t, ok, "second argument should be arrow function")
 			} else {
 				t.Fatalf("unexpected expression type: %T", stmt.Expression)
 			}
@@ -2846,28 +2851,29 @@ func TestParsing_StaticAccessExpressions(t *testing.T) {
 			assignExpr, ok := exprStmt.Expression.(*ast.AssignmentExpression)
 			assert.True(t, ok, "Expression should be AssignmentExpression")
 
-			var staticAccess *ast.StaticAccessExpression
+			// These are all class constants, so they should be ClassConstantAccessExpression
+			var classConst *ast.ClassConstantAccessExpression
 
-			// Handle both direct static access and static access in binary expressions
-			if sa, ok := assignExpr.Right.(*ast.StaticAccessExpression); ok {
-				staticAccess = sa
+			// Handle both direct class constant access and class constant access in binary expressions
+			if cc, ok := assignExpr.Right.(*ast.ClassConstantAccessExpression); ok {
+				classConst = cc
 			} else if binExpr, ok := assignExpr.Right.(*ast.BinaryExpression); ok {
-				sa, ok := binExpr.Left.(*ast.StaticAccessExpression)
-				assert.True(t, ok, "Left side of binary expression should be StaticAccessExpression")
-				staticAccess = sa
+				cc, ok := binExpr.Left.(*ast.ClassConstantAccessExpression)
+				assert.True(t, ok, "Left side of binary expression should be ClassConstantAccessExpression")
+				classConst = cc
 			}
 
-			assert.NotNil(t, staticAccess, "Should find StaticAccessExpression")
+			assert.NotNil(t, classConst, "Should find ClassConstantAccessExpression")
 
 			// Check class name
-			classIdent, ok := staticAccess.Class.(*ast.IdentifierNode)
+			classIdent, ok := classConst.Class.(*ast.IdentifierNode)
 			assert.True(t, ok, "Class should be IdentifierNode")
 			assert.Equal(t, tt.expectedClass, classIdent.Name)
 
-			// Check property name
-			propIdent, ok := staticAccess.Property.(*ast.IdentifierNode)
-			assert.True(t, ok, "Property should be IdentifierNode")
-			assert.Equal(t, tt.expectedProperty, propIdent.Name)
+			// Check constant name
+			constIdent, ok := classConst.Constant.(*ast.IdentifierNode)
+			assert.True(t, ok, "Constant should be IdentifierNode")
+			assert.Equal(t, tt.expectedProperty, constIdent.Name)
 		})
 	}
 }
@@ -4652,20 +4658,17 @@ $tested = $test->getName();`,
 				assert.Equal(t, "$tested", leftVar.Name)
 
 				// Check right side ($test->getName())
-				callExpr, ok := assignment.Right.(*ast.CallExpression)
-				assert.True(t, ok, "Right side should be CallExpression")
+				methodCall, ok := assignment.Right.(*ast.MethodCallExpression)
+				assert.True(t, ok, "Right side should be MethodCallExpression")
 
-				propAccess, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Callee should be PropertyAccessExpression")
-
-				objVar, ok := propAccess.Object.(*ast.Variable)
+				objVar, ok := methodCall.Object.(*ast.Variable)
 				assert.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$test", objVar.Name)
 
-				assert.NotNil(t, propAccess.Property, "Property should not be nil")
-				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
-				assert.True(t, ok, "Property should be IdentifierNode")
-				assert.Equal(t, "getName", propIdent.Name)
+				assert.NotNil(t, methodCall.Method, "Method should not be nil")
+				methodIdent, ok := methodCall.Method.(*ast.IdentifierNode)
+				assert.True(t, ok, "Method should be IdentifierNode")
+				assert.Equal(t, "getName", methodIdent.Name)
 			},
 		},
 		{
@@ -5883,8 +5886,8 @@ func TestParsing_YieldExpressions(t *testing.T) {
 				assert.NotNil(t, yieldExpr.Value, "Value should not be nil")
 
 				// Key should be method call
-				_, ok = yieldExpr.Key.(*ast.CallExpression)
-				assert.True(t, ok, "Key should be CallExpression")
+				_, ok = yieldExpr.Key.(*ast.MethodCallExpression)
+				assert.True(t, ok, "Key should be MethodCallExpression")
 
 				// Value should be property access
 				valueProp, ok := yieldExpr.Value.(*ast.PropertyAccessExpression)
@@ -5970,18 +5973,16 @@ func TestParsing_YieldFromExpressions(t *testing.T) {
 				assert.True(t, ok, "Expected YieldFromExpression")
 				assert.NotNil(t, yieldFromExpr.Expression, "Expression should not be nil")
 
-				callExpr, ok := yieldFromExpr.Expression.(*ast.CallExpression)
-				assert.True(t, ok, "Expression should be CallExpression")
+				methodCall, ok := yieldFromExpr.Expression.(*ast.MethodCallExpression)
+				assert.True(t, ok, "Expression should be MethodCallExpression")
 
-				propAccess, ok := callExpr.Callee.(*ast.PropertyAccessExpression)
-				assert.True(t, ok, "Callee should be PropertyAccessExpression")
-
-				objVar, ok := propAccess.Object.(*ast.Variable)
+				objVar, ok := methodCall.Object.(*ast.Variable)
 				assert.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$obj", objVar.Name)
-				propIdent, ok := propAccess.Property.(*ast.IdentifierNode)
-				assert.True(t, ok, "Property should be IdentifierNode")
-				assert.Equal(t, "getGenerator", propIdent.Name)
+				
+				methodIdent, ok := methodCall.Method.(*ast.IdentifierNode)
+				assert.True(t, ok, "Method should be IdentifierNode")
+				assert.Equal(t, "getGenerator", methodIdent.Name)
 			},
 		},
 		{

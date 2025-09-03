@@ -4078,6 +4078,126 @@ func (ce *CallExpression) String() string {
 	return ce.Callee.String() + "(" + strings.Join(args, ", ") + ")"
 }
 
+// MethodCallExpression 方法调用表达式 - $obj->method(args)
+// 使用 ASTMethodCall (768) 节点类型，符合PHP官方zend_ast.h定义
+type MethodCallExpression struct {
+	BaseNode
+	Object    Expression   `json:"object"`    // 对象表达式
+	Method    Expression   `json:"method"`    // 方法名表达式  
+	Arguments []Expression `json:"arguments"` // 参数列表
+}
+
+func NewMethodCallExpression(pos lexer.Position, object Expression, method Expression) *MethodCallExpression {
+	return &MethodCallExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTMethodCall,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Object:    object,
+		Method:    method,
+		Arguments: make([]Expression, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (mce *MethodCallExpression) GetChildren() []Node {
+	children := []Node{mce.Object, mce.Method}
+	for _, arg := range mce.Arguments {
+		children = append(children, arg)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (mce *MethodCallExpression) Accept(visitor Visitor) {
+	if visitor.Visit(mce) {
+		if mce.Object != nil {
+			mce.Object.Accept(visitor)
+		}
+		if mce.Method != nil {
+			mce.Method.Accept(visitor)
+		}
+		for _, arg := range mce.Arguments {
+			if arg != nil {
+				arg.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (mce *MethodCallExpression) expressionNode() {}
+
+func (mce *MethodCallExpression) String() string {
+	var args []string
+	for _, arg := range mce.Arguments {
+		if arg != nil {
+			args = append(args, arg.String())
+		}
+	}
+	return mce.Object.String() + "->" + mce.Method.String() + "(" + strings.Join(args, ", ") + ")"
+}
+
+// NullsafeMethodCallExpression 空安全方法调用表达式 - $obj?->method(args)
+// 使用 ASTNullsafeMethodCall (769) 节点类型，符合PHP官方zend_ast.h定义
+type NullsafeMethodCallExpression struct {
+	BaseNode
+	Object    Expression   `json:"object"`    // 对象表达式
+	Method    Expression   `json:"method"`    // 方法名表达式
+	Arguments []Expression `json:"arguments"` // 参数列表
+}
+
+func NewNullsafeMethodCallExpression(pos lexer.Position, object Expression, method Expression) *NullsafeMethodCallExpression {
+	return &NullsafeMethodCallExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTNullsafeMethodCall,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Object:    object,
+		Method:    method,
+		Arguments: make([]Expression, 0),
+	}
+}
+
+// GetChildren 返回子节点
+func (nmce *NullsafeMethodCallExpression) GetChildren() []Node {
+	children := []Node{nmce.Object, nmce.Method}
+	for _, arg := range nmce.Arguments {
+		children = append(children, arg)
+	}
+	return children
+}
+
+// Accept 接受访问者
+func (nmce *NullsafeMethodCallExpression) Accept(visitor Visitor) {
+	if visitor.Visit(nmce) {
+		if nmce.Object != nil {
+			nmce.Object.Accept(visitor)
+		}
+		if nmce.Method != nil {
+			nmce.Method.Accept(visitor)
+		}
+		for _, arg := range nmce.Arguments {
+			if arg != nil {
+				arg.Accept(visitor)
+			}
+		}
+	}
+}
+
+func (nmce *NullsafeMethodCallExpression) expressionNode() {}
+
+func (nmce *NullsafeMethodCallExpression) String() string {
+	var args []string
+	for _, arg := range nmce.Arguments {
+		if arg != nil {
+			args = append(args, arg.String())
+		}
+	}
+	return nmce.Object.String() + "?->" + nmce.Method.String() + "(" + strings.Join(args, ", ") + ")"
+}
+
 // DocBlockComment 文档块注释
 type DocBlockComment struct {
 	BaseNode
@@ -5082,6 +5202,106 @@ func (sae *StaticAccessExpression) String() string {
 	}
 
 	return class + "::" + property
+}
+
+// StaticPropertyAccessExpression 表示静态属性访问表达式 Class::$property
+// 使用 ASTStaticProp (515) 节点类型，符合PHP官方zend_ast.h定义
+type StaticPropertyAccessExpression struct {
+	BaseNode
+	Class    Expression `json:"class"`    // 类名表达式
+	Property Expression `json:"property"` // 属性表达式
+}
+
+func NewStaticPropertyAccessExpression(pos lexer.Position, class, property Expression) *StaticPropertyAccessExpression {
+	return &StaticPropertyAccessExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTStaticProp,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Class:    class,
+		Property: property,
+	}
+}
+
+func (spae *StaticPropertyAccessExpression) GetChildren() []Node {
+	children := []Node{spae.Class, spae.Property}
+	return children
+}
+
+func (spae *StaticPropertyAccessExpression) Accept(visitor Visitor) {
+	if visitor.Visit(spae) {
+		if spae.Class != nil {
+			spae.Class.Accept(visitor)
+		}
+		if spae.Property != nil {
+			spae.Property.Accept(visitor)
+		}
+	}
+}
+
+func (spae *StaticPropertyAccessExpression) expressionNode() {}
+
+func (spae *StaticPropertyAccessExpression) String() string {
+	var class string
+	if spae.Class != nil {
+		class = spae.Class.String()
+	}
+	var property string
+	if spae.Property != nil {
+		property = spae.Property.String()
+	}
+	return class + "::" + property
+}
+
+// ClassConstantAccessExpression 表示类常量访问表达式 Class::CONSTANT
+// 使用 ASTClassConst (517) 节点类型，符合PHP官方zend_ast.h定义
+type ClassConstantAccessExpression struct {
+	BaseNode
+	Class    Expression `json:"class"`    // 类名表达式
+	Constant Expression `json:"constant"` // 常量表达式
+}
+
+func NewClassConstantAccessExpression(pos lexer.Position, class, constant Expression) *ClassConstantAccessExpression {
+	return &ClassConstantAccessExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTClassConst,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Class:    class,
+		Constant: constant,
+	}
+}
+
+func (ccae *ClassConstantAccessExpression) GetChildren() []Node {
+	children := []Node{ccae.Class, ccae.Constant}
+	return children
+}
+
+func (ccae *ClassConstantAccessExpression) Accept(visitor Visitor) {
+	if visitor.Visit(ccae) {
+		if ccae.Class != nil {
+			ccae.Class.Accept(visitor)
+		}
+		if ccae.Constant != nil {
+			ccae.Constant.Accept(visitor)
+		}
+	}
+}
+
+func (ccae *ClassConstantAccessExpression) expressionNode() {}
+
+func (ccae *ClassConstantAccessExpression) String() string {
+	var class string
+	if ccae.Class != nil {
+		class = ccae.Class.String()
+	}
+	var constant string
+	if ccae.Constant != nil {
+		constant = ccae.Constant.String()
+	}
+	return class + "::" + constant
 }
 
 // VisibilityModifierExpression 表示可见性修饰符表达式

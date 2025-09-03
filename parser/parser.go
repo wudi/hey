@@ -2645,6 +2645,18 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 		}
 	}
 
+	// 检查是否是方法调用 (后面跟着括号)
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		// 这是一个方法调用: $obj->method()
+		methodCall := ast.NewMethodCallExpression(pos, left, property)
+		
+		// 移动到括号并解析参数
+		p.nextToken() // 移动到 (
+		methodCall.Arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
+		
+		return methodCall
+	}
+
 	return ast.NewPropertyAccessExpression(pos, left, property)
 }
 
@@ -2682,6 +2694,18 @@ func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression 
 			p.addError(fmt.Sprintf("expected property name, variable, or brace-enclosed expression, got %s", p.currentToken.Value))
 			return nil
 		}
+	}
+
+	// 检查是否是空安全方法调用 (后面跟着括号)
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		// 这是一个空安全方法调用: $obj?->method()
+		methodCall := ast.NewNullsafeMethodCallExpression(pos, left, property)
+		
+		// 移动到括号并解析参数
+		p.nextToken() // 移动到 (
+		methodCall.Arguments = parseExpressionList(p, lexer.TOKEN_RPAREN)
+		
+		return methodCall
 	}
 
 	return ast.NewNullsafePropertyAccessExpression(pos, left, property)
@@ -6198,7 +6222,33 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 		property = parseExpression(p, CALL)
 	}
 
-	// 创建一个静态访问表达式
+	// 检查是否是静态方法调用 (后面跟着括号)
+	if p.peekToken.Type == lexer.TOKEN_LPAREN {
+		// 这是一个静态方法调用: Class::method()
+		// 继续使用原来的 StaticAccessExpression，因为它已经使用 ASTStaticCall
+		staticCall := ast.NewStaticAccessExpression(pos, left, property)
+		
+		// 注意：这里不直接解析参数，让 parseCallExpression 处理
+		// 因为 TOKEN_LPAREN 在 globalInfixParseFns 中已经映射到 parseCallExpression
+		return staticCall
+	}
+
+	// 检查是否是静态属性访问 (以$开头)
+	if property != nil {
+		// 检查property是否是变量表达式
+		if variable, ok := property.(*ast.Variable); ok && strings.HasPrefix(variable.Name, "$") {
+			// 这是静态属性访问: Class::$property
+			return ast.NewStaticPropertyAccessExpression(pos, left, property)
+		}
+		
+		// 检查是否是标识符（常量）
+		if _, ok := property.(*ast.IdentifierNode); ok {
+			// 这是类常量访问: Class::CONSTANT
+			return ast.NewClassConstantAccessExpression(pos, left, property)
+		}
+	}
+
+	// 默认情况，使用通用静态访问表达式
 	return ast.NewStaticAccessExpression(pos, left, property)
 }
 
