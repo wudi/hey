@@ -29,9 +29,23 @@ go build -o php-parser ./cmd/php-parser  # Build command-line tool
 echo '<?php echo "Hello"; ?>' | ./php-parser  # Parse from stdin
 ```
 
-**WordPress Compatibility Testing:**
+**Compatibility Testing:**
 ```bash
-go run test_wordpress.go                 # Run WordPress parsing test suite (1,648 files)
+go run scripts/test_folder.go <directory>             # Test all PHP files in a directory
+```
+- WordPress `/home/ubuntu/wordpress-develop`
+- Laravel `/home/ubuntu/framework`
+- Symfony `/home/ubuntu/symfony`
+- CakePHP `/home/ubuntu/cakephp`
+- Yii2 `/home/ubuntu/yii2`
+- Filament `/home/ubuntu/filament`
+- Joomla-CMS `/home/ubuntu/joomla-cms`
+- CodeIgniter4 `/home/ubuntu/CodeIgniter4`
+- ThinkPHP `/home/ubuntu/thinkphp`
+
+For example test with WordPress:
+```bash
+go run scripts/test_folder.go /home/ubuntu/wordpress-develop
 ```
 
 # Code style
@@ -51,7 +65,7 @@ go run test_wordpress.go                 # Run WordPress parsing test suite (1,6
 - Run targeted tests: `go test ./parser -run=TestSpecificFeature -v`
 - After fixing a bug, run all tests to ensure no regressions: `go test ./...`
 - For major changes, run benchmarks: `go test ./parser -bench=. -run=^$`
-- Test WordPress compatibility after major changes: `go run test_wordpress.go`
+- Test compatibility after major changes: `go run scripts/test_folder.go <directory>`
 - Create descriptive commit messages with detailed changelog
 
 **PHP Compatibility Testing:**
@@ -171,7 +185,7 @@ This is a PHP parser implementation in Go with the following structure:
 7. Add constructor functions (NewXXXExpression) following existing patterns
 8. Update `ast/visitor.go` Walk function to handle new node types (lines 28-95)
 9. Add comprehensive test cases covering all syntax variations and edge cases
-10. Test with WordPress codebase using `go run test_wordpress.go`
+10. Test with codebase using `go run scripts/test_folder.go <directory>`
 
 **When Adding New Class Member Types:**
 1. Analyze PHP grammar rules in `/home/ubuntu/php-src/Zend/zend_language_parser.y`
@@ -236,12 +250,6 @@ This is a PHP parser implementation in Go with the following structure:
 - Print expression parsing and attribute parsing improvements
 - Multiple class modifier support with any order combinations
 - Enhanced method modifier combinations in any order
-
-**100% WordPress Compatibility (2024-12-28):**
-- Fixed namespace parsing in implements clauses (`class A implements B\C\D`)
-- Added unary plus operator support (`+(expression)`)
-- Successfully parses all 1,648 PHP files in WordPress 6.7.1
-- Both `parseClassDeclaration` and `parseReadonlyClassDeclaration` updated
 
 **PHP 8.4 Grammar Enhancements (2024-12-19):**
 - **Complete Operator Support**: Added all missing assignment operators (??=, **=, &=, |=, ^=, <<=, >>=), power operator (**), spaceship operator (<=>), logical XOR (xor)
@@ -325,21 +333,6 @@ When fixing statement parsing issues, particularly for control structures (try-c
 2. **Loop Token Advancement**: In loops that parse multiple similar constructs (like catch clauses), only advance tokens when certain there are more constructs to parse
 3. **Finally Block Detection**: Use `peekToken` to check for optional constructs like finally blocks without advancing prematurely
 4. **Break vs Continue**: Use proper loop control to avoid unnecessary token advancement that can skip subsequent statements
-
-**Common Pattern for Multi-Construct Parsing:**
-```go
-for p.currentToken.Type == EXPECTED_TOKEN {
-    // Parse construct
-    // ...
-    
-    // Only advance if there's another construct
-    if p.peekToken.Type == EXPECTED_TOKEN {
-        p.nextToken()
-    } else {
-        break
-    }
-}
-```
 
 # important-instruction-reminders
 Do what has been asked; nothing more, nothing less.

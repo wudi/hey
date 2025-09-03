@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 package main
@@ -23,7 +24,7 @@ type ParseResult struct {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run test_laravel_vendor.go <directory>")
+		fmt.Println("Usage: go run test_folder.go <directory>")
 		os.Exit(1)
 	}
 
@@ -62,11 +63,11 @@ func main() {
 		wg.Add(1)
 		go func(filename string) {
 			defer wg.Done()
-			sem <- struct{}{} // Acquire semaphore
+			sem <- struct{}{}        // Acquire semaphore
 			defer func() { <-sem }() // Release semaphore
 
 			result := parseFile(filename)
-			
+
 			mu.Lock()
 			results = append(results, result)
 			if !result.Success {
@@ -104,7 +105,7 @@ func main() {
 	fmt.Printf("Failed: %d\n", failed)
 	fmt.Printf("Total tokens parsed: %d\n", totalTokens)
 	fmt.Printf("Elapsed time: %v\n", elapsed)
-	
+
 	if failed > 0 {
 		fmt.Printf("\nFailed files:\n")
 		for _, result := range failedFiles {
@@ -129,10 +130,10 @@ func parseFile(filename string) ParseResult {
 
 	l := lexer.New(string(content))
 	p := parser.New(l)
-	
+
 	// Parse the file
 	_ = p.ParseProgram()
-	
+
 	if len(p.Errors()) > 0 {
 		// Get first error for reporting
 		firstError := p.Errors()[0]
