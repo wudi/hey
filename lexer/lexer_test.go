@@ -1325,3 +1325,132 @@ test
 		})
 	}
 }
+
+// TestLexer_DocCommentDetection tests the specific logic for distinguishing
+// between T_COMMENT and T_DOC_COMMENT based on PHP's whitespace rules
+func TestLexer_DocCommentDetection(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "/**/ should be T_COMMENT (no whitespace after /**)",
+			input: `<?php /**/`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/**/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "/** */ should be T_DOC_COMMENT (space after /**)",
+			input: `<?php /** */`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOC_COMMENT, "/** */"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "/**\t*/ should be T_DOC_COMMENT (tab after /**)",
+			input: "<?php /**\t*/",
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOC_COMMENT, "/**\t*/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "/**\n*/ should be T_DOC_COMMENT (newline after /**)",
+			input: "<?php /**\n*/",
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOC_COMMENT, "/**\n*/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "/**\r*/ should be T_DOC_COMMENT (carriage return after /**)",
+			input: "<?php /**\r*/",
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOC_COMMENT, "/**\r*/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "/**content*/ should be T_DOC_COMMENT (content after /**)",
+			input: `<?php /**content*/`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOC_COMMENT, "/**content*/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "/** multiline doc comment */ should be T_DOC_COMMENT",
+			input: `<?php /**
+ * This is a multiline
+ * doc comment
+ */`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOC_COMMENT, "/**\n * This is a multiline\n * doc comment\n */"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "/*/ should be T_COMMENT (regular comment with slash)",
+			input: `<?php /*/`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/*/"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - token type wrong. expected=%s, got=%s",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
