@@ -562,10 +562,14 @@ func (l *Lexer) nextTokenInScripting() Token {
 			return Token{Type: T_COMMENT, Value: comment, Position: pos}
 		} else if l.peekChar() == '*' {
 			// 块注释 - 先检查是否为文档注释
-			isDocComment := l.peekChar() == '*' && l.peekCharN(1) == '*' // 检查是否为 /**
+			// PHP only considers /** as doc comment if followed by whitespace or content
+			isDocComment := l.peekChar() == '*' && l.peekCharN(1) == '*' && 
+				(l.peekCharN(2) == ' ' || l.peekCharN(2) == '\t' || l.peekCharN(2) == '\n' || l.peekCharN(2) == '\r' || 
+				 (l.peekCharN(2) != '/' && l.peekCharN(2) != 0))
 			l.readChar()                                                 // 跳过 /
+			l.readChar()                                                 // 跳过 *
 			comment := l.readBlockComment()
-			fullComment := "/" + comment
+			fullComment := "/*" + comment
 
 			if isDocComment {
 				return Token{Type: T_DOC_COMMENT, Value: fullComment, Position: pos}

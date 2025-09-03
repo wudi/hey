@@ -1191,3 +1191,137 @@ func TestLexer_BacktickWithCurlyBraces(t *testing.T) {
 		})
 	}
 }
+
+// TestLexer_BlockCommentEdgeCases tests edge cases for block comment parsing,
+// specifically the bug where /*/ was incorrectly parsed as a complete comment
+func TestLexer_BlockCommentEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "comment starting with /*//",
+			input: `<?php /*//test
+test
+*/`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/*//test\ntest\n*/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "comment with single slash after opening",
+			input: `<?php /*/ test */`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/*/ test */"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "comment with multiple */ sequences inside",
+			input: `<?php /* */ inside */ real end */`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/* */"},
+				{T_STRING, "inside"},
+				{TOKEN_MULTIPLY, "*"},
+				{TOKEN_DIVIDE, "/"},
+				{T_STRING, "real"},
+				{T_STRING, "end"},
+				{TOKEN_MULTIPLY, "*"},
+				{TOKEN_DIVIDE, "/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "comment with star-slash-star pattern",
+			input: `<?php /*/*/*/`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/*/*/"},
+				{TOKEN_MULTIPLY, "*"},
+				{TOKEN_DIVIDE, "/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "doc comment with slash after opening",
+			input: `<?php /**/ doctest */`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/**/"},
+				{T_STRING, "doctest"},
+				{TOKEN_MULTIPLY, "*"},
+				{TOKEN_DIVIDE, "/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "nested comment-like patterns",
+			input: `<?php /* /* nested */ fake */ real */`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/* /* nested */"},
+				{T_STRING, "fake"},
+				{TOKEN_MULTIPLY, "*"},
+				{TOKEN_DIVIDE, "/"},
+				{T_STRING, "real"},
+				{TOKEN_MULTIPLY, "*"},
+				{TOKEN_DIVIDE, "/"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "comment with line breaks and slashes",
+			input: "<?php /*\n//comment\n/* fake start\n*/",
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_COMMENT, "/*\n//comment\n/* fake start\n*/"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - token type wrong. expected=%s, got=%s",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
