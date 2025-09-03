@@ -1366,32 +1366,35 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 	// 检查是否是有效的类型
 	var tokenType TokenType
 	var tokenValue string
+	
+	// Convert to lowercase for comparison, but preserve original case for token value
+	lowerTypeName := strings.ToLower(typeName)
 
-	switch typeName {
+	switch lowerTypeName {
 	case "int", "integer":
 		tokenType = T_INT_CAST
-		tokenValue = "(int)"
+		tokenValue = "(" + typeName + ")"
 	case "bool", "boolean":
 		tokenType = T_BOOL_CAST
-		tokenValue = "(bool)"
+		tokenValue = "(" + typeName + ")"
 	case "float", "double", "real":
 		tokenType = T_DOUBLE_CAST
-		tokenValue = "(double)"
+		tokenValue = "(" + typeName + ")"
 	case "string":
 		tokenType = T_STRING_CAST
-		tokenValue = "(string)"
+		tokenValue = "(" + typeName + ")"
 	case "array":
 		tokenType = T_ARRAY_CAST
-		tokenValue = "(array)"
+		tokenValue = "(" + typeName + ")"
 	case "object":
 		tokenType = T_OBJECT_CAST
-		tokenValue = "(object)"
+		tokenValue = "(" + typeName + ")"
 	case "unset":
 		tokenType = T_UNSET_CAST
-		tokenValue = "(unset)"
+		tokenValue = "(" + typeName + ")"
 	case "binary":
 		tokenType = T_STRING_CAST // binary cast is treated as string cast in PHP
-		tokenValue = "(binary)"
+		tokenValue = "(" + typeName + ")"
 	default:
 		// 恢复位置
 		l.position = oldPosition

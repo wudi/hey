@@ -1454,3 +1454,291 @@ func TestLexer_DocCommentDetection(t *testing.T) {
 		})
 	}
 }
+
+func TestLexer_TypeCasts(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "lowercase string cast (string)",
+			input: `<?php (string)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_STRING_CAST, "(string)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed case string cast (String)",
+			input: `<?php (String)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_STRING_CAST, "(String)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "uppercase string cast (STRING)",
+			input: `<?php (STRING)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_STRING_CAST, "(STRING)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "lowercase int cast (int)",
+			input: `<?php (int)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_INT_CAST, "(int)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed case int cast (Int)",
+			input: `<?php (Int)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_INT_CAST, "(Int)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "uppercase integer cast (INTEGER)",
+			input: `<?php (INTEGER)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_INT_CAST, "(INTEGER)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "lowercase bool cast (bool)",
+			input: `<?php (bool)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_BOOL_CAST, "(bool)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed case boolean cast (Boolean)",
+			input: `<?php (Boolean)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_BOOL_CAST, "(Boolean)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "uppercase array cast (ARRAY)",
+			input: `<?php (ARRAY)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ARRAY_CAST, "(ARRAY)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed case object cast (Object)",
+			input: `<?php (Object)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_OBJECT_CAST, "(Object)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "uppercase float cast (FLOAT)",
+			input: `<?php (FLOAT)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOUBLE_CAST, "(FLOAT)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed case double cast (Double)",
+			input: `<?php (Double)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_DOUBLE_CAST, "(Double)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "uppercase unset cast (UNSET)",
+			input: `<?php (UNSET)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_UNSET_CAST, "(UNSET)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "mixed case binary cast (Binary)",
+			input: `<?php (Binary)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_STRING_CAST, "(Binary)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "cast with spaces (  String  )",
+			input: `<?php (  String  )$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_STRING_CAST, "(String)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "cast with tabs (\t\tint\t\t)",
+			input: "<?php (\t\tint\t\t)$x;",
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_INT_CAST, "(int)"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "non-cast parentheses (invalid)",
+			input: `<?php (notacast)$x;`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{TOKEN_LPAREN, "("},
+				{T_STRING, "notacast"},
+				{TOKEN_RPAREN, ")"},
+				{T_VARIABLE, "$x"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "cast in array expression (failing test case)",
+			input: `<?php array('id' => (String)$id,);`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ARRAY, "array"},
+				{TOKEN_LPAREN, "("},
+				{T_CONSTANT_ENCAPSED_STRING, "'id'"},
+				{T_DOUBLE_ARROW, "=>"},
+				{T_STRING_CAST, "(String)"},
+				{T_VARIABLE, "$id"},
+				{TOKEN_COMMA, ","},
+				{TOKEN_RPAREN, ")"},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - token type wrong. expected=%s, got=%s",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
