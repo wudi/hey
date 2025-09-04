@@ -246,15 +246,19 @@ func (c *Compiler) compileIncrementDecrement(expr *ast.UnaryExpression) error {
 	// Write new value back to variable
 	c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, newVal, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, varSlot)
 
-	// Return appropriate value based on pre/post increment
-	if expr.Prefix {
-		// Pre-increment/decrement: return new value  
-		// The new value is already in newVal temp
-	} else {
-		// Post-increment/decrement: return original value
-		// The original value is already in currentVal temp
+	// The expression result should be available in the appropriate temp variable
+	// For post-increment: currentVal contains the original value (what should be returned)  
+	// For pre-increment: newVal contains the new value (what should be returned)
+	// The VM execution model expects the result in the "current" temp slot
+	
+	if !expr.Prefix {
+		// Post-increment: ensure original value is in the current temp slot
+		// Move currentVal to be the "current" result temp
+		result := c.allocateTemp()
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, currentVal, 0, 0, opcodes.IS_TMP_VAR, result)
 	}
-
+	// For pre-increment, newVal is already in the right place
+	
 	return nil
 }
 
