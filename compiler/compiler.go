@@ -333,14 +333,8 @@ func (c *Compiler) getOpcodeForAssignmentOperator(operator string) opcodes.Opcod
 }
 
 func (c *Compiler) getVariableSlot(name string) uint32 {
-	// Simplified variable management - in a real implementation,
-	// this would use proper scope management
-	// Use a hash of the name to get a consistent slot
-	hash := uint32(0)
-	for _, r := range name {
-		hash = hash*31 + uint32(r)
-	}
-	return hash % 100 // Keep slots within reasonable range
+	// Use the same allocation system as getOrCreateVariable for consistency
+	return c.getOrCreateVariable(name)
 }
 
 func (c *Compiler) compileVariable(expr *ast.Variable) error {
