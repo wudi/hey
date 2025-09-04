@@ -6,17 +6,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/lexer"
 	"github.com/wudi/php-parser/parser"
-	"github.com/wudi/php-parser/compiler/vm"
 )
 
 func TestEcho(t *testing.T) {
 	p := parser.New(lexer.New(`<?php echo "Hello, World!";`))
 	prog := p.ParseProgram()
 
-	comp := NewSimpleCompiler()
-	err := comp.CompileNode(prog)
+	comp := NewCompiler()
+	err := comp.Compile(prog)
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
@@ -42,8 +42,8 @@ func TestArithmeticOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -75,8 +75,8 @@ func TestComparisonOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -103,8 +103,8 @@ func TestLogicalOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -131,8 +131,8 @@ func TestBitwiseOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -158,8 +158,8 @@ func TestUnaryOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -182,8 +182,8 @@ func TestStringOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -204,42 +204,42 @@ func TestAdvancedComparisonOperators(t *testing.T) {
 		{"IntEqual_False", `<?php echo 5 == 3;`, ""},
 		{"IntNotEqual_True", `<?php echo 5 != 3;`, "1"},
 		{"IntNotEqual_False", `<?php echo 5 != 5;`, ""},
-		
+
 		// String comparisons
 		{"StringEqual_True", `<?php echo "hello" == "hello";`, "1"},
 		{"StringEqual_False", `<?php echo "hello" == "world";`, ""},
 		{"StringNotEqual", `<?php echo "hello" != "world";`, "1"},
-		
+
 		// Identity comparisons (strict)
 		{"Identical_Int", `<?php echo 5 === 5;`, "1"},
 		{"NotIdentical_IntString", `<?php echo 5 !== "5";`, "1"},
 		{"Identical_String", `<?php echo "hello" === "hello";`, "1"},
 		{"NotIdentical_String", `<?php echo "hello" !== "world";`, "1"},
-		
+
 		// Numeric comparisons
 		{"LessThan_True", `<?php echo 3 < 5;`, "1"},
 		{"LessThan_False", `<?php echo 5 < 3;`, ""},
 		{"LessEqual_Equal", `<?php echo 5 <= 5;`, "1"},
 		{"LessEqual_Less", `<?php echo 3 <= 5;`, "1"},
 		{"LessEqual_False", `<?php echo 7 <= 5;`, ""},
-		
+
 		{"GreaterThan_True", `<?php echo 7 > 3;`, "1"},
 		{"GreaterThan_False", `<?php echo 3 > 7;`, ""},
 		{"GreaterEqual_Equal", `<?php echo 5 >= 5;`, "1"},
 		{"GreaterEqual_Greater", `<?php echo 7 >= 3;`, "1"},
 		{"GreaterEqual_False", `<?php echo 3 >= 7;`, ""},
-		
+
 		// Spaceship operator
 		{"Spaceship_Less", `<?php echo 3 <=> 5;`, "-1"},
 		{"Spaceship_Equal", `<?php echo 5 <=> 5;`, "0"},
 		{"Spaceship_Greater", `<?php echo 7 <=> 3;`, "1"},
-		
+
 		// Boolean comparisons
 		{"BoolEqual_True", `<?php echo true == true;`, "1"},
 		{"BoolEqual_False", `<?php echo true == false;`, ""},
 		{"BoolIdentical", `<?php echo true === true;`, "1"},
 		{"BoolNotIdentical", `<?php echo true !== false;`, "1"},
-		
+
 		// Mixed type comparisons
 		{"IntBool_Equal", `<?php echo 1 == true;`, "1"},
 		{"IntBool_NotIdentical", `<?php echo 1 !== true;`, "1"},
@@ -252,8 +252,8 @@ func TestAdvancedComparisonOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -282,8 +282,8 @@ func TestComparisonWithNull(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -302,25 +302,25 @@ func TestComplexComparisonExpressions(t *testing.T) {
 		{"NestedAnd", `<?php echo (5 > 3) && (10 < 20);`},
 		{"NestedOr", `<?php echo (5 < 3) || (10 > 5);`},
 		{"MixedLogical", `<?php echo (5 == 5) && (3 != 4) || (2 < 1);`},
-		
-		// Chained comparisons 
+
+		// Chained comparisons
 		{"ChainedEqual", `<?php echo 5 == 5 == true;`},
 		{"ChainedComparison", `<?php echo 1 < 2 < 3;`},
-		
+
 		// Comparisons with arithmetic
 		{"ArithmeticComparison", `<?php echo (5 + 3) > (2 * 3);`},
 		{"ComplexArithmetic", `<?php echo (10 / 2) == (15 - 10);`},
 		{"PowerComparison", `<?php echo (2 ** 3) > (3 ** 2);`},
-		
-		// String comparisons 
+
+		// String comparisons
 		{"StringLength", `<?php echo "abc" < "def";`},
 		{"StringNumeric", `<?php echo "10" > "2";`},
 		{"StringConcat", `<?php echo ("hello" . " world") == "hello world";`},
-		
+
 		// Mixed type complex comparisons
 		{"MixedTypeComplex", `<?php echo ("5" == 5) && (true == 1) && (false == 0);`},
 		{"IdenticalVsEqual", `<?php echo ("5" == 5) && ("5" !== 5);`},
-		
+
 		// Parenthesized expressions
 		{"ParenthesesGrouping", `<?php echo (5 > 3 && 2 < 4) || (1 == 2);`},
 		{"NestedParentheses", `<?php echo ((5 + 2) > (3 * 2)) && ((4 - 1) == 3);`},
@@ -331,8 +331,8 @@ func TestComplexComparisonExpressions(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -352,17 +352,17 @@ func TestSpaceshipOperatorDetails(t *testing.T) {
 		{"IntSpaceship_Less", `<?php echo 1 <=> 5;`, "-1"},
 		{"IntSpaceship_Equal", `<?php echo 5 <=> 5;`, "0"},
 		{"IntSpaceship_Greater", `<?php echo 10 <=> 3;`, "1"},
-		
+
 		// String spaceship (lexicographical)
 		{"StringSpaceship_Less", `<?php echo "apple" <=> "banana";`, "-1"},
 		{"StringSpaceship_Equal", `<?php echo "hello" <=> "hello";`, "0"},
 		{"StringSpaceship_Greater", `<?php echo "zebra" <=> "apple";`, "1"},
-		
+
 		// Mixed type spaceship
 		{"MixedSpaceship_IntString", `<?php echo 5 <=> "5";`, "0"},
 		{"MixedSpaceship_BoolInt", `<?php echo true <=> 1;`, "0"},
 		{"MixedSpaceship_NullInt", `<?php echo null <=> 0;`, "0"},
-		
+
 		// Negative numbers
 		{"NegativeSpaceship", `<?php echo -5 <=> -3;`, "-1"},
 		{"NegativePositive", `<?php echo -1 <=> 1;`, "-1"},
@@ -373,8 +373,8 @@ func TestSpaceshipOperatorDetails(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -394,19 +394,19 @@ func TestIncrementDecrementOperators(t *testing.T) {
 		{"PreIncrement_Float", `<?php $x = 3.5; echo ++$x;`},
 		{"PreIncrement_String", `<?php $x = "10"; echo ++$x;`},
 		{"PreIncrement_StringFloat", `<?php $x = "10.5"; echo ++$x;`},
-		
+
 		// Pre-decrement
 		{"PreDecrement_Int", `<?php $x = 5; echo --$x;`},
 		{"PreDecrement_Float", `<?php $x = 3.5; echo --$x;`},
 		{"PreDecrement_String", `<?php $x = "10"; echo --$x;`},
 		{"PreDecrement_StringFloat", `<?php $x = "10.5"; echo --$x;`},
-		
+
 		// Post-increment
 		{"PostIncrement_Int", `<?php $x = 5; echo $x++;`},
 		{"PostIncrement_Float", `<?php $x = 3.5; echo $x++;`},
 		{"PostIncrement_String", `<?php $x = "10"; echo $x++;`},
 		{"PostIncrement_StringFloat", `<?php $x = "10.5"; echo $x++;`},
-		
+
 		// Post-decrement
 		{"PostDecrement_Int", `<?php $x = 5; echo $x--;`},
 		{"PostDecrement_Float", `<?php $x = 3.5; echo $x--;`},
@@ -419,8 +419,8 @@ func TestIncrementDecrementOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -432,8 +432,8 @@ func TestIncrementDecrementOperators(t *testing.T) {
 
 func TestAdvancedIncrementDecrementOperators(t *testing.T) {
 	testCases := []struct {
-		name string
-		code string
+		name     string
+		code     string
 		expected string
 	}{
 		// Pre-increment tests with expected results
@@ -441,31 +441,31 @@ func TestAdvancedIncrementDecrementOperators(t *testing.T) {
 		{"PreIncrement_FloatValue", `<?php $x = 3.5; echo ++$x;`, "4.5"},
 		{"PreIncrement_StringValue", `<?php $x = "10"; echo ++$x;`, "11"},
 		{"PreIncrement_ZeroValue", `<?php $x = 0; echo ++$x;`, "1"},
-		
+
 		// Pre-decrement tests with expected results
 		{"PreDecrement_IntValue", `<?php $x = 5; echo --$x;`, "4"},
 		{"PreDecrement_FloatValue", `<?php $x = 3.5; echo --$x;`, "2.5"},
 		{"PreDecrement_StringValue", `<?php $x = "10"; echo --$x;`, "9"},
 		{"PreDecrement_ZeroValue", `<?php $x = 0; echo --$x;`, "-1"},
-		
+
 		// Post-increment tests with expected results
 		{"PostIncrement_IntValue", `<?php $x = 5; echo $x++;`, "5"},
 		{"PostIncrement_FloatValue", `<?php $x = 3.5; echo $x++;`, "3.5"},
 		{"PostIncrement_StringValue", `<?php $x = "10"; echo $x++;`, "10"},
 		{"PostIncrement_ZeroValue", `<?php $x = 0; echo $x++;`, "0"},
-		
+
 		// Post-decrement tests with expected results
 		{"PostDecrement_IntValue", `<?php $x = 5; echo $x--;`, "5"},
 		{"PostDecrement_FloatValue", `<?php $x = 3.5; echo $x--;`, "3.5"},
 		{"PostDecrement_StringValue", `<?php $x = "10"; echo $x--;`, "10"},
 		{"PostDecrement_ZeroValue", `<?php $x = 0; echo $x--;`, "0"},
-		
+
 		// Edge cases
 		{"PreIncrement_Null", `<?php $x = null; echo ++$x;`, "1"},
 		{"PreDecrement_Null", `<?php $x = null; echo --$x;`, "-1"},
 		{"PostIncrement_Null", `<?php $x = null; echo $x++;`, ""},
 		{"PostDecrement_Null", `<?php $x = null; echo $x--;`, ""},
-		
+
 		// Boolean values
 		{"PreIncrement_True", `<?php $x = true; echo ++$x;`, "2"},
 		{"PreIncrement_False", `<?php $x = false; echo ++$x;`, "1"},
@@ -478,8 +478,8 @@ func TestAdvancedIncrementDecrementOperators(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -498,12 +498,12 @@ func TestIncrementDecrementSequences(t *testing.T) {
 		{"MultiplePreIncrement", `<?php $x = 5; echo ++$x; echo " "; echo ++$x;`},
 		{"MultiplePostIncrement", `<?php $x = 5; echo $x++; echo " "; echo $x++;`},
 		{"MixedIncrementDecrement", `<?php $x = 5; echo ++$x; echo " "; echo $x--; echo " "; echo --$x;`},
-		
+
 		// Chained operations
 		{"ChainedIncrement", `<?php $x = 0; echo ++$x + ++$x;`},
 		{"ChainedDecrement", `<?php $x = 10; echo --$x - --$x;`},
 		{"MixedChained", `<?php $x = 5; echo ++$x * $x--;`},
-		
+
 		// Complex expressions
 		{"IncrementInExpression", `<?php $x = 5; $y = 3; echo ($x++ + ++$y);`},
 		{"DecrementInExpression", `<?php $x = 10; $y = 8; echo ($x-- - --$y);`},
@@ -515,8 +515,8 @@ func TestIncrementDecrementSequences(t *testing.T) {
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 
-			comp := NewSimpleCompiler()
-			err := comp.CompileNode(prog)
+			comp := NewCompiler()
+			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
@@ -537,8 +537,8 @@ echo $a; // except: 2
 	if len(p.Errors()) > 0 {
 		t.Fatalf("parser errors: %v", p.Errors())
 	}
-	comp := NewSimpleCompiler()
-	err := comp.CompileNode(prog)
+	comp := NewCompiler()
+	err := comp.Compile(prog)
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
@@ -549,11 +549,11 @@ echo $a; // except: 2
 func TestPostIncrementWithOutputCapture(t *testing.T) {
 	// Save original stdout
 	oldStdout := os.Stdout
-	
+
 	// Create a pipe to capture output
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	
+
 	// Parse and execute the PHP code
 	p := parser.New(lexer.New(`<?php
 $a=1;
@@ -565,8 +565,8 @@ echo $a; // except: 2
 	if len(p.Errors()) > 0 {
 		t.Fatalf("parser errors: %v", p.Errors())
 	}
-	comp := NewSimpleCompiler()
-	err := comp.CompileNode(prog)
+	comp := NewCompiler()
+	err := comp.Compile(prog)
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
@@ -576,12 +576,12 @@ echo $a; // except: 2
 	// Close writer and restore stdout
 	w.Close()
 	os.Stdout = oldStdout
-	
+
 	// Read captured output
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	output := buf.String()
-	
+
 	// Verify output is "2"
 	require.Equal(t, "2", output, "Expected output to be '2', got '%s'", output)
 }
