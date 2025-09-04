@@ -1100,8 +1100,114 @@ func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
 }
 
 func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
-	// TODO: Implement match expression
-	return fmt.Errorf("match expression not implemented")
+	// Compile the subject expression
+	err := c.compileNode(expr.Subject)
+	if err != nil {
+		return err
+	}
+	subjectTemp := c.nextTemp - 1
+
+	// Allocate temp variable for the match result
+	resultTemp := c.allocateTemp()
+
+	// Create labels for each arm and the end
+	endLabel := c.generateLabel()
+	var defaultLabel string
+	
+	// Match expression evaluation: compare subject with each arm's conditions
+	for _, arm := range expr.Arms {
+		if !arm.IsDefault {
+			// For each condition in this arm (comma-separated conditions)
+			conditionMatchLabel := c.generateLabel()
+			nextArmLabel := c.generateLabel()
+			
+			for j, condition := range arm.Conditions {
+				// Compile the condition
+				err := c.compileNode(condition)
+				if err != nil {
+					return err
+				}
+				conditionTemp := c.nextTemp - 1
+				
+				// Compare subject === condition using strict comparison
+				c.allocateTemp() // For comparison result
+				compResultTemp := c.nextTemp - 1
+				c.emit(opcodes.OP_IS_IDENTICAL, opcodes.IS_TMP_VAR, subjectTemp,
+					   opcodes.IS_TMP_VAR, conditionTemp, opcodes.IS_TMP_VAR, compResultTemp)
+				
+				// If this condition matches, jump to arm body
+				c.emitJumpNZ(opcodes.IS_TMP_VAR, compResultTemp, conditionMatchLabel)
+				
+				// If this was the last condition and none matched, try next arm
+				if j == len(arm.Conditions)-1 {
+					c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, nextArmLabel)
+				}
+			}
+			
+			// Label for when this arm's condition matches
+			c.placeLabel(conditionMatchLabel)
+			
+			// Compile the arm body
+			err := c.compileNode(arm.Body)
+			if err != nil {
+				return err
+			}
+			bodyResultTemp := c.nextTemp - 1
+			
+			// Store the result in our match result temp
+			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, bodyResultTemp, 0, 0, opcodes.IS_TMP_VAR, resultTemp)
+			
+			// After executing the arm, jump to end (no fall-through in match)
+			c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+			
+			// Label for trying the next arm
+			c.placeLabel(nextArmLabel)
+		} else {
+			// This is a default arm, remember its label for later
+			defaultLabel = c.generateLabel()
+		}
+	}
+	
+	// If no condition matched, execute default arm if present
+	if defaultLabel != "" {
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, defaultLabel)
+		
+		// Emit default arm
+		c.placeLabel(defaultLabel)
+		
+		// Find and compile the default arm
+		for _, arm := range expr.Arms {
+			if arm.IsDefault {
+				err := c.compileNode(arm.Body)
+				if err != nil {
+					return err
+				}
+				bodyResultTemp := c.nextTemp - 1
+				
+				// Store the result in our match result temp
+				c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, bodyResultTemp, 0, 0, opcodes.IS_TMP_VAR, resultTemp)
+				break
+			}
+		}
+	} else {
+		// No default arm - throw UnhandledMatchError
+		// For now, use a generic error message. In a full implementation,
+		// we would need to implement a special instruction that can format
+		// the error message with the actual type of the subject at runtime.
+		errorMsg := "UnhandledMatchError: Unhandled match case"
+		c.emit(opcodes.OP_THROW, opcodes.IS_CONST, c.addConstant(values.NewString(errorMsg)), 0, 0, 0, 0)
+	}
+	
+	c.placeLabel(endLabel)
+	
+	// Ensure the final result is in the expected position (nextTemp - 1)
+	// This is needed so that parent expressions (like echo) can find the result
+	if resultTemp != c.nextTemp - 1 {
+		finalResult := c.allocateTemp()
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, resultTemp, 0, 0, opcodes.IS_TMP_VAR, finalResult)
+	}
+	
+	return nil
 }
 
 func (c *Compiler) compileFor(stmt *ast.ForStatement) error {

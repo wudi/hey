@@ -289,6 +289,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeReturn(ctx, inst)
 	case opcodes.OP_EXIT:
 		return vm.executeExit(ctx, inst)
+	case opcodes.OP_THROW:
+		return vm.executeThrow(ctx, inst)
 	case opcodes.OP_QM_ASSIGN:
 		return vm.executeQuickAssign(ctx, inst)
 		
@@ -811,6 +813,26 @@ func (vm *VirtualMachine) executeExit(ctx *ExecutionContext, inst *opcodes.Instr
 	}
 	ctx.Halted = true
 	return nil
+}
+
+func (vm *VirtualMachine) executeThrow(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the exception value
+	exceptionValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	
+	// Create exception object
+	exception := Exception{
+		Value: exceptionValue,
+		File:  "<unknown>", // TODO: Add file tracking
+		Line:  0,           // TODO: Add line tracking
+		Trace: []string{},  // TODO: Add stack trace
+	}
+	
+	// Push exception onto the exception stack
+	ctx.ExceptionStack = append(ctx.ExceptionStack, exception)
+	
+	// For now, return the exception as an error to halt execution
+	// In a full implementation, this would look for catch handlers
+	return fmt.Errorf("%s", exceptionValue.ToString())
 }
 
 func (vm *VirtualMachine) executeQuickAssign(ctx *ExecutionContext, inst *opcodes.Instruction) error {

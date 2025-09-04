@@ -755,3 +755,51 @@ func TestCoalesceOperator(t *testing.T) {
 		})
 	}
 }
+
+func TestMatchExpression(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{"SimpleMatch", `<?php echo match(1) { 1 => "one", 2 => "two", default => "other" };`},
+		{"MatchString", `<?php echo match("hello") { "hello" => "world", "hi" => "there", default => "unknown" };`},
+		{"MatchMultipleConditions", `<?php echo match(2) { 1, 2, 3 => "small", 4, 5 => "medium", default => "large" };`},
+		{"MatchWithoutDefault", `<?php echo match(1) { 1 => "one", 2 => "two" };`},
+		{"MatchStrictComparison", `<?php echo match(1) { "1" => "string", 1 => "integer", default => "other" };`},
+		{"MatchExpression", `<?php echo match(5 + 3) { 8 => "eight", 10 => "ten", default => "other" };`},
+		{"MatchBooleanValues", `<?php echo match(true) { true => "yes", false => "no", default => "maybe" };`},
+		{"MatchNullValue", `<?php echo match(null) { null => "null", 0 => "zero", false => "false", default => "other" };`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
+
+func TestMatchExpressionError(t *testing.T) {
+	// Test case where no match is found and there's no default
+	code := `<?php echo match(5) { 1 => "one", 2 => "two" };`
+	
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Failed to compile match expression error test")
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	require.Error(t, err, "Expected UnhandledMatchError")
+	require.Contains(t, err.Error(), "UnhandledMatchError", "Should contain UnhandledMatchError")
+}
