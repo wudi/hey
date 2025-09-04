@@ -349,8 +349,21 @@ func (c *Compiler) compileVariable(expr *ast.Variable) error {
 }
 
 func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
-	// Identifiers are typically constants or function names
-	constant := c.addConstant(values.NewString(expr.Name))
+	// Handle special literal keywords
+	var constant uint32
+	
+	switch expr.Name {
+	case "null":
+		constant = c.addConstant(values.NewNull())
+	case "true":
+		constant = c.addConstant(values.NewBool(true))
+	case "false":
+		constant = c.addConstant(values.NewBool(false))
+	default:
+		// Identifiers are typically constants or function names
+		constant = c.addConstant(values.NewString(expr.Name))
+	}
+	
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
@@ -1036,8 +1049,49 @@ func (c *Compiler) getOpcodeForUnaryOperator(operator string) opcodes.Opcode {
 // Placeholder implementations for missing methods
 
 func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
-	// TODO: Implement null coalescing operator
-	return fmt.Errorf("coalesce operator not implemented")
+	// Compile left operand
+	err := c.compileNode(expr.Left)
+	if err != nil {
+		return err
+	}
+	leftResult := c.allocateTemp()
+	c.emitMove(leftResult)
+
+	// Generate labels for control flow
+	rightLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	// Check if left operand is null - if null, jump to right operand
+	nullConstant := c.addConstant(values.NewNull())
+	compResult := c.allocateTemp()
+	
+	// Compare left with null (using identical comparison for precise null check)
+	c.emit(opcodes.OP_IS_IDENTICAL, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_CONST, nullConstant, opcodes.IS_TMP_VAR, compResult)
+	
+	// If left is null (comparison is true), jump to evaluate right operand
+	c.emitJumpNZ(opcodes.IS_TMP_VAR, compResult, rightLabel)
+	
+	// Left is not null - use left value as result
+	result := c.allocateTemp()
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, leftResult, 0, 0, opcodes.IS_TMP_VAR, result)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+	
+	// Right operand evaluation (when left is null)
+	c.placeLabel(rightLabel)
+	err = c.compileNode(expr.Right)
+	if err != nil {
+		return err
+	}
+	rightResult := c.allocateTemp()
+	c.emitMove(rightResult)
+	
+	// Use right value as result
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, 0, 0, opcodes.IS_TMP_VAR, result)
+	
+	// End label
+	c.placeLabel(endLabel)
+
+	return nil
 }
 
 func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {

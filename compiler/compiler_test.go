@@ -723,3 +723,35 @@ switch ($a) {
 	// Should output "firstsecond" due to fall-through
 	require.Equal(t, "firstsecond", output)
 }
+
+func TestCoalesceOperator(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{"NullCoalesceToValue", `<?php echo null ?? "default";`},
+		{"ValueCoalesceIgnored", `<?php echo "value" ?? "default";`},
+		{"NumberCoalesceIgnored", `<?php echo 42 ?? "default";`},
+		{"ZeroCoalesceIgnored", `<?php echo 0 ?? "default";`},
+		{"FalseCoalesceIgnored", `<?php echo false ?? "default";`},
+		{"EmptyStringCoalesceIgnored", `<?php echo "" ?? "default";`},
+		{"ChainedCoalesce", `<?php echo null ?? null ?? "final";`},
+		{"VariableCoalesce", `<?php $x = null; echo $x ?? "default";`},
+		{"ExpressionCoalesce", `<?php echo (1 > 2 ? "true" : null) ?? "default";`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
