@@ -3,6 +3,7 @@ package vm
 import (
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/wudi/php-parser/compiler/opcodes"
 	"github.com/wudi/php-parser/compiler/values"
@@ -186,6 +187,16 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeNot(ctx, inst)
 	case opcodes.OP_BW_NOT:
 		return vm.executeBitwiseNot(ctx, inst)
+		
+	// Increment/Decrement operations
+	case opcodes.OP_PRE_INC:
+		return vm.executePreIncrement(ctx, inst)
+	case opcodes.OP_PRE_DEC:
+		return vm.executePreDecrement(ctx, inst)
+	case opcodes.OP_POST_INC:
+		return vm.executePostIncrement(ctx, inst)
+	case opcodes.OP_POST_DEC:
+		return vm.executePostDecrement(ctx, inst)
 		
 	// Comparison operations
 	case opcodes.OP_IS_EQUAL:
@@ -488,6 +499,142 @@ func (vm *VirtualMachine) executeSpaceship(ctx *ExecutionContext, inst *opcodes.
 	
 	result := values.NewInt(int64(op1.Compare(op2)))
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	
+	ctx.IP++
+	return nil
+}
+
+// Increment/Decrement operations
+
+func (vm *VirtualMachine) executePreIncrement(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Pre-increment: ++$var - increment variable and return new value
+	variable := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if variable == nil {
+		variable = values.NewInt(0)
+	}
+	
+	var result *values.Value
+	if variable.IsInt() {
+		result = values.NewInt(variable.ToInt() + 1)
+	} else if variable.IsFloat() {
+		result = values.NewFloat(variable.ToFloat() + 1.0)
+	} else if variable.IsString() {
+		// PHP converts string to number for increment
+		str := variable.ToString()
+		if strings.Contains(str, ".") {
+			result = values.NewFloat(variable.ToFloat() + 1.0)
+		} else {
+			result = values.NewInt(variable.ToInt() + 1)
+		}
+	} else {
+		result = values.NewInt(1)
+	}
+	
+	// Update the variable with the incremented value
+	vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), result)
+	// Return the new value
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executePreDecrement(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Pre-decrement: --$var - decrement variable and return new value
+	variable := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if variable == nil {
+		variable = values.NewInt(0)
+	}
+	
+	var result *values.Value
+	if variable.IsInt() {
+		result = values.NewInt(variable.ToInt() - 1)
+	} else if variable.IsFloat() {
+		result = values.NewFloat(variable.ToFloat() - 1.0)
+	} else if variable.IsString() {
+		// PHP converts string to number for decrement
+		str := variable.ToString()
+		if strings.Contains(str, ".") {
+			result = values.NewFloat(variable.ToFloat() - 1.0)
+		} else {
+			result = values.NewInt(variable.ToInt() - 1)
+		}
+	} else {
+		result = values.NewInt(-1)
+	}
+	
+	// Update the variable with the decremented value
+	vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), result)
+	// Return the new value
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executePostIncrement(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Post-increment: $var++ - return current value, then increment variable
+	variable := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if variable == nil {
+		variable = values.NewInt(0)
+	}
+	
+	// Return the original value
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), variable)
+	
+	var newValue *values.Value
+	if variable.IsInt() {
+		newValue = values.NewInt(variable.ToInt() + 1)
+	} else if variable.IsFloat() {
+		newValue = values.NewFloat(variable.ToFloat() + 1.0)
+	} else if variable.IsString() {
+		// PHP converts string to number for increment
+		str := variable.ToString()
+		if strings.Contains(str, ".") {
+			newValue = values.NewFloat(variable.ToFloat() + 1.0)
+		} else {
+			newValue = values.NewInt(variable.ToInt() + 1)
+		}
+	} else {
+		newValue = values.NewInt(1)
+	}
+	
+	// Update the variable with the incremented value
+	vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), newValue)
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executePostDecrement(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Post-decrement: $var-- - return current value, then decrement variable
+	variable := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if variable == nil {
+		variable = values.NewInt(0)
+	}
+	
+	// Return the original value
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), variable)
+	
+	var newValue *values.Value
+	if variable.IsInt() {
+		newValue = values.NewInt(variable.ToInt() - 1)
+	} else if variable.IsFloat() {
+		newValue = values.NewFloat(variable.ToFloat() - 1.0)
+	} else if variable.IsString() {
+		// PHP converts string to number for decrement
+		str := variable.ToString()
+		if strings.Contains(str, ".") {
+			newValue = values.NewFloat(variable.ToFloat() - 1.0)
+		} else {
+			newValue = values.NewInt(variable.ToInt() - 1)
+		}
+	} else {
+		newValue = values.NewInt(-1)
+	}
+	
+	// Update the variable with the decremented value
+	vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), newValue)
 	
 	ctx.IP++
 	return nil

@@ -96,6 +96,11 @@ func (c *SimpleCompiler) compileBinaryExpression(expr *ast.BinaryExpression) err
 }
 
 func (c *SimpleCompiler) compileUnaryExpression(expr *ast.UnaryExpression) error {
+	// Handle increment/decrement operators differently
+	if expr.Operator == "++" || expr.Operator == "--" {
+		return c.compileIncrementDecrementExpression(expr)
+	}
+	
 	err := c.CompileNode(expr.Operand)
 	if err != nil {
 		return err
@@ -107,6 +112,40 @@ func (c *SimpleCompiler) compileUnaryExpression(expr *ast.UnaryExpression) error
 	opcode := c.getOpcodeForUnaryOperator(expr.Operator)
 	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
 	c.emit(opcode, opcodes.IS_TMP_VAR, operandResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
+
+	return nil
+}
+
+func (c *SimpleCompiler) compileIncrementDecrementExpression(expr *ast.UnaryExpression) error {
+	// For increment/decrement, the operand must be a variable
+	variable, ok := expr.Operand.(*ast.Variable)
+	if !ok {
+		return fmt.Errorf("increment/decrement can only be applied to variables")
+	}
+
+	// Get variable slot
+	varSlot := c.getVariableSlot(variable.Name)
+	result := c.allocateTemp()
+	
+	// Determine the opcode based on operator and prefix/postfix
+	var opcode opcodes.Opcode
+	if expr.Operator == "++" {
+		if expr.Prefix {
+			opcode = opcodes.OP_PRE_INC
+		} else {
+			opcode = opcodes.OP_POST_INC
+		}
+	} else { // "--"
+		if expr.Prefix {
+			opcode = opcodes.OP_PRE_DEC
+		} else {
+			opcode = opcodes.OP_POST_DEC
+		}
+	}
+	
+	// Emit the increment/decrement instruction
+	// For increment/decrement: opcode, varType, varSlot, unused, 0, resultType, result
+	c.emit(opcode, opcodes.IS_VAR, varSlot, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }

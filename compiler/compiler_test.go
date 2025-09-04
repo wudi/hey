@@ -381,3 +381,145 @@ func TestSpaceshipOperatorDetails(t *testing.T) {
 		})
 	}
 }
+
+func TestIncrementDecrementOperators(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		// Pre-increment
+		{"PreIncrement_Int", `<?php $x = 5; echo ++$x;`},
+		{"PreIncrement_Float", `<?php $x = 3.5; echo ++$x;`},
+		{"PreIncrement_String", `<?php $x = "10"; echo ++$x;`},
+		{"PreIncrement_StringFloat", `<?php $x = "10.5"; echo ++$x;`},
+		
+		// Pre-decrement
+		{"PreDecrement_Int", `<?php $x = 5; echo --$x;`},
+		{"PreDecrement_Float", `<?php $x = 3.5; echo --$x;`},
+		{"PreDecrement_String", `<?php $x = "10"; echo --$x;`},
+		{"PreDecrement_StringFloat", `<?php $x = "10.5"; echo --$x;`},
+		
+		// Post-increment
+		{"PostIncrement_Int", `<?php $x = 5; echo $x++;`},
+		{"PostIncrement_Float", `<?php $x = 3.5; echo $x++;`},
+		{"PostIncrement_String", `<?php $x = "10"; echo $x++;`},
+		{"PostIncrement_StringFloat", `<?php $x = "10.5"; echo $x++;`},
+		
+		// Post-decrement
+		{"PostDecrement_Int", `<?php $x = 5; echo $x--;`},
+		{"PostDecrement_Float", `<?php $x = 3.5; echo $x--;`},
+		{"PostDecrement_String", `<?php $x = "10"; echo $x--;`},
+		{"PostDecrement_StringFloat", `<?php $x = "10.5"; echo $x--;`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+
+			comp := NewSimpleCompiler()
+			err := comp.CompileNode(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
+
+func TestAdvancedIncrementDecrementOperators(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+		expected string
+	}{
+		// Pre-increment tests with expected results
+		{"PreIncrement_IntValue", `<?php $x = 5; echo ++$x;`, "6"},
+		{"PreIncrement_FloatValue", `<?php $x = 3.5; echo ++$x;`, "4.5"},
+		{"PreIncrement_StringValue", `<?php $x = "10"; echo ++$x;`, "11"},
+		{"PreIncrement_ZeroValue", `<?php $x = 0; echo ++$x;`, "1"},
+		
+		// Pre-decrement tests with expected results
+		{"PreDecrement_IntValue", `<?php $x = 5; echo --$x;`, "4"},
+		{"PreDecrement_FloatValue", `<?php $x = 3.5; echo --$x;`, "2.5"},
+		{"PreDecrement_StringValue", `<?php $x = "10"; echo --$x;`, "9"},
+		{"PreDecrement_ZeroValue", `<?php $x = 0; echo --$x;`, "-1"},
+		
+		// Post-increment tests with expected results
+		{"PostIncrement_IntValue", `<?php $x = 5; echo $x++;`, "5"},
+		{"PostIncrement_FloatValue", `<?php $x = 3.5; echo $x++;`, "3.5"},
+		{"PostIncrement_StringValue", `<?php $x = "10"; echo $x++;`, "10"},
+		{"PostIncrement_ZeroValue", `<?php $x = 0; echo $x++;`, "0"},
+		
+		// Post-decrement tests with expected results
+		{"PostDecrement_IntValue", `<?php $x = 5; echo $x--;`, "5"},
+		{"PostDecrement_FloatValue", `<?php $x = 3.5; echo $x--;`, "3.5"},
+		{"PostDecrement_StringValue", `<?php $x = "10"; echo $x--;`, "10"},
+		{"PostDecrement_ZeroValue", `<?php $x = 0; echo $x--;`, "0"},
+		
+		// Edge cases
+		{"PreIncrement_Null", `<?php $x = null; echo ++$x;`, "1"},
+		{"PreDecrement_Null", `<?php $x = null; echo --$x;`, "-1"},
+		{"PostIncrement_Null", `<?php $x = null; echo $x++;`, ""},
+		{"PostDecrement_Null", `<?php $x = null; echo $x--;`, ""},
+		
+		// Boolean values
+		{"PreIncrement_True", `<?php $x = true; echo ++$x;`, "2"},
+		{"PreIncrement_False", `<?php $x = false; echo ++$x;`, "1"},
+		{"PreDecrement_True", `<?php $x = true; echo --$x;`, "0"},
+		{"PreDecrement_False", `<?php $x = false; echo --$x;`, "-1"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+
+			comp := NewSimpleCompiler()
+			err := comp.CompileNode(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
+
+func TestIncrementDecrementSequences(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		// Multiple operations
+		{"MultiplePreIncrement", `<?php $x = 5; echo ++$x; echo " "; echo ++$x;`},
+		{"MultiplePostIncrement", `<?php $x = 5; echo $x++; echo " "; echo $x++;`},
+		{"MixedIncrementDecrement", `<?php $x = 5; echo ++$x; echo " "; echo $x--; echo " "; echo --$x;`},
+		
+		// Chained operations
+		{"ChainedIncrement", `<?php $x = 0; echo ++$x + ++$x;`},
+		{"ChainedDecrement", `<?php $x = 10; echo --$x - --$x;`},
+		{"MixedChained", `<?php $x = 5; echo ++$x * $x--;`},
+		
+		// Complex expressions
+		{"IncrementInExpression", `<?php $x = 5; $y = 3; echo ($x++ + ++$y);`},
+		{"DecrementInExpression", `<?php $x = 10; $y = 8; echo ($x-- - --$y);`},
+		{"IncrementComparisonExpression", `<?php $x = 5; echo (++$x > 5);`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+
+			comp := NewSimpleCompiler()
+			err := comp.CompileNode(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
