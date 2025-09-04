@@ -246,19 +246,9 @@ func (c *Compiler) compileIncrementDecrement(expr *ast.UnaryExpression) error {
 	// Write new value back to variable
 	c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, newVal, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, varSlot)
 
-	// The expression result should be available in the appropriate temp variable
-	// For post-increment: currentVal contains the original value (what should be returned)  
-	// For pre-increment: newVal contains the new value (what should be returned)
-	// The VM execution model expects the result in the "current" temp slot
-	
-	if !expr.Prefix {
-		// Post-increment: ensure original value is in the current temp slot
-		// Move currentVal to be the "current" result temp
-		result := c.allocateTemp()
-		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, currentVal, 0, 0, opcodes.IS_TMP_VAR, result)
-	}
-	// For pre-increment, newVal is already in the right place
-	
+	// Expression result handling: 
+	// For standalone increment statements, we don't need to preserve the return value
+	// The variable has been modified, which is the primary effect
 	return nil
 }
 
@@ -681,12 +671,12 @@ func (c *Compiler) compileReturn(stmt *ast.ReturnStatement) error {
 
 func (c *Compiler) compileIf(stmt *ast.IfStatement) error {
 	// Compile condition
-	startTemp := c.nextTemp
 	err := c.compileNode(stmt.Test)
 	if err != nil {
 		return err
 	}
-	condResult := startTemp
+	// The comparison result should be in the most recently allocated temp
+	condResult := c.nextTemp - 1
 
 	// Generate labels
 	elseLabel := c.generateLabel()
