@@ -395,6 +395,8 @@ func (l *Lexer) NextToken() Token {
 		return l.nextTokenInHeredoc()
 	case ST_NOWDOC:
 		return l.nextTokenInNowdoc()
+	case ST_VAR_OFFSET:
+		return l.nextTokenInVarOffset()
 	case ST_BACKQUOTE:
 		return l.nextTokenInBackquote()
 	default:
@@ -964,6 +966,14 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 			// 读取变量
 			l.readChar() // 跳过 $
 			identifier := l.readIdentifier()
+			
+			// 检查是否后面跟着 [ 表示数组访问
+			if l.ch == '[' {
+				// 进入变量偏移状态来处理数组访问
+				l.stateStack.Push(l.state) // 保存当前状态
+				l.state = ST_VAR_OFFSET
+			}
+			
 			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
 		}
 
@@ -1528,6 +1538,58 @@ func (l *Lexer) isAmpersandFollowedByVarOrVararg() bool {
 	}
 
 	return false // 到达文件末尾
+}
+
+// nextTokenInVarOffset 在变量偏移状态中获取token (处理数组访问如 $arr[index])
+func (l *Lexer) nextTokenInVarOffset() Token {
+	l.skipWhitespace()
+	pos := l.getCurrentPosition()
+
+	switch l.ch {
+	case '[':
+		l.readChar()
+		return Token{Type: TOKEN_LBRACKET, Value: "[", Position: pos}
+	case ']':
+		l.readChar()
+		// 返回到之前的状态 (ST_DOUBLE_QUOTES 或 ST_HEREDOC)
+		if !l.stateStack.IsEmpty() {
+			l.state = l.stateStack.Pop()
+		} else {
+			l.state = ST_IN_SCRIPTING
+		}
+		return Token{Type: TOKEN_RBRACKET, Value: "]", Position: pos}
+	case '$':
+		// 变量
+		if isLabelStart(l.peekChar()) {
+			l.readChar() // 跳过 $
+			identifier := l.readIdentifier()
+			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
+		}
+		// 如果不是有效的变量名，则作为普通字符处理
+		fallthrough
+	case 0:
+		// 文件结束，恢复到之前状态
+		if !l.stateStack.IsEmpty() {
+			l.state = l.stateStack.Pop()
+		} else {
+			l.state = ST_IN_SCRIPTING
+		}
+		return Token{Type: T_EOF, Value: "", Position: pos}
+	default:
+		// 数字或其他标识符
+		if isDigit(l.ch) {
+			number, tokenType := l.readNumber()
+			return Token{Type: tokenType, Value: number, Position: pos}
+		} else if isLabelStart(l.ch) {
+			identifier := l.readIdentifier()
+			return Token{Type: T_STRING, Value: identifier, Position: pos}
+		} else {
+			// 单个字符 token
+			ch := l.ch
+			l.readChar()
+			return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: string(ch), Position: pos}
+		}
+	}
 }
 
 // PeekTokensAhead performs n-token lookahead without modifying lexer state
