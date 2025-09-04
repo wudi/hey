@@ -885,3 +885,86 @@ func TestForeachStatement(t *testing.T) {
 		})
 	}
 }
+
+func TestInterpolatedStringExpression(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "Simple variable interpolation",
+			code: `<?php 
+				$name = "World";
+				echo "Hello $name!";
+			`,
+		},
+		{
+			name: "Multiple variable interpolation",
+			code: `<?php 
+				$first = "John";
+				$last = "Doe";
+				echo "Hello $first $last!";
+			`,
+		},
+		{
+			name: "Number interpolation",
+			code: `<?php 
+				$age = 25;
+				echo "I am $age years old";
+			`,
+		},
+		{
+			name: "Mixed content interpolation",
+			code: `<?php 
+				$name = "Alice";
+				$count = 5;
+				echo "Hello $name, you have $count messages";
+			`,
+		},
+		{
+			name: "Expression interpolation",
+			code: `<?php 
+				$a = 10;
+				$b = 20;
+				echo "Sum: ${$a + $b}";
+			`,
+		},
+		{
+			name: "Array access interpolation",
+			code: `<?php 
+				$data = ["name" => "Bob"];
+				echo "Hello {$data['name']}!";
+			`,
+		},
+		{
+			name: "Nested interpolation",
+			code: `<?php 
+				$prefix = "Mr";
+				$name = "Smith";
+				echo "$prefix $name says: 'Hello world!'";
+			`,
+		},
+		{
+			name: "Empty interpolation parts",
+			code: `<?php 
+				$empty = "";
+				echo "Start${empty}End";
+			`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile interpolated string: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute interpolated string: %s", tt.name)
+		})
+	}
+}

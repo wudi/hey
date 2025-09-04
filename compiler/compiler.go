@@ -121,6 +121,8 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileCoalesce(n)
 	case *ast.MatchExpression:
 		return c.compileMatch(n)
+	case *ast.InterpolatedStringExpression:
+		return c.compileInterpolatedString(n)
 
 	// Statements
 	case *ast.ExpressionStatement:
@@ -397,6 +399,49 @@ func (c *Compiler) compileStringLiteral(expr *ast.StringLiteral) error {
 	constant := c.addConstant(values.NewString(expr.Value))
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+func (c *Compiler) compileInterpolatedString(expr *ast.InterpolatedStringExpression) error {
+	if len(expr.Parts) == 0 {
+		// Empty interpolated string - return empty string constant
+		constant := c.addConstant(values.NewString(""))
+		result := c.allocateTemp()
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
+		return nil
+	}
+
+	if len(expr.Parts) == 1 {
+		// Single part - just compile it and convert to string if needed
+		err := c.compileNode(expr.Parts[0])
+		if err != nil {
+			return err
+		}
+		// The result is already in the next temp variable
+		return nil
+	}
+
+	// Multiple parts - compile first part
+	err := c.compileNode(expr.Parts[0])
+	if err != nil {
+		return err
+	}
+	resultTemp := c.nextTemp - 1
+
+	// Compile and concatenate remaining parts
+	for i := 1; i < len(expr.Parts); i++ {
+		err := c.compileNode(expr.Parts[i])
+		if err != nil {
+			return err
+		}
+		partTemp := c.nextTemp - 1
+
+		// Concatenate with previous result
+		newResult := c.allocateTemp()
+		c.emit(opcodes.OP_CONCAT, opcodes.IS_TMP_VAR, resultTemp, opcodes.IS_TMP_VAR, partTemp, opcodes.IS_TMP_VAR, newResult)
+		resultTemp = newResult
+	}
+
 	return nil
 }
 
