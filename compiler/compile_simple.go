@@ -48,6 +48,8 @@ func (c *SimpleCompiler) CompileNode(node ast.Node) error {
 		return c.compileBooleanLiteral(n)
 	case *ast.NullLiteral:
 		return c.compileNullLiteral(n)
+	case *ast.IdentifierNode:
+		return c.compileIdentifier(n)
 
 	// Statements
 	case *ast.ExpressionStatement:
@@ -73,19 +75,22 @@ func (c *SimpleCompiler) compileBinaryExpression(expr *ast.BinaryExpression) err
 	if err != nil {
 		return err
 	}
-	leftResult := c.allocateTemp()
+	// The result of left operand should be in the last allocated temp
+	leftResult := c.nextTemp - 1
 
 	// Compile right operand
 	err = c.CompileNode(expr.Right)
 	if err != nil {
 		return err
 	}
-	rightResult := c.allocateTemp()
+	// The result of right operand should be in the last allocated temp
+	rightResult := c.nextTemp - 1
 
 	// Generate operation
 	result := c.allocateTemp()
 	opcode := c.getOpcodeForOperator(expr.Operator)
-	c.emit(opcode, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_TMP_VAR, rightResult)
+	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+	c.emit(opcode, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }
@@ -96,10 +101,12 @@ func (c *SimpleCompiler) compileUnaryExpression(expr *ast.UnaryExpression) error
 		return err
 	}
 
-	operandResult := c.allocateTemp()
+	// The result of operand should be in the last allocated temp
+	operandResult := c.nextTemp - 1
 	result := c.allocateTemp()
 	opcode := c.getOpcodeForUnaryOperator(expr.Operator)
-	c.emit(opcode, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, operandResult, 0, 0)
+	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+	c.emit(opcode, opcodes.IS_TMP_VAR, operandResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }
@@ -111,13 +118,26 @@ func (c *SimpleCompiler) compileAssignmentExpression(expr *ast.AssignmentExpress
 		return err
 	}
 
-	valueResult := c.allocateTemp()
+	// The result of right-hand side should be in the last allocated temp
+	valueResult := c.nextTemp - 1
 
 	// For now, assume left side is always a variable
 	if variable, ok := expr.Left.(*ast.Variable); ok {
-		// Create a simple variable assignment
 		varSlot := c.getVariableSlot(variable.Name)
-		c.emit(opcodes.OP_ASSIGN, opcodes.IS_VAR, varSlot, opcodes.IS_TMP_VAR, valueResult, 0, 0)
+		
+		// Get the appropriate assignment opcode based on operator
+		opcode := c.getOpcodeForAssignmentOperator(expr.Operator)
+		
+		if opcode == opcodes.OP_ASSIGN {
+			// Simple assignment: $var = value
+			// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+			c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, varSlot)
+		} else {
+			// Compound assignment: $var += value, $var *= value, etc.
+			// These need special handling as they read and write the variable
+			// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+			c.emit(opcode, opcodes.IS_VAR, varSlot, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, varSlot)
+		}
 	}
 
 	return nil
@@ -170,6 +190,29 @@ func (c *SimpleCompiler) compileNullLiteral(expr *ast.NullLiteral) error {
 	result := c.allocateTemp()
 	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+func (c *SimpleCompiler) compileIdentifier(expr *ast.IdentifierNode) error {
+	// Handle PHP constants like true, false, null
+	var constant *values.Value
+	switch expr.Name {
+	case "true":
+		constant = values.NewBool(true)
+	case "false":
+		constant = values.NewBool(false)
+	case "null":
+		constant = values.NewNull()
+	default:
+		// For other identifiers, this might be a constant or class name
+		// For now, treat as string literal
+		constant = values.NewString(expr.Name)
+	}
+	
+	constantIndex := c.addConstant(constant)
+	result := c.allocateTemp()
+	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constantIndex, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
@@ -244,6 +287,7 @@ func (c *SimpleCompiler) getVariableSlot(name string) uint32 {
 
 func (c *SimpleCompiler) getOpcodeForOperator(operator string) opcodes.Opcode {
 	switch operator {
+	// Arithmetic operators
 	case "+":
 		return opcodes.OP_ADD
 	case "-":
@@ -254,16 +298,61 @@ func (c *SimpleCompiler) getOpcodeForOperator(operator string) opcodes.Opcode {
 		return opcodes.OP_DIV
 	case "%":
 		return opcodes.OP_MOD
+	case "**":
+		return opcodes.OP_POW
+	
+	// String operators
 	case ".":
 		return opcodes.OP_CONCAT
+	
+	// Comparison operators
 	case "==":
 		return opcodes.OP_IS_EQUAL
-	case "!=":
+	case "!=", "<>":
 		return opcodes.OP_IS_NOT_EQUAL
+	case "===":
+		return opcodes.OP_IS_IDENTICAL
+	case "!==":
+		return opcodes.OP_IS_NOT_IDENTICAL
 	case "<":
 		return opcodes.OP_IS_SMALLER
+	case "<=":
+		return opcodes.OP_IS_SMALLER_OR_EQUAL
 	case ">":
 		return opcodes.OP_IS_GREATER
+	case ">=":
+		return opcodes.OP_IS_GREATER_OR_EQUAL
+	case "<=>":
+		return opcodes.OP_SPACESHIP
+	
+	// Logical operators
+	case "&&":
+		return opcodes.OP_BOOLEAN_AND
+	case "||":
+		return opcodes.OP_BOOLEAN_OR
+	case "and":
+		return opcodes.OP_LOGICAL_AND
+	case "or":
+		return opcodes.OP_LOGICAL_OR
+	case "xor":
+		return opcodes.OP_LOGICAL_XOR
+	
+	// Bitwise operators
+	case "&":
+		return opcodes.OP_BW_AND
+	case "|":
+		return opcodes.OP_BW_OR
+	case "^":
+		return opcodes.OP_BW_XOR
+	case "<<":
+		return opcodes.OP_SL
+	case ">>":
+		return opcodes.OP_SR
+		
+	// Instance check
+	case "instanceof":
+		return opcodes.OP_INSTANCEOF
+	
 	default:
 		return opcodes.OP_NOP
 	}
@@ -271,14 +360,75 @@ func (c *SimpleCompiler) getOpcodeForOperator(operator string) opcodes.Opcode {
 
 func (c *SimpleCompiler) getOpcodeForUnaryOperator(operator string) opcodes.Opcode {
 	switch operator {
+	// Unary arithmetic
 	case "+":
 		return opcodes.OP_PLUS
 	case "-":
 		return opcodes.OP_MINUS
+		
+	// Logical operators
 	case "!":
 		return opcodes.OP_NOT
+		
+	// Bitwise operators
+	case "~":
+		return opcodes.OP_BW_NOT
+		
+	// Increment/Decrement operators
+	case "++":
+		return opcodes.OP_PRE_INC  // This will need context to determine pre vs post
+	case "--":
+		return opcodes.OP_PRE_DEC  // This will need context to determine pre vs post
+		
 	default:
 		return opcodes.OP_NOP
+	}
+}
+
+func (c *SimpleCompiler) getOpcodeForAssignmentOperator(operator string) opcodes.Opcode {
+	switch operator {
+	// Simple assignment
+	case "=":
+		return opcodes.OP_ASSIGN
+	case "=&":
+		return opcodes.OP_ASSIGN_REF
+		
+	// Arithmetic compound assignments
+	case "+=":
+		return opcodes.OP_ASSIGN_ADD
+	case "-=":
+		return opcodes.OP_ASSIGN_SUB
+	case "*=":
+		return opcodes.OP_ASSIGN_MUL
+	case "/=":
+		return opcodes.OP_ASSIGN_DIV
+	case "%=":
+		return opcodes.OP_ASSIGN_MOD
+	case "**=":
+		return opcodes.OP_ASSIGN_POW
+		
+	// String assignment
+	case ".=":
+		return opcodes.OP_ASSIGN_CONCAT
+		
+	// Bitwise compound assignments
+	case "&=":
+		return opcodes.OP_ASSIGN_BW_AND
+	case "|=":
+		return opcodes.OP_ASSIGN_BW_OR
+	case "^=":
+		return opcodes.OP_ASSIGN_BW_XOR
+	case "<<=":
+		return opcodes.OP_ASSIGN_SL
+	case ">>=":
+		return opcodes.OP_ASSIGN_SR
+		
+	// Null coalescing assignment
+	case "??=":
+		return opcodes.OP_ASSIGN_COALESCE
+		
+	default:
+		return opcodes.OP_ASSIGN
 	}
 }
 

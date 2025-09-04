@@ -212,6 +212,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeBooleanAnd(ctx, inst)
 	case opcodes.OP_BOOLEAN_OR:
 		return vm.executeBooleanOr(ctx, inst)
+	case opcodes.OP_LOGICAL_AND:
+		return vm.executeBooleanAnd(ctx, inst)  // Same implementation as boolean AND
+	case opcodes.OP_LOGICAL_OR:
+		return vm.executeBooleanOr(ctx, inst)   // Same implementation as boolean OR
+	case opcodes.OP_LOGICAL_XOR:
+		return vm.executeBooleanXor(ctx, inst)  // New function needed
 		
 	// Bitwise operations
 	case opcodes.OP_BW_AND:
@@ -750,6 +756,20 @@ func (vm *VirtualMachine) executeBooleanOr(ctx *ExecutionContext, inst *opcodes.
 	op2 := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
 	
 	result := values.NewBool(op1.ToBool() || op2.ToBool())
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeBooleanXor(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	op1 := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	op2 := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	
+	// XOR: true if exactly one operand is true
+	bool1 := op1.ToBool()
+	bool2 := op2.ToBool()
+	result := values.NewBool((bool1 && !bool2) || (!bool1 && bool2))
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 	
 	ctx.IP++
