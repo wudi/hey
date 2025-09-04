@@ -9,14 +9,22 @@ import (
 	"github.com/wudi/php-parser/compiler/values"
 )
 
+// ForwardJump represents a jump that needs to be resolved later
+type ForwardJump struct {
+	instructionIndex int
+	opType           opcodes.OpType
+	operand          int // 1 for Op1, 2 for Op2
+}
+
 // Compiler compiles AST to bytecode
 type Compiler struct {
-	instructions []opcodes.Instruction
-	constants    []*values.Value
-	scopes       []*Scope
-	labels       map[string]int
-	nextTemp     uint32
-	nextLabel    int
+	instructions    []opcodes.Instruction
+	constants       []*values.Value
+	scopes          []*Scope
+	labels          map[string]int
+	forwardJumps    map[string][]ForwardJump
+	nextTemp        uint32
+	nextLabel       int
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -36,6 +44,7 @@ func NewCompiler() *Compiler {
 		constants:    make([]*values.Value, 0),
 		scopes:       make([]*Scope, 0),
 		labels:       make(map[string]int),
+		forwardJumps: make(map[string][]ForwardJump),
 		nextTemp:     1000, // Start temp vars at 1000 to avoid conflicts
 		nextLabel:    0,
 	}
@@ -592,7 +601,7 @@ func (c *Compiler) compileTernary(expr *ast.TernaryExpression) error {
 	endLabel := c.generateLabel()
 
 	// Jump to else if condition is false
-	c.emit(opcodes.OP_JMPZ, opcodes.IS_TMP_VAR, condResult, opcodes.IS_CONST, c.addLabel(elseLabel), 0, 0)
+	c.emitJumpZ(opcodes.IS_TMP_VAR, condResult, elseLabel)
 
 	// Compile true branch
 	if expr.Consequent != nil {
@@ -608,7 +617,7 @@ func (c *Compiler) compileTernary(expr *ast.TernaryExpression) error {
 	c.emitMove(trueResult)
 
 	// Jump to end
-	c.emit(opcodes.OP_JMP, opcodes.IS_CONST, c.addLabel(endLabel), 0, 0, 0, 0)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
 
 	// Else branch
 	c.placeLabel(elseLabel)
@@ -668,19 +677,19 @@ func (c *Compiler) compileReturn(stmt *ast.ReturnStatement) error {
 
 func (c *Compiler) compileIf(stmt *ast.IfStatement) error {
 	// Compile condition
+	startTemp := c.nextTemp
 	err := c.compileNode(stmt.Test)
 	if err != nil {
 		return err
 	}
-	condResult := c.allocateTemp()
-	c.emitMove(condResult)
+	condResult := startTemp
 
 	// Generate labels
 	elseLabel := c.generateLabel()
 	endLabel := c.generateLabel()
 
 	// Jump to else if condition is false
-	c.emit(opcodes.OP_JMPZ, opcodes.IS_TMP_VAR, condResult, opcodes.IS_CONST, c.addLabel(elseLabel), 0, 0)
+	c.emitJumpZ(opcodes.IS_TMP_VAR, condResult, elseLabel)
 
 	// Compile consequence
 	for _, s := range stmt.Consequent {
@@ -691,7 +700,7 @@ func (c *Compiler) compileIf(stmt *ast.IfStatement) error {
 	}
 
 	// Jump to end
-	c.emit(opcodes.OP_JMP, opcodes.IS_CONST, c.addLabel(endLabel), 0, 0, 0, 0)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
 
 	// Else branch
 	c.placeLabel(elseLabel)
@@ -733,7 +742,7 @@ func (c *Compiler) compileWhile(stmt *ast.WhileStatement) error {
 	c.emitMove(condResult)
 
 	// Jump to end if condition is false
-	c.emit(opcodes.OP_JMPZ, opcodes.IS_TMP_VAR, condResult, opcodes.IS_CONST, c.addLabel(endLabel), 0, 0)
+	c.emitJumpZ(opcodes.IS_TMP_VAR, condResult, endLabel)
 
 	// Compile body
 	for _, s := range stmt.Body {
@@ -744,7 +753,7 @@ func (c *Compiler) compileWhile(stmt *ast.WhileStatement) error {
 	}
 
 	// Jump back to start
-	c.emit(opcodes.OP_JMP, opcodes.IS_CONST, c.addLabel(startLabel), 0, 0, 0, 0)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, startLabel)
 
 	// End label
 	c.placeLabel(endLabel)
@@ -810,12 +819,82 @@ func (c *Compiler) generateLabel() string {
 }
 
 func (c *Compiler) addLabel(name string) uint32 {
-	// This would add a forward reference to be resolved later
-	return uint32(len(c.instructions)) // Placeholder
+	// Check if label is already placed
+	if pos, exists := c.labels[name]; exists {
+		return uint32(pos)
+	}
+	
+	// Return a placeholder value (we'll use the label name as a constant)
+	// This will be resolved when the label is placed
+	return uint32(0xFFFF) // Placeholder value that will be patched
+}
+
+func (c *Compiler) addForwardJump(instructionIndex int, labelName string, operand int) {
+	jump := ForwardJump{
+		instructionIndex: instructionIndex,
+		opType:           opcodes.IS_CONST,
+		operand:          operand,
+	}
+	c.forwardJumps[labelName] = append(c.forwardJumps[labelName], jump)
 }
 
 func (c *Compiler) placeLabel(name string) {
-	c.labels[name] = len(c.instructions)
+	pos := len(c.instructions)
+	c.labels[name] = pos
+	
+	// Resolve all forward jumps to this label
+	if jumps, exists := c.forwardJumps[name]; exists {
+		for _, jump := range jumps {
+			if jump.operand == 0 {
+				// Update constant value (for new jump system)
+				constantIndex := jump.instructionIndex
+				c.constants[constantIndex] = values.NewInt(int64(pos))
+			} else {
+				// Update instruction operand (for old jump system)
+				instruction := &c.instructions[jump.instructionIndex]
+				if jump.operand == 1 {
+					instruction.Op1 = uint32(pos)
+				} else if jump.operand == 2 {
+					instruction.Op2 = uint32(pos)
+				}
+			}
+		}
+		delete(c.forwardJumps, name)
+	}
+}
+
+// Helper function to emit jump with forward reference
+func (c *Compiler) emitJump(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint32, labelName string) {
+	// Add a placeholder constant for the jump target
+	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
+	
+	// Emit instruction with constant reference for label
+	c.emit(opcode, op1Type, op1, opcodes.IS_CONST, jumpConstant, 0, 0)
+	
+	// Record forward jump for later resolution - need to update the constant, not the instruction
+	jump := ForwardJump{
+		instructionIndex: int(jumpConstant), // Store constant index instead of instruction index
+		opType:           opcodes.IS_CONST,
+		operand:          0, // Special marker for constant update
+	}
+	c.forwardJumps[labelName] = append(c.forwardJumps[labelName], jump)
+}
+
+// Helper function to emit conditional jump with forward reference  
+func (c *Compiler) emitJumpZ(condType opcodes.OpType, cond uint32, labelName string) {
+	// Add a placeholder constant for the jump target
+	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
+	
+	// Emit instruction with constant reference for label
+	c.emit(opcodes.OP_JMPZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
+	
+	// Record forward jump for later resolution - need to update the constant, not the instruction
+	jump := ForwardJump{
+		instructionIndex: int(jumpConstant), // Store constant index instead of instruction index
+		opType:           opcodes.IS_CONST,
+		operand:          0, // Special marker for constant update
+	}
+	c.forwardJumps[labelName] = append(c.forwardJumps[labelName], jump)
 }
 
 func (c *Compiler) pushScope(isFunction bool) {
@@ -971,7 +1050,7 @@ func (c *Compiler) compileBreak(stmt *ast.BreakStatement) error {
 	if scope == nil || scope.breakLabel == "" {
 		return fmt.Errorf("break statement not in loop")
 	}
-	c.emit(opcodes.OP_JMP, opcodes.IS_CONST, c.addLabel(scope.breakLabel), 0, 0, 0, 0)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, scope.breakLabel)
 	return nil
 }
 
@@ -980,7 +1059,7 @@ func (c *Compiler) compileContinue(stmt *ast.ContinueStatement) error {
 	if scope == nil || scope.continueLabel == "" {
 		return fmt.Errorf("continue statement not in loop")
 	}
-	c.emit(opcodes.OP_JMP, opcodes.IS_CONST, c.addLabel(scope.continueLabel), 0, 0, 0, 0)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, scope.continueLabel)
 	return nil
 }
 
