@@ -185,7 +185,7 @@ func (c *SimpleCompiler) compileAssignmentExpression(expr *ast.AssignmentExpress
 func (c *SimpleCompiler) compileVariable(expr *ast.Variable) error {
 	varSlot := c.getVariableSlot(expr.Name)
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_FETCH_R, opcodes.IS_TMP_VAR, result, opcodes.IS_VAR, varSlot, 0, 0)
+	c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, varSlot, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
@@ -273,7 +273,7 @@ func (c *SimpleCompiler) compileEchoStatement(stmt *ast.EchoStatement) error {
 			// Get the result of the compiled expression
 			// The last allocated temp should contain the result
 			result := c.nextTemp - 1
-			c.emit(opcodes.OP_ECHO, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
+			c.emit(opcodes.OP_ECHO, opcodes.IS_TMP_VAR, result, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0)
 		}
 	}
 	return nil
@@ -321,7 +321,12 @@ func (c *SimpleCompiler) allocateTemp() uint32 {
 func (c *SimpleCompiler) getVariableSlot(name string) uint32 {
 	// Simplified variable management - in a real implementation,
 	// this would use proper scope management
-	return uint32(len(name)) // Just use string length as slot for demo
+	// Use a hash of the name to get a consistent slot
+	hash := uint32(0)
+	for _, r := range name {
+		hash = hash*31 + uint32(r)
+	}
+	return hash % 100 // Keep slots within reasonable range
 }
 
 func (c *SimpleCompiler) getOpcodeForOperator(operator string) opcodes.Opcode {

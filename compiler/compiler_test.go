@@ -1,6 +1,8 @@
 package compiler
 
 import (
+	"bytes"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -522,4 +524,64 @@ func TestIncrementDecrementSequences(t *testing.T) {
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
+}
+
+func TestPostIncrementExample(t *testing.T) {
+	p := parser.New(lexer.New(`<?php
+$a=1;
+$a++;
+
+echo $a; // except: 2
+`))
+	prog := p.ParseProgram()
+	if len(p.Errors()) > 0 {
+		t.Fatalf("parser errors: %v", p.Errors())
+	}
+	comp := NewSimpleCompiler()
+	err := comp.CompileNode(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	require.NoError(t, err)
+}
+
+func TestPostIncrementWithOutputCapture(t *testing.T) {
+	// Save original stdout
+	oldStdout := os.Stdout
+	
+	// Create a pipe to capture output
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	
+	// Parse and execute the PHP code
+	p := parser.New(lexer.New(`<?php
+$a=1;
+$a++;
+
+echo $a; // except: 2
+`))
+	prog := p.ParseProgram()
+	if len(p.Errors()) > 0 {
+		t.Fatalf("parser errors: %v", p.Errors())
+	}
+	comp := NewSimpleCompiler()
+	err := comp.CompileNode(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	require.NoError(t, err)
+
+	// Close writer and restore stdout
+	w.Close()
+	os.Stdout = oldStdout
+	
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+	
+	// Verify output is "2"
+	require.Equal(t, "2", output, "Expected output to be '2', got '%s'", output)
 }

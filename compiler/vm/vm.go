@@ -687,10 +687,7 @@ func (vm *VirtualMachine) executeJumpIfNotZero(ctx *ExecutionContext, inst *opco
 // Variable operations
 
 func (vm *VirtualMachine) executeAssign(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	value := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
-	vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), value)
-	
-	// Also set as result
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
 	
 	ctx.IP++
