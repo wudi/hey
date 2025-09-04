@@ -530,7 +530,7 @@ func (c *Compiler) compileArrayAccess(expr *ast.ArrayAccessExpression) error {
 	c.emitMove(indexResult)
 
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_FETCH_DIM_R, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, arrayResult, opcodes.IS_TMP_VAR, indexResult)
+	c.emit(opcodes.OP_FETCH_DIM_R, opcodes.IS_TMP_VAR, arrayResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }

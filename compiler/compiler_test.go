@@ -968,3 +968,172 @@ func TestInterpolatedStringExpression(t *testing.T) {
 		})
 	}
 }
+
+// TestInterpolatedStringArrayAccess tests array access within interpolated strings
+func TestInterpolatedStringArrayAccess(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		{
+			name: "Simple array access interpolation",
+			code: `<?php
+				$arr = [1,2,3];
+				for($i=0; $i<3; $i++) {
+					echo "$arr[$i]\n";
+				}
+			`,
+			expectedOutput: "1\n2\n3\n",
+		},
+		{
+			name: "Array access with string key",
+			code: `<?php
+				$arr = ["a" => "hello", "b" => "world"];
+				$key = "a";
+				echo "$arr[$key]";
+			`,
+			expectedOutput: "hello",
+		},
+		{
+			name: "Multiple array access in one string",
+			code: `<?php
+				$arr1 = [1,2,3];
+				$arr2 = [4,5,6]; 
+				echo "$arr1[0] and $arr2[1]";
+			`,
+			expectedOutput: "1 and 5",
+		},
+		{
+			name: "Simple single array access",
+			code: `<?php
+				$arr = [1,2,3];
+				echo "$arr[0]";
+			`,
+			expectedOutput: "1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile array access interpolation: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute array access interpolation: %s", tt.name)
+			
+			// For now, we just verify compilation and execution succeed
+			// TODO: Implement output capturing to verify actual output values
+		})
+	}
+}
+
+// TestArrayAccessEdgeCases tests edge cases for array access compilation
+func TestArrayAccessEdgeCases(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "Nested array access in interpolation",
+			code: `<?php
+				$arr = [[1,2],[3,4]];
+				$i = 0; $j = 1;
+				echo "$arr[$i][$j]";
+			`,
+		},
+		{
+			name: "Array access with expression index in interpolation",  
+			code: `<?php
+				$arr = [1,2,3,4,5];
+				$i = 1;
+				echo "$arr[$i+1]";
+			`,
+		},
+		{
+			name: "Array access with negative index",
+			code: `<?php
+				$arr = [1,2,3];
+				$i = -1;
+				echo "$arr[$i]";
+			`,
+		},
+		{
+			name: "Multiple interpolated expressions",
+			code: `<?php
+				$arr1 = [1,2,3];
+				$arr2 = [4,5,6];
+				$i = 0; $j = 1;
+				echo "First: $arr1[$i], Second: $arr2[$j]";
+			`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile edge case: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute edge case: %s", tt.name)
+		})
+	}
+}
+
+// TestArrayAccessOutsideInterpolation tests that array access works outside interpolated strings  
+func TestArrayAccessOutsideInterpolation(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "Simple array access assignment",
+			code: `<?php
+				$arr = [1,2,3];
+				$val = $arr[1];
+			`,
+		},
+		{
+			name: "Array access in expressions",
+			code: `<?php
+				$arr = [1,2,3];
+				$sum = $arr[0] + $arr[1];
+			`,
+		},
+		{
+			name: "Array access in function calls",
+			code: `<?php
+				$arr = ["hello", "world"];
+				echo($arr[0]);
+			`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile array access outside interpolation: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute array access outside interpolation: %s", tt.name)
+		})
+	}
+}
