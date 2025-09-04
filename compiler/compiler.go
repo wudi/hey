@@ -654,12 +654,12 @@ func (c *Compiler) compileExpressionStatement(stmt *ast.ExpressionStatement) err
 func (c *Compiler) compileEcho(stmt *ast.EchoStatement) error {
 	if stmt.Arguments != nil {
 		for _, expr := range stmt.Arguments.Arguments {
-			startTemp := c.nextTemp
 			err := c.compileNode(expr)
 			if err != nil {
 				return err
 			}
-			result := startTemp
+			// Use the most recently allocated temp as the result
+			result := c.nextTemp - 1
 			c.emit(opcodes.OP_ECHO, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
 		}
 	}
@@ -1054,8 +1054,7 @@ func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
 	if err != nil {
 		return err
 	}
-	leftResult := c.allocateTemp()
-	c.emitMove(leftResult)
+	leftResult := c.nextTemp - 1
 
 	// Generate labels for control flow
 	rightLabel := c.generateLabel()
@@ -1082,10 +1081,9 @@ func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
 	if err != nil {
 		return err
 	}
-	rightResult := c.allocateTemp()
-	c.emitMove(rightResult)
+	rightResult := c.nextTemp - 1
 	
-	// Use right value as result
+	// Use right value as result  
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, 0, 0, opcodes.IS_TMP_VAR, result)
 	
 	// End label
