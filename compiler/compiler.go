@@ -86,10 +86,10 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileAssign(n)
 	case *ast.Variable:
 		return c.compileVariable(n)
-	case *ast.IntegerLiteral:
-		return c.compileIntegerLiteral(n)
-	case *ast.FloatLiteral:
-		return c.compileFloatLiteral(n)
+	case *ast.IdentifierNode:
+		return c.compileIdentifier(n)
+	case *ast.NumberLiteral:
+		return c.compileNumberLiteral(n)
 	case *ast.StringLiteral:
 		return c.compileStringLiteral(n)
 	case *ast.BooleanLiteral:
@@ -102,7 +102,7 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileArrayAccess(n)
 	case *ast.PropertyAccessExpression:
 		return c.compilePropertyAccess(n)
-	case *ast.FunctionCall:
+	case *ast.CallExpression:
 		return c.compileFunctionCall(n)
 	case *ast.MethodCallExpression:
 		return c.compileMethodCall(n)
@@ -144,7 +144,7 @@ func (c *Compiler) compileNode(node ast.Node) error {
 	// Declarations
 	case *ast.FunctionDeclaration:
 		return c.compileFunctionDeclaration(n)
-	case *ast.ClassDeclaration:
+	case *ast.AnonymousClass:
 		return c.compileClassDeclaration(n)
 	case *ast.PropertyDeclaration:
 		return c.compilePropertyDeclaration(n)
@@ -163,30 +163,38 @@ func (c *Compiler) compileNode(node ast.Node) error {
 // Expression compilation methods
 
 func (c *Compiler) compileBinaryOp(expr *ast.BinaryExpression) error {
-	// Compile operands
+	// Save current temp counter
+	startTemp := c.nextTemp
+
+	// Compile left operand
 	err := c.compileNode(expr.Left)
 	if err != nil {
 		return err
 	}
-	leftResult := c.allocateTemp()
-	c.emitMove(leftResult)
+	leftResult := startTemp
 
+	// Compile right operand  
 	err = c.compileNode(expr.Right)
 	if err != nil {
 		return err
 	}
-	rightResult := c.allocateTemp()
-	c.emitMove(rightResult)
+	rightResult := startTemp + 1
 
 	// Generate operation
 	result := c.allocateTemp()
 	opcode := c.getOpcodeForBinaryOperator(expr.Operator)
-	c.emit(opcode, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_TMP_VAR, rightResult)
+	c.emit(opcode, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }
 
 func (c *Compiler) compileUnaryOp(expr *ast.UnaryExpression) error {
+	// Handle increment/decrement operations specially
+	if expr.Operator == "++" || expr.Operator == "--" {
+		return c.compileIncrementDecrement(expr)
+	}
+
+	// Handle regular unary operations
 	err := c.compileNode(expr.Operand)
 	if err != nil {
 		return err
@@ -202,9 +210,48 @@ func (c *Compiler) compileUnaryOp(expr *ast.UnaryExpression) error {
 	return nil
 }
 
+func (c *Compiler) compileIncrementDecrement(expr *ast.UnaryExpression) error {
+	// Increment/decrement only works on variables
+	variable, ok := expr.Operand.(*ast.Variable)
+	if !ok {
+		return fmt.Errorf("increment/decrement can only be applied to variables")
+	}
+
+	varSlot := c.getVariableSlot(variable.Name)
+	
+	// Read current value from variable
+	currentVal := c.allocateTemp()
+	c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, varSlot, 0, 0, opcodes.IS_TMP_VAR, currentVal)
+
+	// Create constant 1 for increment/decrement
+	oneConstant := c.addConstant(values.NewInt(1))
+	
+	// Calculate new value
+	newVal := c.allocateTemp()
+	if expr.Operator == "++" {
+		c.emit(opcodes.OP_ADD, opcodes.IS_TMP_VAR, currentVal, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	} else { // "--"
+		c.emit(opcodes.OP_SUB, opcodes.IS_TMP_VAR, currentVal, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	}
+
+	// Write new value back to variable
+	c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, newVal, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, varSlot)
+
+	// Return appropriate value based on pre/post increment
+	if expr.Prefix {
+		// Pre-increment/decrement: return new value  
+		// The new value is already in newVal temp
+	} else {
+		// Post-increment/decrement: return original value
+		// The original value is already in currentVal temp
+	}
+
+	return nil
+}
+
 func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 	// Compile right-hand side first
-	err := c.Compile(expr.Right)
+	err := c.compileNode(expr.Right)
 	if err != nil {
 		return err
 	}
@@ -292,54 +339,62 @@ func (c *Compiler) getVariableSlot(name string) uint32 {
 }
 
 func (c *Compiler) compileVariable(expr *ast.Variable) error {
-	varSlot := c.getOrCreateVariable(expr.Name)
+	varSlot := c.getVariableSlot(expr.Name)
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_FETCH_R, opcodes.IS_TMP_VAR, result, opcodes.IS_VAR, varSlot, 0, 0)
+	c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, varSlot, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
-func (c *Compiler) compileIntegerLiteral(expr *ast.IntegerLiteral) error {
-	value, err := strconv.ParseInt(expr.Value, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid integer literal: %s", expr.Value)
-	}
-
-	constant := c.addConstant(values.NewInt(value))
+func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
+	// Identifiers are typically constants or function names
+	constant := c.addConstant(values.NewString(expr.Name))
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
-func (c *Compiler) compileFloatLiteral(expr *ast.FloatLiteral) error {
-	value, err := strconv.ParseFloat(expr.Value, 64)
-	if err != nil {
-		return fmt.Errorf("invalid float literal: %s", expr.Value)
+func (c *Compiler) compileNumberLiteral(expr *ast.NumberLiteral) error {
+	var constant uint32
+	
+	if expr.Kind == "integer" {
+		value, err := strconv.ParseInt(expr.Value, 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid integer literal: %s", expr.Value)
+		}
+		constant = c.addConstant(values.NewInt(value))
+	} else if expr.Kind == "float" {
+		value, err := strconv.ParseFloat(expr.Value, 64)
+		if err != nil {
+			return fmt.Errorf("invalid float literal: %s", expr.Value)
+		}
+		constant = c.addConstant(values.NewFloat(value))
+	} else {
+		return fmt.Errorf("unsupported number kind: %s", expr.Kind)
 	}
 
-	constant := c.addConstant(values.NewFloat(value))
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
 func (c *Compiler) compileStringLiteral(expr *ast.StringLiteral) error {
 	constant := c.addConstant(values.NewString(expr.Value))
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
 func (c *Compiler) compileBooleanLiteral(expr *ast.BooleanLiteral) error {
 	constant := c.addConstant(values.NewBool(expr.Value))
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
 func (c *Compiler) compileNullLiteral(expr *ast.NullLiteral) error {
 	constant := c.addConstant(values.NewNull())
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
@@ -348,16 +403,20 @@ func (c *Compiler) compileArray(expr *ast.ArrayExpression) error {
 	c.emit(opcodes.OP_INIT_ARRAY, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
 
 	for _, element := range expr.Elements {
-		if element.Key != nil {
+		arrayElement, ok := element.(*ast.ArrayElementExpression)
+		if !ok {
+			return fmt.Errorf("invalid array element type: %T", element)
+		}
+		if arrayElement.Key != nil {
 			// Keyed element
-			err := c.compileNode(element.Key)
+			err := c.compileNode(arrayElement.Key)
 			if err != nil {
 				return err
 			}
 			keyResult := c.allocateTemp()
 			c.emitMove(keyResult)
 
-			err = c.compileNode(element.Value)
+			err = c.compileNode(arrayElement.Value)
 			if err != nil {
 				return err
 			}
@@ -367,7 +426,7 @@ func (c *Compiler) compileArray(expr *ast.ArrayExpression) error {
 			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, keyResult, opcodes.IS_TMP_VAR, valueResult)
 		} else {
 			// Auto-indexed element
-			err := c.compileNode(element.Value)
+			err := c.compileNode(arrayElement.Value)
 			if err != nil {
 				return err
 			}
@@ -391,7 +450,10 @@ func (c *Compiler) compileArrayAccess(expr *ast.ArrayAccessExpression) error {
 	c.emitMove(arrayResult)
 
 	// Compile index expression
-	err = c.compileNode(expr.Index)
+	if expr.Index == nil {
+		return fmt.Errorf("array access requires an index")
+	}
+	err = c.compileNode(*expr.Index)
 	if err != nil {
 		return err
 	}
@@ -413,32 +475,51 @@ func (c *Compiler) compilePropertyAccess(expr *ast.PropertyAccessExpression) err
 	objectResult := c.allocateTemp()
 	c.emitMove(objectResult)
 
-	// Property name as constant
-	propConstant := c.addConstant(values.NewString(expr.Property))
+	// Compile property expression
+	err = c.compileNode(expr.Property)
+	if err != nil {
+		return err
+	}
+	propResult := c.allocateTemp()
+	c.emitMove(propResult)
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_FETCH_OBJ_R, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, objectResult, opcodes.IS_CONST, propConstant)
+	c.emit(opcodes.OP_FETCH_OBJ_R, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, objectResult, opcodes.IS_TMP_VAR, propResult)
 
 	return nil
 }
 
-func (c *Compiler) compileFunctionCall(expr *ast.FunctionCall) error {
-	// Initialize function call
-	funcNameConstant := c.addConstant(values.NewString(expr.Name))
-	numArgs := uint32(len(expr.Arguments))
+func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
+	// Compile callee expression
+	err := c.compileNode(expr.Callee)
+	if err != nil {
+		return err
+	}
+	calleeResult := c.allocateTemp()
+	c.emitMove(calleeResult)
+	
+	// Get number of arguments
+	var numArgs uint32
+	if expr.Arguments != nil {
+		numArgs = uint32(len(expr.Arguments.Arguments))
+	} else {
+		numArgs = 0
+	}
 
-	c.emit(opcodes.OP_INIT_FCALL, opcodes.IS_CONST, funcNameConstant, opcodes.IS_CONST, c.addConstant(values.NewInt(int64(numArgs))), 0, 0)
+	c.emit(opcodes.OP_INIT_FCALL, opcodes.IS_TMP_VAR, calleeResult, opcodes.IS_CONST, c.addConstant(values.NewInt(int64(numArgs))), 0, 0)
 
 	// Compile and send arguments
-	for i, arg := range expr.Arguments {
-		err := c.compileNode(arg)
-		if err != nil {
-			return err
-		}
-		argResult := c.allocateTemp()
-		c.emitMove(argResult)
+	if expr.Arguments != nil {
+		for i, arg := range expr.Arguments.Arguments {
+			err := c.compileNode(arg)
+			if err != nil {
+				return err
+			}
+			argResult := c.allocateTemp()
+			c.emitMove(argResult)
 
-		argNum := c.addConstant(values.NewInt(int64(i)))
-		c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+			argNum := c.addConstant(values.NewInt(int64(i)))
+			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+		}
 	}
 
 	// Execute call
@@ -457,23 +538,37 @@ func (c *Compiler) compileMethodCall(expr *ast.MethodCallExpression) error {
 	objectResult := c.allocateTemp()
 	c.emitMove(objectResult)
 
-	// Initialize method call
-	methodNameConstant := c.addConstant(values.NewString(expr.Method))
-	numArgs := uint32(len(expr.Arguments))
+	// Compile method name
+	err = c.compileNode(expr.Method)
+	if err != nil {
+		return err
+	}
+	methodResult := c.allocateTemp()
+	c.emitMove(methodResult)
+	
+	// Get number of arguments
+	var numArgs uint32
+	if expr.Arguments != nil {
+		numArgs = uint32(len(expr.Arguments.Arguments))
+	} else {
+		numArgs = 0
+	}
 
-	c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, objectResult, opcodes.IS_CONST, methodNameConstant, opcodes.IS_CONST, c.addConstant(values.NewInt(int64(numArgs))))
+	c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, objectResult, opcodes.IS_TMP_VAR, methodResult, opcodes.IS_CONST, c.addConstant(values.NewInt(int64(numArgs))))
 
 	// Compile and send arguments
-	for i, arg := range expr.Arguments {
-		err := c.compileNode(arg)
-		if err != nil {
-			return err
-		}
-		argResult := c.allocateTemp()
-		c.emitMove(argResult)
+	if expr.Arguments != nil {
+		for i, arg := range expr.Arguments.Arguments {
+			err := c.compileNode(arg)
+			if err != nil {
+				return err
+			}
+			argResult := c.allocateTemp()
+			c.emitMove(argResult)
 
-		argNum := c.addConstant(values.NewInt(int64(i)))
-		c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+			argNum := c.addConstant(values.NewInt(int64(i)))
+			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+		}
 	}
 
 	// Execute call
@@ -485,7 +580,7 @@ func (c *Compiler) compileMethodCall(expr *ast.MethodCallExpression) error {
 
 func (c *Compiler) compileTernary(expr *ast.TernaryExpression) error {
 	// Compile condition
-	err := c.compileNode(expr.Condition)
+	err := c.compileNode(expr.Test)
 	if err != nil {
 		return err
 	}
@@ -500,7 +595,12 @@ func (c *Compiler) compileTernary(expr *ast.TernaryExpression) error {
 	c.emit(opcodes.OP_JMPZ, opcodes.IS_TMP_VAR, condResult, opcodes.IS_CONST, c.addLabel(elseLabel), 0, 0)
 
 	// Compile true branch
-	err = c.compileNode(expr.TrueExpr)
+	if expr.Consequent != nil {
+		err = c.compileNode(expr.Consequent)
+	} else {
+		// Short ternary - use condition result
+		err = c.compileNode(expr.Test)
+	}
 	if err != nil {
 		return err
 	}
@@ -512,7 +612,7 @@ func (c *Compiler) compileTernary(expr *ast.TernaryExpression) error {
 
 	// Else branch
 	c.placeLabel(elseLabel)
-	err = c.compileNode(expr.FalseExpr)
+	err = c.compileNode(expr.Alternate)
 	if err != nil {
 		return err
 	}
@@ -536,21 +636,23 @@ func (c *Compiler) compileExpressionStatement(stmt *ast.ExpressionStatement) err
 }
 
 func (c *Compiler) compileEcho(stmt *ast.EchoStatement) error {
-	for _, expr := range stmt.Expressions {
-		err := c.compileNode(expr)
-		if err != nil {
-			return err
+	if stmt.Arguments != nil {
+		for _, expr := range stmt.Arguments.Arguments {
+			startTemp := c.nextTemp
+			err := c.compileNode(expr)
+			if err != nil {
+				return err
+			}
+			result := startTemp
+			c.emit(opcodes.OP_ECHO, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
 		}
-		result := c.allocateTemp()
-		c.emitMove(result)
-		c.emit(opcodes.OP_ECHO, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
 	}
 	return nil
 }
 
 func (c *Compiler) compileReturn(stmt *ast.ReturnStatement) error {
-	if stmt.Value != nil {
-		err := c.compileNode(stmt.Value)
+	if stmt.Argument != nil {
+		err := c.compileNode(stmt.Argument)
 		if err != nil {
 			return err
 		}
@@ -566,7 +668,7 @@ func (c *Compiler) compileReturn(stmt *ast.ReturnStatement) error {
 
 func (c *Compiler) compileIf(stmt *ast.IfStatement) error {
 	// Compile condition
-	err := c.compileNode(stmt.Condition)
+	err := c.compileNode(stmt.Test)
 	if err != nil {
 		return err
 	}
@@ -581,9 +683,11 @@ func (c *Compiler) compileIf(stmt *ast.IfStatement) error {
 	c.emit(opcodes.OP_JMPZ, opcodes.IS_TMP_VAR, condResult, opcodes.IS_CONST, c.addLabel(elseLabel), 0, 0)
 
 	// Compile consequence
-	err = c.compileNode(stmt.Consequence)
-	if err != nil {
-		return err
+	for _, s := range stmt.Consequent {
+		err = c.compileNode(s)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Jump to end
@@ -591,10 +695,12 @@ func (c *Compiler) compileIf(stmt *ast.IfStatement) error {
 
 	// Else branch
 	c.placeLabel(elseLabel)
-	if stmt.Alternative != nil {
-		err = c.compileNode(stmt.Alternative)
-		if err != nil {
-			return err
+	if len(stmt.Alternate) > 0 {
+		for _, s := range stmt.Alternate {
+			err = c.compileNode(s)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -619,7 +725,7 @@ func (c *Compiler) compileWhile(stmt *ast.WhileStatement) error {
 	c.placeLabel(startLabel)
 
 	// Compile condition
-	err := c.compileNode(stmt.Condition)
+	err := c.compileNode(stmt.Test)
 	if err != nil {
 		return err
 	}
@@ -630,9 +736,11 @@ func (c *Compiler) compileWhile(stmt *ast.WhileStatement) error {
 	c.emit(opcodes.OP_JMPZ, opcodes.IS_TMP_VAR, condResult, opcodes.IS_CONST, c.addLabel(endLabel), 0, 0)
 
 	// Compile body
-	err = c.compileNode(stmt.Body)
-	if err != nil {
-		return err
+	for _, s := range stmt.Body {
+		err = c.compileNode(s)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Jump back to start
@@ -649,7 +757,7 @@ func (c *Compiler) compileWhile(stmt *ast.WhileStatement) error {
 }
 
 func (c *Compiler) compileProgram(program *ast.Program) error {
-	for _, stmt := range program.Statements {
+	for _, stmt := range program.Body {
 		err := c.compileNode(stmt)
 		if err != nil {
 			return err
@@ -689,6 +797,10 @@ func (c *Compiler) allocateTemp() uint32 {
 	temp := c.nextTemp
 	c.nextTemp++
 	return temp
+}
+
+func (c *Compiler) getLastAllocatedTemp() uint32 {
+	return c.nextTemp - 1
 }
 
 func (c *Compiler) generateLabel() string {
@@ -878,7 +990,7 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 }
 
 func (c *Compiler) compileThrow(stmt *ast.ThrowStatement) error {
-	err := c.compileNode(stmt.Exception)
+	err := c.compileNode(stmt.Argument)
 	if err != nil {
 		return err
 	}
@@ -889,7 +1001,7 @@ func (c *Compiler) compileThrow(stmt *ast.ThrowStatement) error {
 }
 
 func (c *Compiler) compileBlock(stmt *ast.BlockStatement) error {
-	for _, s := range stmt.Statements {
+	for _, s := range stmt.Body {
 		err := c.compileNode(s)
 		if err != nil {
 			return err
@@ -903,7 +1015,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	return fmt.Errorf("function declaration not implemented")
 }
 
-func (c *Compiler) compileClassDeclaration(decl *ast.ClassDeclaration) error {
+func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	// TODO: Implement class declaration
 	return fmt.Errorf("class declaration not implemented")
 }
