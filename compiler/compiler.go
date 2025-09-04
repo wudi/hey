@@ -1070,7 +1070,8 @@ func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
 	// If left is null (comparison is true), jump to evaluate right operand
 	c.emitJumpNZ(opcodes.IS_TMP_VAR, compResult, rightLabel)
 	
-	// Left is not null - use left value as result
+	// Left is not null - we need to ensure the result is in the final temp position
+	// We'll allocate a temp for the result and copy the left value into it
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, leftResult, 0, 0, opcodes.IS_TMP_VAR, result)
 	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
@@ -1083,11 +1084,17 @@ func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
 	}
 	rightResult := c.nextTemp - 1
 	
-	// Use right value as result  
+	// Since we already allocated result temp above, we need to ensure both branches use the same temp
+	// Copy right result to the same result temp we allocated above
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, 0, 0, opcodes.IS_TMP_VAR, result)
 	
 	// End label
 	c.placeLabel(endLabel)
+	
+	// Ensure the result is in the final temp position for echo to find it
+	// This handles the issue where compiling the right expression allocates additional temps
+	finalResult := c.allocateTemp()
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, 0, 0, opcodes.IS_TMP_VAR, finalResult)
 
 	return nil
 }
