@@ -416,40 +416,49 @@ func (c *Compiler) compileNullLiteral(expr *ast.NullLiteral) error {
 
 func (c *Compiler) compileArray(expr *ast.ArrayExpression) error {
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_INIT_ARRAY, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
+	c.emit(opcodes.OP_INIT_ARRAY, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
 	for _, element := range expr.Elements {
-		arrayElement, ok := element.(*ast.ArrayElementExpression)
-		if !ok {
-			return fmt.Errorf("invalid array element type: %T", element)
-		}
-		if arrayElement.Key != nil {
-			// Keyed element
-			err := c.compileNode(arrayElement.Key)
-			if err != nil {
-				return err
-			}
-			keyResult := c.allocateTemp()
-			c.emitMove(keyResult)
+		if arrayElement, ok := element.(*ast.ArrayElementExpression); ok {
+			// Wrapped array element
+			if arrayElement.Key != nil {
+				// Keyed element
+				err := c.compileNode(arrayElement.Key)
+				if err != nil {
+					return err
+				}
+				keyResult := c.allocateTemp()
+				c.emitMove(keyResult)
 
-			err = c.compileNode(arrayElement.Value)
-			if err != nil {
-				return err
-			}
-			valueResult := c.allocateTemp()
-			c.emitMove(valueResult)
+				err = c.compileNode(arrayElement.Value)
+				if err != nil {
+					return err
+				}
+				valueResult := c.allocateTemp()
+				c.emitMove(valueResult)
 
-			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, keyResult, opcodes.IS_TMP_VAR, valueResult)
+				c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_TMP_VAR, keyResult, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_TMP_VAR, result)
+			} else {
+				// Auto-indexed element
+				err := c.compileNode(arrayElement.Value)
+				if err != nil {
+					return err
+				}
+				valueResult := c.allocateTemp()
+				c.emitMove(valueResult)
+
+				c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_TMP_VAR, result)
+			}
 		} else {
-			// Auto-indexed element
-			err := c.compileNode(arrayElement.Value)
+			// Direct element (not wrapped in ArrayElementExpression) - treat as auto-indexed
+			err := c.compileNode(element)
 			if err != nil {
 				return err
 			}
 			valueResult := c.allocateTemp()
 			c.emitMove(valueResult)
 
-			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_TMP_VAR, result, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult)
+			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_TMP_VAR, result)
 		}
 	}
 
@@ -1211,13 +1220,152 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 }
 
 func (c *Compiler) compileFor(stmt *ast.ForStatement) error {
-	// TODO: Implement for loop
-	return fmt.Errorf("for loop not implemented")
+	// Create labels for the loop
+	testLabel := c.generateLabel()
+	bodyLabel := c.generateLabel()
+	updateLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	// Set break/continue labels for this scope
+	oldBreak := c.currentScope().breakLabel
+	oldContinue := c.currentScope().continueLabel
+	c.currentScope().breakLabel = endLabel
+	c.currentScope().continueLabel = updateLabel
+
+	// Compile initialization (if exists)
+	if stmt.Init != nil {
+		err := c.compileNode(stmt.Init)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Test label - evaluate condition first
+	c.placeLabel(testLabel)
+
+	// Compile test condition (if exists)
+	if stmt.Test != nil {
+		err := c.compileNode(stmt.Test)
+		if err != nil {
+			return err
+		}
+		// Jump to end if condition is false
+		condResult := c.allocateTemp()
+		c.emitMove(condResult)
+		c.emitJumpZ(opcodes.IS_TMP_VAR, condResult, endLabel)
+	}
+
+	// Body label - start of loop body
+	c.placeLabel(bodyLabel)
+
+	// Compile body
+	for _, s := range stmt.Body {
+		err := c.compileNode(s)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update label (where continue jumps to)
+	c.placeLabel(updateLabel)
+
+	// Compile update expression (if exists)
+	if stmt.Update != nil {
+		err := c.compileNode(stmt.Update)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Jump back to test condition
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, testLabel)
+
+	// End label (where break jumps to)
+	c.placeLabel(endLabel)
+
+	// Restore old break/continue labels
+	c.currentScope().breakLabel = oldBreak
+	c.currentScope().continueLabel = oldContinue
+
+	return nil
 }
 
 func (c *Compiler) compileForeach(stmt *ast.ForeachStatement) error {
-	// TODO: Implement foreach loop
-	return fmt.Errorf("foreach loop not implemented")
+	// Create labels for the foreach loop
+	startLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+	continueLabel := c.generateLabel()
+
+	// Set break/continue labels for this scope
+	oldBreak := c.currentScope().breakLabel
+	oldContinue := c.currentScope().continueLabel
+	c.currentScope().breakLabel = endLabel
+	c.currentScope().continueLabel = continueLabel
+
+	// Compile the iterable expression
+	err := c.compileNode(stmt.Iterable)
+	if err != nil {
+		return err
+	}
+	iterableTemp := c.nextTemp - 1
+
+	// Initialize foreach iterator
+	iteratorTemp := c.allocateTemp()
+	c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, iteratorTemp)
+
+	// Start of loop
+	c.placeLabel(startLabel)
+
+	// Fetch next element - this will set values or null if no more elements
+	valueTemp := c.allocateTemp()
+	var keyTemp uint32 = 0
+	if stmt.Key != nil {
+		keyTemp = c.allocateTemp()
+		c.emit(opcodes.OP_FE_FETCH, opcodes.IS_TMP_VAR, iteratorTemp, opcodes.IS_TMP_VAR, keyTemp, opcodes.IS_TMP_VAR, valueTemp)
+	} else {
+		c.emit(opcodes.OP_FE_FETCH, opcodes.IS_TMP_VAR, iteratorTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueTemp)
+	}
+
+	// Check if value is null (end of iteration)
+	nullCheckTemp := c.allocateTemp()
+	nullConstant := c.addConstant(values.NewNull())
+	c.emit(opcodes.OP_IS_IDENTICAL, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_CONST, nullConstant, opcodes.IS_TMP_VAR, nullCheckTemp)
+	c.emitJumpNZ(opcodes.IS_TMP_VAR, nullCheckTemp, endLabel)
+
+	// Assign key to key variable if present
+	if stmt.Key != nil {
+		if keyVar, ok := stmt.Key.(*ast.Variable); ok {
+			keySlot := c.getOrCreateVariable(keyVar.Name)
+			c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, keyTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, keySlot)
+		}
+	}
+
+	// Assign value to value variable
+	if valueVar, ok := stmt.Value.(*ast.Variable); ok {
+		valueSlot := c.getOrCreateVariable(valueVar.Name)
+		c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+	}
+
+	// Compile body
+	err = c.compileNode(stmt.Body)
+	if err != nil {
+		return err
+	}
+
+	// Continue label (where continue jumps to)
+	c.placeLabel(continueLabel)
+
+	// Jump back to start for next iteration
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, startLabel)
+
+	// End label
+	c.placeLabel(endLabel)
+
+	// Restore old break/continue labels
+	c.currentScope().breakLabel = oldBreak
+	c.currentScope().continueLabel = oldContinue
+
+	return nil
 }
 
 func (c *Compiler) compileSwitch(stmt *ast.SwitchStatement) error {

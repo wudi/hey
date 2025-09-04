@@ -803,3 +803,85 @@ func TestMatchExpressionError(t *testing.T) {
 	require.Error(t, err, "Expected UnhandledMatchError")
 	require.Contains(t, err.Error(), "UnhandledMatchError", "Should contain UnhandledMatchError")
 }
+
+func TestForStatement(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple For Loop",
+			`<?php for ($i = 0; $i < 3; $i++) { echo $i; }`,
+		},
+		{
+			"For Loop with Empty Init",
+			`<?php $i = 0; for (; $i < 2; $i++) { echo $i; }`,
+		},
+		{
+			"For Loop with Empty Update",
+			`<?php for ($i = 0; $i < 2; ) { echo $i; $i++; }`,
+		},
+		{
+			"Infinite For Loop with Break",
+			`<?php for (;;) { echo "1"; break; }`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile for statement: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute for statement: %s", tt.name)
+		})
+	}
+}
+
+func TestForeachStatement(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple Foreach",
+			`<?php $arr = array(1, 2, 3); foreach ($arr as $value) { echo $value; }`,
+		},
+		{
+			"Foreach with Key",
+			`<?php $arr = array("a" => 1, "b" => 2); foreach ($arr as $key => $value) { echo $key . ":" . $value; }`,
+		},
+		{
+			"Empty Array Foreach",
+			`<?php $arr = array(); foreach ($arr as $value) { echo $value; }`,
+		},
+		{
+			"Foreach with Break",
+			`<?php $arr = array(1, 2, 3, 4, 5); foreach ($arr as $value) { if ($value > 2) break; echo $value; }`,
+		},
+		{
+			"Nested Foreach",
+			`<?php $outer = array(array(1, 2), array(3, 4)); foreach ($outer as $inner) { foreach ($inner as $value) { echo $value; } }`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile foreach statement: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute foreach statement: %s", tt.name)
+		})
+	}
+}

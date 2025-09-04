@@ -31,6 +31,9 @@ type ExecutionContext struct {
 	// Global state
 	GlobalVars    map[string]*values.Value
 	Functions     map[string]*Function
+	
+	// Loop state
+	ForeachIterators map[uint32]*ForeachIterator // Foreach iterator state
 	Classes       map[string]*Class
 	
 	// Error handling
@@ -297,6 +300,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	// String operations
 	case opcodes.OP_CONCAT:
 		return vm.executeConcat(ctx, inst)
+		
+	// Foreach operations
+	case opcodes.OP_FE_RESET:
+		return vm.executeForeachReset(ctx, inst)
+	case opcodes.OP_FE_FETCH:
+		return vm.executeForeachFetch(ctx, inst)
 		
 	// No operation
 	case opcodes.OP_NOP:
@@ -1099,4 +1108,128 @@ func (vm *VirtualMachine) checkMemoryLimit(ctx *ExecutionContext) error {
 	}
 	
 	return nil
+}
+
+// Foreach operation implementations
+
+func (vm *VirtualMachine) executeForeachReset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the iterable (array/object to iterate over)
+	iterable := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	
+	// Create a new iterator state
+	iterator := &ForeachIterator{
+		Array:   iterable,
+		Index:   0,
+		Keys:    make([]*values.Value, 0),
+		Values:  make([]*values.Value, 0),
+		HasMore: true,
+	}
+	
+	// Initialize the iterator with the array's keys and values
+	if iterable.Type == values.TypeArray {
+		arrayVal := iterable.Data.(*values.Array)
+		for key, value := range arrayVal.Elements {
+			keyVal := convertToValue(key)
+			iterator.Keys = append(iterator.Keys, keyVal)
+			iterator.Values = append(iterator.Values, value)
+		}
+		iterator.HasMore = len(iterator.Keys) > 0
+	} else {
+		// For non-arrays, treat as empty iteration
+		iterator.HasMore = false
+	}
+	
+	// Store iterator in VM context's iterator map
+	if ctx.ForeachIterators == nil {
+		ctx.ForeachIterators = make(map[uint32]*ForeachIterator)
+	}
+	ctx.ForeachIterators[inst.Result] = iterator
+	
+	// Store a placeholder value in the result location
+	iteratorValue := values.NewInt(int64(inst.Result)) // Use result slot as iterator ID
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), iteratorValue)
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeForeachFetch(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the iterator ID from the operand
+	iteratorValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if iteratorValue.Type != values.TypeInt {
+		ctx.IP++
+		return fmt.Errorf("invalid iterator ID in foreach fetch")
+	}
+	
+	iteratorID := uint32(iteratorValue.Data.(int64))
+	
+	// Get the iterator from context
+	iterator, exists := ctx.ForeachIterators[iteratorID]
+	if !exists {
+		ctx.IP++
+		return fmt.Errorf("iterator not found in foreach fetch")
+	}
+	
+	// Check if we have more elements
+	if !iterator.HasMore || iterator.Index >= len(iterator.Values) {
+		// No more elements, create null values for key/value
+		nullValue := values.NewNull()
+		
+		// Set key if requested
+		if opcodes.DecodeOpType2(inst.OpType1) != opcodes.IS_UNUSED {
+			vm.setValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1), nullValue)
+		}
+		
+		// Set value
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), nullValue)
+		
+		ctx.IP++
+		return nil
+	}
+	
+	// Get current key and value
+	currentKey := iterator.Keys[iterator.Index]
+	currentValue := iterator.Values[iterator.Index]
+	
+	// Set key if requested
+	if opcodes.DecodeOpType2(inst.OpType1) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1), currentKey)
+	}
+	
+	// Set value
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), currentValue)
+	
+	// Move to next element
+	iterator.Index++
+	iterator.HasMore = iterator.Index < len(iterator.Values)
+	
+	ctx.IP++
+	return nil
+}
+
+// ForeachIterator represents the state of a foreach loop
+type ForeachIterator struct {
+	Array   *values.Value
+	Index   int
+	Keys    []*values.Value
+	Values  []*values.Value
+	HasMore bool
+}
+
+// Helper function to convert Go interface{} keys to Value objects
+func convertToValue(key interface{}) *values.Value {
+	switch k := key.(type) {
+	case int:
+		return values.NewInt(int64(k))
+	case int64:
+		return values.NewInt(k)
+	case float64:
+		return values.NewFloat(k)
+	case string:
+		return values.NewString(k)
+	case bool:
+		return values.NewBool(k)
+	default:
+		return values.NewString(fmt.Sprintf("%v", k))
+	}
 }
