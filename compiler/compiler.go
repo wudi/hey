@@ -507,6 +507,11 @@ func (c *Compiler) compileArray(expr *ast.ArrayExpression) error {
 		}
 	}
 
+	// Ensure the array result is in the expected location (c.nextTemp - 1)
+	// The array was created in the 'result' temp variable at the beginning
+	finalResult := c.allocateTemp()
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+
 	return nil
 }
 
@@ -854,8 +859,10 @@ func (c *Compiler) emit(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint3
 }
 
 func (c *Compiler) emitMove(target uint32) {
-	// This is a placeholder for moving the top of stack to target
-	// In a real implementation, this would be more sophisticated
+	// Move the result from the previous compilation to the target temp variable
+	// We need to get the source temp before allocating target, so this must be called correctly
+	source := c.nextTemp - 2  // -1 for the target that was just allocated, -1 more for the actual source
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, source, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, target)
 }
 
 func (c *Compiler) addConstant(value *values.Value) uint32 {
@@ -926,7 +933,19 @@ func (c *Compiler) placeLabel(name string) {
 
 // Helper function to emit unconditional jump with forward reference
 func (c *Compiler) emitJump(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint32, labelName string) {
-	// Add a placeholder constant for the jump target
+	// Check if label already exists (backward jump)
+	if pos, exists := c.labels[labelName]; exists {
+		// Backward jump - emit instruction with known target
+		jumpConstant := c.addConstant(values.NewInt(int64(pos)))
+		if opcode == opcodes.OP_JMP {
+			c.emit(opcode, opcodes.IS_CONST, jumpConstant, 0, 0, 0, 0)
+		} else {
+			c.emit(opcode, op1Type, op1, opcodes.IS_CONST, jumpConstant, 0, 0)
+		}
+		return
+	}
+	
+	// Forward jump - add placeholder constant for the jump target
 	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
 	
 	// For unconditional jumps, the target goes in Op1
@@ -948,7 +967,15 @@ func (c *Compiler) emitJump(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 u
 
 // Helper function to emit conditional jump with forward reference  
 func (c *Compiler) emitJumpZ(condType opcodes.OpType, cond uint32, labelName string) {
-	// Add a placeholder constant for the jump target
+	// Check if label already exists (backward jump)
+	if pos, exists := c.labels[labelName]; exists {
+		// Backward jump - emit instruction with known target
+		jumpConstant := c.addConstant(values.NewInt(int64(pos)))
+		c.emit(opcodes.OP_JMPZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
+		return
+	}
+	
+	// Forward jump - add placeholder constant for the jump target
 	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
 	
 	// Emit instruction with constant reference for label
@@ -964,7 +991,15 @@ func (c *Compiler) emitJumpZ(condType opcodes.OpType, cond uint32, labelName str
 }
 
 func (c *Compiler) emitJumpNZ(condType opcodes.OpType, cond uint32, labelName string) {
-	// Add a placeholder constant for the jump target
+	// Check if label already exists (backward jump)
+	if pos, exists := c.labels[labelName]; exists {
+		// Backward jump - emit instruction with known target
+		jumpConstant := c.addConstant(values.NewInt(int64(pos)))
+		c.emit(opcodes.OP_JMPNZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
+		return
+	}
+	
+	// Forward jump - add placeholder constant for the jump target
 	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
 	
 	// Emit instruction with constant reference for label

@@ -334,6 +334,10 @@ var opcodeNames = map[Opcode]string{
 	OP_CATCH:   "CATCH",
 	OP_FINALLY: "FINALLY",
 	
+	// Loop operations
+	OP_FE_RESET: "FE_RESET",
+	OP_FE_FETCH: "FE_FETCH",
+	
 	// Variables
 	OP_ASSIGN:     "ASSIGN",
 	OP_ASSIGN_REF: "ASSIGN_REF",

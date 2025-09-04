@@ -3487,7 +3487,13 @@ func parseForeachStatement(p *Parser) ast.Statement {
 		value = parseExpression(p, LOWEST)
 		p.nextToken()
 	} else {
-		value = firstVar
+		// Check if firstVar is an ArrayElementExpression (key => value)
+		if arrayElem, ok := firstVar.(*ast.ArrayElementExpression); ok {
+			key = arrayElem.Key
+			value = arrayElem.Value
+		} else {
+			value = firstVar
+		}
 	}
 
 	// 期望 ')'

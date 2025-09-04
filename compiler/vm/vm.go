@@ -121,18 +121,19 @@ func NewVirtualMachine() *VirtualMachine {
 // NewExecutionContext creates a new execution context
 func NewExecutionContext() *ExecutionContext {
 	return &ExecutionContext{
-		Stack:        make([]*values.Value, 1000),
-		SP:           -1,
-		MaxStackSize: 1000,
-		Variables:    make(map[uint32]*values.Value),
-		Temporaries:  make(map[uint32]*values.Value),
-		CallStack:    make([]CallFrame, 0),
-		GlobalVars:   make(map[string]*values.Value),
-		Functions:    make(map[string]*Function),
-		Classes:      make(map[string]*Class),
-		ExceptionStack: make([]Exception, 0),
-		Halted:       false,
-		ExitCode:     0,
+		Stack:            make([]*values.Value, 1000),
+		SP:               -1,
+		MaxStackSize:     1000,
+		Variables:        make(map[uint32]*values.Value),
+		Temporaries:      make(map[uint32]*values.Value),
+		CallStack:        make([]CallFrame, 0),
+		GlobalVars:       make(map[string]*values.Value),
+		Functions:        make(map[string]*Function),
+		ForeachIterators: make(map[uint32]*ForeachIterator),
+		Classes:          make(map[string]*Class),
+		ExceptionStack:   make([]Exception, 0),
+		Halted:           false,
+		ExitCode:         0,
 	}
 }
 
