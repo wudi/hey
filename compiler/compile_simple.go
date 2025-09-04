@@ -144,28 +144,32 @@ func (c *SimpleCompiler) compileNumberLiteral(expr *ast.NumberLiteral) error {
 	
 	constant := c.addConstant(values.NewInt(val))
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
 func (c *SimpleCompiler) compileStringLiteral(expr *ast.StringLiteral) error {
 	constant := c.addConstant(values.NewString(expr.Value))
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
 func (c *SimpleCompiler) compileBooleanLiteral(expr *ast.BooleanLiteral) error {
 	constant := c.addConstant(values.NewBool(expr.Value))
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
 func (c *SimpleCompiler) compileNullLiteral(expr *ast.NullLiteral) error {
 	constant := c.addConstant(values.NewNull())
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constant, 0, 0)
+	// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
@@ -174,12 +178,21 @@ func (c *SimpleCompiler) compileExpressionStatement(stmt *ast.ExpressionStatemen
 }
 
 func (c *SimpleCompiler) compileEchoStatement(stmt *ast.EchoStatement) error {
-	// EchoStatement has Arguments field, not Expressions
-	if stmt.Arguments != nil {
-		// For now, assume we can get the expressions from Arguments
-		// This is simplified - in reality you'd need to handle ArgumentList properly
-		result := c.allocateTemp()
-		c.emit(opcodes.OP_ECHO, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
+	// EchoStatement has Arguments field containing ArgumentList
+	if stmt.Arguments != nil && len(stmt.Arguments.Arguments) > 0 {
+		// Compile each argument and emit ECHO for each
+		for _, arg := range stmt.Arguments.Arguments {
+			// Compile the argument expression
+			err := c.CompileNode(arg)
+			if err != nil {
+				return err
+			}
+			
+			// Get the result of the compiled expression
+			// The last allocated temp should contain the result
+			result := c.nextTemp - 1
+			c.emit(opcodes.OP_ECHO, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
+		}
 	}
 	return nil
 }
