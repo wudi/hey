@@ -857,13 +857,18 @@ func (c *Compiler) placeLabel(name string) {
 	}
 }
 
-// Helper function to emit jump with forward reference
+// Helper function to emit unconditional jump with forward reference
 func (c *Compiler) emitJump(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint32, labelName string) {
 	// Add a placeholder constant for the jump target
 	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
 	
-	// Emit instruction with constant reference for label
-	c.emit(opcode, op1Type, op1, opcodes.IS_CONST, jumpConstant, 0, 0)
+	// For unconditional jumps, the target goes in Op1
+	// For conditional jumps, condition is Op1 and target is Op2
+	if opcode == opcodes.OP_JMP {
+		c.emit(opcode, opcodes.IS_CONST, jumpConstant, 0, 0, 0, 0)
+	} else {
+		c.emit(opcode, op1Type, op1, opcodes.IS_CONST, jumpConstant, 0, 0)
+	}
 	
 	// Record forward jump for later resolution - need to update the constant, not the instruction
 	jump := ForwardJump{
@@ -881,6 +886,22 @@ func (c *Compiler) emitJumpZ(condType opcodes.OpType, cond uint32, labelName str
 	
 	// Emit instruction with constant reference for label
 	c.emit(opcodes.OP_JMPZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
+	
+	// Record forward jump for later resolution - need to update the constant, not the instruction
+	jump := ForwardJump{
+		instructionIndex: int(jumpConstant), // Store constant index instead of instruction index
+		opType:           opcodes.IS_CONST,
+		operand:          0, // Special marker for constant update
+	}
+	c.forwardJumps[labelName] = append(c.forwardJumps[labelName], jump)
+}
+
+func (c *Compiler) emitJumpNZ(condType opcodes.OpType, cond uint32, labelName string) {
+	// Add a placeholder constant for the jump target
+	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
+	
+	// Emit instruction with constant reference for label
+	c.emit(opcodes.OP_JMPNZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
 	
 	// Record forward jump for later resolution - need to update the constant, not the instruction
 	jump := ForwardJump{
@@ -1035,8 +1056,81 @@ func (c *Compiler) compileForeach(stmt *ast.ForeachStatement) error {
 }
 
 func (c *Compiler) compileSwitch(stmt *ast.SwitchStatement) error {
-	// TODO: Implement switch statement
-	return fmt.Errorf("switch statement not implemented")
+	// Compile the discriminant (the switch expression)
+	err := c.compileNode(stmt.Discriminant)
+	if err != nil {
+		return err
+	}
+	discriminantTemp := c.nextTemp - 1
+
+	// Create labels for the switch
+	endLabel := c.generateLabel()
+	var defaultLabel string
+	var caseLabels []string
+	
+	// Generate labels for each case
+	for i := 0; i < len(stmt.Cases); i++ {
+		if stmt.Cases[i].Test == nil {
+			// Default case
+			defaultLabel = c.generateLabel()
+			caseLabels = append(caseLabels, defaultLabel)
+		} else {
+			caseLabels = append(caseLabels, c.generateLabel())
+		}
+	}
+	
+	// Push new scope for break statements
+	c.pushScope(false)
+	c.currentScope().breakLabel = endLabel
+
+	// Sequential case comparisons - evaluate each case and jump if equal
+	for i, switchCase := range stmt.Cases {
+		if switchCase.Test != nil {
+			// Compile the case value
+			err := c.compileNode(switchCase.Test)
+			if err != nil {
+				c.popScope()
+				return err
+			}
+			caseValueTemp := c.nextTemp - 1
+			
+			// Compare discriminant == case value using loose comparison
+			c.allocateTemp() // For comparison result
+			compResultTemp := c.nextTemp - 1
+			c.emit(opcodes.OP_IS_EQUAL, opcodes.IS_TMP_VAR, discriminantTemp, 
+				   opcodes.IS_TMP_VAR, caseValueTemp, opcodes.IS_TMP_VAR, compResultTemp)
+			
+			// Jump to case if equal
+			c.emitJumpNZ(opcodes.IS_TMP_VAR, compResultTemp, caseLabels[i])
+		}
+	}
+	
+	// If no case matched, jump to default (if exists) or end
+	if defaultLabel != "" {
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, defaultLabel)
+	} else {
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+	}
+	
+	// Emit case bodies
+	for i, switchCase := range stmt.Cases {
+		c.placeLabel(caseLabels[i])
+		
+		// Compile case body
+		for _, stmt := range switchCase.Body {
+			err := c.compileNode(stmt)
+			if err != nil {
+				c.popScope()
+				return err
+			}
+		}
+		// Fall-through behavior - no automatic jump to end
+	}
+	
+	c.placeLabel(endLabel)
+	c.popScope()
+	
+	return nil
 }
 
 func (c *Compiler) compileBreak(stmt *ast.BreakStatement) error {

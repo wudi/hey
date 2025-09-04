@@ -585,3 +585,141 @@ echo $a; // except: 2
 	// Verify output is "2"
 	require.Equal(t, "2", output, "Expected output to be '2', got '%s'", output)
 }
+
+func TestSwitchStatement(t *testing.T) {
+	// Test the provided switch case - should output "case 124"
+	code := `<?php
+$a = 123;
+$a++;
+
+switch ($a) {
+    case 123:
+        echo "case 123";
+        break;
+    case 124:
+        echo "case 124";
+        break;
+    default:
+        echo "case default";
+}`
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+
+	// Check for parser errors
+	parserErrors := p.Errors()
+	require.Empty(t, parserErrors, "Parser should not have errors: %v", parserErrors)
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	require.NoError(t, err)
+
+	// Close write pipe and restore stdout
+	w.Close()
+	os.Stdout = old
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify output is "case 124" as expected
+	require.Equal(t, "case 124", output, "Expected output to be 'case 124', got '%s'", output)
+}
+
+func TestSwitchStatementDefault(t *testing.T) {
+	// Test default case
+	code := `<?php
+$a = 999;
+
+switch ($a) {
+    case 123:
+        echo "case 123";
+        break;
+    case 124:
+        echo "case 124";
+        break;
+    default:
+        echo "default case";
+}`
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	require.NoError(t, err)
+
+	// Close write pipe and restore stdout
+	w.Close()
+	os.Stdout = old
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	require.Equal(t, "default case", output)
+}
+
+func TestSwitchStatementFallthrough(t *testing.T) {
+	// Test fall-through behavior (no break statement)
+	code := `<?php
+$a = 123;
+
+switch ($a) {
+    case 123:
+        echo "first";
+    case 124:
+        echo "second";
+        break;
+    default:
+        echo "default";
+}`
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	require.NoError(t, err)
+
+	// Close write pipe and restore stdout
+	w.Close()
+	os.Stdout = old
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	// Should output "firstsecond" due to fall-through
+	require.Equal(t, "firstsecond", output)
+}
