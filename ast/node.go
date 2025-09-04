@@ -1445,6 +1445,43 @@ func (v *Variable) ToJSON() ([]byte, error) {
 	return json.MarshalIndent(v, "", "  ")
 }
 
+// VariableVariableExpression 变量变量表达式 (${expression})
+type VariableVariableExpression struct {
+	BaseNode
+	Expression Expression `json:"expression"`
+}
+
+func NewVariableVariableExpression(pos lexer.Position, expr Expression) *VariableVariableExpression {
+	return &VariableVariableExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTVar, // 使用相同的 Kind 作为变量
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Expression: expr,
+	}
+}
+
+// GetChildren 返回子节点
+func (vve *VariableVariableExpression) GetChildren() []Node {
+	return []Node{vve.Expression}
+}
+
+// Accept 接受访问者
+func (vve *VariableVariableExpression) Accept(visitor Visitor) {
+	visitor.Visit(vve)
+}
+
+func (vve *VariableVariableExpression) expressionNode() {}
+
+func (vve *VariableVariableExpression) String() string {
+	return "${" + vve.Expression.String() + "}"
+}
+
+func (vve *VariableVariableExpression) ToJSON() ([]byte, error) {
+	return json.MarshalIndent(vve, "", "  ")
+}
+
 // StringLiteral 字符串字面量
 type StringLiteral struct {
 	BaseNode

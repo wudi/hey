@@ -947,8 +947,20 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 	var content strings.Builder
 
 	for l.ch != '"' && l.ch != 0 {
-		// 检查 {$variable} 语法
-		if l.ch == '{' && l.peekChar() == '$' {
+		// 检查 ${expression} 语法 (variable variables)
+		if l.ch == '$' && l.peekChar() == '{' {
+			// 如果已经有内容，先返回内容
+			if content.Len() > 0 {
+				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
+			}
+			// 推入当前状态到栈
+			l.stateStack.Push(l.state)
+			l.state = ST_IN_SCRIPTING
+			l.readChar() // 跳过 $
+			l.readChar() // 跳过 {
+			return Token{Type: T_DOLLAR_OPEN_CURLY_BRACES, Value: "${", Position: pos}
+		} else if l.ch == '{' && l.peekChar() == '$' {
+			// 检查 {$variable} 语法
 			// 如果已经有内容，先返回内容
 			if content.Len() > 0 {
 				return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: content.String(), Position: pos}
@@ -1584,9 +1596,18 @@ func (l *Lexer) nextTokenInVarOffset() Token {
 			identifier := l.readIdentifier()
 			return Token{Type: T_STRING, Value: identifier, Position: pos}
 		} else {
-			// 单个字符 token
+			// 按照 PHP 的规则，遇到无效字符时退出 VAR_OFFSET 状态
+			// 并将该字符作为 T_ENCAPSED_AND_WHITESPACE 返回
 			ch := l.ch
 			l.readChar()
+			
+			// 退出 VAR_OFFSET 状态，返回到之前的状态
+			if !l.stateStack.IsEmpty() {
+				l.state = l.stateStack.Pop()
+			} else {
+				l.state = ST_IN_SCRIPTING
+			}
+			
 			return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: string(ch), Position: pos}
 		}
 	}

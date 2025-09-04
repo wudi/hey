@@ -6384,15 +6384,80 @@ func parseInterpolatedString(p *Parser) ast.Expression {
 	for p.currentToken.Type != lexer.TOKEN_QUOTE && !p.isAtEnd() {
 		switch p.currentToken.Type {
 		case lexer.T_VARIABLE:
-			// 变量插值
-			variable := ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
-			parts = append(parts, variable)
+			// 变量插值，检查是否跟着数组访问
+			variablePos := p.currentToken.Position
+			variableName := p.currentToken.Value
+			variable := ast.NewVariable(variablePos, variableName)
+			
+			// 检查是否后面跟着数组访问 [
+			if p.peekToken.Type == lexer.TOKEN_LBRACKET {
+				p.nextToken() // 现在在 [
+				
+				// 解析数组索引表达式
+				var indexExpr ast.Expression
+				p.nextToken() // 现在在索引内容
+				
+				if p.currentToken.Type == lexer.T_VARIABLE {
+					indexExpr = ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
+				} else if p.currentToken.Type == lexer.T_LNUMBER {
+					indexExpr = ast.NewNumberLiteral(p.currentToken.Position, p.currentToken.Value, "integer")
+				} else if p.currentToken.Type == lexer.T_STRING {
+					indexExpr = ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				} else {
+					// 如果不是预期的索引类型，回退到简单变量处理
+					parts = append(parts, variable)
+					continue
+				}
+				
+				// 期待 ]
+				p.nextToken()
+				if p.currentToken.Type == lexer.TOKEN_RBRACKET {
+					// 创建数组访问表达式
+					arrayAccess := ast.NewArrayAccessExpression(variablePos, variable, &indexExpr)
+					parts = append(parts, arrayAccess)
+					// continue 跳过最后的 p.nextToken()，因为我们已经在 ] 上了
+					p.nextToken()
+					continue
+				} else {
+					// 如果没有找到 ]，回退到简单变量
+					parts = append(parts, variable)
+				}
+			} else {
+				parts = append(parts, variable)
+			}
 		case lexer.T_ENCAPSED_AND_WHITESPACE:
 			// 字符串片段
 			if p.currentToken.Value != "" {
 				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 				parts = append(parts, stringPart)
 			}
+		case lexer.T_DOLLAR_OPEN_CURLY_BRACES:
+			// 变量变量插值 ${expression} - 这是 PHP 的 variable variables 语法
+			p.nextToken() // 跳过 T_DOLLAR_OPEN_CURLY_BRACES
+
+			// 解析大括号内的表达式
+			expr := parseExpression(p, LOWEST)
+			if expr != nil {
+				// 包装在 VariableVariableExpression 中以表示这是 ${expression} 语法
+				parts = append(parts, ast.NewVariableVariableExpression(p.currentToken.Position, expr))
+			}
+
+			// parseExpression 会消费表达式中的所有token，现在检查是否在右大括号上
+			if p.peekToken.Type == lexer.TOKEN_RBRACE {
+				p.nextToken() // 移动到 }
+				p.nextToken() // 跳过 }
+			} else if p.currentToken.Type == lexer.TOKEN_RBRACE {
+				p.nextToken() // 跳过 }
+			} else {
+				// 尝试寻找结束的大括号
+				for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.TOKEN_QUOTE && !p.isAtEnd() {
+					p.nextToken()
+				}
+				if p.currentToken.Type == lexer.TOKEN_RBRACE {
+					p.nextToken()
+				}
+			}
+			continue // 跳过最后的 p.nextToken()
 		case lexer.T_CURLY_OPEN:
 			// 复杂变量插值 {$var} 或 {$var['key']} 或 {$var->prop} 或 {$obj->method()}
 			p.nextToken() // 跳过 T_CURLY_OPEN
@@ -6403,11 +6468,29 @@ func parseInterpolatedString(p *Parser) ast.Expression {
 				parts = append(parts, expr)
 			}
 
-			// 期待并跳过结束的大括号
-			if p.currentToken.Type == lexer.TOKEN_RBRACE {
-				p.nextToken()
+			// parseExpression 会消费表达式中的所有token，现在检查是否在右大括号上
+			if p.peekToken.Type == lexer.TOKEN_RBRACE {
+				p.nextToken() // 移动到 }
+				p.nextToken() // 跳过 }
+			} else if p.currentToken.Type == lexer.TOKEN_RBRACE {
+				p.nextToken() // 跳过 }
+			} else {
+				// 尝试寻找结束的大括号
+				for p.currentToken.Type != lexer.TOKEN_RBRACE && p.currentToken.Type != lexer.TOKEN_QUOTE && !p.isAtEnd() {
+					p.nextToken()
+				}
+				if p.currentToken.Type == lexer.TOKEN_RBRACE {
+					p.nextToken()
+				}
 			}
 			continue // 跳过最后的 p.nextToken()
+		case lexer.TOKEN_LBRACKET, lexer.TOKEN_RBRACKET:
+			// 这些 tokens 应该被数组访问处理逻辑处理，如果到这里说明是孤立的
+			// 作为字符串字面量处理
+			if p.currentToken.Value != "" {
+				stringPart := ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
+				parts = append(parts, stringPart)
+			}
 		default:
 			// 其他内容，当作字符串处理
 			if p.currentToken.Value != "" {
