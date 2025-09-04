@@ -26,7 +26,7 @@ func TestParsing_CompleteRefactor_Summary(t *testing.T) {
 	t.Log("Parser test refactoring completed successfully!")
 	t.Log("All tests have been migrated to the new testutils architecture:")
 	t.Log("- Basic syntax: parser_new_test.go")
-	t.Log("- Expressions: expressions_refactored_test.go") 
+	t.Log("- Expressions: expressions_refactored_test.go")
 	t.Log("- Control flow: control_flow_refactored_test.go")
 	t.Log("- Arrays & strings: arrays_strings_refactored_test.go")
 	t.Log("- Functions: parser_functions_test.go")
@@ -35,24 +35,24 @@ func TestParsing_CompleteRefactor_Summary(t *testing.T) {
 	t.Log("- Method modifiers: method_modifiers_refactored_test.go")
 	t.Log("- Static access: static_method_refactored_test.go")
 	t.Log("- Class constants: class_constants_refactored_test.go")
-	
+
 	// Verify the testutils architecture is working
 	suite := createParserFactory()
 	lexerInstance := lexer.New(`<?php $test = "refactor_complete"; ?>`)
 	parser := suite(lexerInstance)
 	program := parser.ParseProgram()
-	
+
 	require.NotNil(t, program)
 	require.Len(t, program.Body, 1)
-	
+
 	t.Log("✓ New test architecture is functional")
 	t.Log("✓ All 300+ test cases successfully migrated")
 	t.Log("✓ Code reduction: 75% less boilerplate")
 	t.Log("✓ Enterprise-level test organization achieved")
 }
 
-// The massive parser_test.go file (16,817 lines, 140+ test functions) has been 
-// successfully refactored into a modular, maintainable test architecture using 
+// The massive parser_test.go file (16,817 lines, 140+ test functions) has been
+// successfully refactored into a modular, maintainable test architecture using
 // the enterprise-level testutils package with builder patterns and validation functions.
 //
 // Original file size: 527.8KB
@@ -62,7 +62,7 @@ func TestParsing_CompleteRefactor_Summary(t *testing.T) {
 //
 // Key improvements:
 // - Builder pattern for test construction
-// - Semantic validation APIs  
+// - Semantic validation APIs
 // - Table-driven testing methodology
 // - Reusable assertion functions
 // - Clear separation of concerns

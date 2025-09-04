@@ -2,14 +2,14 @@ package parser
 
 import (
 	"testing"
-	
+
 	"github.com/wudi/php-parser/parser/testutils"
 )
 
 // TestRefactored_ClassConstantsWithModifiers 重构后的类常量修饰符测试
 func TestRefactored_ClassConstantsWithModifiers(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ClassConstantsWithModifiers", createParserFactory())
-	
+
 	// 基础常量（无可见性修饰符）
 	suite.AddSimple("basic_const_without_visibility",
 		`<?php
@@ -18,7 +18,7 @@ class Test {
 }`,
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("BASIC", ""))) // 默认为public
-	
+
 	// 可见性修饰符测试
 	suite.AddSimple("public_const",
 		`<?php
@@ -27,7 +27,7 @@ class Test {
 }`,
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("PUBLIC_CONST", "public")))
-		
+
 	suite.AddSimple("private_const",
 		`<?php
 class Test {
@@ -35,7 +35,7 @@ class Test {
 }`,
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("PRIVATE_CONST", "private")))
-			
+
 	suite.AddSimple("protected_const",
 		`<?php
 class Test {
@@ -43,7 +43,7 @@ class Test {
 }`,
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("PROTECTED_CONST", "protected")))
-	
+
 	// final修饰符测试
 	suite.AddSimple("final_const",
 		`<?php
@@ -52,7 +52,7 @@ class Test {
 }`,
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("FINAL_BASIC", "")))
-			
+
 	suite.AddSimple("final_public_const",
 		`<?php
 class Test {
@@ -60,7 +60,7 @@ class Test {
 }`,
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("FINAL_PUBLIC", "public")))
-			
+
 	suite.AddSimple("final_protected_const",
 		`<?php
 class Test {
@@ -68,7 +68,7 @@ class Test {
 }`,
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("FINAL_PROTECTED", "protected")))
-	
+
 	// 多个常量在一个声明中
 	suite.AddSimple("multiple_constants_basic",
 		`<?php
@@ -79,7 +79,7 @@ class Test {
 			testutils.ValidateClassConstant("A", ""),
 			testutils.ValidateClassConstant("B", ""),
 			testutils.ValidateClassConstant("C", "")))
-			
+
 	suite.AddSimple("multiple_constants_public",
 		`<?php
 class Test {
@@ -88,7 +88,7 @@ class Test {
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("X", "public"),
 			testutils.ValidateClassConstant("Y", "public")))
-			
+
 	suite.AddSimple("multiple_constants_final_protected",
 		`<?php
 class Test {
@@ -97,7 +97,7 @@ class Test {
 		testutils.ValidateClass("Test",
 			testutils.ValidateClassConstant("P", "protected"),
 			testutils.ValidateClassConstant("Q", "protected")))
-	
+
 	// 原始失败用例 - final protected const
 	suite.AddSimple("original_failing_case",
 		`<?php
@@ -106,6 +106,6 @@ class BaseUri {
 }`,
 		testutils.ValidateClass("BaseUri",
 			testutils.ValidateClassConstant("WHATWG_SPECIAL_SCHEMES", "protected")))
-	
+
 	suite.Run(t)
 }

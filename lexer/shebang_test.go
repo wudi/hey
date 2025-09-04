@@ -55,7 +55,7 @@ func TestShebangSkipping(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			lexer := New(test.input)
-			
+
 			for i, expectedType := range test.expected {
 				token := lexer.NextToken()
 				if token.Type != expectedType {
@@ -138,7 +138,7 @@ func TestShebangEdgeCases(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// 这个测试主要确保不会崩溃
 			lexer := New(test.input)
-			
+
 			// 尝试获取一些 token，确保不会 panic
 			for i := 0; i < 5; i++ {
 				token := lexer.NextToken()
@@ -154,18 +154,18 @@ func TestShebangEdgeCases(t *testing.T) {
 func TestShebangPositions(t *testing.T) {
 	input := "#!/usr/bin/php\n<?php echo 'hello';"
 	lexer := New(input)
-	
+
 	// 第一个token应该是T_OPEN_TAG，位置应该从第2行开始
 	token := lexer.NextToken()
 	if token.Type != T_OPEN_TAG {
 		t.Errorf("Expected T_OPEN_TAG, got %d", token.Type)
 	}
-	
+
 	// 位置信息应该正确（注意：行号从1开始，但跳过shebang后实际从第2行开始）
 	if token.Position.Line != 1 {
 		t.Errorf("Expected line 1 after skipping shebang, got %d", token.Position.Line)
 	}
-	
+
 	if token.Position.Column != 0 {
 		t.Errorf("Expected column 0, got %d", token.Position.Column)
 	}

@@ -31,21 +31,21 @@ func ValidateFunctionDeclaration(funcName string, params []string, returnType st
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		funcDecl, ok := body[0].(*ast.FunctionDeclaration)
 		require.True(ctx.T, ok, "Statement should be FunctionDeclaration, got %T", body[0])
-		
+
 		// 验证函数名
 		if nameIdent, ok := funcDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, funcName, nameIdent.Name)
 		}
-		
+
 		// 验证参数
 		if len(params) > 0 {
 			require.NotNil(ctx.T, funcDecl.Parameters, "Function should have parameters")
 			assert.Len(ctx.T, funcDecl.Parameters.Parameters, len(params))
 		}
-		
+
 		// 验证函数体
 		if bodyValidator != nil && len(funcDecl.Body) > 0 {
 			funcCtx := &TestContext{T: ctx.T, Program: &ast.Program{Body: funcDecl.Body}}
@@ -69,14 +69,14 @@ func ValidateTypedFunction(funcName string, params []TypedParam, bodyValidator V
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		funcDecl, ok := body[0].(*ast.FunctionDeclaration)
 		require.True(ctx.T, ok, "Statement should be FunctionDeclaration, got %T", body[0])
-		
+
 		if nameIdent, ok := funcDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, funcName, nameIdent.Name)
 		}
-		
+
 		if bodyValidator != nil && len(funcDecl.Body) > 0 {
 			funcCtx := &TestContext{T: ctx.T, Program: &ast.Program{Body: funcDecl.Body}}
 			bodyValidator(funcCtx)
@@ -89,19 +89,19 @@ func ValidateAnonymousFunctionAssignment(varName string, bodyValidator Validatio
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧匿名函数
 		anonFunc, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
 		require.True(ctx.T, ok, "Right side should be AnonymousFunctionExpression, got %T", assignment.Right)
-		
+
 		if bodyValidator != nil && len(anonFunc.Body) > 0 {
 			funcCtx := &TestContext{T: ctx.T, Program: &ast.Program{Body: anonFunc.Body}}
 			bodyValidator(funcCtx)
@@ -114,22 +114,22 @@ func ValidateAnonymousFunctionWithParams(varName string, params []string, bodyVa
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		anonFunc, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
 		require.True(ctx.T, ok, "Right side should be AnonymousFunctionExpression")
-		
+
 		// 验证参数数量
 		if anonFunc.Parameters != nil && len(params) > 0 {
 			assert.Len(ctx.T, anonFunc.Parameters.Parameters, len(params))
 		}
-		
+
 		if bodyValidator != nil && len(anonFunc.Body) > 0 {
 			funcCtx := &TestContext{T: ctx.T, Program: &ast.Program{Body: anonFunc.Body}}
 			bodyValidator(funcCtx)
@@ -142,22 +142,22 @@ func ValidateClosureWithUse(varName string, params []string, useVars []string, b
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		anonFunc, ok := assignment.Right.(*ast.AnonymousFunctionExpression)
 		require.True(ctx.T, ok, "Right side should be AnonymousFunctionExpression")
-		
+
 		// 验证use变量
 		if len(useVars) > 0 {
 			assert.Len(ctx.T, anonFunc.UseClause, len(useVars))
 		}
-		
+
 		if bodyValidator != nil && len(anonFunc.Body) > 0 {
 			funcCtx := &TestContext{T: ctx.T, Program: &ast.Program{Body: anonFunc.Body}}
 			bodyValidator(funcCtx)
@@ -170,22 +170,22 @@ func ValidateArrowFunctionAssignment(varName string, params []string, bodyValida
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		arrowFunc, ok := assignment.Right.(*ast.ArrowFunctionExpression)
 		require.True(ctx.T, ok, "Right side should be ArrowFunctionExpression, got %T", assignment.Right)
-		
+
 		// 验证参数数量
 		if arrowFunc.Parameters != nil && len(params) > 0 {
 			assert.Len(ctx.T, arrowFunc.Parameters.Parameters, len(params))
 		}
-		
+
 		// 验证箭头函数表达式 (简化)
 		if bodyValidator != nil && arrowFunc.Body != nil {
 			// 箭头函数的body是表达式，暂时简化验证
@@ -199,22 +199,22 @@ func ValidateTypedArrowFunction(varName string, params []TypedParam, returnType 
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		arrowFunc, ok := assignment.Right.(*ast.ArrowFunctionExpression)
 		require.True(ctx.T, ok, "Right side should be ArrowFunctionExpression")
-		
+
 		// 验证返回类型
 		if returnType != "" && arrowFunc.ReturnType != nil {
 			assert.NotNil(ctx.T, arrowFunc.ReturnType, "Return type should not be nil")
 		}
-		
+
 		if bodyValidator != nil && arrowFunc.Body != nil {
 			// 箭头函数的body是表达式，暂时简化验证
 			assert.NotNil(ctx.T, arrowFunc.Body, "Arrow function body should not be nil")
@@ -227,16 +227,16 @@ func ValidateClassDeclaration(className, parentClass string, interfaces []string
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
 		require.True(ctx.T, ok, "Expression should be ClassExpression, got %T", exprStmt.Expression)
-		
+
 		// 验证类名
 		if nameIdent, ok := classDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, className, nameIdent.Name)
 		}
-		
+
 		// 验证成员
 		if memberValidator != nil && classDecl.Body != nil && len(classDecl.Body) > 0 {
 			memberCtx := &TestContext{T: ctx.T, Program: &ast.Program{Body: classDecl.Body}}
@@ -260,15 +260,15 @@ func ValidateFinalClass(className string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
 		require.True(ctx.T, ok, "Expression should be ClassExpression")
-		
+
 		if nameIdent, ok := classDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, className, nameIdent.Name)
 		}
-		
+
 		// 检查final修饰符
 		assert.True(ctx.T, classDecl.Final, "Class should be marked as final")
 	}
@@ -279,15 +279,15 @@ func ValidateAbstractClass(className string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
 		require.True(ctx.T, ok, "Expression should be ClassExpression")
-		
+
 		if nameIdent, ok := classDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, className, nameIdent.Name)
 		}
-		
+
 		// 检查abstract修饰符
 		assert.True(ctx.T, classDecl.Abstract, "Class should be marked as abstract")
 	}
@@ -298,24 +298,24 @@ func ValidateStaticPropertyAccess(varName, className, propertyName string) Valid
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证静态属性访问
 		staticAccess, ok := assignment.Right.(*ast.StaticPropertyAccessExpression)
 		require.True(ctx.T, ok, "Right side should be StaticPropertyAccessExpression, got %T", assignment.Right)
-		
+
 		// 验证类名
 		if classIdent, ok := staticAccess.Class.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, className, classIdent.Name)
 		}
-		
+
 		// 验证属性名
 		if propVar, ok := staticAccess.Property.(*ast.Variable); ok {
 			assert.Equal(ctx.T, propertyName, propVar.Name)
@@ -328,15 +328,15 @@ func ValidateStaticMethodCall(varName, className, methodName string, args []stri
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 简化验证静态方法调用 - 可能是函数调用表达式的特殊形式
 		// 具体实现需要根据实际的AST结构来调整
 		assert.NotNil(ctx.T, assignment.Right, "Right side should contain static method call")
@@ -348,15 +348,15 @@ func ValidateStaticConstantAccess(varName, className, constantName string) Valid
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证静态常量访问 - 尝试不同的AST节点类型
 		if staticAccess, ok := assignment.Right.(*ast.StaticAccessExpression); ok {
 			// 验证类名
@@ -381,14 +381,14 @@ func ValidateChainedStaticCall(varName, className, firstMethod string, firstArgs
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 简化验证 - 检查是否包含预期的结构
 		assert.NotNil(ctx.T, assignment.Right, "Right side should not be nil")
 	}
@@ -401,14 +401,14 @@ func ValidateMatchExpression(varName, matchVar string, arms []MatchArm) Validati
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		require.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// match表达式验证需要根据实际AST结构实现
 		assert.NotNil(ctx.T, assignment.Right, "Right side should contain match expression")
 	}
@@ -424,7 +424,7 @@ func ValidateEnumDeclaration(enumName, backingType string, cases []string) Valid
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		// 枚举验证需要根据实际AST结构实现
 		assert.NotNil(ctx.T, body[0], "Should have enum declaration")
 	}
@@ -435,7 +435,7 @@ func ValidateBackedEnum(enumName, backingType string, cases []EnumCase) Validati
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		// 枚举验证需要根据实际AST结构实现
 		assert.NotNil(ctx.T, body[0], "Should have backed enum declaration")
 	}
@@ -461,12 +461,12 @@ func ValidateClassInExpressionStatement(className string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
-		
+
 		classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
 		require.True(ctx.T, ok, "Expression should be ClassExpression, got %T", exprStmt.Expression)
-		
+
 		// 验证类名
 		if nameIdent, ok := classDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, className, nameIdent.Name)
@@ -479,16 +479,16 @@ func ValidateFinalClassInExpressionStatement(className string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
-		
+
 		classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
 		require.True(ctx.T, ok, "Expression should be ClassExpression")
-		
+
 		if nameIdent, ok := classDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, className, nameIdent.Name)
 		}
-		
+
 		// 检查final修饰符
 		assert.True(ctx.T, classDecl.Final, "Class should be marked as final")
 	}
@@ -499,16 +499,16 @@ func ValidateAbstractClassInExpressionStatement(className string) ValidationFunc
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
-		
+
 		classDecl, ok := exprStmt.Expression.(*ast.ClassExpression)
 		require.True(ctx.T, ok, "Expression should be ClassExpression")
-		
+
 		if nameIdent, ok := classDecl.Name.(*ast.IdentifierNode); ok {
 			assert.Equal(ctx.T, className, nameIdent.Name)
 		}
-		
+
 		// 检查abstract修饰符
 		assert.True(ctx.T, classDecl.Abstract, "Class should be marked as abstract")
 	}

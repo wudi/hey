@@ -420,7 +420,7 @@ type InterfaceDeclaration struct {
 // InterfaceMethod 表示接口方法声明
 type InterfaceMethod struct {
 	Name        *IdentifierNode `json:"name"`                  // 方法名称
-	Parameters  *ParameterList  `json:"parameters,omitempty"` // 参数列表
+	Parameters  *ParameterList  `json:"parameters,omitempty"`  // 参数列表
 	ReturnType  *TypeHint       `json:"returnType,omitempty"`  // 返回类型
 	Visibility  string          `json:"visibility"`            // 可见性 (通常是 public)
 	ByReference bool            `json:"byReference,omitempty"` // function &foo() - 引用返回
@@ -485,15 +485,15 @@ func (i *InterfaceDeclaration) String() string {
 		if method.Parameters != nil {
 			paramStrs = make([]string, len(method.Parameters.Parameters))
 			for idx, param := range method.Parameters.Parameters {
-			paramStr := ""
-			if param.Type != nil {
-				paramStr += param.Type.String() + " "
-			}
-			if param.ByReference {
-				paramStr += "&"
-			}
-			paramStr += "$" + param.Name.String()
-			paramStrs[idx] = paramStr
+				paramStr := ""
+				if param.Type != nil {
+					paramStr += param.Type.String() + " "
+				}
+				if param.ByReference {
+					paramStr += "&"
+				}
+				paramStr += "$" + param.Name.String()
+				paramStrs[idx] = paramStr
 			}
 		}
 		result += strings.Join(paramStrs, ", ")
@@ -1964,8 +1964,8 @@ func NewFunctionDeclaration(pos lexer.Position, name Identifier) *FunctionDeclar
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Name:       name,
-		Body:       make([]Statement, 0),
+		Name: name,
+		Body: make([]Statement, 0),
 	}
 }
 
@@ -2070,7 +2070,7 @@ type ParameterNode struct {
 	DefaultValue Expression        `json:"defaultValue,omitempty"`
 	Type         *TypeHint         `json:"type,omitempty"`
 	ByReference  bool              `json:"byReference,omitempty"` // &$param
-	Variadic     bool              `json:"variadic,omitempty"`    // ...$params  
+	Variadic     bool              `json:"variadic,omitempty"`    // ...$params
 	Visibility   string            `json:"visibility,omitempty"`  // public, private, protected
 	ReadOnly     bool              `json:"readOnly,omitempty"`    // readonly
 	Attributes   []*AttributeGroup `json:"attributes,omitempty"`  // #[...] attributes
@@ -2124,7 +2124,7 @@ func (p *ParameterNode) statementNode() {}
 
 func (p *ParameterNode) String() string {
 	var result strings.Builder
-	
+
 	// Attributes
 	for _, attr := range p.Attributes {
 		if attr != nil {
@@ -2132,46 +2132,45 @@ func (p *ParameterNode) String() string {
 			result.WriteString(" ")
 		}
 	}
-	
+
 	// Visibility (for promoted properties)
 	if p.Visibility != "" {
 		result.WriteString(p.Visibility)
 		result.WriteString(" ")
 	}
-	
+
 	// Readonly modifier
 	if p.ReadOnly {
 		result.WriteString("readonly ")
 	}
-	
+
 	// Type hint
 	if p.Type != nil {
 		result.WriteString(p.Type.String())
 		result.WriteString(" ")
 	}
-	
+
 	// Reference
 	if p.ByReference {
 		result.WriteString("&")
 	}
-	
+
 	// Variadic
 	if p.Variadic {
 		result.WriteString("...")
 	}
-	
+
 	// Parameter name
 	result.WriteString(p.Name.String())
-	
+
 	// Default value
 	if p.DefaultValue != nil {
 		result.WriteString(" = ")
 		result.WriteString(p.DefaultValue.String())
 	}
-	
+
 	return result.String()
 }
-
 
 // ParameterList represents a list of function/method parameters
 type ParameterList struct {
@@ -2437,7 +2436,6 @@ func (af *ArrowFunctionExpression) String() string {
 	out.WriteString(" => " + af.Body.String())
 	return out.String()
 }
-
 
 // IdentifierNode 标识符节点
 type IdentifierNode struct {
@@ -3706,7 +3704,7 @@ func (l *LabelStatement) String() string {
 // NewExpression new 表达式
 type NewExpression struct {
 	BaseNode
-	Class     Expression   `json:"class"`
+	Class     Expression    `json:"class"`
 	Arguments *ArgumentList `json:"arguments,omitempty"`
 }
 
@@ -3717,7 +3715,7 @@ func NewNewExpression(pos lexer.Position, class Expression) *NewExpression {
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Class:     class,
+		Class: class,
 	}
 }
 
@@ -4179,7 +4177,7 @@ func (al *AttributeList) String() string {
 // CallExpression 函数调用表达式
 type CallExpression struct {
 	BaseNode
-	Callee    Expression   `json:"callee"`
+	Callee    Expression    `json:"callee"`
 	Arguments *ArgumentList `json:"arguments,omitempty"`
 }
 
@@ -4190,7 +4188,7 @@ func NewCallExpression(pos lexer.Position, callee Expression) *CallExpression {
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Callee:    callee,
+		Callee: callee,
 	}
 }
 
@@ -4226,8 +4224,8 @@ func (ce *CallExpression) String() string {
 // 使用 ASTMethodCall (768) 节点类型，符合PHP官方zend_ast.h定义
 type MethodCallExpression struct {
 	BaseNode
-	Object    Expression   `json:"object"`    // 对象表达式
-	Method    Expression   `json:"method"`    // 方法名表达式  
+	Object    Expression    `json:"object"`              // 对象表达式
+	Method    Expression    `json:"method"`              // 方法名表达式
 	Arguments *ArgumentList `json:"arguments,omitempty"` // 参数列表
 }
 
@@ -4238,8 +4236,8 @@ func NewMethodCallExpression(pos lexer.Position, object Expression, method Expre
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Object:    object,
-		Method:    method,
+		Object: object,
+		Method: method,
 	}
 }
 
@@ -4281,8 +4279,8 @@ func (mce *MethodCallExpression) String() string {
 // 使用 ASTNullsafeMethodCall (769) 节点类型，符合PHP官方zend_ast.h定义
 type NullsafeMethodCallExpression struct {
 	BaseNode
-	Object    Expression   `json:"object"`    // 对象表达式
-	Method    Expression   `json:"method"`    // 方法名表达式
+	Object    Expression    `json:"object"`              // 对象表达式
+	Method    Expression    `json:"method"`              // 方法名表达式
 	Arguments *ArgumentList `json:"arguments,omitempty"` // 参数列表
 }
 
@@ -4293,8 +4291,8 @@ func NewNullsafeMethodCallExpression(pos lexer.Position, object Expression, meth
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Object:    object,
-		Method:    method,
+		Object: object,
+		Method: method,
 	}
 }
 

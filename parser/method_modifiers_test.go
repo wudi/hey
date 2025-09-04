@@ -28,7 +28,7 @@ class Foo {
 			validate: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Equal(t, "Foo", getClassName(t, classExpr))
 				assert.Equal(t, 1, len(classExpr.Body))
-				
+
 				method := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.Equal(t, "isSigchildEnabled", getMethodName(t, method))
 				assert.Equal(t, "public", method.Visibility)
@@ -53,7 +53,7 @@ class TestClass {
 			validate: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Equal(t, "TestClass", getClassName(t, classExpr))
 				assert.Equal(t, 6, len(classExpr.Body))
-				
+
 				// Check that all methods have the correct final and static properties regardless of modifier order
 				for i, stmt := range classExpr.Body {
 					method, ok := stmt.(*ast.FunctionDeclaration)
@@ -66,13 +66,13 @@ class TestClass {
 					assert.True(t, method.IsStatic, "Method %d should be static", i)
 					assert.False(t, method.IsAbstract, "Method %d should not be abstract", i)
 				}
-				
+
 				// Check specific method names
 				expectedNames := []string{
 					"publicFinalStatic", "publicStaticFinal", "finalPublicStatic",
 					"finalStaticPublic", "staticPublicFinal", "staticFinalPublic",
 				}
-				
+
 				for i, expectedName := range expectedNames {
 					method := classExpr.Body[i].(*ast.FunctionDeclaration)
 					assert.Equal(t, expectedName, getMethodName(t, method))
@@ -92,21 +92,21 @@ class TestClass {
 			validate: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Equal(t, "TestClass", getClassName(t, classExpr))
 				assert.Equal(t, 3, len(classExpr.Body))
-				
+
 				// Protected method
 				method1 := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.Equal(t, "protectedFinalStatic", getMethodName(t, method1))
 				assert.Equal(t, "protected", method1.Visibility)
 				assert.True(t, method1.IsFinal)
 				assert.True(t, method1.IsStatic)
-				
+
 				// Default visibility methods (should be public implicitly)
 				method2 := classExpr.Body[1].(*ast.FunctionDeclaration)
 				assert.Equal(t, "defaultFinalStatic", getMethodName(t, method2))
 				assert.Equal(t, "", method2.Visibility) // Explicit visibility not set
 				assert.True(t, method2.IsFinal)
 				assert.True(t, method2.IsStatic)
-				
+
 				method3 := classExpr.Body[2].(*ast.FunctionDeclaration)
 				assert.Equal(t, "defaultStaticFinal", getMethodName(t, method3))
 				assert.Equal(t, "", method3.Visibility) // Explicit visibility not set
@@ -127,7 +127,7 @@ abstract class AbstractTestClass {
 				assert.Equal(t, "AbstractTestClass", getClassName(t, classExpr))
 				assert.True(t, classExpr.Abstract)
 				assert.Equal(t, 2, len(classExpr.Body))
-				
+
 				// Both methods should be abstract and static
 				for i, stmt := range classExpr.Body {
 					method, ok := stmt.(*ast.FunctionDeclaration)
@@ -137,12 +137,12 @@ abstract class AbstractTestClass {
 					assert.False(t, method.IsFinal, "Method %d should not be final", i)
 					assert.Nil(t, method.Body, "Abstract method %d should have no body", i)
 				}
-				
+
 				// Check visibility and names
 				method1 := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.Equal(t, "abstractPublicStatic", getMethodName(t, method1))
 				assert.Equal(t, "public", method1.Visibility)
-				
+
 				method2 := classExpr.Body[1].(*ast.FunctionDeclaration)
 				assert.Equal(t, "abstractStaticPublic", getMethodName(t, method2))
 				assert.Equal(t, "public", method2.Visibility)
@@ -163,35 +163,35 @@ class TestClass {
 			validate: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Equal(t, "TestClass", getClassName(t, classExpr))
 				assert.Equal(t, 5, len(classExpr.Body))
-				
+
 				// Public method
 				method1 := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.Equal(t, "publicMethod", getMethodName(t, method1))
 				assert.Equal(t, "public", method1.Visibility)
 				assert.False(t, method1.IsStatic)
 				assert.False(t, method1.IsFinal)
-				
+
 				// Private method
 				method2 := classExpr.Body[1].(*ast.FunctionDeclaration)
 				assert.Equal(t, "privateMethod", getMethodName(t, method2))
 				assert.Equal(t, "private", method2.Visibility)
 				assert.False(t, method2.IsStatic)
 				assert.False(t, method2.IsFinal)
-				
+
 				// Protected method
 				method3 := classExpr.Body[2].(*ast.FunctionDeclaration)
 				assert.Equal(t, "protectedMethod", getMethodName(t, method3))
 				assert.Equal(t, "protected", method3.Visibility)
 				assert.False(t, method3.IsStatic)
 				assert.False(t, method3.IsFinal)
-				
+
 				// Static method (no explicit visibility)
 				method4 := classExpr.Body[3].(*ast.FunctionDeclaration)
 				assert.Equal(t, "staticMethod", getMethodName(t, method4))
 				assert.Equal(t, "", method4.Visibility) // Default
 				assert.True(t, method4.IsStatic)
 				assert.False(t, method4.IsFinal)
-				
+
 				// Final method (no explicit visibility)
 				method5 := classExpr.Body[4].(*ast.FunctionDeclaration)
 				assert.Equal(t, "finalMethod", getMethodName(t, method5))

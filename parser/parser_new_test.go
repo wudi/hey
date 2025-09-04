@@ -2,14 +2,14 @@ package parser
 
 import (
 	"testing"
-	
+
 	"github.com/wudi/php-parser/parser/testutils"
 )
 
 // TestBasic_VariableDeclaration 基础变量声明测试
 func TestBasic_VariableDeclaration(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("VariableDeclaration", createParserFactory())
-	
+
 	suite.
 		AddStringAssignment("simple_string", "$name", "John", `"John"`).
 		AddStringAssignment("empty_string", "$empty", "", `""`).
@@ -25,9 +25,9 @@ func TestBasic_VariableDeclaration(t *testing.T) {
 // TestBasic_EchoStatement 基础echo语句测试
 func TestBasic_EchoStatement(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("EchoStatement", createParserFactory())
-	
+
 	suite.
-		AddEcho("single_string", []string{`"Hello World"`}, 
+		AddEcho("single_string", []string{`"Hello World"`},
 			testutils.ValidateStringArg("Hello World", `"Hello World"`)).
 		AddEcho("multiple_strings", []string{`"Hello"`, `" "`, `"World"`},
 			testutils.ValidateStringArg("Hello", `"Hello"`),
@@ -41,13 +41,13 @@ func TestBasic_EchoStatement(t *testing.T) {
 // TestBasic_EchoWithoutSemicolon echo语句无分号测试
 func TestBasic_EchoWithoutSemicolon(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("EchoWithoutSemicolon", createParserFactory())
-	
+
 	suite.
 		AddSimple("simple_string_echo", `<?php echo 'hello' ?>`,
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				echoStmt := assertions.AssertEchoStatement(body[0], 1)
 				assertions.AssertStringLiteral(echoStmt.Arguments.Arguments[0], "hello", "'hello'")
 			}).
@@ -55,7 +55,7 @@ func TestBasic_EchoWithoutSemicolon(t *testing.T) {
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				echoStmt := assertions.AssertEchoStatement(body[0], 1)
 				assertions.AssertVariable(echoStmt.Arguments.Arguments[0], "$var")
 			}).
@@ -63,7 +63,7 @@ func TestBasic_EchoWithoutSemicolon(t *testing.T) {
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				echoStmt := assertions.AssertEchoStatement(body[0], 1)
 				assertions.AssertTernaryExpression(echoStmt.Arguments.Arguments[0])
 			}).
@@ -71,7 +71,7 @@ func TestBasic_EchoWithoutSemicolon(t *testing.T) {
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				echoStmt := assertions.AssertEchoStatement(body[0], 3)
 				assertions.AssertStringLiteral(echoStmt.Arguments.Arguments[0], "Hello", "'Hello'")
 				assertions.AssertStringLiteral(echoStmt.Arguments.Arguments[1], " ", "' '")
@@ -81,7 +81,7 @@ func TestBasic_EchoWithoutSemicolon(t *testing.T) {
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				echoStmt := assertions.AssertEchoStatement(body[0], 1)
 				assertions.AssertBinaryExpression(echoStmt.Arguments.Arguments[0], "+")
 			}).
@@ -91,13 +91,13 @@ func TestBasic_EchoWithoutSemicolon(t *testing.T) {
 // TestBasic_FloatLiteralEdgeCases 浮点数字面量边界情况测试
 func TestBasic_FloatLiteralEdgeCases(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("FloatLiteralEdgeCases", createParserFactory())
-	
+
 	suite.
 		AddSimple("float_ending_with_decimal", `<?php $x = 1.; ?>`,
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				exprStmt := assertions.AssertExpressionStatement(body[0])
 				assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
 				assertions.AssertVariable(assignment.Left, "$x")
@@ -107,7 +107,7 @@ func TestBasic_FloatLiteralEdgeCases(t *testing.T) {
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				exprStmt := assertions.AssertExpressionStatement(body[0])
 				assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
 				assertions.AssertVariable(assignment.Left, "$x")
@@ -117,11 +117,11 @@ func TestBasic_FloatLiteralEdgeCases(t *testing.T) {
 			func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(ctx.T)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				exprStmt := assertions.AssertExpressionStatement(body[0])
 				assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
 				assertions.AssertVariable(assignment.Left, "$arr")
-				
+
 				arrayExpr := assertions.AssertArray(assignment.Right, 3)
 				assertions.AssertNumberLiteral(arrayExpr.Elements[0], "1.")
 				assertions.AssertNumberLiteral(arrayExpr.Elements[1], "1.0")
@@ -133,11 +133,11 @@ func TestBasic_FloatLiteralEdgeCases(t *testing.T) {
 // TestBasic_BinaryExpressions 基础二元表达式测试
 func TestBasic_BinaryExpressions(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("BinaryExpressions", createParserFactory())
-	
+
 	// 算术运算符
 	suite.
 		AddSimple("addition", "<?php $result = 1 + 2; ?>",
-			testutils.ValidateBinaryOperation("+", 
+			testutils.ValidateBinaryOperation("+",
 				testutils.ValidateNumberArg("1"),
 				testutils.ValidateNumberArg("2"))).
 		AddSimple("subtraction", "<?php $result = 10 - 3; ?>",
@@ -163,10 +163,10 @@ func TestBasic_BinaryExpressions(t *testing.T) {
 		Run(t)
 }
 
-// TestBasic_ComparisonExpressions 基础比较表达式测试  
+// TestBasic_ComparisonExpressions 基础比较表达式测试
 func TestBasic_ComparisonExpressions(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ComparisonExpressions", createParserFactory())
-	
+
 	suite.
 		AddSimple("equals", "<?php $result = $a == $b; ?>",
 			testutils.ValidateBinaryOperation("==", nil, nil)).
@@ -194,7 +194,7 @@ func TestBasic_ComparisonExpressions(t *testing.T) {
 // TestBasic_LogicalExpressions 基础逻辑表达式测试
 func TestBasic_LogicalExpressions(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("LogicalExpressions", createParserFactory())
-	
+
 	suite.
 		AddSimple("logical_and", "<?php $result = $a && $b; ?>",
 			testutils.ValidateBinaryOperation("&&", nil, nil)).
@@ -212,7 +212,7 @@ func TestBasic_LogicalExpressions(t *testing.T) {
 // TestBasic_StringConcatenation 基础字符串连接测试
 func TestBasic_StringConcatenation(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("StringConcatenation", createParserFactory())
-	
+
 	suite.
 		AddSimple("simple_concat", "<?php $result = \"Hello\" . \" World\"; ?>",
 			testutils.ValidateBinaryOperation(".",
@@ -228,7 +228,7 @@ func TestBasic_StringConcatenation(t *testing.T) {
 // TestBasic_AssignmentOperators 基础赋值操作符测试
 func TestBasic_AssignmentOperators(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("AssignmentOperators", createParserFactory())
-	
+
 	suite.
 		AddSimple("basic_assignment", "<?php $a = 5; ?>",
 			testutils.ValidateBasicAssignment("$a")).
@@ -254,7 +254,7 @@ func TestBasic_AssignmentOperators(t *testing.T) {
 // TestBasic_BitwiseOperators 基础位运算符测试
 func TestBasic_BitwiseOperators(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("BitwiseOperators", createParserFactory())
-	
+
 	suite.
 		AddSimple("bitwise_and", "<?php $result = $a & $b; ?>",
 			testutils.ValidateBinaryOperation("&", nil, nil)).

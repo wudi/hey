@@ -240,7 +240,7 @@ func TestLexer_Numbers(t *testing.T) {
 func TestLexer_FloatInArray(t *testing.T) {
 	input := `<?php [1., 1.0, 1.23] ?>`
 	lexer := New(input)
-	
+
 	// Expected tokens
 	expectedTokens := []struct {
 		tokenType TokenType
@@ -248,7 +248,7 @@ func TestLexer_FloatInArray(t *testing.T) {
 	}{
 		{T_OPEN_TAG, "<?php "},
 		{TOKEN_LBRACKET, "["},
-		{T_DNUMBER, "1."},   // This was the bug - should be T_DNUMBER not T_LNUMBER + T_DOT
+		{T_DNUMBER, "1."}, // This was the bug - should be T_DNUMBER not T_LNUMBER + T_DOT
 		{TOKEN_COMMA, ","},
 		{T_DNUMBER, "1.0"},
 		{TOKEN_COMMA, ","},
@@ -256,10 +256,10 @@ func TestLexer_FloatInArray(t *testing.T) {
 		{TOKEN_RBRACKET, "]"},
 		{T_CLOSE_TAG, "?>"},
 	}
-	
+
 	for i, expected := range expectedTokens {
 		token := lexer.NextToken()
-		assert.Equal(t, expected.tokenType, token.Type, 
+		assert.Equal(t, expected.tokenType, token.Type,
 			"Token %d: expected type %s, got %s", i, TokenNames[expected.tokenType], TokenNames[token.Type])
 		assert.Equal(t, expected.value, token.Value,
 			"Token %d: expected value %q, got %q", i, expected.value, token.Value)
@@ -1038,8 +1038,8 @@ func TestLexer_PropertyHooks(t *testing.T) {
 func TestLexer_NotEqualOperator(t *testing.T) {
 	// Test that both != and <> are tokenized as T_IS_NOT_EQUAL
 	tests := []struct {
-		name  string
-		input string
+		name           string
+		input          string
 		expectedTokens []struct {
 			expectedType  TokenType
 			expectedValue string
@@ -1129,7 +1129,7 @@ func TestLexer_NotEqualOperator(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			lexer := New(tt.input)
-			
+
 			for i, expectedToken := range tt.expectedTokens {
 				tok := lexer.NextToken()
 				assert.Equal(t, expectedToken.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[expectedToken.expectedType], TokenNames[tok.Type])
@@ -1141,9 +1141,9 @@ func TestLexer_NotEqualOperator(t *testing.T) {
 
 func TestLexer_BacktickWithCurlyBraces(t *testing.T) {
 	tests := []struct {
-		name            string
-		input           string
-		expectedTokens  []struct {
+		name           string
+		input          string
+		expectedTokens []struct {
 			expectedType  TokenType
 			expectedValue string
 		}
@@ -1204,7 +1204,7 @@ func TestLexer_BlockCommentEdgeCases(t *testing.T) {
 		}
 	}{
 		{
-			name:  "comment starting with /*//",
+			name: "comment starting with /*//",
 			input: `<?php /*//test
 test
 */`,
@@ -1410,7 +1410,7 @@ func TestLexer_DocCommentDetection(t *testing.T) {
 			},
 		},
 		{
-			name:  "/** multiline doc comment */ should be T_DOC_COMMENT",
+			name: "/** multiline doc comment */ should be T_DOC_COMMENT",
 			input: `<?php /**
  * This is a multiline
  * doc comment
@@ -1457,8 +1457,8 @@ func TestLexer_DocCommentDetection(t *testing.T) {
 
 func TestLexer_TypeCasts(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
+		name     string
+		input    string
 		expected []struct {
 			expectedType  TokenType
 			expectedValue string
@@ -1745,8 +1745,8 @@ func TestLexer_TypeCasts(t *testing.T) {
 
 func TestLexer_MagicConstantsCaseInsensitive(t *testing.T) {
 	tests := []struct {
-		name  string
-		input string
+		name     string
+		input    string
 		expected []struct {
 			expectedType  TokenType
 			expectedValue string

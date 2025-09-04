@@ -20,11 +20,11 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			input: `<?= "hello" ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments.Arguments, 1)
-				
+
 				stringLit, ok := stmt.Arguments.Arguments[0].(*ast.StringLiteral)
 				require.True(t, ok, "Argument should be StringLiteral")
 				assert.Equal(t, "hello", stringLit.Value)
@@ -35,11 +35,11 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			input: `<?= $name ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments.Arguments, 1)
-				
+
 				variable, ok := stmt.Arguments.Arguments[0].(*ast.Variable)
 				require.True(t, ok, "Argument should be Variable")
 				assert.Equal(t, "$name", variable.Name)
@@ -50,18 +50,18 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			input: `<?= $this->charset ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments.Arguments, 1)
-				
+
 				objAccess, ok := stmt.Arguments.Arguments[0].(*ast.PropertyAccessExpression)
 				require.True(t, ok, "Argument should be PropertyAccessExpression")
-				
+
 				variable, ok := objAccess.Object.(*ast.Variable)
 				require.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$this", variable.Name)
-				
+
 				property, ok := objAccess.Property.(*ast.IdentifierNode)
 				require.True(t, ok, "Property should be IdentifierNode")
 				assert.Equal(t, "charset", property.Name)
@@ -72,11 +72,11 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			input: `<?= "hello"; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments.Arguments, 1)
-				
+
 				stringLit, ok := stmt.Arguments.Arguments[0].(*ast.StringLiteral)
 				require.True(t, ok, "Argument should be StringLiteral")
 				assert.Equal(t, "hello", stringLit.Value)
@@ -87,11 +87,11 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			input: `<?= $user->getName() . " says hello"; ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments.Arguments, 1)
-				
+
 				// Should be a binary expression for string concatenation
 				binExpr, ok := stmt.Arguments.Arguments[0].(*ast.BinaryExpression)
 				require.True(t, ok, "Argument should be BinaryExpression")
@@ -103,16 +103,16 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			input: `<meta charset="<?= $this->charset; ?>" />`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 3)
-				
+
 				// Second statement should be the Short echo
 				echoStmt, ok := program.Body[1].(*ast.EchoStatement)
 				require.True(t, ok, "Second statement should be EchoStatement")
 				require.Len(t, echoStmt.Arguments.Arguments, 1)
-				
+
 				// Verify it's parsing the property access correctly
 				objAccess, ok := echoStmt.Arguments.Arguments[0].(*ast.PropertyAccessExpression)
 				require.True(t, ok, "Echo argument should be PropertyAccessExpression")
-				
+
 				variable, ok := objAccess.Object.(*ast.Variable)
 				require.True(t, ok, "Object should be Variable")
 				assert.Equal(t, "$this", variable.Name)
@@ -123,11 +123,11 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			input: `<?= 42 ?>`,
 			validate: func(t *testing.T, program *ast.Program) {
 				require.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.EchoStatement)
 				require.True(t, ok, "Statement should be EchoStatement")
 				require.Len(t, stmt.Arguments.Arguments, 1)
-				
+
 				intLit, ok := stmt.Arguments.Arguments[0].(*ast.NumberLiteral)
 				require.True(t, ok, "Argument should be NumberLiteral")
 				assert.Equal(t, "42", intLit.Value)
@@ -140,7 +140,7 @@ func TestParsing_ShortEchoTags(t *testing.T) {
 			l := lexer.New(tt.input)
 			p := New(l)
 			program := p.ParseProgram()
-			
+
 			checkParserErrors(t, p)
 			require.NotNil(t, program)
 			tt.validate(t, program)

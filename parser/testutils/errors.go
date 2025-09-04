@@ -3,7 +3,7 @@ package testutils
 import (
 	"strings"
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,13 +20,13 @@ func NewErrorTestBuilder(parserFactory ParserFactory) *ErrorTestBuilder {
 // ExpectError 验证解析错误
 func (b *ErrorTestBuilder) ExpectError(t *testing.T, source string, expectedErrorSubstring string) {
 	t.Helper()
-	
+
 	builder := NewParserTestBuilder(b.parserFactory).WithStrictMode(false)
-	
+
 	builder.Test(t, source, func(ctx *TestContext) {
 		errors := ctx.Parser.Errors()
 		assert.NotEmpty(t, errors, "Expected parsing errors but got none")
-		
+
 		if len(errors) > 0 {
 			found := false
 			for _, err := range errors {
@@ -43,9 +43,9 @@ func (b *ErrorTestBuilder) ExpectError(t *testing.T, source string, expectedErro
 // ExpectNoError 验证无解析错误
 func (b *ErrorTestBuilder) ExpectNoError(t *testing.T, source string) {
 	t.Helper()
-	
+
 	builder := NewParserTestBuilder(b.parserFactory).WithStrictMode(true)
-	
+
 	builder.Test(t, source, func(ctx *TestContext) {
 		errors := ctx.Parser.Errors()
 		assert.Empty(t, errors, "Expected no parsing errors but got: %v", errors)
@@ -55,16 +55,16 @@ func (b *ErrorTestBuilder) ExpectNoError(t *testing.T, source string) {
 // ExpectRecovery 验证错误恢复（有错误但仍能解析部分内容）
 func (b *ErrorTestBuilder) ExpectRecovery(t *testing.T, source string, expectedStatementCount int) {
 	t.Helper()
-	
+
 	builder := NewParserTestBuilder(b.parserFactory).WithStrictMode(false)
-	
+
 	builder.Test(t, source, func(ctx *TestContext) {
 		errors := ctx.Parser.Errors()
 		assert.NotEmpty(t, errors, "Expected parsing errors but got none")
-		
+
 		// 验证仍然解析了一些内容
 		if ctx.Program != nil {
-			assert.Len(t, ctx.Program.Body, expectedStatementCount, 
+			assert.Len(t, ctx.Program.Body, expectedStatementCount,
 				"Expected %d statements despite errors", expectedStatementCount)
 		}
 	})
@@ -154,7 +154,7 @@ func ValidateErrorMessage(expectedKeywords ...string) ValidationFunc {
 	return func(ctx *TestContext) {
 		errors := ctx.Parser.Errors()
 		assert.NotEmpty(ctx.T, errors, "Expected parsing errors but got none")
-		
+
 		for _, keyword := range expectedKeywords {
 			found := false
 			for _, err := range errors {

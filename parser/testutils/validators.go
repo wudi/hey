@@ -2,7 +2,7 @@ package testutils
 
 import (
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/ast"
@@ -15,9 +15,9 @@ func ValidateEcho(expectedArgCount int, argValidators ...func(ast.Node, *testing
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		echoStmt := assertions.AssertEchoStatement(body[0], expectedArgCount)
-		
+
 		// 验证每个参数
 		for i, validator := range argValidators {
 			if i < len(echoStmt.Arguments.Arguments) {
@@ -48,11 +48,11 @@ func ValidateBinaryOperation(operator string, leftValidator, rightValidator func
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
 		binExpr := assertions.AssertBinaryExpression(assignment.Right, operator)
-		
+
 		if leftValidator != nil {
 			leftValidator(binExpr.Left, ctx.T)
 		}
@@ -67,20 +67,20 @@ func ValidateFunction(expectedName string, expectedParamCount int, validators ..
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		funcDecl, ok := body[0].(*ast.FunctionDeclaration)
 		assert.True(ctx.T, ok, "Statement should be FunctionDeclaration, got %T", body[0])
-		
+
 		nameIdent, ok := funcDecl.Name.(*ast.IdentifierNode)
 		assert.True(ctx.T, ok, "Function name should be IdentifierNode")
 		assert.Equal(ctx.T, expectedName, nameIdent.Name)
-		
+
 		if funcDecl.Parameters != nil {
 			assert.Len(ctx.T, funcDecl.Parameters.Parameters, expectedParamCount)
 		} else {
 			assert.Equal(ctx.T, 0, expectedParamCount, "Expected no parameters but Parameters is nil")
 		}
-		
+
 		// 运行自定义验证器
 		for _, validator := range validators {
 			validator(funcDecl, ctx.T)
@@ -93,10 +93,10 @@ func ValidateClass(expectedName string, validators ...func(*ast.ClassExpression,
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		classExpr := assertions.AssertClass(exprStmt.Expression, expectedName)
-		
+
 		// 运行自定义验证器
 		for _, validator := range validators {
 			validator(classExpr, ctx.T)
@@ -117,7 +117,7 @@ func ValidateClassMethod(expectedName, expectedVisibility string) func(*ast.Clas
 				}
 			}
 		}
-		
+
 		assert.NotNil(t, foundMethod, "Method %s not found in class", expectedName)
 		if foundMethod != nil {
 			assert.Equal(t, expectedVisibility, foundMethod.Visibility, "Method visibility mismatch")
@@ -143,7 +143,7 @@ func ValidateClassConstant(expectedName string, expectedVisibility string) func(
 				}
 			}
 		}
-		
+
 		assert.NotNil(t, foundConstant, "Constant %s not found in class", expectedName)
 		if foundConstant != nil {
 			assert.Equal(t, expectedVisibility, foundConstant.Visibility, "Constant visibility mismatch")
@@ -165,7 +165,7 @@ func ValidateProperty(expectedName string, expectedVisibility string) func(*ast.
 				}
 			}
 		}
-		
+
 		assert.NotNil(t, foundProperty, "Property %s not found in class", expectedName)
 		if foundProperty != nil {
 			assert.Equal(t, expectedVisibility, foundProperty.Visibility, "Property visibility mismatch")
@@ -178,9 +178,9 @@ func ValidateControlFlow(expectedType string, validators ...func(ast.Statement, 
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		stmt := body[0]
-		
+
 		switch expectedType {
 		case "if":
 			_, ok := stmt.(*ast.IfStatement)
@@ -201,7 +201,7 @@ func ValidateControlFlow(expectedType string, validators ...func(ast.Statement, 
 			_, ok := stmt.(*ast.TryStatement)
 			assert.True(ctx.T, ok, "Statement should be TryStatement")
 		}
-		
+
 		// 运行自定义验证器
 		for _, validator := range validators {
 			validator(stmt, ctx.T)
@@ -216,24 +216,24 @@ func ValidateIfStatement(testValidator ValidationFunc, consequentValidators ...V
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		// 支持两种类型if语句
 		if ifStmt, ok := body[0].(*ast.IfStatement); ok {
 			// 常规if语句
 			// 验证条件
 			if testValidator != nil {
 				testCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: ifStmt.Test}}},
 				}
 				testValidator(testCtx)
 			}
-			
+
 			// 验证consequent块
 			for i, validator := range consequentValidators {
 				if i < len(ifStmt.Consequent) {
 					stmtCtx := &TestContext{
-						T: ctx.T,
+						T:       ctx.T,
 						Program: &ast.Program{Body: []ast.Statement{ifStmt.Consequent[i]}},
 					}
 					validator(stmtCtx)
@@ -244,17 +244,17 @@ func ValidateIfStatement(testValidator ValidationFunc, consequentValidators ...V
 			// 验证条件
 			if testValidator != nil {
 				testCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: altIfStmt.Condition}}},
 				}
 				testValidator(testCtx)
 			}
-			
+
 			// 验证consequent块
 			for i, validator := range consequentValidators {
 				if i < len(altIfStmt.Then) {
 					stmtCtx := &TestContext{
-						T: ctx.T,
+						T:       ctx.T,
 						Program: &ast.Program{Body: []ast.Statement{altIfStmt.Then[i]}},
 					}
 					validator(stmtCtx)
@@ -271,32 +271,32 @@ func ValidateIfElseStatement(testValidator ValidationFunc, consequentValidator V
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		ifStmt, ok := body[0].(*ast.IfStatement)
 		assert.True(ctx.T, ok, "Statement should be IfStatement, got %T", body[0])
-		
+
 		// 验证条件
 		if testValidator != nil {
 			testCtx := &TestContext{
-				T: ctx.T,
+				T:       ctx.T,
 				Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: ifStmt.Test}}},
 			}
 			testValidator(testCtx)
 		}
-		
+
 		// 验证consequent
 		if consequentValidator != nil && len(ifStmt.Consequent) > 0 {
 			stmtCtx := &TestContext{
-				T: ctx.T,
+				T:       ctx.T,
 				Program: &ast.Program{Body: []ast.Statement{ifStmt.Consequent[0]}},
 			}
 			consequentValidator(stmtCtx)
 		}
-		
+
 		// 验证alternate
 		if alternateValidator != nil && len(ifStmt.Alternate) > 0 {
 			stmtCtx := &TestContext{
-				T: ctx.T,
+				T:       ctx.T,
 				Program: &ast.Program{Body: []ast.Statement{ifStmt.Alternate[0]}},
 			}
 			alternateValidator(stmtCtx)
@@ -309,24 +309,24 @@ func ValidateWhileStatement(testValidator ValidationFunc, bodyValidators ...Vali
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		// 支持两种类型while语句
 		if whileStmt, ok := body[0].(*ast.WhileStatement); ok {
 			// 常规while语句
 			// 验证条件
 			if testValidator != nil {
 				testCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: whileStmt.Test}}},
 				}
 				testValidator(testCtx)
 			}
-			
+
 			// 验证循环体
 			for i, validator := range bodyValidators {
 				if i < len(whileStmt.Body) {
 					stmtCtx := &TestContext{
-						T: ctx.T,
+						T:       ctx.T,
 						Program: &ast.Program{Body: []ast.Statement{whileStmt.Body[i]}},
 					}
 					validator(stmtCtx)
@@ -337,17 +337,17 @@ func ValidateWhileStatement(testValidator ValidationFunc, bodyValidators ...Vali
 			// 验证条件
 			if testValidator != nil {
 				testCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: altWhileStmt.Condition}}},
 				}
 				testValidator(testCtx)
 			}
-			
+
 			// 验证循环体
 			for i, validator := range bodyValidators {
 				if i < len(altWhileStmt.Body) {
 					stmtCtx := &TestContext{
-						T: ctx.T,
+						T:       ctx.T,
 						Program: &ast.Program{Body: []ast.Statement{altWhileStmt.Body[i]}},
 					}
 					validator(stmtCtx)
@@ -364,41 +364,41 @@ func ValidateForStatement(initValidator, testValidator, updateValidator, bodyVal
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		// 支持两种类型for语句
 		if forStmt, ok := body[0].(*ast.ForStatement); ok {
 			// 常规for语句
 			// 验证初始化
 			if initValidator != nil && forStmt.Init != nil {
 				initCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: forStmt.Init}}},
 				}
 				initValidator(initCtx)
 			}
-			
+
 			// 验证条件
 			if testValidator != nil && forStmt.Test != nil {
 				testCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: forStmt.Test}}},
 				}
 				testValidator(testCtx)
 			}
-			
+
 			// 验证更新
 			if updateValidator != nil && forStmt.Update != nil {
 				updateCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: forStmt.Update}}},
 				}
 				updateValidator(updateCtx)
 			}
-			
+
 			// 验证循环体
 			if bodyValidator != nil && len(forStmt.Body) > 0 {
 				bodyCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{forStmt.Body[0]}},
 				}
 				bodyValidator(bodyCtx)
@@ -408,34 +408,34 @@ func ValidateForStatement(initValidator, testValidator, updateValidator, bodyVal
 			// 验证初始化
 			if initValidator != nil && len(altForStmt.Init) > 0 && altForStmt.Init[0] != nil {
 				initCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: altForStmt.Init[0]}}},
 				}
 				initValidator(initCtx)
 			}
-			
+
 			// 验证条件
 			if testValidator != nil && len(altForStmt.Condition) > 0 && altForStmt.Condition[0] != nil {
 				testCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: altForStmt.Condition[0]}}},
 				}
 				testValidator(testCtx)
 			}
-			
+
 			// 验证更新
 			if updateValidator != nil && len(altForStmt.Update) > 0 && altForStmt.Update[0] != nil {
 				updateCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{&ast.ExpressionStatement{Expression: altForStmt.Update[0]}}},
 				}
 				updateValidator(updateCtx)
 			}
-			
+
 			// 验证循环体
 			if bodyValidator != nil && len(altForStmt.Body) > 0 {
 				bodyCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{altForStmt.Body[0]}},
 				}
 				bodyValidator(bodyCtx)
@@ -451,7 +451,7 @@ func ValidateForeachStatement(iterableVar, keyVar, valueVar string, bodyValidato
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		// 检查是否是常规foreach或替代foreach
 		if foreachStmt, ok := body[0].(*ast.ForeachStatement); ok {
 			// 常规foreach - Body是单个Statement
@@ -461,25 +461,25 @@ func ValidateForeachStatement(iterableVar, keyVar, valueVar string, bodyValidato
 				assert.True(ctx.T, ok, "Iterable should be Variable")
 				assert.Equal(ctx.T, iterableVar, iterableVariable.Name)
 			}
-			
+
 			// 验证值变量
 			if valueVar != "" {
 				valueVariable, ok := foreachStmt.Value.(*ast.Variable)
 				assert.True(ctx.T, ok, "Value should be Variable")
 				assert.Equal(ctx.T, valueVar, valueVariable.Name)
 			}
-			
+
 			// 验证键变量（如果存在）
 			if keyVar != "" && foreachStmt.Key != nil {
 				keyVariable, ok := foreachStmt.Key.(*ast.Variable)
 				assert.True(ctx.T, ok, "Key should be Variable")
 				assert.Equal(ctx.T, keyVar, keyVariable.Name)
 			}
-			
+
 			// 验证循环体（单个Statement）
 			if len(bodyValidators) > 0 && foreachStmt.Body != nil {
 				stmtCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{foreachStmt.Body}},
 				}
 				bodyValidators[0](stmtCtx)
@@ -492,26 +492,26 @@ func ValidateForeachStatement(iterableVar, keyVar, valueVar string, bodyValidato
 				assert.True(ctx.T, ok, "Iterable should be Variable")
 				assert.Equal(ctx.T, iterableVar, iterableVariable.Name)
 			}
-			
+
 			// 验证值变量
 			if valueVar != "" {
 				valueVariable, ok := altForeachStmt.Value.(*ast.Variable)
 				assert.True(ctx.T, ok, "Value should be Variable")
 				assert.Equal(ctx.T, valueVar, valueVariable.Name)
 			}
-			
+
 			// 验证键变量（如果存在）
 			if keyVar != "" && altForeachStmt.Key != nil {
 				keyVariable, ok := altForeachStmt.Key.(*ast.Variable)
 				assert.True(ctx.T, ok, "Key should be Variable")
 				assert.Equal(ctx.T, keyVar, keyVariable.Name)
 			}
-			
+
 			// 验证循环体（[]Statement）
 			for i, validator := range bodyValidators {
 				if i < len(altForeachStmt.Body) {
 					stmtCtx := &TestContext{
-						T: ctx.T,
+						T:       ctx.T,
 						Program: &ast.Program{Body: []ast.Statement{altForeachStmt.Body[i]}},
 					}
 					validator(stmtCtx)
@@ -541,41 +541,41 @@ func ValidateTryCatchStatement(tryValidator ValidationFunc, catchValidator Catch
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		tryStmt, ok := body[0].(*ast.TryStatement)
 		assert.True(ctx.T, ok, "Statement should be TryStatement, got %T", body[0])
-		
+
 		// 验证try块
 		if tryValidator != nil && len(tryStmt.Body) > 0 {
 			tryCtx := &TestContext{
-				T: ctx.T,
+				T:       ctx.T,
 				Program: &ast.Program{Body: []ast.Statement{tryStmt.Body[0]}},
 			}
 			tryValidator(tryCtx)
 		}
-		
+
 		// 验证catch块
 		if len(tryStmt.CatchClauses) > 0 && catchValidator.BodyValidator != nil {
 			catchClause := tryStmt.CatchClauses[0]
-			
+
 			// 验证异常类型 - 使用Types[0]而不是Type
 			if catchValidator.ExceptionType != "" && len(catchClause.Types) > 0 {
 				typeIdent, ok := catchClause.Types[0].(*ast.IdentifierNode)
 				assert.True(ctx.T, ok, "Exception type should be IdentifierNode")
 				assert.Equal(ctx.T, catchValidator.ExceptionType, typeIdent.Name)
 			}
-			
+
 			// 验证异常变量 - 使用Parameter而不是Variable
 			if catchValidator.VariableName != "" {
 				catchVar, ok := catchClause.Parameter.(*ast.Variable)
 				assert.True(ctx.T, ok, "Exception parameter should be Variable")
 				assert.Equal(ctx.T, catchValidator.VariableName, catchVar.Name)
 			}
-			
+
 			// 验证catch体
 			if len(catchClause.Body) > 0 {
 				catchCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{catchClause.Body[0]}},
 				}
 				catchValidator.BodyValidator(catchCtx)
@@ -590,19 +590,19 @@ func ValidateTryCatchFinallyStatement(tryValidator ValidationFunc, catchValidato
 		// 首先执行try-catch验证
 		tryCatchValidator := ValidateTryCatchStatement(tryValidator, catchValidator)
 		tryCatchValidator(ctx)
-		
+
 		// 然后验证finally块
 		if finallyValidator != nil {
 			assertions := NewASTAssertions(ctx.T)
 			body := assertions.AssertProgramBody(ctx.Program, 1)
-			
+
 			tryStmt, ok := body[0].(*ast.TryStatement)
 			assert.True(ctx.T, ok, "Statement should be TryStatement")
-			
+
 			// 使用FinallyBlock而不是Finally.Body
 			if len(tryStmt.FinallyBlock) > 0 {
 				finallyCtx := &TestContext{
-					T: ctx.T,
+					T:       ctx.T,
 					Program: &ast.Program{Body: []ast.Statement{tryStmt.FinallyBlock[0]}},
 				}
 				finallyValidator(finallyCtx)
@@ -616,44 +616,44 @@ func ValidateTryMultipleCatchStatement(tryValidator ValidationFunc, catchValidat
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		tryStmt, ok := body[0].(*ast.TryStatement)
 		assert.True(ctx.T, ok, "Statement should be TryStatement, got %T", body[0])
-		
+
 		// 验证try块
 		if tryValidator != nil && len(tryStmt.Body) > 0 {
 			tryCtx := &TestContext{
-				T: ctx.T,
+				T:       ctx.T,
 				Program: &ast.Program{Body: []ast.Statement{tryStmt.Body[0]}},
 			}
 			tryValidator(tryCtx)
 		}
-		
+
 		// 验证所有catch子句
 		assert.Len(ctx.T, tryStmt.CatchClauses, len(catchValidators), "Catch clause count mismatch")
-		
+
 		for i, catchValidator := range catchValidators {
 			if i < len(tryStmt.CatchClauses) {
 				catchClause := tryStmt.CatchClauses[i]
-				
+
 				// 验证异常类型 - 使用Types[0]而不是Type
 				if catchValidator.ExceptionType != "" && len(catchClause.Types) > 0 {
 					typeIdent, ok := catchClause.Types[0].(*ast.IdentifierNode)
 					assert.True(ctx.T, ok, "Exception type should be IdentifierNode")
 					assert.Equal(ctx.T, catchValidator.ExceptionType, typeIdent.Name)
 				}
-				
+
 				// 验证异常变量
 				if catchValidator.VariableName != "" {
 					catchVar, ok := catchClause.Parameter.(*ast.Variable)
 					assert.True(ctx.T, ok, "Exception variable should be Variable")
 					assert.Equal(ctx.T, catchValidator.VariableName, catchVar.Name)
 				}
-				
+
 				// 验证catch体
 				if catchValidator.BodyValidator != nil && len(catchClause.Body) > 0 {
 					catchCtx := &TestContext{
-						T: ctx.T,
+						T:       ctx.T,
 						Program: &ast.Program{Body: []ast.Statement{catchClause.Body[0]}},
 					}
 					catchValidator.BodyValidator(catchCtx)
@@ -668,36 +668,36 @@ func ValidateSwitchStatement(discriminantVar string, cases []SwitchCase) Validat
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		switchStmt, ok := body[0].(*ast.SwitchStatement)
 		assert.True(ctx.T, ok, "Statement should be SwitchStatement, got %T", body[0])
-		
+
 		// 验证discriminant
 		if discriminantVar != "" {
 			discriminantVariable, ok := switchStmt.Discriminant.(*ast.Variable)
 			assert.True(ctx.T, ok, "Discriminant should be Variable")
 			assert.Equal(ctx.T, discriminantVar, discriminantVariable.Name)
 		}
-		
+
 		// 验证case子句
 		assert.Len(ctx.T, switchStmt.Cases, len(cases), "Switch case count mismatch")
-		
+
 		for i, expectedCase := range cases {
 			if i < len(switchStmt.Cases) {
 				caseStmt := switchStmt.Cases[i]
-				
+
 				if expectedCase.IsDefault {
 					assert.Nil(ctx.T, caseStmt.Test, "Default case should have nil test")
 				} else {
 					// 验证case值
 					assert.NotNil(ctx.T, caseStmt.Test, "Case should have test value")
 				}
-				
+
 				// 验证case体
 				for j, validator := range expectedCase.Validators {
 					if j < len(caseStmt.Body) {
 						caseCtx := &TestContext{
-							T: ctx.T,
+							T:       ctx.T,
 							Program: &ast.Program{Body: []ast.Statement{caseStmt.Body[j]}},
 						}
 						validator(caseCtx)
@@ -715,17 +715,17 @@ func ValidateBinaryExpression(leftVar, operator, rightValue string) ValidationFu
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		binExpr := assertions.AssertBinaryExpression(exprStmt.Expression, operator)
-		
+
 		// 验证左侧变量
 		if leftVar != "" {
 			leftVariable, ok := binExpr.Left.(*ast.Variable)
 			assert.True(ctx.T, ok, "Left operand should be Variable")
 			assert.Equal(ctx.T, leftVar, leftVariable.Name)
 		}
-		
+
 		// 验证右侧值
 		if rightValue != "" {
 			// 尝试作为数字
@@ -738,19 +738,19 @@ func ValidateBinaryExpression(leftVar, operator, rightValue string) ValidationFu
 	}
 }
 
-// ValidatePostfixExpression 创建后缀表达式验证器 
+// ValidatePostfixExpression 创建后缀表达式验证器
 func ValidatePostfixExpression(varName, operator string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		unaryExpr, ok := exprStmt.Expression.(*ast.UnaryExpression)
 		assert.True(ctx.T, ok, "Expression should be PostfixExpression, got %T", exprStmt.Expression)
-		
+
 		assert.Equal(ctx.T, operator, unaryExpr.Operator)
 		assert.False(ctx.T, unaryExpr.Prefix, "Should be postfix unary expression")
-		
+
 		if varName != "" {
 			operandVar, ok := unaryExpr.Operand.(*ast.Variable)
 			assert.True(ctx.T, ok, "Operand should be Variable")
@@ -759,13 +759,12 @@ func ValidatePostfixExpression(varName, operator string) ValidationFunc {
 	}
 }
 
-
 // ValidateEchoVariable 创建echo变量验证器
 func ValidateEchoVariable(varName string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		echoStmt := assertions.AssertEchoStatement(body[0], 1)
 		variable, ok := echoStmt.Arguments.Arguments[0].(*ast.Variable)
 		assert.True(ctx.T, ok, "Echo argument should be Variable")
@@ -778,13 +777,13 @@ func ValidateEchoArgs(args []string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		echoStmt := assertions.AssertEchoStatement(body[0], len(args))
-		
+
 		for i, expectedArg := range args {
 			if i < len(echoStmt.Arguments.Arguments) {
 				arg := echoStmt.Arguments.Arguments[i]
-				
+
 				if stringLit, ok := arg.(*ast.StringLiteral); ok {
 					assert.Equal(ctx.T, expectedArg, stringLit.Raw)
 				} else if variable, ok := arg.(*ast.Variable); ok {
@@ -800,15 +799,15 @@ func ValidateFunctionCall(funcName string, args ...string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		callExpr, ok := exprStmt.Expression.(*ast.CallExpression)
 		assert.True(ctx.T, ok, "Expression should be CallExpression, got %T", exprStmt.Expression)
-		
+
 		funcIdent, ok := callExpr.Callee.(*ast.IdentifierNode)
 		assert.True(ctx.T, ok, "Callee should be IdentifierNode")
 		assert.Equal(ctx.T, funcName, funcIdent.Name)
-		
+
 		if callExpr.Arguments != nil {
 			assert.Len(ctx.T, callExpr.Arguments.Arguments, len(args))
 		} else {
@@ -822,17 +821,17 @@ func ValidateAssignmentExpression(varName, value string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		if varName != "" {
 			leftVar, ok := assignment.Left.(*ast.Variable)
 			assert.True(ctx.T, ok, "Left side should be Variable")
 			assert.Equal(ctx.T, varName, leftVar.Name)
 		}
-		
+
 		// 验证右侧值
 		if value != "" {
 			// 尝试作为数字
@@ -855,7 +854,7 @@ func ValidateBreakStatement() ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		_, ok := body[0].(*ast.BreakStatement)
 		assert.True(ctx.T, ok, "Statement should be BreakStatement, got %T", body[0])
 	}
@@ -892,7 +891,7 @@ func ValidateVariableExpression(varName string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		variable, ok := exprStmt.Expression.(*ast.Variable)
 		assert.True(ctx.T, ok, "Expression should be Variable, got %T", exprStmt.Expression)
@@ -916,9 +915,9 @@ type StringInterpolation struct {
 
 // InterpolationPart 表示插值部分
 type InterpolationPart struct {
-	Text       string // 字符串文本
-	Variable   string // 变量名
-	HasBraces  bool   // 是否有花括号
+	Text      string // 字符串文本
+	Variable  string // 变量名
+	HasBraces bool   // 是否有花括号
 }
 
 // ValidateArrayAssignment 验证数组赋值
@@ -926,28 +925,28 @@ func ValidateArrayAssignment(varName string, elements []ArrayElement) Validation
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧数组
 		arrayExpr, ok := assignment.Right.(*ast.ArrayExpression)
 		assert.True(ctx.T, ok, "Right side should be ArrayExpression, got %T", assignment.Right)
-		
+
 		assert.Len(ctx.T, arrayExpr.Elements, len(elements), "Array element count mismatch")
-		
+
 		for i, expectedElement := range elements {
 			if i >= len(arrayExpr.Elements) {
 				break
 			}
-			
+
 			element := arrayExpr.Elements[i]
-			
+
 			// 检查是否为键值对
 			if arrayElement, ok := element.(*ast.ArrayElementExpression); ok {
 				// 验证键
@@ -961,7 +960,7 @@ func ValidateArrayAssignment(varName string, elements []ArrayElement) Validation
 				} else {
 					assert.Nil(ctx.T, arrayElement.Key, "Array element should not have key")
 				}
-				
+
 				// 验证值
 				if expectedElement.IsNumeric {
 					numVal, ok := arrayElement.Value.(*ast.NumberLiteral)
@@ -975,7 +974,7 @@ func ValidateArrayAssignment(varName string, elements []ArrayElement) Validation
 			} else {
 				// 直接元素（非键值对）
 				assert.Equal(ctx.T, "", expectedElement.Key, "Expected direct element but got key")
-				
+
 				if expectedElement.IsNumeric {
 					numVal, ok := element.(*ast.NumberLiteral)
 					assert.True(ctx.T, ok, "Array element should be NumberLiteral")
@@ -995,15 +994,15 @@ func ValidateHeredocAssignment(varName, expectedValue string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧Heredoc
 		stringLit, ok := assignment.Right.(*ast.StringLiteral)
 		assert.True(ctx.T, ok, "Right side should be StringLiteral for Heredoc, got %T", assignment.Right)
@@ -1016,15 +1015,15 @@ func ValidateNowdocAssignment(varName, expectedValue string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧Nowdoc
 		stringLit, ok := assignment.Right.(*ast.StringLiteral)
 		assert.True(ctx.T, ok, "Right side should be StringLiteral for Nowdoc, got %T", assignment.Right)
@@ -1037,28 +1036,28 @@ func ValidateInterpolatedStringAssignment(varName string, interpolation StringIn
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧插值字符串
 		interpolatedStr, ok := assignment.Right.(*ast.InterpolatedStringExpression)
 		assert.True(ctx.T, ok, "Right side should be InterpolatedStringExpression, got %T", assignment.Right)
-		
+
 		assert.Len(ctx.T, interpolatedStr.Parts, len(interpolation.Parts), "Interpolation parts count mismatch")
-		
+
 		for i, expectedPart := range interpolation.Parts {
 			if i >= len(interpolatedStr.Parts) {
 				break
 			}
-			
+
 			part := interpolatedStr.Parts[i]
-			
+
 			if expectedPart.Text != "" {
 				// 文本部分
 				stringLit, ok := part.(*ast.StringLiteral)
@@ -1079,24 +1078,24 @@ func ValidateArrayAccess(varName, arrayVar, index string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧数组访问
 		accessExpr, ok := assignment.Right.(*ast.ArrayAccessExpression)
 		assert.True(ctx.T, ok, "Right side should be ArrayAccessExpression, got %T", assignment.Right)
-		
+
 		// 验证数组变量
 		arrVar, ok := accessExpr.Array.(*ast.Variable)
 		assert.True(ctx.T, ok, "Array should be Variable")
 		assert.Equal(ctx.T, arrayVar, arrVar.Name)
-		
+
 		// 验证索引
 		if index[0] == '"' || index[0] == '\'' {
 			// 字符串索引
@@ -1117,23 +1116,23 @@ func ValidateChainedArrayAccess(varName, arrayVar string, indices []string) Vali
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证链式数组访问
 		currentExpr := assignment.Right
-		
+
 		// 从外层向内层逐层解析
 		for i := len(indices) - 1; i >= 0; i-- {
 			accessExpr, ok := currentExpr.(*ast.ArrayAccessExpression)
 			assert.True(ctx.T, ok, "Should be ArrayAccessExpression at level %d", i)
-			
+
 			// 验证索引
 			index := indices[i]
 			if index[0] == '"' || index[0] == '\'' {
@@ -1147,7 +1146,7 @@ func ValidateChainedArrayAccess(varName, arrayVar string, indices []string) Vali
 				assert.True(ctx.T, ok, "Index should be NumberLiteral at level %d", i)
 				assert.Equal(ctx.T, index, indexNum.Value)
 			}
-			
+
 			if i == 0 {
 				// 最内层，应该是原始数组变量
 				arrVar, ok := accessExpr.Array.(*ast.Variable)
@@ -1160,6 +1159,7 @@ func ValidateChainedArrayAccess(varName, arrayVar string, indices []string) Vali
 		}
 	}
 }
+
 // 表达式验证函数
 
 // ValidatePrefixExpression 验证前缀表达式
@@ -1167,22 +1167,22 @@ func ValidatePrefixExpression(varName, operandVar, operator string) ValidationFu
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧前缀表达式
 		unaryExpr, ok := assignment.Right.(*ast.UnaryExpression)
 		assert.True(ctx.T, ok, "Right side should be UnaryExpression, got %T", assignment.Right)
-		
+
 		assert.Equal(ctx.T, operator, unaryExpr.Operator)
 		assert.True(ctx.T, unaryExpr.Prefix, "Should be prefix unary expression")
-		
+
 		if operandVar != "" {
 			operandVariable, ok := unaryExpr.Operand.(*ast.Variable)
 			assert.True(ctx.T, ok, "Operand should be Variable")
@@ -1196,22 +1196,22 @@ func ValidatePostfixAssignment(varName, operandVar, operator string) ValidationF
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧后缀表达式
 		unaryExpr, ok := assignment.Right.(*ast.UnaryExpression)
 		assert.True(ctx.T, ok, "Right side should be UnaryExpression, got %T", assignment.Right)
-		
+
 		assert.Equal(ctx.T, operator, unaryExpr.Operator)
 		assert.False(ctx.T, unaryExpr.Prefix, "Should be postfix unary expression")
-		
+
 		if operandVar != "" {
 			operandVariable, ok := unaryExpr.Operand.(*ast.Variable)
 			assert.True(ctx.T, ok, "Operand should be Variable")
@@ -1225,25 +1225,25 @@ func ValidateBinaryAssignment(varName, leftVar, operator, rightVar string) Valid
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVariable, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVariable.Name)
-		
+
 		// 验证右侧二元表达式
 		binExpr := assertions.AssertBinaryExpression(assignment.Right, operator)
-		
+
 		// 验证左操作数
 		if leftVar != "" {
 			leftOperand, ok := binExpr.Left.(*ast.Variable)
 			assert.True(ctx.T, ok, "Left operand should be Variable")
 			assert.Equal(ctx.T, leftVar, leftOperand.Name)
 		}
-		
+
 		// 验证右操作数
 		if rightVar != "" {
 			rightOperand, ok := binExpr.Right.(*ast.Variable)
@@ -1258,26 +1258,26 @@ func ValidateCoalesceExpression(varName, leftVar, rightVar string) ValidationFun
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVariable, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVariable.Name)
-		
+
 		// 验证右侧coalesce表达式
 		coalesceExpr, ok := assignment.Right.(*ast.CoalesceExpression)
 		assert.True(ctx.T, ok, "Right side should be CoalesceExpression, got %T", assignment.Right)
-		
+
 		// 验证左操作数
 		if leftVar != "" {
 			leftOperand, ok := coalesceExpr.Left.(*ast.Variable)
 			assert.True(ctx.T, ok, "Left operand should be Variable")
 			assert.Equal(ctx.T, leftVar, leftOperand.Name)
 		}
-		
+
 		// 验证右操作数
 		if rightVar != "" {
 			rightOperand, ok := coalesceExpr.Right.(*ast.Variable)
@@ -1292,10 +1292,10 @@ func ValidateReturnStatement(expectedValue string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		returnStmt, ok := body[0].(*ast.ReturnStatement)
 		require.True(ctx.T, ok, "Statement should be ReturnStatement, got %T", body[0])
-		
+
 		if expectedValue != "" && returnStmt.Argument != nil {
 			// 根据期望值的类型进行验证
 			if expectedValue[0] == '"' { // 字符串字面量
@@ -1325,12 +1325,12 @@ func ValidateReturnBinaryExpression(leftVar, operator, rightVar string) Validati
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		returnStmt, ok := body[0].(*ast.ReturnStatement)
 		require.True(ctx.T, ok, "Statement should be ReturnStatement")
-		
+
 		binExpr := assertions.AssertBinaryExpression(returnStmt.Argument, operator)
-		
+
 		// 验证左操作数
 		if leftVar != "" {
 			if leftVar[0] == '$' {
@@ -1339,7 +1339,7 @@ func ValidateReturnBinaryExpression(leftVar, operator, rightVar string) Validati
 				assert.Equal(ctx.T, leftVar, leftOperand.Name)
 			}
 		}
-		
+
 		// 验证右操作数
 		if rightVar != "" {
 			if rightVar[0] == '$' {
@@ -1360,10 +1360,10 @@ func ValidateReturnNull() ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		returnStmt, ok := body[0].(*ast.ReturnStatement)
 		require.True(ctx.T, ok, "Statement should be ReturnStatement")
-		
+
 		// 检查是否是null
 		if nullLit, ok := returnStmt.Argument.(*ast.NullLiteral); ok {
 			assert.NotNil(ctx.T, nullLit, "Should be null literal")
@@ -1378,15 +1378,15 @@ func ValidatePropertyDeclaration(visibility, varName, typeName, defaultValue str
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		propDecl, ok := body[0].(*ast.PropertyDeclaration)
 		require.True(ctx.T, ok, "Statement should be PropertyDeclaration, got %T", body[0])
-		
+
 		// 验证可见性
 		if visibility != "" {
 			assert.Equal(ctx.T, visibility, propDecl.Visibility)
 		}
-		
+
 		// 验证属性名
 		if varName != "" {
 			expectedName := varName
@@ -1403,26 +1403,26 @@ func ValidateInstanceofExpression(varName, objectVar, className string) Validati
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧instanceof表达式
 		instanceofExpr, ok := assignment.Right.(*ast.InstanceofExpression)
 		assert.True(ctx.T, ok, "Right side should be InstanceofExpression, got %T", assignment.Right)
-		
+
 		// 验证对象变量
 		if objectVar != "" {
 			objectVariable, ok := instanceofExpr.Left.(*ast.Variable)
 			assert.True(ctx.T, ok, "Left operand should be Variable")
 			assert.Equal(ctx.T, objectVar, objectVariable.Name)
 		}
-		
+
 		// 验证类名
 		if className != "" {
 			classIdent, ok := instanceofExpr.Right.(*ast.IdentifierNode)
@@ -1437,33 +1437,33 @@ func ValidateTernaryExpression(varName, conditionVar, trueVar, falseVar string) 
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧三元表达式
 		ternaryExpr, ok := assignment.Right.(*ast.TernaryExpression)
 		assert.True(ctx.T, ok, "Right side should be TernaryExpression, got %T", assignment.Right)
-		
+
 		// 验证条件
 		if conditionVar != "" {
 			conditionVariable, ok := ternaryExpr.Test.(*ast.Variable)
 			assert.True(ctx.T, ok, "Condition should be Variable")
 			assert.Equal(ctx.T, conditionVar, conditionVariable.Name)
 		}
-		
+
 		// 验证真值
 		if trueVar != "" {
 			trueVariable, ok := ternaryExpr.Consequent.(*ast.Variable)
 			assert.True(ctx.T, ok, "True value should be Variable")
 			assert.Equal(ctx.T, trueVar, trueVariable.Name)
 		}
-		
+
 		// 验证假值
 		if falseVar != "" {
 			falseVariable, ok := ternaryExpr.Alternate.(*ast.Variable)
@@ -1478,15 +1478,15 @@ func ValidateAssignmentOperation(varName, operator, valueVar string) ValidationF
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, operator)
-		
+
 		// 验证左侧变量
 		leftVar, ok := assignment.Left.(*ast.Variable)
 		assert.True(ctx.T, ok, "Left side should be Variable")
 		assert.Equal(ctx.T, varName, leftVar.Name)
-		
+
 		// 验证右侧值
 		if valueVar != "" {
 			rightVariable, ok := assignment.Right.(*ast.Variable)

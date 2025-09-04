@@ -198,7 +198,7 @@ func TestTransform(t *testing.T) {
 
 	// 创建一个变量节点
 	variable := NewVariable(pos, "$old_name")
-	
+
 	// 使用转换器重命名变量
 	transformed := TransformFunc(variable, func(node Node) Node {
 		if v, ok := node.(*Variable); ok && v.Name == "$old_name" {
@@ -248,10 +248,10 @@ func TestComplexAST(t *testing.T) {
 	variable := builder.CreateVar(pos, "$x")
 	zero := builder.CreateZval(pos, 0)
 	condition := builder.CreateBinaryOp(pos, variable, zero, ">")
-	
+
 	echoVar := builder.CreateVar(pos, "$x")
 	echoStmt := builder.CreateEcho(pos, []Node{echoVar})
-	
+
 	ifStmt := builder.CreateIf(pos, condition, []Node{echoStmt}, nil)
 
 	// 验证结构
@@ -284,18 +284,18 @@ func TestComplexAST(t *testing.T) {
 // BenchmarkNodeCreation 基准测试节点创建
 func BenchmarkNodeCreation(b *testing.B) {
 	pos := lexer.Position{Line: 1, Column: 1, Offset: 0}
-	
+
 	b.Run("Variable", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			NewVariable(pos, "$test")
 		}
 	})
-	
+
 	b.Run("BinaryExpression", func(b *testing.B) {
 		left := NewVariable(pos, "$a")
 		right := NewVariable(pos, "$b")
 		b.ResetTimer()
-		
+
 		for i := 0; i < b.N; i++ {
 			NewBinaryExpression(pos, left, "+", right)
 		}

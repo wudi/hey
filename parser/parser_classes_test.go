@@ -2,14 +2,14 @@ package parser
 
 import (
 	"testing"
-	
+
 	"github.com/wudi/php-parser/parser/testutils"
 )
 
 // TestClasses_BasicDeclaration 基础类声明测试
 func TestClasses_BasicDeclaration(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("BasicClassDeclaration", createParserFactory())
-	
+
 	suite.
 		AddClass("empty_class", "Test", "").
 		AddClass("simple_class", "User", "$name = 'default';").
@@ -21,7 +21,7 @@ func TestClasses_BasicDeclaration(t *testing.T) {
 // TestClasses_Inheritance 类继承测试
 func TestClasses_Inheritance(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ClassInheritance", createParserFactory())
-	
+
 	suite.
 		AddSimple("extends_class", "<?php class Child extends Parent { } ?>",
 			testutils.ValidateClass("Child")).
@@ -37,10 +37,10 @@ func TestClasses_Inheritance(t *testing.T) {
 // TestClasses_Properties 类属性测试
 func TestClasses_Properties(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ClassProperties", createParserFactory())
-	
+
 	suite.
 		AddSimple("public_property", "<?php class Test { public $name; } ?>",
-			testutils.ValidateClass("Test", 
+			testutils.ValidateClass("Test",
 				testutils.ValidateProperty("name", "public"))).
 		AddSimple("private_property", "<?php class Test { private $data; } ?>",
 			testutils.ValidateClass("Test",
@@ -63,7 +63,7 @@ func TestClasses_Properties(t *testing.T) {
 // TestClasses_Methods 类方法测试
 func TestClasses_Methods(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ClassMethods", createParserFactory())
-	
+
 	suite.
 		AddSimple("public_method", "<?php class Test { public function getName() { } } ?>",
 			testutils.ValidateClass("Test",
@@ -88,7 +88,7 @@ func TestClasses_Methods(t *testing.T) {
 // TestClasses_Constants 类常量测试
 func TestClasses_Constants(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ClassConstants", createParserFactory())
-	
+
 	suite.
 		AddSimple("public_constant", "<?php class Test { public const VERSION = '1.0'; } ?>",
 			testutils.ValidateClass("Test",
@@ -112,7 +112,7 @@ func TestClasses_Constants(t *testing.T) {
 // TestClasses_Constructor 构造函数测试
 func TestClasses_Constructor(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ClassConstructor", createParserFactory())
-	
+
 	suite.
 		AddSimple("basic_constructor", "<?php class Test { public function __construct() { } } ?>",
 			testutils.ValidateClass("Test",
@@ -132,7 +132,7 @@ func TestClasses_Constructor(t *testing.T) {
 // TestClasses_ModifierCombinations 修饰符组合测试
 func TestClasses_ModifierCombinations(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ClassModifierCombinations", createParserFactory())
-	
+
 	suite.
 		AddSimple("abstract_class", "<?php abstract class Test { } ?>",
 			testutils.ValidateClass("Test")).

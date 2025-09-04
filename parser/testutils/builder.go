@@ -2,7 +2,7 @@ package testutils
 
 import (
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/ast"
@@ -67,33 +67,33 @@ func (b *ParserTestBuilder) WithSetup(setup func(*TestContext)) *ParserTestBuild
 // Test 执行测试
 func (b *ParserTestBuilder) Test(t *testing.T, source string, validator func(*TestContext)) {
 	t.Helper()
-	
+
 	ctx := &TestContext{
 		T:      t,
 		Lexer:  lexer.New(source),
 		Config: b.config,
 	}
-	
+
 	ctx.Parser = b.parserFactory(ctx.Lexer)
-	
+
 	// 执行设置函数
 	for _, setup := range b.setup {
 		setup(ctx)
 	}
-	
+
 	// 解析程序
 	ctx.Program = ctx.Parser.ParseProgram()
-	
+
 	// 错误检查
 	if b.config.StrictMode {
 		CheckParserErrors(t, ctx.Parser)
 	}
-	
+
 	// AST验证
 	if b.config.ValidateAST {
 		require.NotNil(t, ctx.Program, "Program should not be nil")
 	}
-	
+
 	// 执行验证函数
 	if validator != nil {
 		validator(ctx)
@@ -107,7 +107,7 @@ func (b *ParserTestBuilder) TestTableDriven(t *testing.T, tests []struct {
 	Validator func(*TestContext)
 }) {
 	t.Helper()
-	
+
 	for _, tt := range tests {
 		t.Run(tt.Name, func(t *testing.T) {
 			b.Test(t, tt.Source, tt.Validator)

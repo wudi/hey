@@ -28,7 +28,7 @@ func ExampleASTBuilder() {
 
 	fmt.Printf("AST Kind: %s\n", program.GetKind().String())
 	fmt.Printf("Children: %d\n", len(program.GetChildren()))
-	
+
 	// Output:
 	// AST Kind: STMT_LIST
 	// Children: 2
@@ -71,7 +71,7 @@ func ExampleVisitor() {
 // ExampleTransform 演示如何使用AST转换
 func ExampleTransform() {
 	pos := lexer.Position{Line: 1, Column: 1, Offset: 0}
-	
+
 	// 创建原始变量
 	original := ast.NewVariable(pos, "$oldName")
 
@@ -100,9 +100,9 @@ func ExampleASTKind() {
 	fmt.Printf("ASTBinaryOp has %d children\n", ast.ASTBinaryOp.GetNumChildren())
 
 	// Kind字符串表示
-	fmt.Printf("Kind names: %s, %s, %s\n", 
-		ast.ASTVar.String(), 
-		ast.ASTBinaryOp.String(), 
+	fmt.Printf("Kind names: %s, %s, %s\n",
+		ast.ASTVar.String(),
+		ast.ASTBinaryOp.String(),
 		ast.ASTEcho.String())
 
 	// Output:
@@ -119,7 +119,7 @@ func Example_complexAST() {
 	builder := ast.NewASTBuilder()
 
 	// 构建: if ($x > 0) { echo "positive"; } else { echo "non-positive"; }
-	
+
 	// 条件: $x > 0
 	x := builder.CreateVar(pos, "$x")
 	zero := builder.CreateZval(pos, 0)
@@ -134,8 +134,8 @@ func Example_complexAST() {
 	echoNonPositive := builder.CreateEcho(pos, []ast.Node{nonPositive})
 
 	// if语句
-	ifStmt := builder.CreateIf(pos, condition, 
-		[]ast.Node{echoPositive}, 
+	ifStmt := builder.CreateIf(pos, condition,
+		[]ast.Node{echoPositive},
 		[]ast.Node{echoNonPositive})
 
 	// 统计节点数量
@@ -172,9 +172,9 @@ func Example_jsonSerialization() {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("JSON contains kind: %t\n", 
+	fmt.Printf("JSON contains kind: %t\n",
 		string(jsonData) != "" && variable.GetKind() == ast.ASTVar)
-	fmt.Printf("JSON contains name: %t\n", 
+	fmt.Printf("JSON contains name: %t\n",
 		string(jsonData) != "" && variable.Name == "$test")
 
 	// Output:

@@ -51,11 +51,11 @@ type ClassInfo struct {
 }
 
 type AnalysisIssue struct {
-	Type        string
-	Severity    string
-	Message     string
-	Location    string
-	Suggestion  string
+	Type       string
+	Severity   string
+	Message    string
+	Location   string
+	Suggestion string
 }
 
 func NewCodeAnalyzer() *CodeAnalyzer {
@@ -91,7 +91,7 @@ func (ca *CodeAnalyzer) Visit(node ast.Node) bool {
 	if ca.currentDepth > ca.Metrics.MaxNestingDepth {
 		ca.Metrics.MaxNestingDepth = ca.currentDepth
 	}
-	
+
 	defer func() {
 		ca.currentDepth--
 	}()
@@ -101,44 +101,44 @@ func (ca *CodeAnalyzer) Visit(node ast.Node) bool {
 
 func (ca *CodeAnalyzer) analyzeFunctionDeclaration(fn *ast.FunctionDeclaration) {
 	ca.Metrics.FunctionCount++
-	
+
 	funcInfo := &FunctionInfo{
 		Complexity: 1, // Base complexity
 	}
-	
+
 	if identifier, ok := fn.Name.(*ast.IdentifierNode); ok {
 		funcInfo.Name = identifier.Name
 	}
-	
+
 	if fn.Parameters != nil {
 		funcInfo.ParameterCount = len(fn.Parameters.Parameters)
 	}
-	
+
 	funcInfo.Visibility = fn.Visibility
-	
+
 	// 检查函数复杂度
 	if funcInfo.ParameterCount > 5 {
-		ca.addIssue("complexity", "warning", 
+		ca.addIssue("complexity", "warning",
 			fmt.Sprintf("Function '%s' has too many parameters (%d)", funcInfo.Name, funcInfo.ParameterCount),
 			funcInfo.Name, "Consider reducing parameter count or using parameter objects")
 	}
-	
+
 	ca.Functions = append(ca.Functions, funcInfo)
 }
 
 func (ca *CodeAnalyzer) analyzeClassDeclaration(class *ast.ClassExpression) {
 	ca.Metrics.ClassCount++
-	
+
 	classInfo := &ClassInfo{
-		Properties:  make([]string, 0),
-		Methods:     make([]*FunctionInfo, 0),
-		Visibility:  make(map[string]int),
+		Properties: make([]string, 0),
+		Methods:    make([]*FunctionInfo, 0),
+		Visibility: make(map[string]int),
 	}
-	
+
 	if identifier, ok := class.Name.(*ast.IdentifierNode); ok {
 		classInfo.Name = identifier.Name
 	}
-	
+
 	ca.Classes = append(ca.Classes, classInfo)
 }
 
@@ -172,7 +172,7 @@ func (ca *CodeAnalyzer) addIssue(issueType, severity, message, location, suggest
 
 func (ca *CodeAnalyzer) generateReport() {
 	fmt.Println("=== Code Analysis Report ===\n")
-	
+
 	// 基本度量
 	fmt.Println("📊 Code Metrics:")
 	fmt.Printf("  Lines of Code: %d\n", ca.Metrics.LinesOfCode)
@@ -182,7 +182,7 @@ func (ca *CodeAnalyzer) generateReport() {
 	fmt.Printf("  Max Nesting Depth: %d\n", ca.Metrics.MaxNestingDepth)
 	fmt.Printf("  Cyclomatic Complexity: %d\n", ca.Metrics.CyclomaticComplexity)
 	fmt.Println()
-	
+
 	// 函数分析
 	if len(ca.Functions) > 0 {
 		fmt.Println("🔧 Function Analysis:")
@@ -198,7 +198,7 @@ func (ca *CodeAnalyzer) generateReport() {
 		}
 		fmt.Println()
 	}
-	
+
 	// 类分析
 	if len(ca.Classes) > 0 {
 		fmt.Println("🏛️  Class Analysis:")
@@ -207,7 +207,7 @@ func (ca *CodeAnalyzer) generateReport() {
 		}
 		fmt.Println()
 	}
-	
+
 	// 变量使用统计
 	if len(ca.Variables) > 0 {
 		fmt.Println("📝 Variable Usage:")
@@ -216,7 +216,7 @@ func (ca *CodeAnalyzer) generateReport() {
 		}
 		fmt.Println()
 	}
-	
+
 	// 问题报告
 	if len(ca.Issues) > 0 {
 		fmt.Println("⚠️  Issues Found:")
@@ -231,40 +231,40 @@ func (ca *CodeAnalyzer) generateReport() {
 		}
 		fmt.Println()
 	}
-	
+
 	// 总体评分
 	ca.generateScoreCard()
 }
 
 func (ca *CodeAnalyzer) generateScoreCard() {
 	fmt.Println("📈 Code Quality Score Card:")
-	
+
 	score := 100
-	
+
 	// 基于复杂度扣分
 	if ca.Metrics.CyclomaticComplexity > 10 {
 		score -= 10
 		fmt.Println("  - High cyclomatic complexity (-10)")
 	}
-	
+
 	// 基于嵌套深度扣分
 	if ca.Metrics.MaxNestingDepth > 5 {
 		score -= 15
 		fmt.Println("  - Deep nesting detected (-15)")
 	}
-	
+
 	// 基于问题数量扣分
 	if len(ca.Issues) > 0 {
 		score -= len(ca.Issues) * 5
 		fmt.Printf("  - %d issues found (-%d)\n", len(ca.Issues), len(ca.Issues)*5)
 	}
-	
+
 	if score < 0 {
 		score = 0
 	}
-	
+
 	fmt.Printf("\n  Overall Score: %d/100 ", score)
-	
+
 	switch {
 	case score >= 90:
 		fmt.Println("🌟 Excellent")
@@ -403,12 +403,12 @@ function calculateUserScore($user, $activities, $timeframe) {
 ?>`
 
 	fmt.Println("=== PHP Code Analysis Example ===\n")
-	
+
 	// 解析代码
 	l := lexer.New(phpCode)
 	p := parser.New(l)
 	program := p.ParseProgram()
-	
+
 	if len(p.Errors()) > 0 {
 		fmt.Println("❌ Parsing errors found:")
 		for _, err := range p.Errors() {
@@ -416,57 +416,57 @@ function calculateUserScore($user, $activities, $timeframe) {
 		}
 		return
 	}
-	
+
 	fmt.Println("✅ Code parsed successfully, starting analysis...\n")
-	
+
 	// 分析代码
 	analyzer := NewCodeAnalyzer()
 	analyzer.Metrics.LinesOfCode = strings.Count(phpCode, "\n") + 1
 	ast.Walk(analyzer, program)
-	
+
 	// 生成分析报告
 	analyzer.generateReport()
-	
+
 	// 额外的分析示例
 	fmt.Println("=== Additional Analysis Examples ===\n")
-	
+
 	// 查找特定模式
 	fmt.Println("🔍 Pattern Analysis:")
-	
+
 	// 查找所有字符串字面量
 	stringLiterals := ast.FindAllFunc(program, func(node ast.Node) bool {
 		_, ok := node.(*ast.StringLiteral)
 		return ok
 	})
 	fmt.Printf("  String literals found: %d\n", len(stringLiterals))
-	
+
 	// 查找所有数组表达式
 	arrayExpressions := ast.FindAllFunc(program, func(node ast.Node) bool {
 		_, ok := node.(*ast.ArrayExpression)
 		return ok
 	})
 	fmt.Printf("  Array expressions found: %d\n", len(arrayExpressions))
-	
+
 	// 计算二进制表达式数量
 	binaryExprCount := ast.CountFunc(program, func(node ast.Node) bool {
 		_, ok := node.(*ast.BinaryExpression)
 		return ok
 	})
 	fmt.Printf("  Binary expressions: %d\n", binaryExprCount)
-	
+
 	// 计算赋值表达式数量
 	assignmentCount := ast.CountFunc(program, func(node ast.Node) bool {
 		_, ok := node.(*ast.AssignmentExpression)
 		return ok
 	})
 	fmt.Printf("  Assignment expressions: %d\n", assignmentCount)
-	
+
 	fmt.Println()
-	
+
 	// 建议报告
 	fmt.Println("💡 Improvement Suggestions:")
 	fmt.Println("  • Consider breaking down complex functions into smaller ones")
-	fmt.Println("  • Use dependency injection for better testability")  
+	fmt.Println("  • Use dependency injection for better testability")
 	fmt.Println("  • Add type hints for better code documentation")
 	fmt.Println("  • Consider using constants for magic numbers")
 	fmt.Println("  • Implement proper error handling with exceptions")

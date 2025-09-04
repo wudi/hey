@@ -8,7 +8,6 @@ import (
 	"github.com/wudi/php-parser/lexer"
 )
 
-
 // Precedence 操作符优先级 - 根据 PHP 官方优先级顺序
 type Precedence int
 
@@ -212,15 +211,15 @@ func init() {
 		lexer.T_THROW:                parseThrowExpression,
 		lexer.T_POW:                  parseFallback, // ** 作为前缀时是无效的，但需要处理
 		// Magic constants
-		lexer.T_FILE:                 parseMagicConstant,
-		lexer.T_LINE:                 parseMagicConstant,
-		lexer.T_DIR:                  parseMagicConstant,
-		lexer.T_CLASS_C:              parseMagicConstant,
-		lexer.T_TRAIT_C:              parseMagicConstant,
-		lexer.T_FUNC_C:               parseMagicConstant,
-		lexer.T_METHOD_C:             parseMagicConstant,
-		lexer.T_NS_C:                 parseMagicConstant,
-		lexer.T_PROPERTY_C:           parseMagicConstant,
+		lexer.T_FILE:       parseMagicConstant,
+		lexer.T_LINE:       parseMagicConstant,
+		lexer.T_DIR:        parseMagicConstant,
+		lexer.T_CLASS_C:    parseMagicConstant,
+		lexer.T_TRAIT_C:    parseMagicConstant,
+		lexer.T_FUNC_C:     parseMagicConstant,
+		lexer.T_METHOD_C:   parseMagicConstant,
+		lexer.T_NS_C:       parseMagicConstant,
+		lexer.T_PROPERTY_C: parseMagicConstant,
 	}
 	globalInfixParseFns = map[lexer.TokenType]InfixParseFn{
 		// 二元运算符
@@ -933,7 +932,7 @@ func parseEchoStatement(p *Parser) *ast.EchoStatement {
 		p.nextToken() // 移动到下一个表达式
 		arguments = append(arguments, parseExpression(p, LOWEST))
 	}
-	
+
 	// 创建 ArgumentList
 	if len(arguments) > 0 {
 		stmt.Arguments = ast.NewArgumentList(p.currentToken.Position, arguments)
@@ -978,7 +977,7 @@ func parsePrintStatement(p *Parser) *ast.PrintStatement {
 		p.nextToken() // 移动到下一个表达式
 		arguments = append(arguments, parseExpression(p, LOWEST))
 	}
-	
+
 	// 创建 ArgumentList
 	if len(arguments) > 0 {
 		stmt.Arguments = ast.NewArgumentList(p.currentToken.Position, arguments)
@@ -1639,7 +1638,7 @@ done:
 			}
 		}
 	}
-	
+
 	// 创建 ParameterList
 	if len(parameters) > 0 {
 		funcDecl.Parameters = ast.NewParameterList(p.currentToken.Position, parameters)
@@ -1699,11 +1698,11 @@ func parseParameter(p *Parser) *ast.ParameterNode {
 	// 例如: readonly private, private readonly, static public 等
 	var visibilityModifiers []string
 	var readOnly bool
-	
+
 	for {
 		switch p.currentToken.Type {
 		case lexer.T_PUBLIC, lexer.T_PRIVATE, lexer.T_PROTECTED,
-			 lexer.T_PUBLIC_SET, lexer.T_PRIVATE_SET, lexer.T_PROTECTED_SET:
+			lexer.T_PUBLIC_SET, lexer.T_PRIVATE_SET, lexer.T_PROTECTED_SET:
 			visibilityModifiers = append(visibilityModifiers, p.currentToken.Value)
 			p.nextToken()
 		case lexer.T_READONLY:
@@ -1718,7 +1717,7 @@ func parseParameter(p *Parser) *ast.ParameterNode {
 			goto end_modifiers
 		}
 	}
-	end_modifiers:
+end_modifiers:
 
 	// 合并多个可见性修饰符为单个字符串
 	var visibility string
@@ -1916,9 +1915,9 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 			prefixParts = []string{p.currentToken.Value}
 			prefixPos = p.currentToken.Position
 		}
-	} else if (p.currentToken.Type == lexer.T_NAME_QUALIFIED || 
-	           p.currentToken.Type == lexer.T_NAME_FULLY_QUALIFIED) && 
-	          p.peekToken.Type == lexer.T_NS_SEPARATOR {
+	} else if (p.currentToken.Type == lexer.T_NAME_QUALIFIED ||
+		p.currentToken.Type == lexer.T_NAME_FULLY_QUALIFIED) &&
+		p.peekToken.Type == lexer.T_NS_SEPARATOR {
 		nextNext := p.peekTokenAt(2)
 		if nextNext.Type == lexer.TOKEN_LBRACE {
 			// Qualified case: use App\Http\{...}
@@ -1943,7 +1942,7 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 	if isGroupedUse {
 		// 这是一个分组使用声明
 		namespaceName := ast.NewNamespaceNameExpression(prefixPos, prefixParts)
-		
+
 		p.nextToken() // 移动到 \
 		p.nextToken() // 移动到 {
 
@@ -1964,7 +1963,7 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 			// 解析项目名称
 			itemName := p.currentToken.Value
 			var fullName *ast.NamespaceNameExpression
-			
+
 			// 构建完整名称 (前缀 + 项目名称)
 			var allParts []string
 			if strings.Contains(itemName, "\\") {
@@ -2032,7 +2031,6 @@ func parseUseStatement(p *Parser) *ast.UseStatement {
 		p.errors = append(p.errors, err.Error())
 		return nil
 	}
-
 
 	// 非分组使用声明 - 原有逻辑
 
@@ -2231,7 +2229,7 @@ func parseInterfaceMethod(p *Parser) *ast.InterfaceMethod {
 			}
 		}
 	}
-	
+
 	// 创建 ParameterList
 	if len(parameters) > 0 {
 		method.Parameters = ast.NewParameterList(p.currentToken.Position, parameters)
@@ -2687,7 +2685,7 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		// 移动到括号
 		p.nextToken() // 移动到 (
-		
+
 		// 检查第一类可调用语法 $obj->method(...)
 		if p.peekToken.Type == lexer.T_ELLIPSIS {
 			// 检查是否为 (...) 模式
@@ -2701,17 +2699,17 @@ func parsePropertyAccess(p *Parser, left ast.Expression) ast.Expression {
 			}
 			// 如果不是 (...) 模式，需要回退处理
 		}
-		
+
 		// 这是一个普通方法调用: $obj->method()
 		methodCall := ast.NewMethodCallExpression(pos, left, property)
-		
+
 		// 解析参数 (注意：如果上面检测到了T_ELLIPSIS但不是FirstClassCallable模式，
 		// parseExpressionList会正确处理剩余的tokens)
 		args := parseExpressionList(p, lexer.TOKEN_RPAREN)
 		if len(args) > 0 {
 			methodCall.Arguments = ast.NewArgumentList(p.currentToken.Position, args)
 		}
-		
+
 		return methodCall
 	}
 
@@ -2758,14 +2756,14 @@ func parseNullsafePropertyAccess(p *Parser, left ast.Expression) ast.Expression 
 	if p.peekToken.Type == lexer.TOKEN_LPAREN {
 		// 这是一个空安全方法调用: $obj?->method()
 		methodCall := ast.NewNullsafeMethodCallExpression(pos, left, property)
-		
+
 		// 移动到括号并解析参数
 		p.nextToken() // 移动到 (
 		args := parseExpressionList(p, lexer.TOKEN_RPAREN)
 		if len(args) > 0 {
 			methodCall.Arguments = ast.NewArgumentList(p.currentToken.Position, args)
 		}
-		
+
 		return methodCall
 	}
 
@@ -2993,7 +2991,7 @@ func parseMagicConstant(p *Parser) ast.Expression {
 	pos := p.currentToken.Position
 	name := p.currentToken.Value
 	tokenType := p.currentToken.Type
-	
+
 	return ast.NewMagicConstantExpression(pos, name, tokenType)
 }
 
@@ -3919,7 +3917,7 @@ func parseNewExpression(p *Parser) ast.Expression {
 				}
 			}
 		}
-		
+
 		// 创建 ArgumentList
 		if len(arguments) > 0 {
 			newExpr.Arguments = ast.NewArgumentList(p.currentToken.Position, arguments)
@@ -5466,7 +5464,7 @@ func parseStaticVisibilityFunction(p *Parser, visibility string, pos lexer.Posit
 			}
 		}
 	}
-	
+
 	// 创建 ParameterList
 	if len(parameters) > 0 {
 		funcDecl.Parameters = ast.NewParameterList(pos, parameters)
@@ -5612,7 +5610,7 @@ func parseVisibilityStaticFunction(p *Parser, visibility string, pos lexer.Posit
 			}
 		}
 	}
-	
+
 	// 创建 ParameterList
 	if len(parameters) > 0 {
 		funcDecl.Parameters = ast.NewParameterList(pos, parameters)
@@ -6309,7 +6307,7 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 		// 这是一个静态方法调用: Class::method()
 		// 继续使用原来的 StaticAccessExpression，因为它已经使用 ASTStaticCall
 		staticCall := ast.NewStaticAccessExpression(pos, left, property)
-		
+
 		// 注意：这里不直接解析参数，让 parseCallExpression 处理
 		// 因为 TOKEN_LPAREN 在 globalInfixParseFns 中已经映射到 parseCallExpression
 		return staticCall
@@ -6322,7 +6320,7 @@ func parseStaticAccessExpression(p *Parser, left ast.Expression) ast.Expression 
 			// 这是静态属性访问: Class::$property
 			return ast.NewStaticPropertyAccessExpression(pos, left, property)
 		}
-		
+
 		// 检查是否是标识符（常量）
 		if _, ok := property.(*ast.IdentifierNode); ok {
 			// 这是类常量访问: Class::CONSTANT
@@ -6451,16 +6449,16 @@ func parseShellExecExpression(p *Parser) ast.Expression {
 		case lexer.T_CURLY_OPEN:
 			// {$expression} 形式的复杂表达式
 			p.nextToken() // 跳过 T_CURLY_OPEN，现在应该在表达式的第一个token上
-			
+
 			// 解析大括号内的表达式
 			expr := parseExpression(p, LOWEST)
 			if expr != nil {
 				parts = append(parts, expr)
 			}
-			
+
 			// parseExpression 完成后，需要前进到下一个token
 			p.nextToken()
-			
+
 			// 现在期望这个token是 }
 			if p.currentToken.Type == lexer.TOKEN_RBRACE {
 				p.nextToken() // 跳过 }，继续处理后面的内容

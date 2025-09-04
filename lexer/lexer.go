@@ -568,10 +568,10 @@ func (l *Lexer) nextTokenInScripting() Token {
 		} else if l.peekChar() == '*' {
 			// 块注释 - 先检查是否为文档注释
 			// PHP only considers /** as doc comment if followed by whitespace or content
-			isDocComment := l.peekChar() == '*' && l.peekCharN(1) == '*' && 
+			isDocComment := l.peekChar() == '*' && l.peekCharN(1) == '*' &&
 				(isWhitespace(l.peekCharN(2)) || (l.peekCharN(2) != '/' && l.peekCharN(2) != 0))
-			l.readChar()                                                 // 跳过 /
-			l.readChar()                                                 // 跳过 *
+			l.readChar() // 跳过 /
+			l.readChar() // 跳过 *
 			comment := l.readBlockComment()
 			fullComment := "/*" + comment
 
@@ -1366,7 +1366,7 @@ func (l *Lexer) checkTypeCast() (TokenType, string, bool) {
 	// 检查是否是有效的类型
 	var tokenType TokenType
 	var tokenValue string
-	
+
 	// Convert to lowercase for comparison, but preserve original case for token value
 	lowerTypeName := strings.ToLower(typeName)
 

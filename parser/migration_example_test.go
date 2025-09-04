@@ -2,7 +2,7 @@ package parser
 
 import (
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/lexer"
@@ -49,7 +49,7 @@ func TestMigrationExample_After(t *testing.T) {
 		return New(l)
 	}
 	builder := testutils.NewParserTestBuilder(parserFactory)
-	
+
 	builder.Test(t,
 		`<?php $name = "John"; ?>`,
 		testutils.ValidateStringAssignment("$name", "John", `"John"`),
@@ -62,7 +62,7 @@ func TestMigrationExample_TableDriven(t *testing.T) {
 		return New(l)
 	}
 	builder := testutils.NewParserTestBuilder(parserFactory)
-	
+
 	tests := []struct {
 		Name      string
 		Source    string
@@ -84,16 +84,16 @@ func TestMigrationExample_TableDriven(t *testing.T) {
 			Validator: func(ctx *testutils.TestContext) {
 				assertions := testutils.NewASTAssertions(t)
 				body := assertions.AssertProgramBody(ctx.Program, 1)
-				
+
 				exprStmt := assertions.AssertExpressionStatement(body[0])
 				assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
 				assertions.AssertVariable(assignment.Left, "$greeting")
-				
+
 				// 验证右侧是二元表达式（字符串连接）
 				assertions.AssertBinaryExpression(assignment.Right, ".")
 			},
 		},
 	}
-	
+
 	builder.TestTableDriven(t, tests)
 }

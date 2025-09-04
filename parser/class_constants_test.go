@@ -2,7 +2,7 @@ package parser
 
 import (
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/lexer"
@@ -22,17 +22,17 @@ class Test {
 }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok)
-				
+
 				classExpr, ok := stmt.Expression.(*ast.ClassExpression)
 				assert.True(t, ok)
-				
+
 				assert.Len(t, classExpr.Body, 1)
 				constDecl, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
-				
+
 				assert.Equal(t, "", constDecl.Visibility) // defaults to public
 				assert.False(t, constDecl.IsFinal)
 				assert.False(t, constDecl.IsAbstract)
@@ -50,27 +50,27 @@ class Test {
 }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok)
-				
+
 				classExpr, ok := stmt.Expression.(*ast.ClassExpression)
 				assert.True(t, ok)
-				
+
 				assert.Len(t, classExpr.Body, 3)
-				
+
 				// Public const
 				publicConst, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
 				assert.Equal(t, "public", publicConst.Visibility)
 				assert.Equal(t, "PUBLIC_CONST", publicConst.Constants[0].Name.(*ast.IdentifierNode).Name)
-				
+
 				// Private const
 				privateConst, ok := classExpr.Body[1].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
 				assert.Equal(t, "private", privateConst.Visibility)
 				assert.Equal(t, "PRIVATE_CONST", privateConst.Constants[0].Name.(*ast.IdentifierNode).Name)
-				
+
 				// Protected const
 				protectedConst, ok := classExpr.Body[2].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -88,15 +88,15 @@ class Test {
 }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok)
-				
+
 				classExpr, ok := stmt.Expression.(*ast.ClassExpression)
 				assert.True(t, ok)
-				
+
 				assert.Len(t, classExpr.Body, 3)
-				
+
 				// final const
 				finalBasic, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -104,7 +104,7 @@ class Test {
 				assert.True(t, finalBasic.IsFinal)
 				assert.False(t, finalBasic.IsAbstract)
 				assert.Equal(t, "FINAL_BASIC", finalBasic.Constants[0].Name.(*ast.IdentifierNode).Name)
-				
+
 				// final public const
 				finalPublic, ok := classExpr.Body[1].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -112,7 +112,7 @@ class Test {
 				assert.True(t, finalPublic.IsFinal)
 				assert.False(t, finalPublic.IsAbstract)
 				assert.Equal(t, "FINAL_PUBLIC", finalPublic.Constants[0].Name.(*ast.IdentifierNode).Name)
-				
+
 				// final protected const
 				finalProtected, ok := classExpr.Body[2].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -132,15 +132,15 @@ class Test {
 }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok)
-				
+
 				classExpr, ok := stmt.Expression.(*ast.ClassExpression)
 				assert.True(t, ok)
-				
+
 				assert.Len(t, classExpr.Body, 3)
-				
+
 				// Basic multiple constants
 				basicMultiple, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -148,7 +148,7 @@ class Test {
 				assert.Equal(t, "A", basicMultiple.Constants[0].Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "B", basicMultiple.Constants[1].Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "C", basicMultiple.Constants[2].Name.(*ast.IdentifierNode).Name)
-				
+
 				// Public multiple constants
 				publicMultiple, ok := classExpr.Body[1].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -156,7 +156,7 @@ class Test {
 				assert.Len(t, publicMultiple.Constants, 2)
 				assert.Equal(t, "X", publicMultiple.Constants[0].Name.(*ast.IdentifierNode).Name)
 				assert.Equal(t, "Y", publicMultiple.Constants[1].Name.(*ast.IdentifierNode).Name)
-				
+
 				// Final protected multiple constants
 				finalProtectedMultiple, ok := classExpr.Body[2].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
@@ -175,27 +175,27 @@ class BaseUri {
 }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok)
-				
+
 				classExpr, ok := stmt.Expression.(*ast.ClassExpression)
 				assert.True(t, ok)
-				
+
 				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "BaseUri", nameIdent.Name)
-				
+
 				assert.Len(t, classExpr.Body, 1)
 				constDecl, ok := classExpr.Body[0].(*ast.ClassConstantDeclaration)
 				assert.True(t, ok)
-				
+
 				assert.Equal(t, "protected", constDecl.Visibility)
 				assert.True(t, constDecl.IsFinal)
 				assert.False(t, constDecl.IsAbstract)
 				assert.Len(t, constDecl.Constants, 1)
 				assert.Equal(t, "WHATWG_SPECIAL_SCHEMES", constDecl.Constants[0].Name.(*ast.IdentifierNode).Name)
-				
+
 				// Check that the array value is parsed correctly
 				arrayExpr, ok := constDecl.Constants[0].Value.(*ast.ArrayExpression)
 				assert.True(t, ok)

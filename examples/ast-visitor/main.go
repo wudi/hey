@@ -47,7 +47,7 @@ func (fc *FunctionCollector) Visit(node ast.Node) bool {
 
 // DepthCounter 计算AST的最大深度
 type DepthCounter struct {
-	MaxDepth    int
+	MaxDepth     int
 	currentDepth int
 }
 
@@ -60,12 +60,12 @@ func (dc *DepthCounter) Visit(node ast.Node) bool {
 	if dc.currentDepth > dc.MaxDepth {
 		dc.MaxDepth = dc.currentDepth
 	}
-	
+
 	// 遍历子节点后需要减少深度
 	defer func() {
 		dc.currentDepth--
 	}()
-	
+
 	return true
 }
 
@@ -130,7 +130,7 @@ echo $user->getName();
 	fmt.Println("1. Collecting all variables:")
 	variableCollector := NewVariableCollector()
 	ast.Walk(variableCollector, program)
-	
+
 	// Remove duplicates
 	uniqueVars := removeDuplicates(variableCollector.Variables)
 	fmt.Printf("   Found %d unique variables: %s\n\n", len(uniqueVars), strings.Join(uniqueVars, ", "))
@@ -139,18 +139,18 @@ echo $user->getName();
 	fmt.Println("2. Collecting all function declarations:")
 	functionCollector := NewFunctionCollector()
 	ast.Walk(functionCollector, program)
-	
+
 	for i, fn := range functionCollector.Functions {
 		funcName := ""
 		if identifier, ok := fn.Name.(*ast.IdentifierNode); ok {
 			funcName = identifier.Name
 		}
-		
+
 		paramCount := 0
 		if fn.Parameters != nil {
 			paramCount = len(fn.Parameters.Parameters)
 		}
-		
+
 		fmt.Printf("   %d. Function '%s' with %d parameters\n", i+1, funcName, paramCount)
 	}
 	fmt.Println()
@@ -163,21 +163,21 @@ echo $user->getName();
 
 	// Example 4: Using built-in visitor functions
 	fmt.Println("4. Using built-in visitor functions:")
-	
+
 	// Find all string literals
 	stringLiterals := ast.FindAllFunc(program, func(node ast.Node) bool {
 		_, ok := node.(*ast.StringLiteral)
 		return ok
 	})
 	fmt.Printf("   Found %d string literals\n", len(stringLiterals))
-	
+
 	// Find all binary expressions
 	binaryExpressions := ast.FindAllFunc(program, func(node ast.Node) bool {
 		_, ok := node.(*ast.BinaryExpression)
 		return ok
 	})
 	fmt.Printf("   Found %d binary expressions\n", len(binaryExpressions))
-	
+
 	// Count assignment expressions
 	assignmentCount := ast.CountFunc(program, func(node ast.Node) bool {
 		_, ok := node.(*ast.AssignmentExpression)
@@ -188,7 +188,7 @@ echo $user->getName();
 	// Example 5: Using WalkFunc for simple operations
 	fmt.Println("5. Using WalkFunc for node type analysis:")
 	nodeTypes := make(map[string]int)
-	
+
 	ast.WalkFunc(program, func(node ast.Node) bool {
 		nodeType := fmt.Sprintf("%T", node)
 		// Remove package prefix for cleaner output
@@ -198,7 +198,7 @@ echo $user->getName();
 		nodeTypes[nodeType]++
 		return true
 	})
-	
+
 	fmt.Println("   Node type statistics:")
 	for nodeType, count := range nodeTypes {
 		fmt.Printf("     %s: %d\n", nodeType, count)
@@ -209,13 +209,13 @@ echo $user->getName();
 func removeDuplicates(slice []string) []string {
 	keys := make(map[string]bool)
 	result := []string{}
-	
+
 	for _, item := range slice {
 		if !keys[item] {
 			keys[item] = true
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }

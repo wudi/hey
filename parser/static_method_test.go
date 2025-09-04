@@ -2,7 +2,7 @@ package parser
 
 import (
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/lexer"
@@ -24,21 +24,21 @@ class MyClass {
 }`,
 			validate: func(t *testing.T, program *ast.Program) {
 				assert.Len(t, program.Body, 1)
-				
+
 				stmt, ok := program.Body[0].(*ast.ExpressionStatement)
 				assert.True(t, ok)
-				
+
 				classExpr, ok := stmt.Expression.(*ast.ClassExpression)
 				assert.True(t, ok)
-				
+
 				nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "MyClass", nameIdent.Name)
-				
+
 				assert.Len(t, classExpr.Body, 1)
 				method, ok := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.True(t, ok)
-				
+
 				methodName, ok := method.Name.(*ast.IdentifierNode)
 				assert.True(t, ok)
 				assert.Equal(t, "fromArray", methodName.Name)

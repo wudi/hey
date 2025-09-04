@@ -44,7 +44,7 @@ func (b *ASTBuilder) CreateBinaryOp(pos lexer.Position, left, right Node, operat
 	if !ok1 || !ok2 {
 		return nil
 	}
-	
+
 	return NewBinaryExpression(pos, leftExpr, operator, rightExpr)
 }
 
@@ -55,7 +55,7 @@ func (b *ASTBuilder) CreateAssign(pos lexer.Position, left, right Node) Node {
 	if !ok1 || !ok2 {
 		return nil
 	}
-	
+
 	return NewAssignmentExpression(pos, leftExpr, "=", rightExpr)
 }
 
@@ -65,7 +65,7 @@ func (b *ASTBuilder) CreateUnaryOp(pos lexer.Position, operand Node, operator st
 	if !ok {
 		return nil
 	}
-	
+
 	return NewUnaryExpression(pos, operator, operandExpr, prefix)
 }
 
@@ -75,7 +75,7 @@ func (b *ASTBuilder) CreateCall(pos lexer.Position, callee Node, args []Node) No
 	if !ok {
 		return nil
 	}
-	
+
 	call := NewCallExpression(pos, calleeExpr)
 	var expressions []Expression
 	for _, arg := range args {
@@ -86,7 +86,7 @@ func (b *ASTBuilder) CreateCall(pos lexer.Position, callee Node, args []Node) No
 	if len(expressions) > 0 {
 		call.Arguments = NewArgumentList(pos, expressions)
 	}
-	
+
 	return call
 }
 
@@ -98,7 +98,7 @@ func (b *ASTBuilder) CreateArray(pos lexer.Position, elements []Node) Node {
 			array.Elements = append(array.Elements, elemExpr)
 		}
 	}
-	
+
 	return array
 }
 
@@ -114,7 +114,7 @@ func (b *ASTBuilder) CreateEcho(pos lexer.Position, args []Node) Node {
 	if len(expressions) > 0 {
 		echo.Arguments = NewArgumentList(pos, expressions)
 	}
-	
+
 	return echo
 }
 
@@ -123,11 +123,11 @@ func (b *ASTBuilder) CreateReturn(pos lexer.Position, arg Node) Node {
 	if arg == nil {
 		return NewReturnStatement(pos, nil)
 	}
-	
+
 	if argExpr, ok := arg.(Expression); ok {
 		return NewReturnStatement(pos, argExpr)
 	}
-	
+
 	return NewReturnStatement(pos, nil)
 }
 
@@ -137,21 +137,21 @@ func (b *ASTBuilder) CreateIf(pos lexer.Position, test Node, consequent []Node, 
 	if !ok {
 		return nil
 	}
-	
+
 	ifStmt := NewIfStatement(pos, testExpr)
-	
+
 	for _, stmt := range consequent {
 		if s, ok := stmt.(Statement); ok {
 			ifStmt.Consequent = append(ifStmt.Consequent, s)
 		}
 	}
-	
+
 	for _, stmt := range alternate {
 		if s, ok := stmt.(Statement); ok {
 			ifStmt.Alternate = append(ifStmt.Alternate, s)
 		}
 	}
-	
+
 	return ifStmt
 }
 
@@ -161,46 +161,46 @@ func (b *ASTBuilder) CreateWhile(pos lexer.Position, test Node, body []Node) Nod
 	if !ok {
 		return nil
 	}
-	
+
 	whileStmt := NewWhileStatement(pos, testExpr)
-	
+
 	for _, stmt := range body {
 		if s, ok := stmt.(Statement); ok {
 			whileStmt.Body = append(whileStmt.Body, s)
 		}
 	}
-	
+
 	return whileStmt
 }
 
 // CreateFor 创建for语句节点
 func (b *ASTBuilder) CreateFor(pos lexer.Position, init, test, update Node, body []Node) Node {
 	forStmt := NewForStatement(pos)
-	
+
 	if init != nil {
 		if initExpr, ok := init.(Expression); ok {
 			forStmt.Init = initExpr
 		}
 	}
-	
+
 	if test != nil {
 		if testExpr, ok := test.(Expression); ok {
 			forStmt.Test = testExpr
 		}
 	}
-	
+
 	if update != nil {
 		if updateExpr, ok := update.(Expression); ok {
 			forStmt.Update = updateExpr
 		}
 	}
-	
+
 	for _, stmt := range body {
 		if s, ok := stmt.(Statement); ok {
 			forStmt.Body = append(forStmt.Body, s)
 		}
 	}
-	
+
 	return forStmt
 }
 
@@ -210,18 +210,18 @@ func (b *ASTBuilder) CreateFuncDecl(pos lexer.Position, name Node, params []*Par
 	if !ok {
 		return nil
 	}
-	
+
 	funcDecl := NewFunctionDeclaration(pos, nameId)
 	if len(params) > 0 {
 		funcDecl.Parameters = NewParameterList(pos, params)
 	}
-	
+
 	for _, stmt := range body {
 		if s, ok := stmt.(Statement); ok {
 			funcDecl.Body = append(funcDecl.Body, s)
 		}
 	}
-	
+
 	return funcDecl
 }
 
@@ -231,14 +231,14 @@ func (b *ASTBuilder) CreateStmtList(pos lexer.Position, stmts []Node) Node {
 		// 如果只有一个语句，直接返回
 		return stmts[0]
 	}
-	
+
 	program := NewProgram(pos)
 	for _, stmt := range stmts {
 		if s, ok := stmt.(Statement); ok {
 			program.Body = append(program.Body, s)
 		}
 	}
-	
+
 	return program
 }
 
@@ -248,7 +248,7 @@ func (b *ASTBuilder) CreateExprList(pos lexer.Position, exprs []Node) Node {
 		// 如果只有一个表达式，直接返回
 		return exprs[0]
 	}
-	
+
 	// 创建一个包含多个表达式的复合节点
 	// 这里可以根据需要实现更复杂的逻辑
 	return exprs[0] // 简单实现

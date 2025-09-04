@@ -32,18 +32,18 @@ func GetGlobalConfig() *GlobalConfig {
 
 // TestCategory 测试分类常量
 const (
-	CategoryBasic      = "basic"
+	CategoryBasic       = "basic"
 	CategoryExpressions = "expressions"
-	CategoryStatements = "statements"
-	CategoryClasses    = "classes"
-	CategoryFunctions  = "functions"
+	CategoryStatements  = "statements"
+	CategoryClasses     = "classes"
+	CategoryFunctions   = "functions"
 	CategoryControlFlow = "control_flow"
-	CategoryErrors     = "errors"
-	CategoryPHP8       = "php8"
-	CategoryPHP81      = "php81"
-	CategoryPHP82      = "php82"
-	CategoryPHP83      = "php83"
-	CategoryPHP84      = "php84"
+	CategoryErrors      = "errors"
+	CategoryPHP8        = "php8"
+	CategoryPHP81       = "php81"
+	CategoryPHP82       = "php82"
+	CategoryPHP83       = "php83"
+	CategoryPHP84       = "php84"
 )
 
 // TestTags 测试标签常量
@@ -64,7 +64,7 @@ func IsTestEnabled(tags []string) bool {
 	if len(tags) == 0 {
 		return true
 	}
-	
+
 	// 检查是否有实验性标签，如果有且未开启调试模式，则跳过
 	for _, tag := range tags {
 		if tag == TagExperimental && !DefaultGlobalConfig.EnableDebug {
@@ -74,6 +74,6 @@ func IsTestEnabled(tags []string) bool {
 			return false
 		}
 	}
-	
+
 	return true
 }

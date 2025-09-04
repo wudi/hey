@@ -137,9 +137,9 @@ class UserController
 		}
 
 		// Skip whitespace and comments for cleaner output
-		if tok.Type == lexer.T_WHITESPACE || 
-		   tok.Type == lexer.T_COMMENT || 
-		   tok.Type == lexer.T_DOC_COMMENT {
+		if tok.Type == lexer.T_WHITESPACE ||
+			tok.Type == lexer.T_COMMENT ||
+			tok.Type == lexer.T_DOC_COMMENT {
 			analyzer.Analyze(tok)
 			continue
 		}
@@ -152,11 +152,11 @@ class UserController
 			value = value[:17] + "..."
 		}
 
-		fmt.Printf("%-25s %-15s %-10d %d:%d\n", 
-			tok.Type.String(), 
-			value, 
-			tok.Position.Offset, 
-			tok.Position.Line, 
+		fmt.Printf("%-25s %-15s %-10d %d:%d\n",
+			tok.Type.String(),
+			value,
+			tok.Position.Offset,
+			tok.Position.Line,
 			tok.Position.Column)
 	}
 
@@ -178,26 +178,26 @@ class UserController
 
 	// Show collected identifiers and literals
 	fmt.Println("4. Extracted Content:")
-	
+
 	if len(analyzer.Keywords) > 0 {
 		uniqueKeywords := removeDuplicates(analyzer.Keywords)
-		fmt.Printf("   Keywords (%d unique): %s\n", 
+		fmt.Printf("   Keywords (%d unique): %s\n",
 			len(uniqueKeywords), strings.Join(uniqueKeywords, ", "))
 	}
-	
+
 	if len(analyzer.Identifiers) > 0 {
 		uniqueIdentifiers := removeDuplicates(analyzer.Identifiers)
-		fmt.Printf("   Identifiers (%d unique): %s\n", 
+		fmt.Printf("   Identifiers (%d unique): %s\n",
 			len(uniqueIdentifiers), strings.Join(uniqueIdentifiers, ", "))
 	}
-	
+
 	if len(analyzer.StringLiterals) > 0 {
-		fmt.Printf("   String literals (%d): %s\n", 
+		fmt.Printf("   String literals (%d): %s\n",
 			len(analyzer.StringLiterals), strings.Join(analyzer.StringLiterals, ", "))
 	}
-	
+
 	if len(analyzer.Numbers) > 0 {
-		fmt.Printf("   Numbers (%d): %s\n", 
+		fmt.Printf("   Numbers (%d): %s\n",
 			len(analyzer.Numbers), strings.Join(analyzer.Numbers, ", "))
 	}
 	fmt.Println()
@@ -227,7 +227,7 @@ echo "Hello, $name! Today is {$date}";
 		if tok.Type == lexer.T_WHITESPACE {
 			continue
 		}
-		
+
 		fmt.Printf("     %s: '%s'\n", tok.Type.String(), tok.Value)
 	}
 }
@@ -240,7 +240,7 @@ func countOperators(tokenCounts map[lexer.TokenType]int) int {
 		lexer.T_IS_SMALLER_OR_EQUAL, lexer.T_IS_GREATER_OR_EQUAL,
 		lexer.T_CONCAT_EQUAL, lexer.T_COALESCE_EQUAL,
 	}
-	
+
 	count := 0
 	for _, tokenType := range operatorTokens {
 		count += tokenCounts[tokenType]
@@ -252,13 +252,13 @@ func countOperators(tokenCounts map[lexer.TokenType]int) int {
 func removeDuplicates(slice []string) []string {
 	keys := make(map[string]bool)
 	result := []string{}
-	
+
 	for _, item := range slice {
 		if !keys[item] {
 			keys[item] = true
 			result = append(result, item)
 		}
 	}
-	
+
 	return result
 }

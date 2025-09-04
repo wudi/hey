@@ -5,7 +5,7 @@ func ValidateAssignment(varName, operator string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, operator)
 		assertions.AssertVariable(assignment.Left, varName)
@@ -82,7 +82,7 @@ func ValidateRightShiftAssignment(varName string) ValidationFunc {
 	return ValidateAssignment(varName, ">>=")
 }
 
-// ValidateVariableAssignment 验证变量赋值的别名，避免与已有函数冲突  
+// ValidateVariableAssignment 验证变量赋值的别名，避免与已有函数冲突
 func ValidateVariableAssignment(varName string) ValidationFunc {
 	return ValidateBasicAssignment(varName)
 }

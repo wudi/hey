@@ -26,7 +26,7 @@ interface EntityInterface {
 			validate: func(t *testing.T, interfaceDecl *ast.InterfaceDeclaration) {
 				assert.Equal(t, "EntityInterface", interfaceDecl.Name.Name)
 				assert.Equal(t, 1, len(interfaceDecl.Methods))
-				
+
 				method := interfaceDecl.Methods[0]
 				assert.Equal(t, "get", method.Name.Name)
 				assert.Equal(t, "public", method.Visibility)
@@ -51,7 +51,7 @@ interface EntityInterface extends ArrayAccess, JsonSerializable, Stringable {
 				assert.Equal(t, "ArrayAccess", interfaceDecl.Extends[0].Name)
 				assert.Equal(t, "JsonSerializable", interfaceDecl.Extends[1].Name)
 				assert.Equal(t, "Stringable", interfaceDecl.Extends[2].Name)
-				
+
 				assert.Equal(t, 1, len(interfaceDecl.Methods))
 				method := interfaceDecl.Methods[0]
 				assert.True(t, method.ByReference, "Expected method to have reference return")
@@ -70,17 +70,17 @@ interface DataInterface {
 			validate: func(t *testing.T, interfaceDecl *ast.InterfaceDeclaration) {
 				assert.Equal(t, "DataInterface", interfaceDecl.Name.Name)
 				assert.Equal(t, 3, len(interfaceDecl.Methods))
-				
+
 				// First method: with reference
 				assert.Equal(t, "getByRef", interfaceDecl.Methods[0].Name.Name)
 				assert.True(t, interfaceDecl.Methods[0].ByReference)
 				assert.Equal(t, "array", interfaceDecl.Methods[0].ReturnType.Name)
-				
+
 				// Second method: without reference
 				assert.Equal(t, "getNormal", interfaceDecl.Methods[1].Name.Name)
 				assert.False(t, interfaceDecl.Methods[1].ByReference)
 				assert.Equal(t, "string", interfaceDecl.Methods[1].ReturnType.Name)
-				
+
 				// Third method: with reference, no explicit visibility
 				assert.Equal(t, "getDefault", interfaceDecl.Methods[2].Name.Name)
 				assert.True(t, interfaceDecl.Methods[2].ByReference)
@@ -99,7 +99,7 @@ interface ProcessorInterface {
 			validate: func(t *testing.T, interfaceDecl *ast.InterfaceDeclaration) {
 				assert.Equal(t, "ProcessorInterface", interfaceDecl.Name.Name)
 				assert.Equal(t, 2, len(interfaceDecl.Methods))
-				
+
 				// First method
 				method1 := interfaceDecl.Methods[0]
 				assert.Equal(t, "process", method1.Name.Name)
@@ -111,7 +111,7 @@ interface ProcessorInterface {
 				assert.NotNil(t, method1.Parameters.Parameters[1].Type)
 				assert.True(t, method1.Parameters.Parameters[1].Type.Nullable)
 				assert.NotNil(t, method1.Parameters.Parameters[1].DefaultValue)
-				
+
 				// Second method
 				method2 := interfaceDecl.Methods[1]
 				assert.Equal(t, "transform", method2.Name.Name)
@@ -136,7 +136,7 @@ interface ReferenceInterface {
 			validate: func(t *testing.T, interfaceDecl *ast.InterfaceDeclaration) {
 				assert.Equal(t, "ReferenceInterface", interfaceDecl.Name.Name)
 				assert.Equal(t, 3, len(interfaceDecl.Methods))
-				
+
 				// All methods should have reference return
 				for _, method := range interfaceDecl.Methods {
 					assert.True(t, method.ByReference, "Expected all methods to have reference return")

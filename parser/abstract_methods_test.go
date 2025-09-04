@@ -51,9 +51,9 @@ abstract class SeekableFileContent implements FileContent {
 				assert.True(t, classExpr.Abstract, "Expected class to be abstract")
 				assert.Equal(t, 1, len(classExpr.Implements), "Expected one interface")
 				assert.Equal(t, "FileContent", getInterfaceName(t, classExpr.Implements[0]))
-				
+
 				assert.Equal(t, 3, len(classExpr.Body), "Expected three abstract methods")
-				
+
 				for i, method := range classExpr.Body {
 					funcDecl, ok := method.(*ast.FunctionDeclaration)
 					assert.True(t, ok, "Expected FunctionDeclaration at index %d", i)
@@ -61,12 +61,12 @@ abstract class SeekableFileContent implements FileContent {
 					assert.True(t, funcDecl.IsAbstract, "Expected method to be abstract")
 					assert.Nil(t, funcDecl.Body, "Abstract methods should have no body")
 				}
-				
+
 				// Check specific method names
 				method1 := classExpr.Body[0].(*ast.FunctionDeclaration)
 				assert.Equal(t, "doRead", getMethodName(t, method1))
 				assert.Equal(t, 2, len(method1.Parameters.Parameters))
-				
+
 				method2 := classExpr.Body[1].(*ast.FunctionDeclaration)
 				assert.Equal(t, "getDefaultPermissions", getMethodName(t, method2))
 				if method2.Parameters != nil {
@@ -74,7 +74,7 @@ abstract class SeekableFileContent implements FileContent {
 				} else {
 					assert.Equal(t, 0, 0) // No parameters
 				}
-				
+
 				method3 := classExpr.Body[2].(*ast.FunctionDeclaration)
 				assert.Equal(t, "doWrite", getMethodName(t, method3))
 				assert.Equal(t, 3, len(method3.Parameters.Parameters))

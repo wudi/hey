@@ -115,7 +115,7 @@ func Walk(visitor Visitor, node Node) {
 		for _, arg := range n.Arguments {
 			Walk(visitor, arg)
 		}
-	// 对于叶子节点（Variable, StringLiteral, NumberLiteral等），不需要进一步遍历
+		// 对于叶子节点（Variable, StringLiteral, NumberLiteral等），不需要进一步遍历
 	}
 }
 

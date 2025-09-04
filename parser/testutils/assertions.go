@@ -2,7 +2,7 @@ package testutils
 
 import (
 	"testing"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/ast"
@@ -132,15 +132,15 @@ func (a *ASTAssertions) AssertMethodCall(node ast.Node, expectedObject, expected
 	a.t.Helper()
 	methodCall, ok := node.(*ast.MethodCallExpression)
 	require.True(a.t, ok, "Node should be MethodCallExpression, got %T", node)
-	
+
 	objVar, ok := methodCall.Object.(*ast.Variable)
 	require.True(a.t, ok, "Object should be Variable, got %T", methodCall.Object)
 	assert.Equal(a.t, expectedObject, objVar.Name, "Object variable name mismatch")
-	
+
 	methodIdent, ok := methodCall.Method.(*ast.IdentifierNode)
 	require.True(a.t, ok, "Method should be IdentifierNode, got %T", methodCall.Method)
 	assert.Equal(a.t, expectedMethod, methodIdent.Name, "Method name mismatch")
-	
+
 	return methodCall
 }
 
@@ -149,13 +149,13 @@ func (a *ASTAssertions) AssertNamespaceStatement(stmt ast.Statement, expectedNam
 	a.t.Helper()
 	namespaceStmt, ok := stmt.(*ast.NamespaceStatement)
 	require.True(a.t, ok, "Statement should be NamespaceStatement, got %T", stmt)
-	
+
 	if expectedName != "" {
 		require.NotNil(a.t, namespaceStmt.Name, "Namespace name should not be nil")
 		// NamespaceNameExpression has a String() method we can use
 		assert.Equal(a.t, expectedName, namespaceStmt.Name.String(), "Namespace name mismatch")
 	}
-	
+
 	return namespaceStmt
 }
 
@@ -191,10 +191,10 @@ func (a *ASTAssertions) AssertTraitDeclaration(stmt ast.Statement, expectedName 
 	a.t.Helper()
 	traitDecl, ok := stmt.(*ast.TraitDeclaration)
 	require.True(a.t, ok, "Statement should be TraitDeclaration, got %T", stmt)
-	
+
 	require.NotNil(a.t, traitDecl.Name, "Trait name should not be nil")
 	assert.Equal(a.t, expectedName, traitDecl.Name.Name, "Trait name mismatch")
-	
+
 	return traitDecl
 }
 
@@ -211,11 +211,11 @@ func (a *ASTAssertions) AssertFunctionDeclaration(stmt ast.Statement, expectedNa
 	a.t.Helper()
 	funcDecl, ok := stmt.(*ast.FunctionDeclaration)
 	require.True(a.t, ok, "Statement should be FunctionDeclaration, got %T", stmt)
-	
+
 	nameIdent, ok := funcDecl.Name.(*ast.IdentifierNode)
 	require.True(a.t, ok, "Function name should be IdentifierNode, got %T", funcDecl.Name)
 	assert.Equal(a.t, expectedName, nameIdent.Name, "Function name mismatch")
-	
+
 	return funcDecl
 }
 
@@ -238,7 +238,7 @@ func (a *ASTAssertions) AssertClass(node ast.Node, expectedName string) *ast.Cla
 	a.t.Helper()
 	classExpr, ok := node.(*ast.ClassExpression)
 	require.True(a.t, ok, "Node should be ClassExpression, got %T", node)
-	
+
 	nameIdent, ok := classExpr.Name.(*ast.IdentifierNode)
 	require.True(a.t, ok, "Class name should be IdentifierNode, got %T", classExpr.Name)
 	assert.Equal(a.t, expectedName, nameIdent.Name, "Class name mismatch")
@@ -270,7 +270,7 @@ func ValidateVariable(name string) ValidationFunc {
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
 		assertions.AssertVariable(assignment.Left, name)
@@ -282,7 +282,7 @@ func ValidateStringAssignment(varName, expectedValue, expectedRaw string) Valida
 	return func(ctx *TestContext) {
 		assertions := NewASTAssertions(ctx.T)
 		body := assertions.AssertProgramBody(ctx.Program, 1)
-		
+
 		exprStmt := assertions.AssertExpressionStatement(body[0])
 		assignment := assertions.AssertAssignment(exprStmt.Expression, "=")
 		assertions.AssertVariable(assignment.Left, varName)

@@ -477,18 +477,18 @@ var Keywords = map[string]TokenType{
 	"callable":        T_CALLABLE,
 	"namespace":       T_NAMESPACE,
 	"__halt_compiler": T_HALT_COMPILER,
-	
+
 	// 魔术常量 (case-insensitive)
-	"__file__":        T_FILE,
-	"__line__":        T_LINE,
-	"__dir__":         T_DIR,
-	"__class__":       T_CLASS_C,
-	"__trait__":       T_TRAIT_C,
-	"__method__":      T_METHOD_C,
-	"__function__":    T_FUNC_C,
-	"__namespace__":   T_NS_C,
-	"__property__":    T_PROPERTY_C,
-	
+	"__file__":      T_FILE,
+	"__line__":      T_LINE,
+	"__dir__":       T_DIR,
+	"__class__":     T_CLASS_C,
+	"__trait__":     T_TRAIT_C,
+	"__method__":    T_METHOD_C,
+	"__function__":  T_FUNC_C,
+	"__namespace__": T_NS_C,
+	"__property__":  T_PROPERTY_C,
+
 	// 属性钩子关键字 (Property Hooks) - PHP 8.4
 }
 

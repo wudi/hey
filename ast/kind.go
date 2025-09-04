@@ -6,7 +6,7 @@ type ASTKind uint16
 const (
 	// 特殊节点 - special nodes (bit 6 set)
 	ASTZval     ASTKind = 64 // 1 << 6 = ZEND_AST_ZVAL
-	ASTConstant ASTKind = 65 // ZEND_AST_CONSTANT  
+	ASTConstant ASTKind = 65 // ZEND_AST_CONSTANT
 	ASTZNode    ASTKind = 66 // ZEND_AST_ZNODE
 
 	// 声明节点 - declaration nodes
@@ -44,7 +44,7 @@ const (
 	// 0子节点 - 0 child nodes (bits 8-15 = 0)
 	ASTMagicConst      ASTKind = 0 // ZEND_AST_MAGIC_CONST
 	ASTType            ASTKind = 1 // ZEND_AST_TYPE
-	ASTConstantClass   ASTKind = 2 // ZEND_AST_CONSTANT_CLASS  
+	ASTConstantClass   ASTKind = 2 // ZEND_AST_CONSTANT_CLASS
 	ASTCallableConvert ASTKind = 3 // ZEND_AST_CALLABLE_CONVERT
 
 	// 1子节点 - 1 child node (bits 8-15 = 1)
@@ -83,44 +83,44 @@ const (
 	ASTPropertyHookShortBody ASTKind = 288 // ZEND_AST_PROPERTY_HOOK_SHORT_BODY
 
 	// 2子节点 - 2 child nodes (bits 8-15 = 2)
-	ASTDim            ASTKind = 512 // 2 << 8 = ZEND_AST_DIM
-	ASTProp           ASTKind = 513 // ZEND_AST_PROP
-	ASTNullsafeProp   ASTKind = 514 // ZEND_AST_NULLSAFE_PROP
-	ASTStaticProp     ASTKind = 515 // ZEND_AST_STATIC_PROP
-	ASTCall           ASTKind = 516 // ZEND_AST_CALL
-	ASTClassConst     ASTKind = 517 // ZEND_AST_CLASS_CONST
-	ASTAssign         ASTKind = 518 // ZEND_AST_ASSIGN
-	ASTAssignRef      ASTKind = 519 // ZEND_AST_ASSIGN_REF
-	ASTAssignOp       ASTKind = 520 // ZEND_AST_ASSIGN_OP
-	ASTBinaryOp       ASTKind = 521 // ZEND_AST_BINARY_OP
-	ASTGreater        ASTKind = 522 // ZEND_AST_GREATER
-	ASTGreaterEqual   ASTKind = 523 // ZEND_AST_GREATER_EQUAL
-	ASTAnd            ASTKind = 524 // ZEND_AST_AND
-	ASTOr             ASTKind = 525 // ZEND_AST_OR
-	ASTArrayElem      ASTKind = 526 // ZEND_AST_ARRAY_ELEM
-	ASTNew            ASTKind = 527 // ZEND_AST_NEW
-	ASTInstanceof     ASTKind = 528 // ZEND_AST_INSTANCEOF
-	ASTYield          ASTKind = 529 // ZEND_AST_YIELD
-	ASTCoalesce       ASTKind = 530 // ZEND_AST_COALESCE
-	ASTAssignCoalesce ASTKind = 531 // ZEND_AST_ASSIGN_COALESCE
-	ASTStatic         ASTKind = 532 // ZEND_AST_STATIC
-	ASTWhile          ASTKind = 533 // ZEND_AST_WHILE
-	ASTDoWhile        ASTKind = 534 // ZEND_AST_DO_WHILE
-	ASTIfElem         ASTKind = 535 // ZEND_AST_IF_ELEM
-	ASTSwitch         ASTKind = 536 // ZEND_AST_SWITCH
-	ASTSwitchCase     ASTKind = 537 // ZEND_AST_SWITCH_CASE
-	ASTDeclare        ASTKind = 538 // ZEND_AST_DECLARE
-	ASTUseTrait       ASTKind = 539 // ZEND_AST_USE_TRAIT
-	ASTTraitPrecedence ASTKind = 540 // ZEND_AST_TRAIT_PRECEDENCE
-	ASTMethodReference ASTKind = 541 // ZEND_AST_METHOD_REFERENCE
-	ASTNamespace      ASTKind = 542 // ZEND_AST_NAMESPACE
-	ASTUseElem        ASTKind = 543 // ZEND_AST_USE_ELEM
-	ASTTraitAlias     ASTKind = 544 // ZEND_AST_TRAIT_ALIAS
-	ASTGroupUse       ASTKind = 545 // ZEND_AST_GROUP_USE
-	ASTAttribute      ASTKind = 546 // ZEND_AST_ATTRIBUTE
-	ASTMatch          ASTKind = 547 // ZEND_AST_MATCH
-	ASTMatchArm       ASTKind = 548 // ZEND_AST_MATCH_ARM
-	ASTNamedArg       ASTKind = 549 // ZEND_AST_NAMED_ARG
+	ASTDim                    ASTKind = 512 // 2 << 8 = ZEND_AST_DIM
+	ASTProp                   ASTKind = 513 // ZEND_AST_PROP
+	ASTNullsafeProp           ASTKind = 514 // ZEND_AST_NULLSAFE_PROP
+	ASTStaticProp             ASTKind = 515 // ZEND_AST_STATIC_PROP
+	ASTCall                   ASTKind = 516 // ZEND_AST_CALL
+	ASTClassConst             ASTKind = 517 // ZEND_AST_CLASS_CONST
+	ASTAssign                 ASTKind = 518 // ZEND_AST_ASSIGN
+	ASTAssignRef              ASTKind = 519 // ZEND_AST_ASSIGN_REF
+	ASTAssignOp               ASTKind = 520 // ZEND_AST_ASSIGN_OP
+	ASTBinaryOp               ASTKind = 521 // ZEND_AST_BINARY_OP
+	ASTGreater                ASTKind = 522 // ZEND_AST_GREATER
+	ASTGreaterEqual           ASTKind = 523 // ZEND_AST_GREATER_EQUAL
+	ASTAnd                    ASTKind = 524 // ZEND_AST_AND
+	ASTOr                     ASTKind = 525 // ZEND_AST_OR
+	ASTArrayElem              ASTKind = 526 // ZEND_AST_ARRAY_ELEM
+	ASTNew                    ASTKind = 527 // ZEND_AST_NEW
+	ASTInstanceof             ASTKind = 528 // ZEND_AST_INSTANCEOF
+	ASTYield                  ASTKind = 529 // ZEND_AST_YIELD
+	ASTCoalesce               ASTKind = 530 // ZEND_AST_COALESCE
+	ASTAssignCoalesce         ASTKind = 531 // ZEND_AST_ASSIGN_COALESCE
+	ASTStatic                 ASTKind = 532 // ZEND_AST_STATIC
+	ASTWhile                  ASTKind = 533 // ZEND_AST_WHILE
+	ASTDoWhile                ASTKind = 534 // ZEND_AST_DO_WHILE
+	ASTIfElem                 ASTKind = 535 // ZEND_AST_IF_ELEM
+	ASTSwitch                 ASTKind = 536 // ZEND_AST_SWITCH
+	ASTSwitchCase             ASTKind = 537 // ZEND_AST_SWITCH_CASE
+	ASTDeclare                ASTKind = 538 // ZEND_AST_DECLARE
+	ASTUseTrait               ASTKind = 539 // ZEND_AST_USE_TRAIT
+	ASTTraitPrecedence        ASTKind = 540 // ZEND_AST_TRAIT_PRECEDENCE
+	ASTMethodReference        ASTKind = 541 // ZEND_AST_METHOD_REFERENCE
+	ASTNamespace              ASTKind = 542 // ZEND_AST_NAMESPACE
+	ASTUseElem                ASTKind = 543 // ZEND_AST_USE_ELEM
+	ASTTraitAlias             ASTKind = 544 // ZEND_AST_TRAIT_ALIAS
+	ASTGroupUse               ASTKind = 545 // ZEND_AST_GROUP_USE
+	ASTAttribute              ASTKind = 546 // ZEND_AST_ATTRIBUTE
+	ASTMatch                  ASTKind = 547 // ZEND_AST_MATCH
+	ASTMatchArm               ASTKind = 548 // ZEND_AST_MATCH_ARM
+	ASTNamedArg               ASTKind = 549 // ZEND_AST_NAMED_ARG
 	ASTParentPropertyHookCall ASTKind = 550 // ZEND_AST_PARENT_PROPERTY_HOOK_CALL
 
 	// 3子节点 - 3 child nodes (bits 8-15 = 3)

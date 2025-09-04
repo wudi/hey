@@ -57,7 +57,7 @@ func BenchmarkParsingComplexity(b *testing.B) {
 			source: `<?php $str = "Hello " . $name . " from " . $location; ?>`,
 		},
 		{
-			name:   "Heredoc String",
+			name: "Heredoc String",
 			source: `<?php $html = <<<HTML
 <div class="test">
     <p>Hello $name</p>
@@ -65,7 +65,7 @@ func BenchmarkParsingComplexity(b *testing.B) {
 HTML; ?>`,
 		},
 		{
-			name:   "Nowdoc String",
+			name: "Nowdoc String",
 			source: `<?php $text = <<<'TEXT'
 Raw text with $variables
 TEXT; ?>`,
@@ -100,7 +100,7 @@ func BenchmarkStringParsing(b *testing.B) {
 			source: `<?php $str = "Hello $name, you are $age years old"; ?>`,
 		},
 		{
-			name:   "Nowdoc",
+			name: "Nowdoc",
 			source: `<?php $text = <<<'TEXT'
 This is raw text
 With $variables that won't be interpolated

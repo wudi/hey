@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	
+
 	"github.com/wudi/php-parser/lexer"
 )
 
@@ -163,35 +163,35 @@ func MustCreateParser(source string) (ParserInterface, *TestContext) {
 	if CreateDefaultParserFactory == nil {
 		panic("CreateDefaultParserFactory not set")
 	}
-	
+
 	factory := CreateDefaultParserFactory()
 	l := lexer.New(source)
 	p := factory(l)
-	
+
 	ctx := &TestContext{
 		Parser: p,
 		Lexer:  l,
 		Config: &TestConfig{StrictMode: false, ValidateAST: false},
 	}
-	
+
 	return p, ctx
 }
 
 // DebugParser 调试解析器，输出详细信息
 func DebugParser(t *testing.T, source string, parserFactory ParserFactory) {
 	t.Helper()
-	
+
 	t.Logf("Parsing source: %s", source)
-	
+
 	l := lexer.New(source)
 	p := parserFactory(l)
 	program := p.ParseProgram()
-	
+
 	errors := p.Errors()
 	if len(errors) > 0 {
 		t.Logf("Parser errors: %v", errors)
 	}
-	
+
 	if program != nil {
 		t.Logf("Program body length: %d", len(program.Body))
 		t.Logf("Program AST: %s", program.String())

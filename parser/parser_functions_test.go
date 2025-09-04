@@ -2,7 +2,7 @@ package parser
 
 import (
 	"testing"
-	
+
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/parser/testutils"
 )
@@ -10,7 +10,7 @@ import (
 // TestFunctions_BasicDeclaration 基础函数声明测试
 func TestFunctions_BasicDeclaration(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("BasicFunctionDeclaration", createParserFactory())
-	
+
 	suite.
 		AddFunction("no_params", "test", []string{},
 			func(funcDecl *ast.FunctionDeclaration, t *testing.T) {
@@ -27,7 +27,7 @@ func TestFunctions_BasicDeclaration(t *testing.T) {
 // TestFunctions_ReturnTypes 函数返回类型测试
 func TestFunctions_ReturnTypes(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("FunctionReturnTypes", createParserFactory())
-	
+
 	suite.
 		AddSimple("string_return", "<?php function getName(): string { return 'test'; } ?>",
 			testutils.ValidateFunction("getName", 0)).
@@ -47,7 +47,7 @@ func TestFunctions_ReturnTypes(t *testing.T) {
 // TestFunctions_ByReference 引用函数测试
 func TestFunctions_ByReference(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("ByReferenceFunctions", createParserFactory())
-	
+
 	suite.
 		AddSimple("ref_function", "<?php function &getReference() { global $data; return $data; } ?>",
 			testutils.ValidateFunction("getReference", 0)).
@@ -58,10 +58,10 @@ func TestFunctions_ByReference(t *testing.T) {
 		Run(t)
 }
 
-// TestFunctions_Variadic 变参函数测试  
+// TestFunctions_Variadic 变参函数测试
 func TestFunctions_Variadic(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("VariadicFunctions", createParserFactory())
-	
+
 	suite.
 		AddSimple("simple_variadic", "<?php function sum(...$numbers) { } ?>",
 			testutils.ValidateFunction("sum", 1)).
@@ -75,7 +75,7 @@ func TestFunctions_Variadic(t *testing.T) {
 // TestFunctions_Anonymous 匿名函数测试
 func TestFunctions_Anonymous(t *testing.T) {
 	suite := testutils.NewTestSuiteBuilder("AnonymousFunctions", createParserFactory())
-	
+
 	suite.
 		AddSimple("simple_closure", "<?php $fn = function() { return 42; }; ?>",
 			testutils.ValidateVariable("$fn")).

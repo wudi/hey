@@ -52,7 +52,7 @@ class User {
 	fmt.Printf("Successfully parsed PHP code!\n")
 	fmt.Printf("Number of statements: %d\n", len(program.Body))
 	fmt.Println("\nParsed statements:")
-	
+
 	for i, stmt := range program.Body {
 		fmt.Printf("  %d. %s\n", i+1, stmt.String())
 	}

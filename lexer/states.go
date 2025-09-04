@@ -17,7 +17,7 @@ const (
 	// Heredoc 状态
 	ST_HEREDOC
 
-	// Nowdoc 状态  
+	// Nowdoc 状态
 	ST_NOWDOC
 
 	// 字符串中的变量偏移状态 (如 "$arr[index]" 中的 index)
@@ -41,17 +41,17 @@ const (
 
 // StateNames 提供状态到名称的映射，便于调试
 var StateNames = map[LexerState]string{
-	ST_INITIAL:                "ST_INITIAL",
-	ST_IN_SCRIPTING:           "ST_IN_SCRIPTING", 
-	ST_DOUBLE_QUOTES:          "ST_DOUBLE_QUOTES",
-	ST_HEREDOC:                "ST_HEREDOC",
-	ST_NOWDOC:                 "ST_NOWDOC",
-	ST_VAR_OFFSET:             "ST_VAR_OFFSET",
-	ST_LOOKING_FOR_PROPERTY:   "ST_LOOKING_FOR_PROPERTY",
-	ST_LOOKING_FOR_VARNAME:    "ST_LOOKING_FOR_VARNAME",
-	ST_BACKQUOTE:              "ST_BACKQUOTE",
-	ST_COMMENT:                "ST_COMMENT",
-	ST_DOC_COMMENT:            "ST_DOC_COMMENT",
+	ST_INITIAL:              "ST_INITIAL",
+	ST_IN_SCRIPTING:         "ST_IN_SCRIPTING",
+	ST_DOUBLE_QUOTES:        "ST_DOUBLE_QUOTES",
+	ST_HEREDOC:              "ST_HEREDOC",
+	ST_NOWDOC:               "ST_NOWDOC",
+	ST_VAR_OFFSET:           "ST_VAR_OFFSET",
+	ST_LOOKING_FOR_PROPERTY: "ST_LOOKING_FOR_PROPERTY",
+	ST_LOOKING_FOR_VARNAME:  "ST_LOOKING_FOR_VARNAME",
+	ST_BACKQUOTE:            "ST_BACKQUOTE",
+	ST_COMMENT:              "ST_COMMENT",
+	ST_DOC_COMMENT:          "ST_DOC_COMMENT",
 }
 
 // String 返回状态的字符串表示
@@ -84,7 +84,7 @@ func (s *StateStack) Pop() LexerState {
 	if len(s.states) == 0 {
 		return ST_INITIAL // 默认状态
 	}
-	
+
 	last := len(s.states) - 1
 	state := s.states[last]
 	s.states = s.states[:last]

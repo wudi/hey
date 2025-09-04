@@ -2,7 +2,7 @@ package testutils
 
 import (
 	"testing"
-	
+
 	"github.com/wudi/php-parser/ast"
 )
 

@@ -30,16 +30,16 @@ readonly class KnowledgeBaseFragmentSyncSubscriber implements ListenerInterface
 				assert.True(t, classExpr.ReadOnly, "Expected class to be readonly")
 				assert.Equal(t, 1, len(classExpr.Implements), "Expected one interface")
 				assert.Equal(t, "ListenerInterface", getInterfaceName(t, classExpr.Implements[0]))
-				
+
 				// Check attributes
 				assert.Equal(t, 2, len(classExpr.Attributes), "Expected two attribute groups")
-				
+
 				// First attribute group - AsyncListener
 				attr1 := classExpr.Attributes[0]
 				assert.Equal(t, 1, len(attr1.Attributes), "Expected one attribute in first group")
 				assert.Equal(t, "AsyncListener", getAttributeName(t, attr1.Attributes[0]))
 				assert.Nil(t, attr1.Attributes[0].Arguments, "Expected no arguments")
-				
+
 				// Second attribute group - Listener
 				attr2 := classExpr.Attributes[1]
 				assert.Equal(t, 1, len(attr2.Attributes), "Expected one attribute in second group")
@@ -60,14 +60,14 @@ abstract class AbstractClass
 			validate: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Equal(t, "AbstractClass", getClassName(t, classExpr))
 				assert.True(t, classExpr.Abstract, "Expected class to be abstract")
-				
+
 				// Check attributes
 				assert.Equal(t, 2, len(classExpr.Attributes), "Expected two attribute groups")
-				
+
 				// First attribute - Entity
 				attr1 := classExpr.Attributes[0]
 				assert.Equal(t, "Entity", getAttributeName(t, attr1.Attributes[0]))
-				
+
 				// Second attribute - Repository with argument
 				attr2 := classExpr.Attributes[1]
 				assert.Equal(t, "Repository", getAttributeName(t, attr2.Attributes[0]))
@@ -87,7 +87,7 @@ final class FinalClass
 			validate: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Equal(t, "FinalClass", getClassName(t, classExpr))
 				assert.True(t, classExpr.Final, "Expected class to be final")
-				
+
 				// Check attributes
 				assert.Equal(t, 2, len(classExpr.Attributes), "Expected two attribute groups")
 				assert.Equal(t, "Controller", getAttributeName(t, classExpr.Attributes[0].Attributes[0]))
@@ -109,7 +109,7 @@ class RegularClass
 				assert.False(t, classExpr.ReadOnly, "Expected class not to be readonly")
 				assert.False(t, classExpr.Abstract, "Expected class not to be abstract")
 				assert.False(t, classExpr.Final, "Expected class not to be final")
-				
+
 				// Check attributes
 				assert.Equal(t, 2, len(classExpr.Attributes), "Expected two attribute groups")
 				assert.Equal(t, "Service", getAttributeName(t, classExpr.Attributes[0].Attributes[0]))
@@ -127,13 +127,13 @@ class MultiAttributeClass
 			expectedErrors: 0,
 			validate: func(t *testing.T, classExpr *ast.ClassExpression) {
 				assert.Equal(t, "MultiAttributeClass", getClassName(t, classExpr))
-				
+
 				// Check attributes - should be 1 group with 3 attributes
 				assert.Equal(t, 1, len(classExpr.Attributes), "Expected one attribute group")
-				
+
 				attrGroup := classExpr.Attributes[0]
 				assert.Equal(t, 3, len(attrGroup.Attributes), "Expected three attributes in group")
-				
+
 				assert.Equal(t, "Component", getAttributeName(t, attrGroup.Attributes[0]))
 				assert.Equal(t, "Service", getAttributeName(t, attrGroup.Attributes[1]))
 				assert.Equal(t, "Tagged", getAttributeName(t, attrGroup.Attributes[2]))

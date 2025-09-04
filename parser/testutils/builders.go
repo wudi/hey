@@ -2,7 +2,7 @@ package testutils
 
 import (
 	"testing"
-	
+
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/lexer"
 )
@@ -81,7 +81,7 @@ func (b *TestSuiteBuilder) AddEcho(name string, args []string, validators ...fun
 		}
 		argsStr += arg
 	}
-	
+
 	return b.AddSimple(name,
 		"<?php echo "+argsStr+"; ?>",
 		ValidateEcho(len(args), validators...))
@@ -96,7 +96,7 @@ func (b *TestSuiteBuilder) AddFunction(name, funcName string, params []string, v
 		}
 		paramsStr += param
 	}
-	
+
 	return b.AddSimple(name,
 		"<?php function "+funcName+"("+paramsStr+") {} ?>",
 		ValidateFunction(funcName, len(params), validators...))
@@ -147,15 +147,15 @@ func (b *TestSuiteBuilder) Run(t *testing.T) {
 			break
 		}
 	}
-	
+
 	builder := NewParserTestBuilder(b.parserFactory).WithConfig(b.config)
-	
+
 	for _, test := range b.tests {
 		// 如果有Only标记，只运行标记的测试
 		if hasOnly && !test.Only {
 			continue
 		}
-		
+
 		// 跳过标记的测试
 		if test.Skip {
 			t.Run(test.Name, func(t *testing.T) {
@@ -163,7 +163,7 @@ func (b *TestSuiteBuilder) Run(t *testing.T) {
 			})
 			continue
 		}
-		
+
 		t.Run(test.Name, func(t *testing.T) {
 			builder.Test(t, test.Source, test.Validator)
 		})
