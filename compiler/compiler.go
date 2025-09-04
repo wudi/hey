@@ -125,6 +125,8 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileMatch(n)
 	case *ast.InterpolatedStringExpression:
 		return c.compileInterpolatedString(n)
+	case *ast.NewExpression:
+		return c.compileNew(n)
 
 	// Statements
 	case *ast.ExpressionStatement:
@@ -1309,6 +1311,43 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 	return nil
 }
 
+func (c *Compiler) compileNew(expr *ast.NewExpression) error {
+	// Get the class name - for now we only support simple class names
+	var className string
+	switch class := expr.Class.(type) {
+	case *ast.CallExpression:
+		// new Exception("message") - CallExpression with constructor arguments
+		if callee, ok := class.Callee.(*ast.IdentifierNode); ok {
+			className = callee.Name
+		} else {
+			return fmt.Errorf("unsupported class expression in new")
+		}
+		
+		// Create object first
+		classConstant := c.addConstant(values.NewString(className))
+		result := c.allocateTemp()
+		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
+		
+		// For simplicity, we'll ignore constructor arguments for now
+		// In a full implementation, we'd compile the arguments and call the constructor
+		
+		return nil
+		
+	case *ast.IdentifierNode:
+		// new Exception - simple class instantiation
+		className = class.Name
+	default:
+		return fmt.Errorf("unsupported class expression in new: %T", expr.Class)
+	}
+	
+	// Create the object
+	classConstant := c.addConstant(values.NewString(className))
+	result := c.allocateTemp()
+	c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
+	
+	return nil
+}
+
 func (c *Compiler) compileFor(stmt *ast.ForStatement) error {
 	// Create labels for the loop
 	testLabel := c.generateLabel()
@@ -1555,8 +1594,122 @@ func (c *Compiler) compileContinue(stmt *ast.ContinueStatement) error {
 }
 
 func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
-	// TODO: Implement try-catch statement
-	return fmt.Errorf("try-catch statement not implemented")
+	// Generate labels for control flow
+	catchLabels := make([]string, len(stmt.CatchClauses))
+	for i := range stmt.CatchClauses {
+		catchLabels[i] = c.generateLabel()
+	}
+	finallyLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	// Start of try block - emit exception handler setup
+	// For now, we'll use a simple approach: register first catch block
+	var firstCatchLabel string
+	if len(catchLabels) > 0 {
+		firstCatchLabel = catchLabels[0]
+	}
+	
+	// This is a simplified exception handler registration
+	// Real implementation would encode all handler info in instruction
+	c.emit(opcodes.OP_CATCH, opcodes.IS_CONST, 0, 0, 0, 0, 0)
+
+	// Compile try block body
+	for _, s := range stmt.Body {
+		err := c.compileNode(s)
+		if err != nil {
+			return err
+		}
+	}
+
+	// If no exception occurred, jump to finally block (or end if no finally)
+	if len(stmt.FinallyBlock) > 0 {
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, finallyLabel)
+	} else {
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+	}
+
+	// Compile catch blocks
+	for i, catchClause := range stmt.CatchClauses {
+		c.placeLabel(catchLabels[i])
+		
+		// Get exception variable slot if specified
+		if catchClause.Parameter != nil {
+			paramVar, ok := catchClause.Parameter.(*ast.Variable)
+			if ok {
+				// Store variable slot for exception parameter (used by VM during exception handling)
+				_ = c.getVariableSlot(paramVar.Name)
+			}
+		}
+
+		// For now, we catch all exceptions (type matching not fully implemented)
+		// In a full implementation, we'd emit type checking code here
+		
+		// Compile catch block body
+		for _, s := range catchClause.Body {
+			err := c.compileNode(s)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Jump to finally block (or end if no finally)
+		if len(stmt.FinallyBlock) > 0 {
+			c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, finallyLabel)
+		} else {
+			c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+		}
+	}
+
+	// Compile finally block if present
+	if len(stmt.FinallyBlock) > 0 {
+		c.placeLabel(finallyLabel)
+		c.emit(opcodes.OP_FINALLY, 0, 0, 0, 0, 0, 0)
+		
+		for _, s := range stmt.FinallyBlock {
+			err := c.compileNode(s)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	// End label
+	c.placeLabel(endLabel)
+	
+	// Now we need to patch the OP_CATCH instruction with the actual catch block address
+	// This is a post-processing step after labels are resolved
+	c.patchExceptionHandler(firstCatchLabel, finallyLabel)
+
+	return nil
+}
+
+// patchExceptionHandler updates the most recent OP_CATCH instruction with handler addresses
+func (c *Compiler) patchExceptionHandler(catchLabel, finallyLabel string) {
+	// Find the most recent OP_CATCH instruction and update it with actual addresses
+	for i := len(c.instructions) - 1; i >= 0; i-- {
+		if c.instructions[i].Opcode == opcodes.OP_CATCH {
+			// Encode catch and finally addresses in the instruction
+			catchAddr := 0
+			finallyAddr := 0
+			
+			if catchLabel != "" {
+				if addr, exists := c.labels[catchLabel]; exists {
+					catchAddr = addr
+				}
+			}
+			
+			if finallyLabel != "" {
+				if addr, exists := c.labels[finallyLabel]; exists {
+					finallyAddr = addr
+				}
+			}
+			
+			// Update the instruction with the addresses
+			c.instructions[i].Op1 = uint32(catchAddr)
+			c.instructions[i].Op2 = uint32(finallyAddr)
+			break
+		}
+	}
 }
 
 func (c *Compiler) compileThrow(stmt *ast.ThrowStatement) error {

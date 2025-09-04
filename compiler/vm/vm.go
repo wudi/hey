@@ -37,7 +37,9 @@ type ExecutionContext struct {
 	Classes       map[string]*Class
 	
 	// Error handling
-	ExceptionStack []Exception
+	ExceptionStack    []Exception
+	ExceptionHandlers []ExceptionHandler
+	CurrentException  *Exception
 	
 	// Execution control
 	Halted        bool
@@ -100,6 +102,18 @@ type Exception struct {
 	Trace         []string
 }
 
+// ExceptionHandler represents a try-catch-finally handler
+type ExceptionHandler struct {
+	TryStart      int      // Start of try block
+	TryEnd        int      // End of try block
+	CatchStart    int      // Start of catch block (0 if no catch)
+	CatchEnd      int      // End of catch block
+	FinallyStart  int      // Start of finally block (0 if no finally)
+	FinallyEnd    int      // End of finally block
+	ExceptionType string   // Type of exception to catch ("" for all)
+	ExceptionVar  uint32   // Variable slot to store caught exception
+}
+
 // VirtualMachine is the PHP bytecode virtual machine
 type VirtualMachine struct {
 	StackSize     int
@@ -131,8 +145,10 @@ func NewExecutionContext() *ExecutionContext {
 		Functions:        make(map[string]*Function),
 		ForeachIterators: make(map[uint32]*ForeachIterator),
 		Classes:          make(map[string]*Class),
-		ExceptionStack:   make([]Exception, 0),
-		Halted:           false,
+		ExceptionStack:    make([]Exception, 0),
+		ExceptionHandlers: make([]ExceptionHandler, 0),
+		CurrentException:  nil,
+		Halted:            false,
 		ExitCode:         0,
 	}
 }
@@ -295,6 +311,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeExit(ctx, inst)
 	case opcodes.OP_THROW:
 		return vm.executeThrow(ctx, inst)
+	case opcodes.OP_CATCH:
+		return vm.executeCatch(ctx, inst)
+	case opcodes.OP_FINALLY:
+		return vm.executeFinally(ctx, inst)
 	case opcodes.OP_QM_ASSIGN:
 		return vm.executeQuickAssign(ctx, inst)
 		
@@ -307,6 +327,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeForeachReset(ctx, inst)
 	case opcodes.OP_FE_FETCH:
 		return vm.executeForeachFetch(ctx, inst)
+		
+	// Object operations
+	case opcodes.OP_NEW:
+		return vm.executeNew(ctx, inst)
 		
 	// No operation
 	case opcodes.OP_NOP:
@@ -829,6 +853,11 @@ func (vm *VirtualMachine) executeThrow(ctx *ExecutionContext, inst *opcodes.Inst
 	// Get the exception value
 	exceptionValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	
+	// PHP validation: Can only throw objects that implement Throwable
+	if !exceptionValue.IsObject() {
+		return fmt.Errorf("Can only throw objects")
+	}
+	
 	// Create exception object
 	exception := Exception{
 		Value: exceptionValue,
@@ -837,12 +866,71 @@ func (vm *VirtualMachine) executeThrow(ctx *ExecutionContext, inst *opcodes.Inst
 		Trace: []string{},  // TODO: Add stack trace
 	}
 	
-	// Push exception onto the exception stack
-	ctx.ExceptionStack = append(ctx.ExceptionStack, exception)
+	// Set current exception
+	ctx.CurrentException = &exception
 	
-	// For now, return the exception as an error to halt execution
-	// In a full implementation, this would look for catch handlers
-	return fmt.Errorf("%s", exceptionValue.ToString())
+	// Look for exception handler
+	handler := vm.findExceptionHandler(ctx, ctx.IP)
+	if handler != nil {
+		// If there's a catch block, jump to it
+		if handler.CatchStart != 0 {
+			// Store exception in the catch variable
+			if handler.ExceptionVar != 0 {
+				vm.setValue(ctx, handler.ExceptionVar, opcodes.IS_VAR, exceptionValue)
+			}
+			ctx.IP = handler.CatchStart
+			return nil
+		}
+		// If there's only finally, jump to it
+		if handler.FinallyStart != 0 {
+			ctx.IP = handler.FinallyStart
+			return nil
+		}
+	}
+	
+	// No handler found, bubble up exception
+	return fmt.Errorf("Uncaught exception: %s", exceptionValue.ToString())
+}
+
+func (vm *VirtualMachine) executeCatch(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Extract catch and finally addresses from instruction operands
+	catchStart := int(inst.Op1)
+	finallyStart := int(inst.Op2)
+	
+	// Create exception handler with addresses from compiler
+	handler := ExceptionHandler{
+		TryStart:      ctx.IP + 1, // Try block starts after this instruction
+		TryEnd:        0,          // Will be determined when exception occurs
+		CatchStart:    catchStart,
+		CatchEnd:      0,  // Will be determined when needed
+		FinallyStart:  finallyStart,
+		FinallyEnd:    0,  // Will be determined when needed
+		ExceptionType: "", // Catch all for now
+		ExceptionVar:  0,  // Will be set when exception occurs
+	}
+	
+	ctx.ExceptionHandlers = append(ctx.ExceptionHandlers, handler)
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeFinally(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Mark that we're in a finally block
+	// Clear current exception after finally block completes
+	ctx.IP++
+	return nil
+}
+
+// findExceptionHandler finds the appropriate exception handler for the current IP
+func (vm *VirtualMachine) findExceptionHandler(ctx *ExecutionContext, ip int) *ExceptionHandler {
+	// Find the innermost handler that contains this IP
+	for i := len(ctx.ExceptionHandlers) - 1; i >= 0; i-- {
+		handler := &ctx.ExceptionHandlers[i]
+		if ip >= handler.TryStart && (handler.TryEnd == 0 || ip <= handler.TryEnd) {
+			return handler
+		}
+	}
+	return nil
 }
 
 func (vm *VirtualMachine) executeQuickAssign(ctx *ExecutionContext, inst *opcodes.Instruction) error {
@@ -1203,6 +1291,23 @@ func (vm *VirtualMachine) executeForeachFetch(ctx *ExecutionContext, inst *opcod
 	// Move to next element
 	iterator.Index++
 	iterator.HasMore = iterator.Index < len(iterator.Values)
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeNew(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the class name from the constant
+	className := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if !className.IsString() {
+		return fmt.Errorf("class name must be a string")
+	}
+	
+	// Create a new object instance
+	newObject := values.NewObject(className.ToString())
+	
+	// Store the result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), newObject)
 	
 	ctx.IP++
 	return nil

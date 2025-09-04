@@ -1137,3 +1137,216 @@ func TestArrayAccessOutsideInterpolation(t *testing.T) {
 		})
 	}
 }
+
+func TestTryStatement(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			"Basic try-catch",
+			`<?php
+			try {
+				echo "in try";
+			} catch (Exception $e) {
+				echo "caught";
+			}`,
+		},
+		{
+			"Try-catch-finally",
+			`<?php
+			try {
+				echo "try block";
+			} catch (Exception $e) {
+				echo "catch block";
+			} finally {
+				echo "finally block";
+			}`,
+		},
+		{
+			"Try with finally only",
+			`<?php
+			try {
+				echo "try block";
+			} finally {
+				echo "finally block";
+			}`,
+		},
+		{
+			"Multiple catch blocks",
+			`<?php
+			try {
+				echo "try block";
+			} catch (RuntimeException $e) {
+				echo "runtime error";
+			} catch (Exception $e) {
+				echo "general error";
+			}`,
+		},
+		{
+			"Try-catch with variable assignment",
+			`<?php
+			$message = "default";
+			try {
+				$message = "success";
+			} catch (Exception $e) {
+				$message = "error";
+			}
+			echo $message;`,
+		},
+		{
+			"Nested try-catch",
+			`<?php
+			try {
+				echo "outer try";
+				try {
+					echo "inner try";
+				} catch (Exception $e) {
+					echo "inner catch";
+				}
+			} catch (Exception $e) {
+				echo "outer catch";
+			}`,
+		},
+		{
+			"Try-catch with throw statement",
+			`<?php
+			try {
+				echo "before throw";
+				throw new Exception("simple exception");
+				echo "after throw";
+			} catch (Exception $e) {
+				echo "caught exception";
+			}`,
+		},
+		{
+			"Try-catch with exception variable usage",
+			`<?php
+			try {
+				echo "try block";
+			} catch (Exception $ex) {
+				echo "Exception caught";
+				$error = $ex;
+			}`,
+		},
+		{
+			"Try-catch-finally with complex expressions",
+			`<?php
+			$x = 10;
+			try {
+				$x = $x * 2;
+				echo $x;
+			} catch (Exception $e) {
+				$x = $x - 5;
+			} finally {
+				$x = $x + 1;
+				echo $x;
+			}`,
+		},
+		{
+			"Empty try-catch blocks",
+			`<?php
+			try {
+			} catch (Exception $e) {
+			}`,
+		},
+		{
+			"Try-catch with array operations",
+			`<?php
+			$arr = [1, 2, 3];
+			try {
+				echo $arr[0];
+				$arr[3] = 4;
+			} catch (Exception $e) {
+				echo "array error";
+			}`,
+		},
+		{
+			"Try-catch with string interpolation",
+			`<?php
+			$name = "test";
+			try {
+				echo "Hello $name";
+			} catch (Exception $e) {
+				echo "Error with $name";
+			}`,
+		},
+		{
+			"Try-catch with conditional logic",
+			`<?php
+			$condition = true;
+			try {
+				if ($condition) {
+					echo "condition true";
+				} else {
+					echo "condition false";
+				}
+			} catch (Exception $e) {
+				echo "exception in conditional";
+			}`,
+		},
+		{
+			"Try-catch with loops",
+			`<?php
+			try {
+				for ($i = 0; $i < 3; $i++) {
+					echo $i;
+				}
+			} catch (Exception $e) {
+				echo "loop error";
+			}`,
+		},
+		{
+			"Try-finally without catch",
+			`<?php
+			try {
+				echo "executing";
+				$x = 5;
+			} finally {
+				echo "cleanup";
+			}
+			echo "done";`,
+		},
+		{
+			"Exception flow with throw and catch",
+			`<?php
+			try {
+				echo "Before throw";
+				throw new Exception("Test exception");
+				echo "After throw";
+			} catch (Exception $e) {
+				echo "Caught exception";
+			}
+			echo "After try-catch";`,
+		},
+		{
+			"Try-catch-finally with exception thrown",
+			`<?php
+			try {
+				echo "Try";
+				throw new Exception("Error");
+			} catch (Exception $e) {
+				echo "Catch";
+			} finally {
+				echo "Finally";
+			}
+			echo "End";`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile try statement: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute try statement: %s", tt.name)
+		})
+	}
+}
