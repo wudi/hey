@@ -776,7 +776,12 @@ func (c *Compiler) compilePropertyAccess(expr *ast.PropertyAccessExpression) err
 }
 
 func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
-	// Compile callee expression
+	// Check if this is a static method call (e.g., parent::__construct, Class::method)
+	if staticAccess, ok := expr.Callee.(*ast.StaticAccessExpression); ok {
+		return c.compileStaticMethodCall(expr, staticAccess)
+	}
+	
+	// Compile callee expression for regular function calls
 	err := c.compileNode(expr.Callee)
 	if err != nil {
 		return err
@@ -813,6 +818,67 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_DO_FCALL, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
+	return nil
+}
+
+func (c *Compiler) compileStaticMethodCall(callExpr *ast.CallExpression, staticAccess *ast.StaticAccessExpression) error {
+	// Handle static method calls like parent::__construct(), Class::method(), etc.
+	
+	// Get class name
+	var className string
+	switch class := staticAccess.Class.(type) {
+	case *ast.IdentifierNode:
+		className = class.Name
+	case *ast.Variable:
+		// Handle parent::, self::, static::
+		className = class.Name
+	default:
+		return fmt.Errorf("unsupported class expression in static method call: %T", staticAccess.Class)
+	}
+	
+	// Get method name
+	var methodName string
+	if method, ok := staticAccess.Property.(*ast.IdentifierNode); ok {
+		methodName = method.Name
+	} else {
+		return fmt.Errorf("unsupported method name type in static method call: %T", staticAccess.Property)
+	}
+	
+	// Get number of arguments
+	var numArgs uint32
+	if callExpr.Arguments != nil {
+		numArgs = uint32(len(callExpr.Arguments.Arguments))
+	}
+	
+	// Initialize static method call
+	classConstant := c.addConstant(values.NewString(className))
+	methodConstant := c.addConstant(values.NewString(methodName))
+	argCountConstant := c.addConstant(values.NewInt(int64(numArgs)))
+	
+	c.emit(opcodes.OP_INIT_STATIC_METHOD_CALL, 
+		opcodes.IS_CONST, classConstant,
+		opcodes.IS_CONST, methodConstant,
+		opcodes.IS_CONST, argCountConstant)
+	
+	// Compile and send arguments
+	if callExpr.Arguments != nil {
+		for i, arg := range callExpr.Arguments.Arguments {
+			err := c.compileNode(arg)
+			if err != nil {
+				return err
+			}
+			argResult := c.allocateTemp()
+			c.emitMove(argResult)
+			
+			argNum := c.addConstant(values.NewInt(int64(i)))
+			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+		}
+	}
+	
+	// Execute static method call
+	result := c.allocateTemp()
+	c.emit(opcodes.OP_STATIC_METHOD_CALL, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
+	
 	return nil
 }
 
@@ -1941,8 +2007,17 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	funcName := nameNode.Name
 	
 	// Check if function already exists
-	if _, exists := c.functions[funcName]; exists {
-		return fmt.Errorf("function %s already declared", funcName)
+	// For class methods, check within the current class; for global functions, check globally
+	if c.currentClass != nil {
+		// This is a class method - check for conflicts within the current class
+		if _, exists := c.currentClass.Methods[funcName]; exists {
+			return fmt.Errorf("function %s already declared", funcName)
+		}
+	} else {
+		// This is a global function - check globally
+		if _, exists := c.functions[funcName]; exists {
+			return fmt.Errorf("function %s already declared", funcName)
+		}
 	}
 	
 	// Create new function
@@ -2033,7 +2108,15 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	// Store compiled function
 	function.Instructions = c.instructions
 	function.Constants = c.constants
-	c.functions[funcName] = function
+	
+	// Store the function in the appropriate location
+	if c.currentClass != nil {
+		// Store as a class method
+		c.currentClass.Methods[funcName] = function
+	} else {
+		// Store as a global function
+		c.functions[funcName] = function
+	}
 	
 	// Restore compiler state
 	c.popScope()
@@ -2094,6 +2177,9 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	nameConstant := c.addConstant(values.NewString(className))
 	c.emit(opcodes.OP_INIT_CLASS_TABLE, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 	
+	// Set current class context in VM for anonymous classes
+	c.emit(opcodes.OP_SET_CURRENT_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
+	
 	// Set parent class if exists
 	if class.ParentClass != "" {
 		parentConstant := c.addConstant(values.NewString(class.ParentClass))
@@ -2122,6 +2208,9 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	// Store compiled class
 	c.classes[className] = class
 	c.currentClass = oldCurrentClass
+	
+	// Clear current class context in VM for anonymous classes
+	c.emit(opcodes.OP_CLEAR_CURRENT_CLASS, 0, 0, 0, 0, 0, 0)
 	
 	// Emit class declaration instruction
 	c.emit(opcodes.OP_DECLARE_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
@@ -2408,6 +2497,9 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	nameConstant := c.addConstant(values.NewString(className))
 	c.emit(opcodes.OP_INIT_CLASS_TABLE, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 	
+	// Set current class context in VM
+	c.emit(opcodes.OP_SET_CURRENT_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
+	
 	// Set parent class if exists
 	if class.ParentClass != "" {
 		parentConstant := c.addConstant(values.NewString(class.ParentClass))
@@ -2436,6 +2528,9 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	// Store compiled class
 	c.classes[className] = class
 	c.currentClass = oldCurrentClass
+	
+	// Clear current class context in VM
+	c.emit(opcodes.OP_CLEAR_CURRENT_CLASS, 0, 0, 0, 0, 0, 0)
 	
 	// Emit class declaration instruction
 	c.emit(opcodes.OP_DECLARE_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)

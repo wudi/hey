@@ -238,6 +238,8 @@ const (
 	OP_INIT_CLASS_TABLE
 	OP_ADD_INTERFACE
 	OP_SET_CLASS_PARENT
+	OP_SET_CURRENT_CLASS
+	OP_CLEAR_CURRENT_CLASS
 )
 
 // Operand types for instruction encoding
@@ -485,6 +487,8 @@ var opcodeNames = map[Opcode]string{
 	OP_INIT_CLASS_TABLE:     "INIT_CLASS_TABLE",
 	OP_ADD_INTERFACE:        "ADD_INTERFACE",
 	OP_SET_CLASS_PARENT:     "SET_CLASS_PARENT",
+	OP_SET_CURRENT_CLASS:    "SET_CURRENT_CLASS",
+	OP_CLEAR_CURRENT_CLASS:  "CLEAR_CURRENT_CLASS",
 }
 
 func (op Opcode) String() string {

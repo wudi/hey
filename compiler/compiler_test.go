@@ -2391,3 +2391,86 @@ for ($i = 0; $i <= 8; $i++) {
 	expected := "F(0) = 0 (OK)\nF(1) = 1 (OK)\nF(2) = 1 (OK)\nF(3) = 2 (OK)\nF(4) = 3 (OK)\nF(5) = 5 (OK)\nF(6) = 8 (OK)\nF(7) = 13 (OK)\nF(8) = 21 (OK)\n"
 	require.Equal(t, expected, output, "Fibonacci comparison output mismatch")
 }
+
+func TestClassInheritance(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple class inheritance with method override",
+			`<?php 
+			class Persion {
+				public $name;
+				public $age;
+
+				public function __construct($name, $age) {
+					$this->name = $name;
+					$this->age = $age;
+				}
+
+				public function introduce() {
+					return "My name is {$this->name} and I am {$this->age} years old.";
+				}
+			}
+
+			class Student extends Persion {
+				public $studentId;
+
+				public function __construct($name, $age, $studentId) {
+					parent::__construct($name, $age);
+					$this->studentId = $studentId;
+				}
+
+				public function introduce() {
+					return parent::introduce() . " My student ID is {$this->studentId}.";
+				}
+			}
+
+			$student = new Student("Alice", 20, "S12345");
+			echo $student->introduce();`,
+		},
+		{
+			"Class inheritance without method override",
+			`<?php 
+			class Animal {
+				public $name;
+
+				public function __construct($name) {
+					$this->name = $name;
+				}
+
+				public function speak() {
+					return "Some sound";
+				}
+			}
+
+			class Dog extends Animal {
+				public function __construct($name) {
+					parent::__construct($name);
+				}
+			}
+
+			$dog = new Dog("Buddy");
+			echo $dog->speak();`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Parse the code
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tc.name)
+
+			// Compile
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile program for test: %s", tc.name)
+
+			// Execute with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Failed to execute program for test: %s", tc.name)
+		})
+	}
+}

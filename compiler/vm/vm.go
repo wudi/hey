@@ -41,6 +41,11 @@ type ExecutionContext struct {
 	// Function call state
 	CallContext   *CallContext // Current function call being prepared
 	CallContextStack []*CallContext // Stack for nested function calls
+	StaticCallContext *StaticCallContext // Current static method call being prepared
+	
+	// Object-oriented state
+	CurrentObject *values.Value // Current object being executed in
+	CurrentClass  string        // Current class name being executed in
 	
 	// Error handling
 	ExceptionStack    []Exception
@@ -387,6 +392,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeAddInterface(ctx, inst)
 	case opcodes.OP_SET_CLASS_PARENT:
 		return vm.executeSetClassParent(ctx, inst)
+	case opcodes.OP_INIT_STATIC_METHOD_CALL:
+		return vm.executeInitStaticMethodCall(ctx, inst)
+	case opcodes.OP_STATIC_METHOD_CALL:
+		return vm.executeStaticMethodCall(ctx, inst)
+	case opcodes.OP_SET_CURRENT_CLASS:
+		return vm.executeSetCurrentClass(ctx, inst)
+	case opcodes.OP_CLEAR_CURRENT_CLASS:
+		return vm.executeClearCurrentClass(ctx, inst)
 		
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
@@ -1279,11 +1292,19 @@ func (vm *VirtualMachine) executeSendValue(ctx *ExecutionContext, inst *opcodes.
 	// Get argument value from operand 2 (the actual argument value)
 	argValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
 	
-	// Add argument to call context
-	if ctx.CallContext == nil {
-		return fmt.Errorf("no function call context - INIT_FCALL must be called first")
+	// Add argument to the appropriate call context
+	if ctx.StaticCallContext != nil {
+		// This is for a static method call
+		if ctx.StaticCallContext.ArgIndex < len(ctx.StaticCallContext.Arguments) {
+			ctx.StaticCallContext.Arguments[ctx.StaticCallContext.ArgIndex] = argValue
+			ctx.StaticCallContext.ArgIndex++
+		}
+	} else if ctx.CallContext != nil {
+		// This is for a regular function call
+		ctx.CallContext.Arguments = append(ctx.CallContext.Arguments, argValue)
+	} else {
+		return fmt.Errorf("no function call context - INIT_FCALL or INIT_STATIC_METHOD_CALL must be called first")
 	}
-	ctx.CallContext.Arguments = append(ctx.CallContext.Arguments, argValue)
 	
 	ctx.IP++
 	return nil
@@ -1296,6 +1317,11 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 	}
 	
 	functionName := ctx.CallContext.FunctionName
+	
+	// Handle method calls differently from function calls
+	if ctx.CallContext.IsMethod {
+		return vm.executeMethodCall(ctx, inst)
+	}
 	
 	// Check for runtime registered functions first
 	if runtimeRegistry.GlobalVMIntegration != nil && runtimeRegistry.GlobalVMIntegration.HasFunction(functionName) {
@@ -1626,6 +1652,16 @@ type CallContext struct {
 	FunctionName string
 	Arguments    []*values.Value
 	NumArgs      int
+	// For method calls
+	Object       *values.Value
+	IsMethod     bool
+}
+
+type StaticCallContext struct {
+	ClassName  string
+	MethodName string
+	Arguments  []*values.Value
+	ArgIndex   int
 }
 
 // Helper function to convert Go interface{} keys to Value objects
@@ -1657,9 +1693,26 @@ func (vm *VirtualMachine) executeDeclareFunction(ctx *ExecutionContext, inst *op
 	
 	funcName := funcNameValue.ToString()
 	
-	// Function should already be available in the context's Functions map
-	// (passed from the compiler during Execute call)
-	if _, exists := ctx.Functions[funcName]; !exists {
+	// Function should already be available in either:
+	// 1. The global Functions map (for regular functions)
+	// 2. As a method in the current class (for class methods)
+	found := false
+	
+	// Check global functions first
+	if _, exists := ctx.Functions[funcName]; exists {
+		found = true
+	}
+	
+	// If not found globally and we have a current class, check class methods
+	if !found && ctx.CurrentClass != "" {
+		if class, classExists := ctx.Classes[ctx.CurrentClass]; classExists {
+			if _, methodExists := class.Methods[funcName]; methodExists {
+				found = true
+			}
+		}
+	}
+	
+	if !found {
 		return fmt.Errorf("function %s not found during declaration", funcName)
 	}
 	
@@ -1857,6 +1910,8 @@ func (vm *VirtualMachine) executeInitMethodCall(ctx *ExecutionContext, inst *opc
 		FunctionName: methodName,
 		Arguments:    make([]*values.Value, 0, numArgs),
 		NumArgs:      numArgs,
+		Object:       object,
+		IsMethod:     true,
 	}
 	
 	ctx.IP++
@@ -2025,3 +2080,266 @@ func (vm *VirtualMachine) executeFetchStaticPropertyWrite(ctx *ExecutionContext,
 	return nil
 }
 
+
+func (vm *VirtualMachine) executeInitStaticMethodCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get class name, method name, and argument count
+	className := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	methodName := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	argCount := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+	
+	if !className.IsString() {
+		return fmt.Errorf("class name must be a string")
+	}
+	if !methodName.IsString() {
+		return fmt.Errorf("method name must be a string")
+	}
+	
+	classNameStr := className.ToString()
+	methodNameStr := methodName.ToString()
+	
+	// Handle special class names
+	actualClassName := classNameStr
+	if classNameStr == "parent" && ctx.CurrentClass != "" {
+		// Look up the parent class of the current class
+		if class, exists := ctx.Classes[ctx.CurrentClass]; exists && class.ParentClass != "" {
+			actualClassName = class.ParentClass
+		} else {
+			return fmt.Errorf("class %s has no parent class", ctx.CurrentClass)
+		}
+	} else if classNameStr == "self" && ctx.CurrentClass != "" {
+		actualClassName = ctx.CurrentClass
+	}
+	
+	numArgs := 0
+	if argCount.IsInt() {
+		numArgs = int(argCount.Data.(int64))
+	}
+	
+	// Set up static method call context
+	ctx.StaticCallContext = &StaticCallContext{
+		ClassName:  actualClassName,
+		MethodName: methodNameStr,
+		Arguments:  make([]*values.Value, numArgs),
+		ArgIndex:   0,
+	}
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeStaticMethodCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Check if we have a static call context
+	if ctx.StaticCallContext == nil {
+		return fmt.Errorf("no static method call context - INIT_STATIC_METHOD_CALL must be called first")
+	}
+	
+	className := ctx.StaticCallContext.ClassName
+	methodName := ctx.StaticCallContext.MethodName
+	
+	// Find the class
+	class, exists := ctx.Classes[className]
+	if !exists {
+		return fmt.Errorf("class %s not found", className)
+	}
+	
+	// Find the method in the class (or its parent classes)
+	var method *Function
+	currentClass := class
+	for currentClass != nil {
+		if m, found := currentClass.Methods[methodName]; found {
+			method = m
+			break
+		}
+		
+		// Check parent class
+		if currentClass.ParentClass != "" {
+			if parentClass, exists := ctx.Classes[currentClass.ParentClass]; exists {
+				currentClass = parentClass
+			} else {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	
+	if method == nil {
+		return fmt.Errorf("method %s not found in class %s or its parents", methodName, className)
+	}
+	
+	// Create a new execution context for the method
+	methodCtx := NewExecutionContext()
+	methodCtx.Constants = method.Constants
+	methodCtx.GlobalVars = ctx.GlobalVars
+	methodCtx.Functions = ctx.Functions
+	methodCtx.Classes = ctx.Classes
+	methodCtx.CurrentClass = className
+	
+	// Set up method parameters (simplified)
+	// TODO: Properly map parameters to variable slots
+	_ = method.Parameters // Avoid unused variable warning
+	
+	// Execute the method
+	result, err := vm.executeMethod(methodCtx, method.Instructions)
+	if err != nil {
+		return err
+	}
+	
+	// Store result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	
+	// Clear static call context
+	ctx.StaticCallContext = nil
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeMethod(ctx *ExecutionContext, instructions []opcodes.Instruction) (*values.Value, error) {
+	// Execute method instructions in the provided context
+	originalInstructions := ctx.Instructions
+	originalIP := ctx.IP
+	
+	// Set the method instructions
+	ctx.Instructions = instructions
+	ctx.IP = 0
+	
+	// Execute until return or end
+	for ctx.IP < len(ctx.Instructions) {
+		if ctx.Halted {
+			break
+		}
+		
+		inst := &ctx.Instructions[ctx.IP]
+		err := vm.executeInstruction(ctx, inst)
+		if err != nil {
+			// Restore original context
+			ctx.Instructions = originalInstructions
+			ctx.IP = originalIP
+			return nil, err
+		}
+		
+		// Check if we hit a return instruction
+		if inst.Opcode == opcodes.OP_RETURN {
+			// Get the return value
+			returnValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+			
+			// Restore original context
+			ctx.Instructions = originalInstructions
+			ctx.IP = originalIP
+			
+			return returnValue, nil
+		}
+	}
+	
+	// If we reach here without a return, return null
+	ctx.Instructions = originalInstructions
+	ctx.IP = originalIP
+	return values.NewNull(), nil
+}
+
+func (vm *VirtualMachine) executeSetCurrentClass(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get class name from constants
+	className := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if !className.IsString() {
+		return fmt.Errorf("class name must be a string")
+	}
+	
+	// Set the current class context
+	ctx.CurrentClass = className.ToString()
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeClearCurrentClass(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Clear the current class context
+	ctx.CurrentClass = ""
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeMethodCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	methodName := ctx.CallContext.FunctionName
+	object := ctx.CallContext.Object
+	
+	// For now, we need to determine the object's class
+	// In a real implementation, we would have object metadata
+	// For this simplified version, we'll look for the method in all classes
+	// and match based on the current execution context
+	
+	var method *Function
+	var className string
+	
+	// Try to find the method in available classes
+	// Start with the most recently instantiated class (heuristic)
+	for cName, class := range ctx.Classes {
+		if m, found := class.Methods[methodName]; found {
+			method = m
+			className = cName
+			break
+		}
+	}
+	
+	// If method not found in any class, try parent classes
+	if method == nil {
+		for cName, class := range ctx.Classes {
+			currentClass := class
+			for currentClass != nil {
+				if m, found := currentClass.Methods[methodName]; found {
+					method = m
+					className = cName
+					break
+				}
+				
+				// Check parent class
+				if currentClass.ParentClass != "" {
+					if parentClass, exists := ctx.Classes[currentClass.ParentClass]; exists {
+						currentClass = parentClass
+					} else {
+						break
+					}
+				} else {
+					break
+				}
+			}
+			if method != nil {
+				break
+			}
+		}
+	}
+	
+	if method == nil {
+		return fmt.Errorf("function %s not found", methodName)
+	}
+	
+	// Create a new execution context for the method
+	methodCtx := NewExecutionContext()
+	methodCtx.Constants = method.Constants  
+	methodCtx.GlobalVars = ctx.GlobalVars
+	methodCtx.Functions = ctx.Functions
+	methodCtx.Classes = ctx.Classes
+	methodCtx.CurrentClass = className
+	methodCtx.CurrentObject = object
+	
+	// Execute the method
+	result, err := vm.executeMethod(methodCtx, method.Instructions)
+	if err != nil {
+		return err
+	}
+	
+	// Store result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	
+	// Pop call context from stack
+	if len(ctx.CallContextStack) > 0 {
+		ctx.CallContext = ctx.CallContextStack[len(ctx.CallContextStack)-1]
+		ctx.CallContextStack = ctx.CallContextStack[:len(ctx.CallContextStack)-1]
+	} else {
+		ctx.CallContext = nil
+	}
+	
+	ctx.IP++
+	return nil
+}
