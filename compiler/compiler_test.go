@@ -20,8 +20,143 @@ func TestEcho(t *testing.T) {
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 	require.NoError(t, err)
+}
+
+func TestForeachWithFunctionCall(t *testing.T) {
+	code := `<?php
+function foo($n):array {
+    $ret = [];
+    for($i=0; $i<$n; $i++) {
+        $ret[] = $i;
+    }
+    return $ret;
+}
+
+foreach(foo(5) as $v) {
+    echo "$v\n";
+}`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Compilation failed")
+
+	// Debug: Print compiled functions
+	t.Logf("Compiled functions: %v", len(comp.GetFunctions()))
+	for name, fn := range comp.GetFunctions() {
+		t.Logf("Function %s: %d instructions, %d constants", name, len(fn.Instructions), len(fn.Constants))
+	}
+	
+	// Capture output
+	var buf bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
+	require.NoError(t, err, "VM execution failed")
+
+	// Restore stdout and capture output
+	w.Close()
+	os.Stdout = oldStdout
+	buf.ReadFrom(r)
+	
+	output := buf.String()
+	t.Logf("VM Output: %q", output)
+	
+	// Check that we got the expected output
+	expectedOutput := "0\n1\n2\n3\n4\n"
+	require.Equal(t, expectedOutput, output, "Expected output doesn't match")
+}
+
+func TestSimpleForeach(t *testing.T) {
+	code := `<?php
+$arr = [0, 1, 2, 3, 4];
+foreach($arr as $v) {
+    echo "$v\n";
+}`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Compilation failed")
+	
+	// Capture output
+	var buf bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
+	require.NoError(t, err, "VM execution failed")
+
+	// Restore stdout and capture output
+	w.Close()
+	os.Stdout = oldStdout
+	buf.ReadFrom(r)
+	
+	output := buf.String()
+	t.Logf("Simple foreach VM Output: %q", output)
+	
+	// Check that we got the expected output
+	expectedOutput := "0\n1\n2\n3\n4\n"
+	require.Equal(t, expectedOutput, output, "Expected output doesn't match")
+}
+
+func TestSimpleFunctionCall(t *testing.T) {
+	code := `<?php
+function foo($n):array {
+    $ret = [];
+    for($i=0; $i<$n; $i++) {
+        $ret[] = $i;
+    }
+    return $ret;
+}
+
+$result = foo(3);
+echo "done";`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Compilation failed")
+
+	// Debug: Print compiled functions
+	t.Logf("Compiled functions: %v", len(comp.GetFunctions()))
+	for name, fn := range comp.GetFunctions() {
+		t.Logf("Function %s: %d instructions, %d constants", name, len(fn.Instructions), len(fn.Constants))
+	}
+	
+	// Capture output
+	var buf bytes.Buffer
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
+	require.NoError(t, err, "VM execution failed")
+
+	// Restore stdout and capture output
+	w.Close()
+	os.Stdout = oldStdout
+	buf.ReadFrom(r)
+	
+	output := buf.String()
+	t.Logf("Function call VM Output: %q", output)
+	
+	// Check that we got some output (at least "done")
+	require.Contains(t, output, "done", "Should contain 'done'")
 }
 
 func TestArithmeticOperators(t *testing.T) {
@@ -47,7 +182,7 @@ func TestArithmeticOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -80,7 +215,7 @@ func TestComparisonOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -108,7 +243,7 @@ func TestLogicalOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -136,7 +271,7 @@ func TestBitwiseOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -163,7 +298,7 @@ func TestUnaryOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -187,7 +322,7 @@ func TestStringOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -257,7 +392,7 @@ func TestAdvancedComparisonOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -287,7 +422,7 @@ func TestComparisonWithNull(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -336,7 +471,7 @@ func TestComplexComparisonExpressions(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -378,7 +513,7 @@ func TestSpaceshipOperatorDetails(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -424,7 +559,7 @@ func TestIncrementDecrementOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -483,7 +618,7 @@ func TestAdvancedIncrementDecrementOperators(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -520,7 +655,7 @@ func TestIncrementDecrementSequences(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -542,7 +677,7 @@ echo $a; // except: 2
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 	require.NoError(t, err)
 }
 
@@ -570,7 +705,7 @@ echo $a; // except: 2
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 	require.NoError(t, err)
 
 	// Close writer and restore stdout
@@ -620,7 +755,7 @@ switch ($a) {
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 	require.NoError(t, err)
 
 	// Close write pipe and restore stdout
@@ -665,7 +800,7 @@ switch ($a) {
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 	require.NoError(t, err)
 
 	// Close write pipe and restore stdout
@@ -708,7 +843,7 @@ switch ($a) {
 	require.NoError(t, err)
 
 	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 	require.NoError(t, err)
 
 	// Close write pipe and restore stdout
@@ -750,7 +885,7 @@ func TestCoalesceOperator(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -781,7 +916,7 @@ func TestMatchExpression(t *testing.T) {
 			require.NoError(t, err, "Failed to compile %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute %s", tc.name)
 		})
 	}
@@ -799,7 +934,7 @@ func TestMatchExpressionError(t *testing.T) {
 	require.NoError(t, err, "Failed to compile match expression error test")
 
 	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 	require.Error(t, err, "Expected UnhandledMatchError")
 	require.Contains(t, err.Error(), "UnhandledMatchError", "Should contain UnhandledMatchError")
 }
@@ -837,7 +972,7 @@ func TestForStatement(t *testing.T) {
 			require.NoError(t, err, "Failed to compile for statement: %s", tt.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute for statement: %s", tt.name)
 		})
 	}
@@ -880,7 +1015,7 @@ func TestForeachStatement(t *testing.T) {
 			require.NoError(t, err, "Failed to compile foreach statement: %s", tt.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute foreach statement: %s", tt.name)
 		})
 	}
@@ -963,7 +1098,7 @@ func TestInterpolatedStringExpression(t *testing.T) {
 			require.NoError(t, err, "Failed to compile interpolated string: %s", tt.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute interpolated string: %s", tt.name)
 		})
 	}
@@ -1025,7 +1160,7 @@ func TestInterpolatedStringArrayAccess(t *testing.T) {
 
 			vmCtx := vm.NewExecutionContext()
 			
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute array access interpolation: %s", tt.name)
 			
 			// For now, we just verify compilation and execution succeed
@@ -1086,7 +1221,7 @@ func TestArrayAccessEdgeCases(t *testing.T) {
 			require.NoError(t, err, "Failed to compile edge case: %s", tt.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute edge case: %s", tt.name)
 		})
 	}
@@ -1132,7 +1267,7 @@ func TestArrayAccessOutsideInterpolation(t *testing.T) {
 			require.NoError(t, err, "Failed to compile array access outside interpolation: %s", tt.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute array access outside interpolation: %s", tt.name)
 		})
 	}
@@ -1345,7 +1480,7 @@ func TestTryStatement(t *testing.T) {
 			require.NoError(t, err, "Failed to compile try statement: %s", tt.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute try statement: %s", tt.name)
 		})
 	}
@@ -1415,7 +1550,7 @@ func TestFunctionDeclaration(t *testing.T) {
 			require.NoError(t, err, "Failed to compile function declaration: %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute function declaration: %s", tc.name)
 		})
 	}
@@ -1500,7 +1635,7 @@ func TestAnonymousClass(t *testing.T) {
 			require.NoError(t, err, "Failed to compile anonymous class: %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute anonymous class: %s", tc.name)
 		})
 	}
@@ -1605,7 +1740,7 @@ func TestPropertyDeclaration(t *testing.T) {
 			require.NoError(t, err, "Failed to compile property declaration: %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute property declaration: %s", tc.name)
 		})
 	}
@@ -1701,7 +1836,7 @@ func TestClassConstantDeclaration(t *testing.T) {
 			require.NoError(t, err, "Failed to compile class constant declaration: %s", tc.name)
 
 			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions())
 			require.NoError(t, err, "Failed to execute class constant declaration: %s", tc.name)
 		})
 	}

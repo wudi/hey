@@ -36,6 +36,9 @@ type ExecutionContext struct {
 	ForeachIterators map[uint32]*ForeachIterator // Foreach iterator state
 	Classes       map[string]*Class
 	
+	// Function call state
+	CallContext   *CallContext // Current function call being prepared
+	
 	// Error handling
 	ExceptionStack    []Exception
 	ExceptionHandlers []ExceptionHandler
@@ -154,9 +157,16 @@ func NewExecutionContext() *ExecutionContext {
 }
 
 // Execute runs bytecode instructions in the given context
-func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []opcodes.Instruction, constants []*values.Value) error {
+func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []opcodes.Instruction, constants []*values.Value, functions map[string]*Function) error {
 	ctx.Instructions = instructions
 	ctx.Constants = constants
+	if ctx.Functions == nil {
+		ctx.Functions = make(map[string]*Function)
+	}
+	// Copy compiler functions to the execution context
+	for name, fn := range functions {
+		ctx.Functions[name] = fn
+	}
 	ctx.IP = 0
 	
 	// Main execution loop with computed goto optimization
@@ -858,8 +868,14 @@ func (vm *VirtualMachine) executeEcho(ctx *ExecutionContext, inst *opcodes.Instr
 }
 
 func (vm *VirtualMachine) executeReturn(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// For now, just halt execution
-	// In a full implementation, this would handle function returns properly
+	// Get return value if present
+	if opcodes.DecodeOpType1(inst.OpType1) != opcodes.IS_UNUSED {
+		returnValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+		// Push return value onto stack so the caller can retrieve it
+		ctx.Stack = append(ctx.Stack, returnValue)
+	}
+	
+	// Halt execution for this context (function returns)
 	ctx.Halted = true
 	return nil
 }
@@ -1124,22 +1140,110 @@ func (vm *VirtualMachine) executeShiftRight(ctx *ExecutionContext, inst *opcodes
 // Function call operations (simplified)
 
 func (vm *VirtualMachine) executeInitFunctionCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// This is a placeholder for function call initialization
+	// Get function callee from operand 1 (should be a function name or reference)
+	calleeValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	
+	// Get number of arguments from operand 2
+	numArgsValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if !numArgsValue.IsInt() {
+		return fmt.Errorf("number of arguments must be an integer")
+	}
+	
+	numArgs := int(numArgsValue.Data.(int64))
+	
+	// Extract function name - for simple cases it might be a string constant
+	var functionName string
+	if calleeValue.IsString() {
+		functionName = calleeValue.ToString()
+	} else {
+		// For more complex cases (variable functions), we'd need more logic here
+		return fmt.Errorf("complex function calls not yet implemented")
+	}
+	
+	// Initialize call context
+	ctx.CallContext = &CallContext{
+		FunctionName: functionName,
+		Arguments:    make([]*values.Value, 0, numArgs),
+		NumArgs:      numArgs,
+	}
+	
 	ctx.IP++
 	return nil
 }
 
 func (vm *VirtualMachine) executeSendValue(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// This is a placeholder for sending function arguments
+	// Get argument value from operand 2 (the actual argument value)
+	argValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	
+	// Add argument to call context
+	if ctx.CallContext == nil {
+		return fmt.Errorf("no function call context - INIT_FCALL must be called first")
+	}
+	
+	ctx.CallContext.Arguments = append(ctx.CallContext.Arguments, argValue)
+	
 	ctx.IP++
 	return nil
 }
 
 func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// This is a placeholder for executing function calls
-	// In a real implementation, this would look up the function and call it
-	result := values.NewNull()
+	// Check if we have a call context from INIT_FCALL
+	if ctx.CallContext == nil {
+		return fmt.Errorf("no function call context - INIT_FCALL must be called first")
+	}
+	
+	functionName := ctx.CallContext.FunctionName
+	
+	// Look up the function in the context's function table
+	function, exists := ctx.Functions[functionName]
+	if !exists {
+		return fmt.Errorf("function %s not found", functionName)
+	}
+	
+	// Create new execution context for function
+	functionCtx := NewExecutionContext()
+	functionCtx.Instructions = function.Instructions
+	functionCtx.Constants = function.Constants
+	functionCtx.Functions = ctx.Functions // Share function table
+	
+	// Set up function parameters - map them to the correct variable slots
+	// Parameters are allocated to variable slots 0, 1, 2, etc. during compilation
+	for i, param := range function.Parameters {
+		if functionCtx.Variables == nil {
+			functionCtx.Variables = make(map[uint32]*values.Value)
+		}
+		
+		if i < len(ctx.CallContext.Arguments) {
+			// Set parameter from argument - use slot index as variable slot
+			functionCtx.Variables[uint32(i)] = ctx.CallContext.Arguments[i]
+		} else if param.HasDefault {
+			// Use default value (simplified - would need proper default value evaluation)
+			functionCtx.Variables[uint32(i)] = values.NewNull()
+		} else {
+			return fmt.Errorf("missing required parameter %s for function %s", param.Name, functionName)
+		}
+	}
+	
+	// Execute the function
+	err := vm.Execute(functionCtx, function.Instructions, function.Constants, ctx.Functions)
+	if err != nil {
+		return fmt.Errorf("error executing function %s: %v", functionName, err)
+	}
+	
+	// Get return value from function execution
+	// For now, we'll use the last value on the stack or null if empty
+	var result *values.Value
+	if len(functionCtx.Stack) > 0 {
+		result = functionCtx.Stack[len(functionCtx.Stack)-1]
+	} else {
+		result = values.NewNull()
+	}
+	
+	// Store result
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	
+	// Clear call context
+	ctx.CallContext = nil
 	
 	ctx.IP++
 	return nil
@@ -1346,6 +1450,13 @@ type ForeachIterator struct {
 	HasMore bool
 }
 
+// CallContext represents the state of a function call being prepared
+type CallContext struct {
+	FunctionName string
+	Arguments    []*values.Value
+	NumArgs      int
+}
+
 // Helper function to convert Go interface{} keys to Value objects
 func convertToValue(key interface{}) *values.Value {
 	switch k := key.(type) {
@@ -1368,14 +1479,20 @@ func convertToValue(key interface{}) *values.Value {
 
 func (vm *VirtualMachine) executeDeclareFunction(ctx *ExecutionContext, inst *opcodes.Instruction) error {
 	// Get function name from constants
-	funcName := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
-	if !funcName.IsString() {
+	funcNameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if !funcNameValue.IsString() {
 		return fmt.Errorf("function name must be a string")
 	}
 	
-	// Function declaration is handled at compile time - this opcode just registers it
-	// In a full implementation, we would store the function in the VM's function table
+	funcName := funcNameValue.ToString()
 	
+	// Function should already be available in the context's Functions map
+	// (passed from the compiler during Execute call)
+	if _, exists := ctx.Functions[funcName]; !exists {
+		return fmt.Errorf("function %s not found during declaration", funcName)
+	}
+	
+	// Function is already registered - this opcode confirms it's available at runtime
 	ctx.IP++
 	return nil
 }

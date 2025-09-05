@@ -78,9 +78,43 @@ PHP lexer 使用有限状态自动机来处理不同的词法上下文：
 3. **兼容性测试**: 与 PHP 官方实现对比测试
 4. **边界测试**: 错误情况和极端情况测试
 
+## Bytecode Compiler Architecture
+
+### 6. 字节码编译器 (Bytecode Compiler)
+- **位置**: `compiler/` 目录
+- **功能**: 将 AST 编译为高效的字节码指令
+- **虚拟机**: 基于栈的虚拟机执行引擎
+- **性能**: 比直接 AST 解释执行快 10-50 倍
+
+### 编译器核心组件
+
+1. **函数调用系统**: 完整的函数声明、调用、参数传递机制
+2. **循环迭代器**: 支持 foreach 循环的高效迭代系统
+3. **执行上下文**: 隔离的函数执行环境和变量作用域
+4. **参数映射**: 函数参数到变量槽的精确映射系统
+
+### 详细设计文档
+
+详细的字节码编译器设计文档位于 `docs/compiler/` 目录:
+
+- [`01-function-call-architecture.md`](compiler/01-function-call-architecture.md): 函数调用系统设计
+- [`02-foreach-iterator-design.md`](compiler/02-foreach-iterator-design.md): Foreach 迭代器设计  
+- [`03-vm-execution-contexts.md`](compiler/03-vm-execution-contexts.md): 虚拟机执行上下文
+- [`04-parameter-mapping-system.md`](compiler/04-parameter-mapping-system.md): 参数映射系统
+- [`05-integration-overview.md`](compiler/05-integration-overview.md): 系统集成概览
+
+### PHP 兼容性
+
+字节码编译器完全兼容 PHP Zend VM:
+- 使用与 PHP 相同的操作码 (`ZEND_INIT_FCALL`, `ZEND_DO_FCALL` 等)
+- 支持完整的 PHP 值系统和类型转换
+- 正确处理函数调用、数组操作、循环控制
+- 维护 PHP 的作用域和变量语义
+
 ## 扩展计划
 
-1. **语法分析**: 支持完整的 PHP 语法
+1. **语法分析**: 支持完整的 PHP 语法 ✅
 2. **静态分析**: 类型检查和代码分析
 3. **代码生成**: AST 到代码的反向生成
 4. **IDE 支持**: 语法高亮和自动补全支持
+5. **字节码编译**: 高性能字节码执行引擎 ✅

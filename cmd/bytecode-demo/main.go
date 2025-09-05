@@ -57,7 +57,7 @@ func demo1() {
 	fmt.Println("\nExecution Output:")
 	virtualMachine := vm.NewVirtualMachine()
 	ctx := vm.NewExecutionContext()
-	err := virtualMachine.Execute(ctx, instructions, constants)
+	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function))
 	if err != nil {
 		fmt.Printf("Execution error: %v\n", err)
 	}
@@ -184,7 +184,7 @@ func demo3() {
 	virtualMachine.DebugMode = false // Set to true to see instruction-level debugging
 	ctx := vm.NewExecutionContext()
 
-	err := virtualMachine.Execute(ctx, instructions, constants)
+	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function))
 	if err != nil {
 		fmt.Printf("Execution error: %v\n", err)
 	} else {

@@ -86,6 +86,11 @@ func (c *Compiler) GetConstants() []*values.Value {
 	return c.constants
 }
 
+// GetFunctions returns the compiled functions
+func (c *Compiler) GetFunctions() map[string]*vm.Function {
+	return c.functions
+}
+
 // Main compilation dispatcher
 func (c *Compiler) compileNode(node ast.Node) error {
 	if node == nil {
@@ -1859,6 +1864,16 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	
 	// Create function scope
 	c.pushScope(true)
+	
+	// Set up parameter variables in the function scope
+	if decl.Parameters != nil {
+		for _, param := range decl.Parameters.Parameters {
+			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+				// Register parameter name in function scope
+				c.getOrCreateVariable(nameNode.Name)
+			}
+		}
+	}
 	
 	// Compile function body
 	for _, stmt := range decl.Body {
