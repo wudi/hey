@@ -1,5 +1,7 @@
 # PHP Parser
 
+**EXPERIMENTAL**
+
 [![Go Report Card](https://goreportcard.com/badge/github.com/wudi/php-parser)](https://goreportcard.com/report/github.com/wudi/php-parser)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/doc/install)
