@@ -300,13 +300,78 @@ func (c *Compiler) compileSimpleIncDec(expr *ast.UnaryExpression, variable *ast.
 }
 
 func (c *Compiler) compileStaticPropIncDec(expr *ast.UnaryExpression, staticProp *ast.StaticPropertyAccessExpression) error {
-	// For static property increment/decrement, we'll create a simplified implementation
-	// In a full implementation, this would properly handle static property access
+	// Implement static property increment/decrement (e.g., TestClass::$counter++)
 	
-	// For now, just create a temp result to avoid errors
-	result := c.allocateTemp()
-	constant := c.addConstant(values.NewInt(1))
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
+	// Step 1: Compile class expression (supports both static and dynamic class names)
+	var classOperandType opcodes.OpType
+	var classOperand uint32
+	
+	switch class := staticProp.Class.(type) {
+	case *ast.IdentifierNode:
+		// Static class name like MyClass::$prop
+		classOperand = c.addConstant(values.NewString(class.Name))
+		classOperandType = opcodes.IS_CONST
+	case *ast.Variable:
+		// Handle self::$prop, static::$prop, parent::$prop etc
+		classOperand = c.addConstant(values.NewString(class.Name))
+		classOperandType = opcodes.IS_CONST
+	default:
+		// Dynamic class expression like $className::$prop
+		err := c.compileNode(class)
+		if err != nil {
+			return fmt.Errorf("failed to compile class expression in static property increment: %w", err)
+		}
+		classOperand = c.nextTemp - 1
+		classOperandType = opcodes.IS_TMP_VAR
+	}
+	
+	// Step 2: Compile property expression 
+	var propOperandType opcodes.OpType
+	var propOperand uint32
+	
+	switch property := staticProp.Property.(type) {
+	case *ast.Variable:
+		// Simple static property like ::$prop
+		// Strip the $ from the property name since class properties are stored without $
+		propName := property.Name
+		if len(propName) > 0 && propName[0] == '$' {
+			propName = propName[1:]
+		}
+		propOperand = c.addConstant(values.NewString(propName))
+		propOperandType = opcodes.IS_CONST
+	default:
+		// Dynamic property expression like ::${$expr} or ::${"prop"}
+		err := c.compileNode(property)
+		if err != nil {
+			return fmt.Errorf("failed to compile property expression in static property increment: %w", err)
+		}
+		propOperand = c.nextTemp - 1
+		propOperandType = opcodes.IS_TMP_VAR
+	}
+	
+	// Step 3: Read current value from static property
+	currentVal := c.allocateTemp()
+	c.emit(opcodes.OP_FETCH_STATIC_PROP_R,
+		classOperandType, classOperand,
+		propOperandType, propOperand,
+		opcodes.IS_TMP_VAR, currentVal)
+	
+	// Step 4: Create constant 1 for increment/decrement
+	oneConstant := c.addConstant(values.NewInt(1))
+	
+	// Step 5: Calculate new value
+	newVal := c.allocateTemp()
+	if expr.Operator == "++" {
+		c.emit(opcodes.OP_ADD, opcodes.IS_TMP_VAR, currentVal, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	} else { // "--"
+		c.emit(opcodes.OP_SUB, opcodes.IS_TMP_VAR, currentVal, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	}
+	
+	// Step 6: Write new value back to static property
+	c.emit(opcodes.OP_FETCH_STATIC_PROP_W,
+		classOperandType, classOperand,
+		propOperandType, propOperand,
+		opcodes.IS_TMP_VAR, newVal)
 	
 	return nil
 }

@@ -2038,3 +2038,46 @@ func TestStaticPropertyAccessExpression(t *testing.T) {
 		})
 	}
 }
+
+func TestStaticPropertyIncrementWithSelfAccess(t *testing.T) {
+	code := `<?php
+class TestClass {
+    public static $counter = "0";
+
+    function GetCounter() {
+        return self::$counter;
+    }
+}
+TestClass::$counter++;
+
+$obj = new TestClass();
+echo $obj->GetCounter();`
+
+	// Capture stdout to verify output
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.Empty(t, p.Errors(), "Parser should not have errors")
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Failed to compile static property increment with self access")
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	require.NoError(t, err, "Failed to execute static property increment with self access")
+
+	// Close writer and restore stdout
+	w.Close()
+	os.Stdout = old
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	require.Equal(t, "1", output, "Expected '1', got '%s'", output)
+}
