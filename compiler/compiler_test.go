@@ -7,9 +7,43 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/compiler/vm"
+	"github.com/wudi/php-parser/compiler/runtime"
+	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/lexer"
 	"github.com/wudi/php-parser/parser"
 )
+
+// Helper function to execute compiled bytecode with runtime initialization
+func executeWithRuntime(t *testing.T, comp *Compiler) error {
+	// Initialize runtime if not already done
+	if runtime.GlobalRegistry == nil {
+		err := runtime.Bootstrap()
+		require.NoError(t, err, "Failed to bootstrap runtime")
+	}
+	
+	// Initialize VM integration
+	if runtime.GlobalVMIntegration == nil {
+		err := runtime.InitializeVMIntegration()
+		require.NoError(t, err, "Failed to initialize VM integration")
+	}
+	
+	// Create VM and execution context
+	vmachine := vm.NewVirtualMachine()
+	vmCtx := vm.NewExecutionContext()
+	
+	// Initialize global variables from runtime
+	if vmCtx.GlobalVars == nil {
+		vmCtx.GlobalVars = make(map[string]*values.Value)
+	}
+	
+	variables := runtime.GlobalVMIntegration.GetAllVariables()
+	for name, value := range variables {
+		vmCtx.GlobalVars[name] = value
+	}
+	
+	// Execute bytecode
+	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+}
 
 func TestEcho(t *testing.T) {
 	p := parser.New(lexer.New(`<?php echo "Hello, World!";`))
@@ -19,8 +53,7 @@ func TestEcho(t *testing.T) {
 	err := comp.Compile(prog)
 	require.NoError(t, err)
 
-	vmCtx := vm.NewExecutionContext()
-	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	err = executeWithRuntime(t, comp)
 	require.NoError(t, err)
 }
 
@@ -70,8 +103,7 @@ func TestBuiltinFunctions(t *testing.T) {
 			err := comp.Compile(prog)
 			require.NoError(t, err, "Compilation failed for test: %s", tc.name)
 
-			vmCtx := vm.NewExecutionContext()
-			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			err = executeWithRuntime(t, comp)
 			require.NoError(t, err, "Execution failed for test: %s", tc.name)
 		})
 	}

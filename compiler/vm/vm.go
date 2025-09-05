@@ -7,6 +7,7 @@ import (
 
 	"github.com/wudi/php-parser/compiler/opcodes"
 	"github.com/wudi/php-parser/compiler/values"
+	runtimeRegistry "github.com/wudi/php-parser/compiler/runtime"
 )
 
 // ExecutionContext represents the runtime execution state
@@ -1296,9 +1297,9 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 	
 	functionName := ctx.CallContext.FunctionName
 	
-	// Check for built-in functions first
-	if isBuiltinFunction(functionName) {
-		result, err := callBuiltinFunction(ctx, functionName, ctx.CallContext.Arguments)
+	// Check for runtime registered functions first
+	if runtimeRegistry.GlobalVMIntegration != nil && runtimeRegistry.GlobalVMIntegration.HasFunction(functionName) {
+		result, err := runtimeRegistry.GlobalVMIntegration.CallFunction(ctx, functionName, ctx.CallContext.Arguments)
 		if err != nil {
 			return err
 		}
@@ -1317,6 +1318,7 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 		ctx.IP++
 		return nil
 	}
+	
 	
 	// Look up the function in the context's function table
 	function, exists := ctx.Functions[functionName]
@@ -2023,107 +2025,3 @@ func (vm *VirtualMachine) executeFetchStaticPropertyWrite(ctx *ExecutionContext,
 	return nil
 }
 
-// Built-in function handling helpers
-
-// isBuiltinFunction checks if a function is a built-in function
-func isBuiltinFunction(functionName string) bool {
-	// Import stdlib integration when available
-	// For now, hardcode common built-in functions
-	builtinFunctions := map[string]bool{
-		"strlen":       true,
-		"substr":       true,
-		"strpos":       true,
-		"str_replace":  true,
-		"strtolower":   true,
-		"strtoupper":   true,
-		"trim":         true,
-		"explode":      true,
-		"implode":      true,
-		"count":        true,
-		"array_push":   true,
-		"array_pop":    true,
-		"array_keys":   true,
-		"array_values": true,
-		"in_array":     true,
-		"abs":          true,
-		"max":          true,
-		"min":          true,
-		"round":        true,
-		"floor":        true,
-		"ceil":         true,
-		"pow":          true,
-		"sqrt":         true,
-		"is_string":    true,
-		"is_int":       true,
-		"is_float":     true,
-		"is_bool":      true,
-		"is_array":     true,
-		"is_null":      true,
-		"is_numeric":   true,
-		"isset":        true,
-		"empty":        true,
-		"intval":       true,
-		"floatval":     true,
-		"strval":       true,
-		"boolval":      true,
-		"var_dump":     true,
-		"print_r":      true,
-		"time":         true,
-		"microtime":    true,
-		"date":         true,
-	}
-	
-	return builtinFunctions[functionName]
-}
-
-// callBuiltinFunction calls a built-in function
-func callBuiltinFunction(ctx *ExecutionContext, functionName string, args []*values.Value) (*values.Value, error) {
-	// This is a simplified implementation - in the full version, this would use stdlib integration
-	switch functionName {
-	case "strlen":
-		if len(args) != 1 {
-			return nil, fmt.Errorf("strlen() expects exactly 1 parameter, %d given", len(args))
-		}
-		return values.NewInt(int64(len(args[0].ToString()))), nil
-		
-	case "count":
-		if len(args) < 1 {
-			return nil, fmt.Errorf("count() expects at least 1 parameter, %d given", len(args))
-		}
-		value := args[0]
-		if value.IsArray() {
-			return values.NewInt(int64(value.ArrayCount())), nil
-		}
-		if value.IsNull() {
-			return values.NewInt(0), nil
-		}
-		return values.NewInt(1), nil
-		
-	case "is_string":
-		if len(args) != 1 {
-			return nil, fmt.Errorf("is_string() expects exactly 1 parameter, %d given", len(args))
-		}
-		return values.NewBool(args[0].IsString()), nil
-		
-	case "is_int":
-		if len(args) != 1 {
-			return nil, fmt.Errorf("is_int() expects exactly 1 parameter, %d given", len(args))
-		}
-		return values.NewBool(args[0].IsInt()), nil
-		
-	case "is_array":
-		if len(args) != 1 {
-			return nil, fmt.Errorf("is_array() expects exactly 1 parameter, %d given", len(args))
-		}
-		return values.NewBool(args[0].IsArray()), nil
-		
-	case "var_dump":
-		for _, arg := range args {
-			fmt.Println(arg.String())
-		}
-		return values.NewNull(), nil
-		
-	default:
-		return nil, fmt.Errorf("built-in function %s not implemented", functionName)
-	}
-}
