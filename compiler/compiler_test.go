@@ -24,6 +24,127 @@ func TestEcho(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// Test built-in functions
+func TestBuiltinFunctions(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "strlen",
+			code: `<?php echo strlen("hello");`,
+		},
+		{
+			name: "count_array",
+			code: `<?php 
+				$arr = [1, 2, 3];
+				echo count($arr);`,
+		},
+		{
+			name: "is_string",
+			code: `<?php 
+				$str = "hello";
+				var_dump(is_string($str));`,
+		},
+		{
+			name: "is_int",
+			code: `<?php 
+				$num = 42;
+				var_dump(is_int($num));`,
+		},
+		{
+			name: "is_array",
+			code: `<?php 
+				$arr = [1, 2, 3];
+				var_dump(is_array($arr));`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Execution failed for test: %s", tc.name)
+		})
+	}
+}
+
+// Test string functions
+func TestStringFunctions(t *testing.T) {
+	code := `<?php
+		$str = "Hello World";
+		echo strlen($str) . "\n";
+		var_dump(is_string($str));
+	`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.NotNil(t, prog)
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	require.NoError(t, err)
+}
+
+// Test array functions
+func TestArrayFunctions(t *testing.T) {
+	code := `<?php
+		$arr = [1, 2, 3, "hello"];
+		echo count($arr) . "\n";
+		var_dump(is_array($arr));
+	`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.NotNil(t, prog)
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	require.NoError(t, err)
+}
+
+// Test type checking functions
+func TestTypeCheckingFunctions(t *testing.T) {
+	code := `<?php
+		$str = "hello";
+		$num = 42;
+		$arr = [1, 2, 3];
+		
+		var_dump(is_string($str));
+		var_dump(is_int($num)); 
+		var_dump(is_array($arr));
+		var_dump(is_string($num));
+	`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.NotNil(t, prog)
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err)
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	require.NoError(t, err)
+}
+
 func TestForeachWithFunctionCall(t *testing.T) {
 	code := `<?php
 function foo($n):array {
