@@ -2474,3 +2474,58 @@ func TestClassInheritance(t *testing.T) {
 		})
 	}
 }
+
+func TestClosure(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "simple_closure_with_use",
+			code: `<?php
+function foo($callback) {
+    $callback();
+}
+
+$var1 = "World";
+
+foo(function() use($var1) { 
+    echo "Hello $var1"; 
+});`,
+		},
+		{
+			name: "closure_without_use",
+			code: `<?php
+$fn = function() {
+    echo "Hello";
+};
+$fn();`,
+		},
+		{
+			name: "closure_with_parameters",
+			code: `<?php
+$fn = function($name) {
+    echo "Hello $name";
+};
+$fn("Alice");`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Parse the code
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tc.name)
+
+			// Compile
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile program for test: %s", tc.name)
+
+			// For now, we just check that compilation succeeds
+			// Full execution can be implemented later
+			_ = comp // Use the compiler to avoid unused variable warning
+		})
+	}
+}

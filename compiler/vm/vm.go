@@ -401,6 +401,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_CLEAR_CURRENT_CLASS:
 		return vm.executeClearCurrentClass(ctx, inst)
 		
+	// Closure operations
+	case opcodes.OP_CREATE_CLOSURE:
+		return vm.executeCreateClosure(ctx, inst)
+	case opcodes.OP_BIND_USE_VAR:
+		return vm.executeBindUseVar(ctx, inst)
+	case opcodes.OP_INVOKE_CLOSURE:
+		return vm.executeInvokeClosure(ctx, inst)
+		
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -2339,6 +2347,58 @@ func (vm *VirtualMachine) executeMethodCall(ctx *ExecutionContext, inst *opcodes
 	} else {
 		ctx.CallContext = nil
 	}
+	
+	ctx.IP++
+	return nil
+}
+
+// Closure execution functions
+
+func (vm *VirtualMachine) executeCreateClosure(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Op1 contains the function index or reference
+	functionRef := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	
+	// Create a new closure with empty bound variables (use variables will be bound separately)
+	boundVars := make(map[string]*values.Value)
+	closure := values.NewClosure(functionRef, boundVars, "anonymous")
+	
+	// Store the closure in the result location
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), closure)
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeBindUseVar(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Op1: closure to bind to
+	// Op2: variable name (as constant)
+	// Result: variable value to bind
+	
+	closureVal := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	varNameVal := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	varValue := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+	
+	if !closureVal.IsClosure() {
+		return fmt.Errorf("cannot bind use variable to non-closure")
+	}
+	
+	closure := closureVal.ClosureGet()
+	varName := varNameVal.ToString()
+	
+	// Bind the variable (copy by value, not by reference, unless explicitly marked as reference)
+	closure.BoundVars[varName] = varValue
+	
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeInvokeClosure(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// For now, let's implement a basic version that just returns null
+	// This is a placeholder implementation that can be enhanced later
+	
+	// Store null result
+	result := values.NewNull()
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 	
 	ctx.IP++
 	return nil

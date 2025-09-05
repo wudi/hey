@@ -242,6 +242,13 @@ const (
 	OP_CLEAR_CURRENT_CLASS
 )
 
+// Closure Operations (200-219)
+const (
+	OP_CREATE_CLOSURE Opcode = iota + 200 // Create a closure
+	OP_BIND_USE_VAR                       // Bind a use variable to closure
+	OP_INVOKE_CLOSURE                     // Invoke a closure
+)
+
 // Operand types for instruction encoding
 type OpType byte
 
@@ -489,6 +496,11 @@ var opcodeNames = map[Opcode]string{
 	OP_SET_CLASS_PARENT:     "SET_CLASS_PARENT",
 	OP_SET_CURRENT_CLASS:    "SET_CURRENT_CLASS",
 	OP_CLEAR_CURRENT_CLASS:  "CLEAR_CURRENT_CLASS",
+	
+	// Closure operations
+	OP_CREATE_CLOSURE: "CREATE_CLOSURE",
+	OP_BIND_USE_VAR:   "BIND_USE_VAR",
+	OP_INVOKE_CLOSURE: "INVOKE_CLOSURE",
 }
 
 func (op Opcode) String() string {

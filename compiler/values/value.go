@@ -47,6 +47,13 @@ type Reference struct {
 	Target *Value
 }
 
+// Closure represents a PHP closure/anonymous function
+type Closure struct {
+	Function    interface{}           // Pointer to VM function or compiled function
+	BoundVars   map[string]*Value     // Variables captured via 'use' clause
+	Name        string                // Optional name for debugging
+}
+
 // Constructors for different value types
 
 func NewNull() *Value {
@@ -98,6 +105,20 @@ func NewReference(target *Value) *Value {
 	}
 }
 
+func NewClosure(function interface{}, boundVars map[string]*Value, name string) *Value {
+	if boundVars == nil {
+		boundVars = make(map[string]*Value)
+	}
+	return &Value{
+		Type: TypeCallable,
+		Data: &Closure{
+			Function:  function,
+			BoundVars: boundVars,
+			Name:      name,
+		},
+	}
+}
+
 // Type checking methods
 
 func (v *Value) IsNull() bool {
@@ -134,6 +155,10 @@ func (v *Value) IsObject() bool {
 
 func (v *Value) IsReference() bool {
 	return v.Type == TypeReference
+}
+
+func (v *Value) IsClosure() bool {
+	return v.Type == TypeCallable && v.Data != nil
 }
 
 // Dereferencing for references
@@ -325,6 +350,15 @@ func (v *Value) ArrayCount() int {
 	}
 	arr := v.Data.(*Array)
 	return len(arr.Elements)
+}
+
+// Closure operations
+
+func (v *Value) ClosureGet() *Closure {
+	if v.Type != TypeCallable {
+		return nil
+	}
+	return v.Data.(*Closure)
 }
 
 // Object operations

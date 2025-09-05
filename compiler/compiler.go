@@ -149,6 +149,8 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileStaticPropertyAccess(n)
 	case *ast.StaticAccessExpression:
 		return c.compileStaticAccess(n)
+	case *ast.AnonymousFunctionExpression:
+		return c.compileAnonymousFunction(n)
 
 	// Statements
 	case *ast.ExpressionStatement:
@@ -2126,6 +2128,133 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	// Emit function declaration instruction
 	nameConstant := c.addConstant(values.NewString(funcName))
 	c.emit(opcodes.OP_DECLARE_FUNCTION, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
+	
+	return nil
+}
+
+func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpression) error {
+	// Generate a unique name for the anonymous function
+	anonName := fmt.Sprintf("__anonymous_%d", len(c.functions))
+	
+	// Create new function
+	function := &vm.Function{
+		Name:         anonName,
+		Instructions: make([]opcodes.Instruction, 0),
+		Constants:    make([]*values.Value, 0),
+		Parameters:   make([]vm.Parameter, 0),
+		IsVariadic:   false,
+		IsGenerator:  false,
+	}
+	
+	// Compile parameters
+	if expr.Parameters != nil {
+		for _, param := range expr.Parameters.Parameters {
+			// param is *ParameterNode
+			paramName := ""
+			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+				paramName = nameNode.Name
+			} else {
+				return fmt.Errorf("invalid parameter name type")
+			}
+			
+			vmParam := vm.Parameter{
+				Name:        paramName,
+				IsReference: param.ByReference,
+				HasDefault:  param.DefaultValue != nil,
+			}
+			
+			// Handle parameter type
+			if param.Type != nil {
+				vmParam.Type = param.Type.String()
+			}
+			
+			// Handle default value
+			if param.DefaultValue != nil {
+				vmParam.HasDefault = true
+			}
+			
+			// Check for variadic
+			if param.Variadic {
+				function.IsVariadic = true
+			}
+			
+			function.Parameters = append(function.Parameters, vmParam)
+		}
+	}
+	
+	// Store current compiler state
+	oldInstructions := c.instructions
+	oldConstants := c.constants
+	
+	// Reset for function compilation
+	c.instructions = make([]opcodes.Instruction, 0)
+	c.constants = make([]*values.Value, 0)
+	
+	// Create function scope
+	c.pushScope(true)
+	
+	// Set up parameter variables in the function scope
+	if expr.Parameters != nil {
+		for _, param := range expr.Parameters.Parameters {
+			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+				// Register parameter name in function scope
+				c.getOrCreateVariable(nameNode.Name)
+			}
+		}
+	}
+	
+	// Compile function body
+	for _, stmt := range expr.Body {
+		err := c.compileNode(stmt)
+		if err != nil {
+			c.popScope()
+			c.instructions = oldInstructions
+			c.constants = oldConstants
+			return fmt.Errorf("error compiling anonymous function: %v", err)
+		}
+	}
+	
+	// Add implicit return if needed
+	if len(c.instructions) == 0 || c.instructions[len(c.instructions)-1].Opcode != opcodes.OP_RETURN {
+		c.emit(opcodes.OP_RETURN, opcodes.IS_CONST, c.addConstant(values.NewNull()), 0, 0, 0, 0)
+	}
+	
+	// Store compiled function
+	function.Instructions = c.instructions
+	function.Constants = c.constants
+	
+	// Store the function
+	c.functions[anonName] = function
+	
+	// Restore compiler state
+	c.popScope()
+	c.instructions = oldInstructions
+	c.constants = oldConstants
+	
+	// Create closure at runtime
+	functionConstant := c.addConstant(values.NewString(anonName))
+	closureResult := c.allocateTemp()
+	c.emit(opcodes.OP_CREATE_CLOSURE, opcodes.IS_CONST, functionConstant, 0, 0, opcodes.IS_TMP_VAR, closureResult)
+	
+	// Bind use variables
+	if expr.UseClause != nil {
+		for _, useVar := range expr.UseClause {
+			if varExpr, ok := useVar.(*ast.Variable); ok {
+				// Get the variable value from current scope
+				err := c.compileNode(varExpr)
+				if err != nil {
+					return fmt.Errorf("error compiling use variable %s: %v", varExpr.Name, err)
+				}
+				varResult := c.allocateTemp()
+				c.emitMove(varResult)
+				
+				// Bind the variable to the closure
+				varNameConstant := c.addConstant(values.NewString(varExpr.Name))
+				c.emit(opcodes.OP_BIND_USE_VAR, opcodes.IS_TMP_VAR, closureResult, opcodes.IS_CONST, varNameConstant, opcodes.IS_TMP_VAR, varResult)
+			}
+			// TODO: Handle reference use variables (&$var)
+		}
+	}
 	
 	return nil
 }
