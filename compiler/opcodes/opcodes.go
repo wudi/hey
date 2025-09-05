@@ -227,6 +227,17 @@ const (
 	OP_MATCH        // match expression
 )
 
+// Declaration Operations (180-199)
+const (
+	OP_DECLARE_FUNCTION Opcode = iota + 180
+	OP_DECLARE_CLASS
+	OP_DECLARE_PROPERTY
+	OP_DECLARE_CLASS_CONST
+	OP_INIT_CLASS_TABLE
+	OP_ADD_INTERFACE
+	OP_SET_CLASS_PARENT
+)
+
 // Operand types for instruction encoding
 type OpType byte
 
@@ -461,6 +472,15 @@ var opcodeNames = map[Opcode]string{
 	OP_QM_ASSIGN: "QM_ASSIGN",
 	OP_COALESCE:  "COALESCE",
 	OP_MATCH:     "MATCH",
+	
+	// Declaration operations
+	OP_DECLARE_FUNCTION:     "DECLARE_FUNCTION",
+	OP_DECLARE_CLASS:        "DECLARE_CLASS",
+	OP_DECLARE_PROPERTY:     "DECLARE_PROPERTY",
+	OP_DECLARE_CLASS_CONST:  "DECLARE_CLASS_CONST",
+	OP_INIT_CLASS_TABLE:     "INIT_CLASS_TABLE",
+	OP_ADD_INTERFACE:        "ADD_INTERFACE",
+	OP_SET_CLASS_PARENT:     "SET_CLASS_PARENT",
 }
 
 func (op Opcode) String() string {

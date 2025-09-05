@@ -1350,3 +1350,359 @@ func TestTryStatement(t *testing.T) {
 		})
 	}
 }
+
+func TestFunctionDeclaration(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple function declaration",
+			`<?php 
+			function greet($name) { 
+				echo "Hello, " . $name; 
+			} 
+			greet("World");`,
+		},
+		{
+			"Function with default parameters",
+			`<?php 
+			function add($x, $y = 10) { 
+				return $x + $y; 
+			} 
+			echo add(5);`,
+		},
+		{
+			"Function with return type",
+			`<?php 
+			function multiply($a, $b): int { 
+				return $a * $b; 
+			} 
+			echo multiply(3, 4);`,
+		},
+		{
+			"Function with reference parameter",
+			`<?php 
+			function increment(&$value) { 
+				$value++; 
+			} 
+			$x = 5; 
+			increment($x); 
+			echo $x;`,
+		},
+		{
+			"Function with variadic parameters",
+			`<?php 
+			function sum(...$numbers) { 
+				$total = 0; 
+				foreach ($numbers as $num) { 
+					$total += $num; 
+				} 
+				return $total; 
+			} 
+			echo sum(1, 2, 3, 4);`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile function declaration: %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute function declaration: %s", tc.name)
+		})
+	}
+}
+
+func TestAnonymousClass(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple anonymous class",
+			`<?php 
+			$obj = new class { 
+				public function hello() { 
+					return "Hello from anonymous class"; 
+				} 
+			}; 
+			echo $obj->hello();`,
+		},
+		{
+			"Anonymous class with properties",
+			`<?php 
+			$obj = new class { 
+				public $name = "test"; 
+				private $value = 42; 
+				public function getName() { 
+					return $this->name; 
+				} 
+			}; 
+			echo $obj->getName();`,
+		},
+		{
+			"Anonymous class with constants",
+			`<?php 
+			$obj = new class { 
+				public const VERSION = "1.0"; 
+				final public const MAX_SIZE = 100; 
+			}; 
+			echo $obj::VERSION; 
+			echo $obj::MAX_SIZE;`,
+		},
+		{
+			"Anonymous class with inheritance",
+			`<?php 
+			class BaseClass { 
+				public function base() { 
+					return "base"; 
+				} 
+			} 
+			$obj = new class extends BaseClass { 
+				public function test() { 
+					return $this->base() . " extended"; 
+				} 
+			}; 
+			echo $obj->test();`,
+		},
+		{
+			"Anonymous class with constructor arguments",
+			`<?php 
+			$obj = new class("test") { 
+				private $value; 
+				public function __construct($val) { 
+					$this->value = $val; 
+				} 
+				public function getValue() { 
+					return $this->value; 
+				} 
+			}; 
+			echo $obj->getValue();`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile anonymous class: %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute anonymous class: %s", tc.name)
+		})
+	}
+}
+
+func TestPropertyDeclaration(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple class property",
+			`<?php 
+			class TestClass { 
+				public $name = "test"; 
+				public function getName() { 
+					return $this->name; 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->getName();`,
+		},
+		{
+			"Property with different visibilities",
+			`<?php 
+			class TestClass { 
+				public $publicProp = "public"; 
+				private $privateProp = "private"; 
+				protected $protectedProp = "protected"; 
+				
+				public function getPrivate() { 
+					return $this->privateProp; 
+				} 
+				public function getProtected() { 
+					return $this->protectedProp; 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->publicProp; 
+			echo $obj->getPrivate(); 
+			echo $obj->getProtected();`,
+		},
+		{
+			"Static properties",
+			`<?php 
+			class TestClass { 
+				public static $counter = 0; 
+				private static $instance = null; 
+				
+				public static function getCounter() { 
+					return self::$counter; 
+				} 
+				public static function increment() { 
+					self::$counter++; 
+				} 
+			} 
+			TestClass::increment(); 
+			echo TestClass::getCounter();`,
+		},
+		{
+			"Properties with type hints",
+			`<?php 
+			class TestClass { 
+				public string $name = "default"; 
+				public int $age = 0; 
+				public ?array $data = null; 
+				
+				public function setData(array $data) { 
+					$this->data = $data; 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->name;`,
+		},
+		{
+			"Readonly properties",
+			`<?php 
+			class TestClass { 
+				public readonly string $id; 
+				
+				public function __construct(string $id) { 
+					$this->id = $id; 
+				} 
+				
+				public function getId() { 
+					return $this->id; 
+				} 
+			} 
+			$obj = new TestClass("test123"); 
+			echo $obj->getId();`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile property declaration: %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute property declaration: %s", tc.name)
+		})
+	}
+}
+
+func TestClassConstantDeclaration(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple class constants",
+			`<?php 
+			class TestClass { 
+				public const VERSION = "1.0"; 
+				public const MAX_SIZE = 100; 
+				
+				public function getVersion() { 
+					return self::VERSION; 
+				} 
+			} 
+			echo TestClass::VERSION; 
+			echo TestClass::MAX_SIZE;`,
+		},
+		{
+			"Multiple constants in one declaration",
+			`<?php 
+			class TestClass { 
+				public const FIRST = 1, SECOND = 2, THIRD = 3; 
+				
+				public static function getSum() { 
+					return self::FIRST + self::SECOND + self::THIRD; 
+				} 
+			} 
+			echo TestClass::getSum();`,
+		},
+		{
+			"Constants with different visibilities",
+			`<?php 
+			class TestClass { 
+				public const PUBLIC_CONST = "public"; 
+				private const PRIVATE_CONST = "private"; 
+				protected const PROTECTED_CONST = "protected"; 
+				
+				public static function getPrivateConst() { 
+					return self::PRIVATE_CONST; 
+				} 
+				public static function getProtectedConst() { 
+					return self::PROTECTED_CONST; 
+				} 
+			} 
+			echo TestClass::PUBLIC_CONST; 
+			echo TestClass::getPrivateConst(); 
+			echo TestClass::getProtectedConst();`,
+		},
+		{
+			"Final constants",
+			`<?php 
+			class BaseClass { 
+				final public const IMMUTABLE = "cannot_override"; 
+			} 
+			class ChildClass extends BaseClass { 
+				public const OTHER = "allowed"; 
+			} 
+			echo ChildClass::IMMUTABLE; 
+			echo ChildClass::OTHER;`,
+		},
+		{
+			"Constants with different types",
+			`<?php 
+			class TestClass { 
+				public const STRING_CONST = "hello"; 
+				public const INT_CONST = 42; 
+				public const FLOAT_CONST = 3.14; 
+				public const BOOL_CONST = true; 
+				public const NULL_CONST = null; 
+				public const ARRAY_CONST = []; 
+			} 
+			echo TestClass::STRING_CONST; 
+			echo TestClass::INT_CONST; 
+			echo TestClass::BOOL_CONST ? "1" : "0";`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile class constant declaration: %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants())
+			require.NoError(t, err, "Failed to execute class constant declaration: %s", tc.name)
+		})
+	}
+}
