@@ -202,22 +202,19 @@ func (c *Compiler) compileNode(node ast.Node) error {
 // Expression compilation methods
 
 func (c *Compiler) compileBinaryOp(expr *ast.BinaryExpression) error {
-	// Save current temp counter
-	startTemp := c.nextTemp
-
 	// Compile left operand
 	err := c.compileNode(expr.Left)
 	if err != nil {
 		return err
 	}
-	leftResult := startTemp
+	leftResult := c.nextTemp - 1  // The last allocated temp contains the left result
 
 	// Compile right operand  
 	err = c.compileNode(expr.Right)
 	if err != nil {
 		return err
 	}
-	rightResult := startTemp + 1
+	rightResult := c.nextTemp - 1  // The last allocated temp contains the right result
 
 	// Generate operation
 	result := c.allocateTemp()

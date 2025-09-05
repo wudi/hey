@@ -2081,3 +2081,160 @@ echo $obj->GetCounter();`
 
 	require.Equal(t, "1", output, "Expected '1', got '%s'", output)
 }
+
+func TestFibonacciIterative(t *testing.T) {
+	code := `<?php
+function fibonacci_iterative($n) {
+    if ($n <= 0) return 0;
+    if ($n == 1) return 1;
+    
+    $a = 0;
+    $b = 1;
+    for ($i = 2; $i <= $n; $i++) {
+        $temp = $a + $b;
+        $a = $b;
+        $b = $temp;
+    }
+    return $b;
+}
+
+// Test cases
+for ($i = 0; $i <= 10; $i++) {
+    echo fibonacci_iterative($i) . "\n";
+}`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.Empty(t, p.Errors(), "Parser should not have errors")
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Failed to compile iterative Fibonacci")
+
+	// Capture output
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	require.NoError(t, err, "Failed to execute iterative Fibonacci")
+
+	// Close writer and restore stdout
+	w.Close()
+	os.Stdout = old
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	expected := "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n"
+	require.Equal(t, expected, output, "Iterative Fibonacci output mismatch")
+}
+
+func TestFibonacciRecursive(t *testing.T) {
+	code := `<?php
+function fibonacci_recursive($n) {
+    if ($n <= 0) return 0;
+    if ($n == 1) return 1;
+    return fibonacci_recursive($n - 1) + fibonacci_recursive($n - 2);
+}
+
+// Test cases
+for ($i = 0; $i <= 10; $i++) {
+    echo fibonacci_recursive($i) . "\n";
+}`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.Empty(t, p.Errors(), "Parser should not have errors")
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Failed to compile recursive Fibonacci")
+
+	// Capture output
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	require.NoError(t, err, "Failed to execute recursive Fibonacci")
+
+	// Close writer and restore stdout
+	w.Close()
+	os.Stdout = old
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	expected := "0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n55\n"
+	require.Equal(t, expected, output, "Recursive Fibonacci output mismatch")
+}
+
+func TestFibonacciComparison(t *testing.T) {
+	code := `<?php
+function fibonacci_iterative($n) {
+    if ($n <= 0) return 0;
+    if ($n == 1) return 1;
+    
+    $a = 0;
+    $b = 1;
+    for ($i = 2; $i <= $n; $i++) {
+        $temp = $a + $b;
+        $a = $b;
+        $b = $temp;
+    }
+    return $b;
+}
+
+function fibonacci_recursive($n) {
+    if ($n <= 0) return 0;
+    if ($n == 1) return 1;
+    return fibonacci_recursive($n - 1) + fibonacci_recursive($n - 2);
+}
+
+// Test both methods produce same results
+for ($i = 0; $i <= 8; $i++) {
+    $iter = fibonacci_iterative($i);
+    $rec = fibonacci_recursive($i);
+    if ($iter == $rec) {
+        echo "F($i) = $iter (OK)\n";
+    } else {
+        echo "F($i) MISMATCH: iter=$iter, rec=$rec\n";
+    }
+}`
+
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.Empty(t, p.Errors(), "Parser should not have errors")
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Failed to compile Fibonacci comparison")
+
+	// Capture output
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	vmCtx := vm.NewExecutionContext()
+	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	require.NoError(t, err, "Failed to execute Fibonacci comparison")
+
+	// Close writer and restore stdout
+	w.Close()
+	os.Stdout = old
+
+	// Read captured output
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	expected := "F(0) = 0 (OK)\nF(1) = 1 (OK)\nF(2) = 1 (OK)\nF(3) = 2 (OK)\nF(4) = 3 (OK)\nF(5) = 5 (OK)\nF(6) = 8 (OK)\nF(7) = 13 (OK)\nF(8) = 21 (OK)\n"
+	require.Equal(t, expected, output, "Fibonacci comparison output mismatch")
+}
