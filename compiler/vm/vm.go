@@ -1414,6 +1414,150 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 	return nil
 }
 
+// ExecuteClosure executes a TypeCallable closure value with proper VM context
+func (vm *VirtualMachine) ExecuteClosure(ctx *ExecutionContext, closure *values.Closure, args []*values.Value) (*values.Value, error) {
+	if closure == nil {
+		return nil, fmt.Errorf("closure is nil")
+	}
+
+	// Handle different closure function types
+	switch fn := closure.Function.(type) {
+	case runtimeRegistry.FunctionHandler:
+		// Runtime function handler with execution context
+		return fn(ctx, args)
+
+	case func(runtimeRegistry.ExecutionContext, []*values.Value) (*values.Value, error):
+		// Direct runtime function handler
+		return fn(ctx, args)
+
+	case func([]*values.Value) (*values.Value, error):
+		// Legacy function handler without context
+		return fn(args)
+
+	case *Function:
+		// VM compiled function - execute with full VM context
+		return vm.executeVMFunction(ctx, fn, args, closure.BoundVars)
+
+	case string:
+		// String-based function name - look up and execute
+		return vm.executeNamedFunction(ctx, fn, args)
+
+	default:
+		return nil, fmt.Errorf("unsupported closure function type: %T", closure.Function)
+	}
+}
+
+// executeVMFunction executes a VM-compiled function with bound variables
+func (vm *VirtualMachine) executeVMFunction(ctx *ExecutionContext, function *Function, args []*values.Value, boundVars map[string]*values.Value) (*values.Value, error) {
+	// Create a new execution context for the function
+	functionCtx := &ExecutionContext{
+		Instructions:     function.Instructions,
+		IP:               0,
+		Stack:            make([]*values.Value, 0, 100),
+		SP:               0,
+		MaxStackSize:     100,
+		Variables:        make(map[uint32]*values.Value),
+		Constants:        function.Constants,
+		Temporaries:      make(map[uint32]*values.Value),
+		VarSlotNames:     make(map[uint32]string),
+		CallStack:        make([]CallFrame, 0),
+		GlobalVars:       ctx.GlobalVars,
+		Functions:        ctx.Functions,
+		ForeachIterators: make(map[uint32]*ForeachIterator),
+		Classes:          ctx.Classes,
+	}
+
+	// Set up function parameters from arguments
+	for i, param := range function.Parameters {
+		if i < len(args) {
+			// Set parameter from argument
+			functionCtx.Variables[uint32(i)] = args[i]
+			functionCtx.VarSlotNames[uint32(i)] = param.Name
+		} else if param.HasDefault {
+			// Use default value
+			if param.DefaultValue != nil {
+				functionCtx.Variables[uint32(i)] = param.DefaultValue
+			} else {
+				functionCtx.Variables[uint32(i)] = values.NewNull()
+			}
+			functionCtx.VarSlotNames[uint32(i)] = param.Name
+		} else {
+			return nil, fmt.Errorf("missing required parameter %s", param.Name)
+		}
+	}
+
+	// Set up bound variables (closure captures)
+	if boundVars != nil {
+		// Find the next available variable slot
+		nextSlot := uint32(len(function.Parameters))
+		
+		for varName, varValue := range boundVars {
+			// Check if this variable is already a parameter
+			isParam := false
+			for i, param := range function.Parameters {
+				if param.Name == varName {
+					// Override parameter with bound value
+					functionCtx.Variables[uint32(i)] = varValue
+					isParam = true
+					break
+				}
+			}
+			
+			if !isParam {
+				// Add as new variable
+				functionCtx.Variables[nextSlot] = varValue
+				functionCtx.VarSlotNames[nextSlot] = varName
+				nextSlot++
+			}
+		}
+	}
+
+	// Execute the function
+	err := vm.Execute(functionCtx, function.Instructions, function.Constants, ctx.Functions, ctx.Classes)
+	if err != nil {
+		return nil, fmt.Errorf("error executing VM function: %v", err)
+	}
+
+	// Return the result from the stack or return value
+	if functionCtx.SP > 0 {
+		return functionCtx.Stack[functionCtx.SP-1], nil
+	}
+
+	return values.NewNull(), nil
+}
+
+// executeNamedFunction looks up and executes a function by name
+func (vm *VirtualMachine) executeNamedFunction(ctx *ExecutionContext, functionName string, args []*values.Value) (*values.Value, error) {
+	// Check runtime registered functions first
+	if runtimeRegistry.GlobalVMIntegration != nil && runtimeRegistry.GlobalVMIntegration.HasFunction(functionName) {
+		return runtimeRegistry.GlobalVMIntegration.CallFunction(ctx, functionName, args)
+	}
+
+	// Check VM functions
+	if function, exists := ctx.Functions[functionName]; exists {
+		return vm.executeVMFunction(ctx, function, args, nil)
+	}
+
+	return nil, fmt.Errorf("function not found: %s", functionName)
+}
+
+// CallClosure is a convenience method for calling closures from external code
+func (vm *VirtualMachine) CallClosure(closure *values.Value, args []*values.Value) (*values.Value, error) {
+	if !closure.IsClosure() {
+		return nil, fmt.Errorf("value is not a closure")
+	}
+
+	// Create a minimal execution context for external calls
+	ctx := NewExecutionContext()
+	
+	closureData := closure.ClosureGet()
+	if closureData == nil {
+		return nil, fmt.Errorf("invalid closure data")
+	}
+
+	return vm.ExecuteClosure(ctx, closureData, args)
+}
+
 // Helper methods
 
 func (vm *VirtualMachine) getValue(ctx *ExecutionContext, operand uint32, opType opcodes.OpType) *values.Value {
