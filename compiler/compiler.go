@@ -329,7 +329,7 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 	// The result of right-hand side should be in the last allocated temp
 	valueResult := c.nextTemp - 1
 
-	// For now, assume left side is always a variable
+	// Handle different left-hand side types
 	if variable, ok := expr.Left.(*ast.Variable); ok {
 		varSlot := c.getVariableSlot(variable.Name)
 
@@ -345,6 +345,25 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 			// These need special handling as they read and write the variable
 			// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
 			c.emit(opcode, opcodes.IS_VAR, varSlot, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, varSlot)
+		}
+	} else if arrayAccess, ok := expr.Left.(*ast.ArrayAccessExpression); ok {
+		// Handle array assignment: $arr[index] = value or $arr[] = value
+		
+		// Compile array variable
+		if arrayVar, ok := arrayAccess.Array.(*ast.Variable); ok {
+			arraySlot := c.getVariableSlot(arrayVar.Name)
+			
+			if arrayAccess.Index == nil {
+				// Array append: $arr[] = value
+				// Use ADD_ARRAY_ELEMENT instruction
+				c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, arraySlot)
+			} else {
+				// Array index assignment: $arr[index] = value
+				// This is more complex - need to implement proper array index assignment
+				return fmt.Errorf("array index assignment not yet implemented")
+			}
+		} else {
+			return fmt.Errorf("complex array expressions not yet supported")
 		}
 	}
 	return nil
@@ -672,7 +691,7 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 
 	// Execute call
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
+	c.emit(opcodes.OP_DO_FCALL, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }
@@ -721,7 +740,7 @@ func (c *Compiler) compileMethodCall(expr *ast.MethodCallExpression) error {
 
 	// Execute call
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
+	c.emit(opcodes.OP_DO_FCALL, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }

@@ -1345,11 +1345,47 @@ func (vm *VirtualMachine) executeForeachReset(ctx *ExecutionContext, inst *opcod
 	// Initialize the iterator with the array's keys and values
 	if iterable.Type == values.TypeArray {
 		arrayVal := iterable.Data.(*values.Array)
-		for key, value := range arrayVal.Elements {
-			keyVal := convertToValue(key)
-			iterator.Keys = append(iterator.Keys, keyVal)
-			iterator.Values = append(iterator.Values, value)
+		
+		// Collect and sort integer keys to ensure consistent iteration order
+		var int64Keys []int64
+		var nonIntKeys []interface{}
+		
+		for key := range arrayVal.Elements {
+			if int64Key, ok := key.(int64); ok {
+				int64Keys = append(int64Keys, int64Key)
+			} else if intKey, ok := key.(int); ok {
+				int64Keys = append(int64Keys, int64(intKey))
+			} else {
+				nonIntKeys = append(nonIntKeys, key)
+			}
 		}
+		
+		// Sort int64 keys using a simple sort
+		for i := 0; i < len(int64Keys); i++ {
+			for j := i + 1; j < len(int64Keys); j++ {
+				if int64Keys[i] > int64Keys[j] {
+					int64Keys[i], int64Keys[j] = int64Keys[j], int64Keys[i]
+				}
+			}
+		}
+		
+		// Build iterator arrays: first integer keys in order, then non-integer keys
+		for _, key := range int64Keys {
+			if value, exists := arrayVal.Elements[key]; exists {
+				keyVal := convertToValue(key)
+				iterator.Keys = append(iterator.Keys, keyVal)
+				iterator.Values = append(iterator.Values, value)
+			}
+		}
+		
+		for _, key := range nonIntKeys {
+			if value, exists := arrayVal.Elements[key]; exists {
+				keyVal := convertToValue(key)
+				iterator.Keys = append(iterator.Keys, keyVal)
+				iterator.Values = append(iterator.Values, value)
+			}
+		}
+		
 		iterator.HasMore = len(iterator.Keys) > 0
 	} else {
 		// For non-arrays, treat as empty iteration
