@@ -1348,11 +1348,10 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 		}
 	} else {
 		// No default arm - throw UnhandledMatchError
-		// For now, use a generic error message. In a full implementation,
-		// we would need to implement a special instruction that can format
-		// the error message with the actual type of the subject at runtime.
-		errorMsg := "UnhandledMatchError: Unhandled match case"
-		c.emit(opcodes.OP_THROW, opcodes.IS_CONST, c.addConstant(values.NewString(errorMsg)), 0, 0, 0, 0)
+		// Create an UnhandledMatchError object with message property
+		errorObj := values.NewObject("UnhandledMatchError")
+		errorObj.Data.(*values.Object).Properties["message"] = values.NewString("UnhandledMatchError")
+		c.emit(opcodes.OP_THROW, opcodes.IS_CONST, c.addConstant(errorObj), 0, 0, 0, 0)
 	}
 	
 	c.placeLabel(endLabel)
