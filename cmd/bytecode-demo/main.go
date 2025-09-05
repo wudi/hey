@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== PHP Bytecode Compiler Demo ===\n")
+	fmt.Println("=== PHP Bytecode Compiler Demo ===")
 
 	// Demo 1: Demonstrate the bytecode architecture
 	demo1()
@@ -57,7 +57,7 @@ func demo1() {
 	fmt.Println("\nExecution Output:")
 	virtualMachine := vm.NewVirtualMachine()
 	ctx := vm.NewExecutionContext()
-	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function))
+	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function), make(map[string]*vm.Class))
 	if err != nil {
 		fmt.Printf("Execution error: %v\n", err)
 	}
@@ -184,7 +184,7 @@ func demo3() {
 	virtualMachine.DebugMode = false // Set to true to see instruction-level debugging
 	ctx := vm.NewExecutionContext()
 
-	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function))
+	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function), make(map[string]*vm.Class))
 	if err != nil {
 		fmt.Printf("Execution error: %v\n", err)
 	} else {

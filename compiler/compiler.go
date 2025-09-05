@@ -91,6 +91,10 @@ func (c *Compiler) GetFunctions() map[string]*vm.Function {
 	return c.functions
 }
 
+func (c *Compiler) GetClasses() map[string]*vm.Class {
+	return c.classes
+}
+
 // Main compilation dispatcher
 func (c *Compiler) compileNode(node ast.Node) error {
 	if node == nil {
@@ -333,6 +337,10 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 	if variable, ok := expr.Left.(*ast.Variable); ok {
 		varSlot := c.getVariableSlot(variable.Name)
 
+		// Emit variable name binding for variable variables support
+		nameConstant := c.addConstant(values.NewString(variable.Name))
+		c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, varSlot, opcodes.IS_CONST, nameConstant, 0, 0)
+
 		// Get the appropriate assignment opcode based on operator
 		opcode := c.getOpcodeForAssignmentOperator(expr.Operator)
 
@@ -422,22 +430,72 @@ func (c *Compiler) getVariableSlot(name string) uint32 {
 }
 
 func (c *Compiler) compileVariable(expr *ast.Variable) error {
+	// Check if this is a variable variable disguised as a regular variable
+	if len(expr.Name) > 3 && expr.Name[0] == '$' && expr.Name[1] == '{' && expr.Name[len(expr.Name)-1] == '}' {
+		// This is ${...} syntax - extract the inner expression
+		innerExpr := expr.Name[2 : len(expr.Name)-1] // Remove ${ and }
+		
+		// For now, handle simple cases like ${$varName}
+		if len(innerExpr) > 1 && innerExpr[0] == '$' {
+			// This is ${$varName} - compile as variable variable
+			varName := innerExpr // Keep the full $varName
+			
+			// Create a temporary variable for the variable name
+			nameSlot := c.getVariableSlot(varName)
+			nameResult := c.allocateTemp()
+			
+			// Emit binding for the name variable
+			nameConstant := c.addConstant(values.NewString(varName))
+			c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, nameSlot, opcodes.IS_CONST, nameConstant, 0, 0)
+			
+			// Fetch the name variable value
+			c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, nameSlot, 0, 0, opcodes.IS_TMP_VAR, nameResult)
+			
+			// Use dynamic fetch with the name
+			result := c.allocateTemp()
+			c.emit(opcodes.OP_FETCH_R_DYNAMIC,
+				opcodes.IS_TMP_VAR, nameResult,
+				0, 0,
+				opcodes.IS_TMP_VAR, result)
+			
+			return nil
+		}
+	}
+	
+	// Regular variable handling
 	varSlot := c.getVariableSlot(expr.Name)
+	
+	// Emit variable name binding for variable variables support
+	nameConstant := c.addConstant(values.NewString(expr.Name))
+	c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, varSlot, opcodes.IS_CONST, nameConstant, 0, 0)
+	
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, varSlot, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
 }
 
 func (c *Compiler) compileVariableVariable(expr *ast.VariableVariableExpression) error {
-	// For now, implement simplified variable variable behavior:
-	// ${expression} should evaluate the expression, convert to string, and access that variable
-	// Since we know in the test case that the variable "$30" doesn't exist, 
-	// it should return empty string (like PHP does with undefined variables)
+	// Variable variables: ${expression}
+	// 1. Evaluate the inner expression to get the variable name
+	// 2. Convert result to string if needed  
+	// 3. Use that string as variable name for lookup
 	
-	// For now, just return an empty string to match PHP's behavior
-	constant := c.addConstant(values.NewString(""))
+	// Compile the inner expression that will give us the variable name
+	err := c.compileNode(expr.Expression)
+	if err != nil {
+		return fmt.Errorf("failed to compile variable variable expression: %w", err)
+	}
+	
+	// The result of the expression is in the last allocated temp
+	nameOperand := c.nextTemp - 1
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
+	
+	// Use OP_FETCH_R_DYNAMIC to fetch variable by computed name
+	// The VM will need to convert nameOperand to string and use it for variable lookup
+	c.emit(opcodes.OP_FETCH_R_DYNAMIC,
+		opcodes.IS_TMP_VAR, nameOperand, // Variable name (from expression)
+		0, 0, // Unused operands
+		opcodes.IS_TMP_VAR, result) // Result
 	
 	return nil
 }
@@ -2364,82 +2422,127 @@ func (c *Compiler) compileClassConstantAccess(expr *ast.ClassConstantAccessExpre
 }
 
 func (c *Compiler) compileStaticPropertyAccess(expr *ast.StaticPropertyAccessExpression) error {
-	// Handle static property access like ClassName::$property
+	// Handle static property access specifically for Class::$property
+	// This is distinct from constants (Class::CONST) or method calls (Class::method())
 	
-	// Get class name
-	var className string
-	switch class := expr.Class.(type) {
-	case *ast.IdentifierNode:
-		className = class.Name
-	case *ast.Variable:
-		// Handle self::, static::, parent:: etc
-		className = class.Name
-	default:
-		return fmt.Errorf("unsupported class expression in static property access: %T", expr.Class)
-	}
-	
-	// Get property name
-	var propName string
-	if prop, ok := expr.Property.(*ast.Variable); ok {
-		propName = prop.Name
-	} else {
-		return fmt.Errorf("invalid property name type in static access")
-	}
-	
-	// For now, create a simplified implementation
 	result := c.allocateTemp()
 	
-	// Create constants for the class and property names
-	classConstant := c.addConstant(values.NewString(className))
-	propConstant := c.addConstant(values.NewString(propName))
+	// Compile class expression (supports both static and dynamic class names)
+	var classOperandType opcodes.OpType
+	var classOperand uint32
 	
-	// Emit instruction to fetch static property
-	c.emit(opcodes.OP_FETCH_STATIC_PROP_R, 
-		opcodes.IS_CONST, classConstant,
-		opcodes.IS_CONST, propConstant,
+	switch class := expr.Class.(type) {
+	case *ast.IdentifierNode:
+		// Static class name like MyClass::$prop
+		classOperand = c.addConstant(values.NewString(class.Name))
+		classOperandType = opcodes.IS_CONST
+	case *ast.Variable:
+		// Handle self::$prop, static::$prop, parent::$prop etc
+		classOperand = c.addConstant(values.NewString(class.Name))
+		classOperandType = opcodes.IS_CONST
+	default:
+		// Dynamic class expression like $className::$prop
+		err := c.compileNode(class)
+		if err != nil {
+			return fmt.Errorf("failed to compile class expression in static property access: %w", err)
+		}
+		classOperand = c.nextTemp - 1
+		classOperandType = opcodes.IS_TMP_VAR
+	}
+	
+	// Compile property expression 
+	var propOperandType opcodes.OpType
+	var propOperand uint32
+	
+	switch property := expr.Property.(type) {
+	case *ast.Variable:
+		// Simple static property like ::$prop
+		// Strip the $ from the property name since class properties are stored without $
+		propName := property.Name
+		if len(propName) > 0 && propName[0] == '$' {
+			propName = propName[1:]
+		}
+		propOperand = c.addConstant(values.NewString(propName))
+		propOperandType = opcodes.IS_CONST
+	default:
+		// Dynamic property expression like ::${$expr} or ::${"prop"}
+		err := c.compileNode(property)
+		if err != nil {
+			return fmt.Errorf("failed to compile property expression in static property access: %w", err)
+		}
+		propOperand = c.nextTemp - 1
+		propOperandType = opcodes.IS_TMP_VAR
+	}
+	
+	// Emit static property access instruction  
+	c.emit(opcodes.OP_FETCH_STATIC_PROP_R,
+		classOperandType, classOperand,
+		propOperandType, propOperand,
 		opcodes.IS_TMP_VAR, result)
 	
 	return nil
 }
 
 func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
-	// Handle static access like Class::CONSTANT or self::$property
-	
-	// Get class name
-	var className string
-	switch class := expr.Class.(type) {
-	case *ast.IdentifierNode:
-		className = class.Name
-	case *ast.Variable:
-		// Handle self::, static::, parent:: etc
-		className = class.Name
-	default:
-		return fmt.Errorf("unsupported class expression in static access: %T", expr.Class)
-	}
+	// Handle static access like Class::CONSTANT, self::method, or Class::$property
 	
 	result := c.allocateTemp()
 	
-	// Create constants for the class
-	classConstant := c.addConstant(values.NewString(className))
+	// Compile class expression (supports both static names and dynamic expressions)
+	var classOperandType opcodes.OpType
+	var classOperand uint32
 	
-	// Determine the property type and create appropriate access
+	switch class := expr.Class.(type) {
+	case *ast.IdentifierNode:
+		// Static class name like MyClass::
+		className := class.Name
+		classOperand = c.addConstant(values.NewString(className))
+		classOperandType = opcodes.IS_CONST
+	case *ast.Variable:
+		// Handle self::, static::, parent:: etc - these are also treated as constants
+		className := class.Name
+		classOperand = c.addConstant(values.NewString(className))
+		classOperandType = opcodes.IS_CONST
+	default:
+		// Dynamic class expression like $className::
+		err := c.compileNode(class)
+		if err != nil {
+			return fmt.Errorf("failed to compile class expression: %w", err)
+		}
+		classOperand = c.nextTemp - 1 // Last allocated temp contains the class name
+		classOperandType = opcodes.IS_TMP_VAR
+	}
+	
+	// Compile property expression and determine access type
 	switch property := expr.Property.(type) {
 	case *ast.IdentifierNode:
-		// Constant access
-		propConstant := c.addConstant(values.NewString(property.Name))
+		// Constant access (Class::CONSTANT)
+		propOperand := c.addConstant(values.NewString(property.Name))
 		c.emit(opcodes.OP_FETCH_CLASS_CONSTANT,
-			opcodes.IS_CONST, classConstant,
-			opcodes.IS_CONST, propConstant,
+			classOperandType, classOperand,
+			opcodes.IS_CONST, propOperand,
 			opcodes.IS_TMP_VAR, result)
 	case *ast.Variable:
-		// Static property access
-		propConstant := c.addConstant(values.NewString(property.Name))
+		// Static property access (Class::$property)
+		propOperand := c.addConstant(values.NewString(property.Name))
 		c.emit(opcodes.OP_FETCH_STATIC_PROP_R,
-			opcodes.IS_CONST, classConstant,
-			opcodes.IS_CONST, propConstant,
+			classOperandType, classOperand,
+			opcodes.IS_CONST, propOperand,
 			opcodes.IS_TMP_VAR, result)
 	default:
-		return fmt.Errorf("unsupported property type in static access: %T", expr.Property)
+		// Dynamic property expression like Class::${$expr} or Class::${"prop"}
+		err := c.compileNode(property)
+		if err != nil {
+			return fmt.Errorf("failed to compile property expression: %w", err)
+		}
+		propOperand := c.nextTemp - 1
+		
+		// For dynamic properties, we assume it's a property access (not constant)
+		// This matches PHP's behavior where Class::${expr} is always property access
+		c.emit(opcodes.OP_FETCH_STATIC_PROP_R,
+			classOperandType, classOperand,
+			opcodes.IS_TMP_VAR, propOperand,
+			opcodes.IS_TMP_VAR, result)
 	}
 	
 	return nil

@@ -82,7 +82,7 @@ const (
 	OP_FE_FETCH // foreach fetch
 )
 
-// Variable Operations (60-89)
+// Variable Operations (60-91)
 const (
 	OP_ASSIGN Opcode = iota + 60
 	OP_ASSIGN_REF // =& reference assignment
@@ -108,6 +108,8 @@ const (
 	OP_FETCH_RW     // Read-write variable
 	OP_FETCH_IS     // isset() check
 	OP_FETCH_UNSET  // unset() operation
+	OP_FETCH_R_DYNAMIC // Read variable with dynamic name (variable variables)
+	OP_BIND_VAR_NAME   // Bind a variable slot to a name for variable variables
 
 	// Array operations
 	OP_FETCH_DIM_R     // $var[key] read
@@ -124,9 +126,9 @@ const (
 	OP_FETCH_OBJ_UNSET // unset($obj->prop)
 )
 
-// Function Operations (90-109)
+// Function Operations (92-111)
 const (
-	OP_INIT_FCALL Opcode = iota + 90
+	OP_INIT_FCALL Opcode = iota + 92
 	OP_INIT_FCALL_BY_NAME
 	OP_INIT_METHOD_CALL
 	OP_INIT_STATIC_METHOD_CALL
@@ -153,9 +155,9 @@ const (
 	OP_YIELD_FROM // yield from
 )
 
-// Array Operations (110-129)
+// Array Operations (112-131)
 const (
-	OP_INIT_ARRAY Opcode = iota + 110
+	OP_INIT_ARRAY Opcode = iota + 112
 	OP_ADD_ARRAY_ELEMENT
 	OP_ADD_ARRAY_UNPACK
 
@@ -176,9 +178,9 @@ const (
 	OP_CAST_OBJECT
 )
 
-// Class Operations (130-159)
+// Class Operations (132-161)
 const (
-	OP_NEW Opcode = iota + 130
+	OP_NEW Opcode = iota + 132
 	OP_CLONE
 	OP_INIT_CTOR_CALL
 	OP_CALL_CTOR
@@ -369,11 +371,13 @@ var opcodeNames = map[Opcode]string{
 	OP_ASSIGN_COALESCE: "ASSIGN_COALESCE",
 	
 	// Variable operations
-	OP_FETCH_R:     "FETCH_R",
-	OP_FETCH_W:     "FETCH_W",
-	OP_FETCH_RW:    "FETCH_RW", 
-	OP_FETCH_IS:    "FETCH_IS",
-	OP_FETCH_UNSET: "FETCH_UNSET",
+	OP_FETCH_R:         "FETCH_R",
+	OP_FETCH_W:         "FETCH_W",
+	OP_FETCH_RW:        "FETCH_RW", 
+	OP_FETCH_IS:        "FETCH_IS",
+	OP_FETCH_UNSET:     "FETCH_UNSET",
+	OP_FETCH_R_DYNAMIC: "FETCH_R_DYNAMIC",
+	OP_BIND_VAR_NAME:   "BIND_VAR_NAME",
 	
 	// Array operations
 	OP_FETCH_DIM_R:     "FETCH_DIM_R",
