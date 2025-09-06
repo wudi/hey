@@ -57,6 +57,9 @@ type ExecutionContext struct {
 	Parameters    []*values.Value // Function call parameters
 	CallArguments []*values.Value // Outgoing call arguments
 
+	// ROPE string concatenation buffer
+	RopeBuffers map[uint32][]string // ROPE buffer per temporary variable
+
 	// Execution control
 	Halted   bool
 	ExitCode int
@@ -165,6 +168,7 @@ func NewExecutionContext() *ExecutionContext {
 		ExceptionStack:    make([]Exception, 0),
 		ExceptionHandlers: make([]ExceptionHandler, 0),
 		CurrentException:  nil,
+		RopeBuffers:       make(map[uint32][]string),
 		Halted:            false,
 		ExitCode:          0,
 	}
@@ -383,6 +387,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	// String operations
 	case opcodes.OP_CONCAT:
 		return vm.executeConcat(ctx, inst)
+	case opcodes.OP_FAST_CONCAT:
+		return vm.executeFastConcat(ctx, inst)
+	case opcodes.OP_ROPE_INIT:
+		return vm.executeRopeInit(ctx, inst)
+	case opcodes.OP_ROPE_ADD:
+		return vm.executeRopeAdd(ctx, inst)
+	case opcodes.OP_ROPE_END:
+		return vm.executeRopeEnd(ctx, inst)
 
 	// Foreach operations
 	case opcodes.OP_FE_RESET:
@@ -1192,6 +1204,81 @@ func (vm *VirtualMachine) executeConcat(ctx *ExecutionContext, inst *opcodes.Ins
 
 	result := op1.Concat(op2)
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// Fast string concatenation operation - optimized for binary concatenation
+func (vm *VirtualMachine) executeFastConcat(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// FAST_CONCAT is similar to CONCAT but optimized for performance
+	op1 := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	op2 := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	// Use strings.Builder for efficient concatenation
+	var result strings.Builder
+	result.WriteString(op1.ToString())
+	result.WriteString(op2.ToString())
+
+	finalStr := values.NewString(result.String())
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), finalStr)
+
+	ctx.IP++
+	return nil
+}
+
+// ROPE string concatenation operations
+// ROPE (Ropes Optimized Parameterized Expression) is PHP's optimization for multiple concatenations
+// like $a . $b . $c . $d which gets compiled to ROPE_INIT, ROPE_ADD, ROPE_ADD, ROPE_END
+
+func (vm *VirtualMachine) executeRopeInit(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Initialize ROPE buffer with first string
+	str := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	bufferID := inst.Result
+	ctx.RopeBuffers[bufferID] = []string{str.ToString()}
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeRopeAdd(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Add string to existing ROPE buffer
+	str := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	bufferID := inst.Op1
+	if buffer, exists := ctx.RopeBuffers[bufferID]; exists {
+		ctx.RopeBuffers[bufferID] = append(buffer, str.ToString())
+	} else {
+		// Initialize buffer if it doesn't exist
+		ctx.RopeBuffers[bufferID] = []string{str.ToString()}
+	}
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeRopeEnd(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Finalize ROPE concatenation and create result string
+	bufferID := inst.Op1
+	buffer, exists := ctx.RopeBuffers[bufferID]
+	if !exists {
+		// Empty ROPE buffer
+		buffer = []string{}
+	}
+
+	// Join all strings in the buffer
+	var result strings.Builder
+	for _, str := range buffer {
+		result.WriteString(str)
+	}
+
+	// Store result
+	finalStr := values.NewString(result.String())
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), finalStr)
+
+	// Clean up buffer
+	delete(ctx.RopeBuffers, bufferID)
 
 	ctx.IP++
 	return nil

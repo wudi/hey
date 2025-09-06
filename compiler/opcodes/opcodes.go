@@ -175,6 +175,9 @@ const (
 	// String operations
 	OP_CONCAT
 	OP_FAST_CONCAT // Optimized concatenation
+	OP_ROPE_INIT   // Initialize rope string concatenation
+	OP_ROPE_ADD    // Add string to rope
+	OP_ROPE_END    // Finalize rope concatenation
 	OP_STRLEN      // String length
 	OP_SUBSTR      // Substring extraction
 	OP_STRPOS      // String position/find
@@ -463,6 +466,9 @@ var opcodeNames = map[Opcode]string{
 	// Strings
 	OP_CONCAT:      "CONCAT",
 	OP_FAST_CONCAT: "FAST_CONCAT",
+	OP_ROPE_INIT:   "ROPE_INIT",
+	OP_ROPE_ADD:    "ROPE_ADD",
+	OP_ROPE_END:    "ROPE_END",
 	OP_STRLEN:      "STRLEN",
 	OP_SUBSTR:      "SUBSTR",
 	OP_STRPOS:      "STRPOS",

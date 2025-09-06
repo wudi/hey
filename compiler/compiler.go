@@ -412,10 +412,13 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 			// Simple assignment: $var = value
 			// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
 			c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, varSlot)
-		} else {
+		} else if opcode == opcodes.OP_ASSIGN_OP {
 			// Compound assignment: $var += value, $var *= value, etc.
-			// These need special handling as they read and write the variable
-			// emit(opcode, op1Type, op1, op2Type, op2, resultType, result)
+			// Uses OP_ASSIGN_OP with operation type in Reserved field
+			operationType := c.getOperationTypeForAssignmentOperator(expr.Operator)
+			c.emitReserved(opcode, opcodes.IS_VAR, varSlot, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, varSlot, operationType)
+		} else {
+			// Other assignment types (QM_ASSIGN, etc.)
 			c.emit(opcode, opcodes.IS_VAR, varSlot, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, varSlot)
 		}
 	} else if arrayAccess, ok := expr.Left.(*ast.ArrayAccessExpression); ok {
@@ -449,42 +452,48 @@ func (c *Compiler) getOpcodeForAssignmentOperator(operator string) opcodes.Opcod
 	case "=&":
 		return opcodes.OP_ASSIGN_REF
 
-	// Arithmetic compound assignments
-	case "+=":
-		return opcodes.OP_ASSIGN_ADD
-	case "-=":
-		return opcodes.OP_ASSIGN_SUB
-	case "*=":
-		return opcodes.OP_ASSIGN_MUL
-	case "/=":
-		return opcodes.OP_ASSIGN_DIV
-	case "%=":
-		return opcodes.OP_ASSIGN_MOD
-	case "**=":
-		return opcodes.OP_ASSIGN_POW
-
-	// String assignment
-	case ".=":
-		return opcodes.OP_ASSIGN_CONCAT
-
-	// Bitwise compound assignments
-	case "&=":
-		return opcodes.OP_ASSIGN_BW_AND
-	case "|=":
-		return opcodes.OP_ASSIGN_BW_OR
-	case "^=":
-		return opcodes.OP_ASSIGN_BW_XOR
-	case "<<=":
-		return opcodes.OP_ASSIGN_SL
-	case ">>=":
-		return opcodes.OP_ASSIGN_SR
+	// All compound assignments use OP_ASSIGN_OP
+	case "+=", "-=", "*=", "/=", "%=", "**=", ".=", "&=", "|=", "^=", "<<=", ">>=":
+		return opcodes.OP_ASSIGN_OP
 
 	// Null coalescing assignment
 	case "??=":
-		return opcodes.OP_ASSIGN_COALESCE
+		return opcodes.OP_QM_ASSIGN
 
 	default:
 		return opcodes.OP_ASSIGN
+	}
+}
+
+func (c *Compiler) getOperationTypeForAssignmentOperator(operator string) byte {
+	// Return Zend Engine operation types that match PHP's implementation
+	switch operator {
+	case "+=":
+		return 1 // ZEND_ADD
+	case "-=":
+		return 2 // ZEND_SUB
+	case "*=":
+		return 3 // ZEND_MUL
+	case "/=":
+		return 4 // ZEND_DIV
+	case "%=":
+		return 5 // ZEND_MOD
+	case "**=":
+		return 6 // ZEND_POW
+	case ".=":
+		return 8 // ZEND_CONCAT
+	case "&=":
+		return 9 // ZEND_BW_AND
+	case "|=":
+		return 10 // ZEND_BW_OR
+	case "^=":
+		return 11 // ZEND_BW_XOR
+	case "<<=":
+		return 12 // ZEND_SL
+	case ">>=":
+		return 13 // ZEND_SR
+	default:
+		return 0 // No operation
 	}
 }
 
@@ -1133,6 +1142,22 @@ func (c *Compiler) emit(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint3
 		Op1:     op1,
 		Op2:     op2,
 		Result:  result,
+	}
+
+	c.instructions = append(c.instructions, instruction)
+}
+
+func (c *Compiler) emitReserved(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint32, op2Type opcodes.OpType, op2 uint32, resultType opcodes.OpType, result uint32, reserved byte) {
+	opType1, opType2 := opcodes.EncodeOpTypes(op1Type, op2Type, resultType)
+
+	instruction := opcodes.Instruction{
+		Opcode:   opcode,
+		OpType1:  opType1,
+		OpType2:  opType2,
+		Reserved: reserved,
+		Op1:      op1,
+		Op2:      op2,
+		Result:   result,
 	}
 
 	c.instructions = append(c.instructions, instruction)
