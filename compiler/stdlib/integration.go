@@ -17,10 +17,10 @@ type StdlibIntegration struct {
 func NewStdlibIntegration() *StdlibIntegration {
 	stdlib := NewStandardLibrary()
 	extensionManager := NewExtensionManager(stdlib)
-	
+
 	// Load built-in extensions
 	stdlib.LoadBuiltinExtensions()
-	
+
 	return &StdlibIntegration{
 		stdlib:           stdlib,
 		extensionManager: extensionManager,
@@ -35,38 +35,38 @@ func (si *StdlibIntegration) InitializeExecutionContext(ctx *vm.ExecutionContext
 		_ = name
 		_ = value
 	}
-	
+
 	// Initialize global variables
 	if ctx.GlobalVars == nil {
 		ctx.GlobalVars = make(map[string]*values.Value)
 	}
-	
+
 	for name, value := range si.stdlib.Variables {
 		ctx.GlobalVars[name] = value
 	}
-	
+
 	// Initialize built-in functions
 	if ctx.Functions == nil {
 		ctx.Functions = make(map[string]*vm.Function)
 	}
-	
+
 	for name, builtinFunc := range si.stdlib.Functions {
 		// Convert builtin function to VM function
 		vmFunc := si.createVMFunctionWrapper(name, builtinFunc)
 		ctx.Functions[name] = vmFunc
 	}
-	
+
 	// Initialize built-in classes
 	if ctx.Classes == nil {
 		ctx.Classes = make(map[string]*vm.Class)
 	}
-	
+
 	for name, stdlibClass := range si.stdlib.Classes {
 		// Convert stdlib class to VM class
 		vmClass := si.convertClassToVM(stdlibClass)
 		ctx.Classes[name] = vmClass
 	}
-	
+
 	return nil
 }
 
@@ -108,7 +108,7 @@ func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
 		IsAbstract:  stdlibClass.IsAbstract,
 		IsFinal:     stdlibClass.IsFinal,
 	}
-	
+
 	// Convert properties
 	for name, prop := range stdlibClass.Properties {
 		vmClass.Properties[name] = &vm.Property{
@@ -119,7 +119,7 @@ func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
 			DefaultValue: prop.DefaultValue,
 		}
 	}
-	
+
 	// Convert methods
 	for name, method := range stdlibClass.Methods {
 		vmClass.Methods[name] = &vm.Function{
@@ -131,7 +131,7 @@ func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
 			IsGenerator:  false,
 		}
 	}
-	
+
 	return vmClass
 }
 
@@ -141,16 +141,16 @@ func (si *StdlibIntegration) HandleBuiltinFunctionCall(ctx *vm.ExecutionContext,
 	if !exists {
 		return nil, fmt.Errorf("undefined function: %s", functionName)
 	}
-	
+
 	// Validate argument count
 	if len(args) < builtinFunc.MinArgs {
 		return nil, fmt.Errorf("%s() expects at least %d parameters, %d given", functionName, builtinFunc.MinArgs, len(args))
 	}
-	
+
 	if builtinFunc.MaxArgs != -1 && len(args) > builtinFunc.MaxArgs {
 		return nil, fmt.Errorf("%s() expects at most %d parameters, %d given", functionName, builtinFunc.MaxArgs, len(args))
 	}
-	
+
 	// Call the handler
 	return builtinFunc.Handler(ctx, args)
 }
@@ -161,22 +161,22 @@ func (si *StdlibIntegration) HandleBuiltinMethodCall(ctx *vm.ExecutionContext, c
 	if !exists {
 		return nil, fmt.Errorf("undefined class: %s", className)
 	}
-	
+
 	method, exists := stdlibClass.Methods[methodName]
 	if !exists {
 		return nil, fmt.Errorf("undefined method: %s::%s", className, methodName)
 	}
-	
+
 	// Check visibility (simplified - would need proper visibility checking)
 	if method.Visibility == "private" || method.Visibility == "protected" {
 		// Would need proper access control checking here
 	}
-	
+
 	// Call the method handler
 	if method.Handler != nil {
 		return method.Handler(ctx, args)
 	}
-	
+
 	return values.NewNull(), nil
 }
 
@@ -257,15 +257,15 @@ func (si *StdlibIntegration) ValidateBuiltinFunctionCall(functionName string, ar
 	if !exists {
 		return fmt.Errorf("undefined function: %s", functionName)
 	}
-	
+
 	if argCount < builtinFunc.MinArgs {
 		return fmt.Errorf("%s() expects at least %d parameters, %d given", functionName, builtinFunc.MinArgs, argCount)
 	}
-	
+
 	if builtinFunc.MaxArgs != -1 && argCount > builtinFunc.MaxArgs {
 		return fmt.Errorf("%s() expects at most %d parameters, %d given", functionName, builtinFunc.MaxArgs, argCount)
 	}
-	
+
 	return nil
 }
 

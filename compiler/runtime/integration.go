@@ -31,12 +31,12 @@ func (vi *VMIntegration) SetSuperGlobal(name string, value *values.Value) error 
 	if vi.registry == nil {
 		return fmt.Errorf("runtime registry not initialized")
 	}
-	
+
 	// Check if it's a built-in variable
 	if vi.registry.builtinVariables[name] {
 		return vi.registry.RegisterVariable(name, value, true, "")
 	}
-	
+
 	return vi.registry.RegisterVariable(name, value, false, "")
 }
 
@@ -96,7 +96,7 @@ func InitializeVMIntegration() error {
 	if GlobalRegistry == nil {
 		return fmt.Errorf("runtime registry not initialized - call Bootstrap() first")
 	}
-	
+
 	GlobalVMIntegration = NewVMIntegration(GlobalRegistry)
 	return nil
 }

@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/compiler/runtime"
 	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/lexer"
 	"github.com/wudi/php-parser/parser"
 )
@@ -20,27 +20,27 @@ func executeWithRuntime(t *testing.T, comp *Compiler) error {
 		err := runtime.Bootstrap()
 		require.NoError(t, err, "Failed to bootstrap runtime")
 	}
-	
+
 	// Initialize VM integration
 	if runtime.GlobalVMIntegration == nil {
 		err := runtime.InitializeVMIntegration()
 		require.NoError(t, err, "Failed to initialize VM integration")
 	}
-	
+
 	// Create VM and execution context
 	vmachine := vm.NewVirtualMachine()
 	vmCtx := vm.NewExecutionContext()
-	
+
 	// Initialize global variables from runtime
 	if vmCtx.GlobalVars == nil {
 		vmCtx.GlobalVars = make(map[string]*values.Value)
 	}
-	
+
 	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
 		vmCtx.GlobalVars[name] = value
 	}
-	
+
 	// Execute bytecode
 	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 }
@@ -203,7 +203,7 @@ foreach(foo(5) as $v) {
 	for name, fn := range comp.GetFunctions() {
 		t.Logf("Function %s: %d instructions, %d constants", name, len(fn.Instructions), len(fn.Constants))
 	}
-	
+
 	// Capture output
 	var buf bytes.Buffer
 	oldStdout := os.Stdout
@@ -218,10 +218,10 @@ foreach(foo(5) as $v) {
 	w.Close()
 	os.Stdout = oldStdout
 	buf.ReadFrom(r)
-	
+
 	output := buf.String()
 	t.Logf("VM Output: %q", output)
-	
+
 	// Check that we got the expected output
 	expectedOutput := "0\n1\n2\n3\n4\n"
 	require.Equal(t, expectedOutput, output, "Expected output doesn't match")
@@ -240,7 +240,7 @@ foreach($arr as $v) {
 	comp := NewCompiler()
 	err := comp.Compile(prog)
 	require.NoError(t, err, "Compilation failed")
-	
+
 	// Capture output
 	var buf bytes.Buffer
 	oldStdout := os.Stdout
@@ -255,10 +255,10 @@ foreach($arr as $v) {
 	w.Close()
 	os.Stdout = oldStdout
 	buf.ReadFrom(r)
-	
+
 	output := buf.String()
 	t.Logf("Simple foreach VM Output: %q", output)
-	
+
 	// Check that we got the expected output
 	expectedOutput := "0\n1\n2\n3\n4\n"
 	require.Equal(t, expectedOutput, output, "Expected output doesn't match")
@@ -289,7 +289,7 @@ echo "done";`
 	for name, fn := range comp.GetFunctions() {
 		t.Logf("Function %s: %d instructions, %d constants", name, len(fn.Instructions), len(fn.Constants))
 	}
-	
+
 	// Capture output
 	var buf bytes.Buffer
 	oldStdout := os.Stdout
@@ -304,10 +304,10 @@ echo "done";`
 	w.Close()
 	os.Stdout = oldStdout
 	buf.ReadFrom(r)
-	
+
 	output := buf.String()
 	t.Logf("Function call VM Output: %q", output)
-	
+
 	// Check that we got some output (at least "done")
 	require.Contains(t, output, "done", "Should contain 'done'")
 }
@@ -1078,7 +1078,7 @@ func TestMatchExpression(t *testing.T) {
 func TestMatchExpressionError(t *testing.T) {
 	// Test case where no match is found and there's no default
 	code := `<?php echo match(5) { 1 => "one", 2 => "two" };`
-	
+
 	p := parser.New(lexer.New(code))
 	prog := p.ParseProgram()
 
@@ -1312,10 +1312,10 @@ func TestInterpolatedStringArrayAccess(t *testing.T) {
 			require.NoError(t, err, "Failed to compile array access interpolation: %s", tt.name)
 
 			vmCtx := vm.NewExecutionContext()
-			
+
 			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 			require.NoError(t, err, "Failed to execute array access interpolation: %s", tt.name)
-			
+
 			// For now, we just verify compilation and execution succeed
 			// TODO: Implement output capturing to verify actual output values
 		})
@@ -1337,7 +1337,7 @@ func TestArrayAccessEdgeCases(t *testing.T) {
 			`,
 		},
 		{
-			name: "Array access with expression index in interpolation",  
+			name: "Array access with expression index in interpolation",
 			code: `<?php
 				$arr = [1,2,3,4,5];
 				$i = 1;
@@ -1380,7 +1380,7 @@ func TestArrayAccessEdgeCases(t *testing.T) {
 	}
 }
 
-// TestArrayAccessOutsideInterpolation tests that array access works outside interpolated strings  
+// TestArrayAccessOutsideInterpolation tests that array access works outside interpolated strings
 func TestArrayAccessOutsideInterpolation(t *testing.T) {
 	tests := []struct {
 		name string
@@ -2002,7 +2002,7 @@ func TestStaticAccessExpression(t *testing.T) {
 			"const_value",
 		},
 		{
-			"Self property access", 
+			"Self property access",
 			`<?php
 			echo TestClass::$staticProp;`,
 			"static_value",

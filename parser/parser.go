@@ -6388,15 +6388,15 @@ func parseInterpolatedString(p *Parser) ast.Expression {
 			variablePos := p.currentToken.Position
 			variableName := p.currentToken.Value
 			variable := ast.NewVariable(variablePos, variableName)
-			
+
 			// 检查是否后面跟着数组访问 [
 			if p.peekToken.Type == lexer.TOKEN_LBRACKET {
 				p.nextToken() // 现在在 [
-				
+
 				// 解析数组索引表达式
 				var indexExpr ast.Expression
 				p.nextToken() // 现在在索引内容
-				
+
 				if p.currentToken.Type == lexer.T_VARIABLE {
 					indexExpr = ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
 				} else if p.currentToken.Type == lexer.T_LNUMBER {
@@ -6408,7 +6408,7 @@ func parseInterpolatedString(p *Parser) ast.Expression {
 					parts = append(parts, variable)
 					continue
 				}
-				
+
 				// 期待 ]
 				p.nextToken()
 				if p.currentToken.Type == lexer.TOKEN_RBRACKET {

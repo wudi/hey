@@ -31,7 +31,7 @@ func (stdlib *StandardLibrary) initConstants() {
 	stdlib.Constants["PHP_FLOAT_MIN"] = values.NewFloat(2.2250738585072014e-308)
 	stdlib.Constants["PHP_FLOAT_DIG"] = values.NewInt(15)
 
-	// Directory constants  
+	// Directory constants
 	stdlib.Constants["DIRECTORY_SEPARATOR"] = values.NewString("/")
 	stdlib.Constants["PATH_SEPARATOR"] = values.NewString(":")
 
@@ -114,7 +114,7 @@ func (stdlib *StandardLibrary) initConstants() {
 	stdlib.Constants["SORT_NATURAL"] = values.NewInt(6)
 	stdlib.Constants["SORT_FLAG_CASE"] = values.NewInt(8)
 
-	// Array constants  
+	// Array constants
 	stdlib.Constants["ARRAY_FILTER_USE_BOTH"] = values.NewInt(1)
 	stdlib.Constants["ARRAY_FILTER_USE_KEY"] = values.NewInt(2)
 

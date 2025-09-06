@@ -30,9 +30,9 @@ type Value struct {
 
 // PHP array implementation
 type Array struct {
-	Elements map[interface{}]*Value // key -> value
-	NextIndex int64                // for auto-incrementing indices
-	IsIndexed bool                 // optimization hint
+	Elements  map[interface{}]*Value // key -> value
+	NextIndex int64                  // for auto-incrementing indices
+	IsIndexed bool                   // optimization hint
 }
 
 // PHP object implementation
@@ -49,9 +49,9 @@ type Reference struct {
 
 // Closure represents a PHP closure/anonymous function
 type Closure struct {
-	Function    interface{}           // Pointer to VM function or compiled function
-	BoundVars   map[string]*Value     // Variables captured via 'use' clause
-	Name        string                // Optional name for debugging
+	Function  interface{}       // Pointer to VM function or compiled function
+	BoundVars map[string]*Value // Variables captured via 'use' clause
+	Name      string            // Optional name for debugging
 }
 
 // Constructors for different value types
@@ -299,10 +299,10 @@ func (v *Value) ArrayGet(key *Value) *Value {
 	if v.Type != TypeArray {
 		return NewNull()
 	}
-	
+
 	arr := v.Data.(*Array)
 	keyValue := convertArrayKey(key)
-	
+
 	if val, exists := arr.Elements[keyValue]; exists {
 		return val
 	}
@@ -313,9 +313,9 @@ func (v *Value) ArraySet(key *Value, value *Value) {
 	if v.Type != TypeArray {
 		return
 	}
-	
+
 	arr := v.Data.(*Array)
-	
+
 	if key == nil || key.IsNull() {
 		// Auto-increment key
 		arr.Elements[arr.NextIndex] = value
@@ -323,7 +323,7 @@ func (v *Value) ArraySet(key *Value, value *Value) {
 	} else {
 		keyValue := convertArrayKey(key)
 		arr.Elements[keyValue] = value
-		
+
 		// Update next index for integer keys
 		if key.IsInt() {
 			intKey := key.ToInt()
@@ -338,7 +338,7 @@ func (v *Value) ArrayUnset(key *Value) {
 	if v.Type != TypeArray {
 		return
 	}
-	
+
 	arr := v.Data.(*Array)
 	keyValue := convertArrayKey(key)
 	delete(arr.Elements, keyValue)
@@ -367,7 +367,7 @@ func (v *Value) ObjectGet(property string) *Value {
 	if v.Type != TypeObject {
 		return NewNull()
 	}
-	
+
 	obj := v.Data.(*Object)
 	if val, exists := obj.Properties[property]; exists {
 		return val
@@ -379,7 +379,7 @@ func (v *Value) ObjectSet(property string, value *Value) {
 	if v.Type != TypeObject {
 		return
 	}
-	
+
 	obj := v.Data.(*Object)
 	obj.Properties[property] = value
 }
@@ -388,7 +388,7 @@ func (v *Value) ObjectUnset(property string) {
 	if v.Type != TypeObject {
 		return
 	}
-	
+
 	obj := v.Data.(*Object)
 	delete(obj.Properties, property)
 }
@@ -399,22 +399,22 @@ func (v *Value) Equal(other *Value) bool {
 	// Handle references
 	v = v.Deref()
 	other = other.Deref()
-	
+
 	// Type coercion rules for ==
 	if v.Type == other.Type {
 		return v.identical(other)
 	}
-	
+
 	// NULL comparisons
 	if v.IsNull() || other.IsNull() {
 		return v.IsNull() && other.IsNull()
 	}
-	
+
 	// Boolean comparisons
 	if v.IsBool() || other.IsBool() {
 		return v.ToBool() == other.ToBool()
 	}
-	
+
 	// Numeric comparisons
 	if v.IsNumeric() && other.IsNumeric() {
 		if v.IsFloat() || other.IsFloat() {
@@ -422,22 +422,22 @@ func (v *Value) Equal(other *Value) bool {
 		}
 		return v.ToInt() == other.ToInt()
 	}
-	
+
 	// String/numeric comparisons
 	if (v.IsString() && other.IsNumeric()) || (v.IsNumeric() && other.IsString()) {
 		return v.ToFloat() == other.ToFloat()
 	}
-	
+
 	// String comparisons
 	if v.IsString() && other.IsString() {
 		return v.ToString() == other.ToString()
 	}
-	
+
 	// Array comparisons
 	if v.IsArray() && other.IsArray() {
 		return v.arrayEqual(other)
 	}
-	
+
 	return false
 }
 
@@ -445,11 +445,11 @@ func (v *Value) Identical(other *Value) bool {
 	// Handle references
 	v = v.Deref()
 	other = other.Deref()
-	
+
 	if v.Type != other.Type {
 		return false
 	}
-	
+
 	return v.identical(other)
 }
 
@@ -479,7 +479,7 @@ func (v *Value) Compare(other *Value) int {
 	// Returns -1, 0, or 1 for <, ==, > respectively
 	v = v.Deref()
 	other = other.Deref()
-	
+
 	// NULL comparisons
 	if v.IsNull() && other.IsNull() {
 		return 0
@@ -490,7 +490,7 @@ func (v *Value) Compare(other *Value) int {
 	if other.IsNull() {
 		return 1
 	}
-	
+
 	// Numeric comparisons
 	if v.IsNumeric() && other.IsNumeric() {
 		if v.IsFloat() || other.IsFloat() {
@@ -510,7 +510,7 @@ func (v *Value) Compare(other *Value) int {
 		}
 		return 0
 	}
-	
+
 	// String comparisons
 	vs, os := v.ToString(), other.ToString()
 	if vs < os {
@@ -528,7 +528,7 @@ func (v *Value) Add(other *Value) *Value {
 	if v.IsArray() && other.IsArray() {
 		return v.arrayUnion(other)
 	}
-	
+
 	// Numeric addition
 	if v.IsNumeric() && other.IsNumeric() {
 		if v.IsFloat() || other.IsFloat() {
@@ -536,7 +536,7 @@ func (v *Value) Add(other *Value) *Value {
 		}
 		return NewInt(v.ToInt() + other.ToInt())
 	}
-	
+
 	// Convert to numeric
 	if v.IsFloat() || other.IsFloat() {
 		return NewFloat(v.ToFloat() + other.ToFloat())
@@ -564,15 +564,15 @@ func (v *Value) Divide(other *Value) *Value {
 		// Division by zero - return infinity or handle error
 		return NewFloat(v.ToFloat() / otherFloat) // Go handles inf/-inf
 	}
-	
+
 	vFloat := v.ToFloat()
 	result := vFloat / otherFloat
-	
+
 	// Return integer if result is whole number and both operands were integers
 	if v.IsInt() && other.IsInt() && result == float64(int64(result)) {
 		return NewInt(int64(result))
 	}
-	
+
 	return NewFloat(result)
 }
 
@@ -588,7 +588,7 @@ func (v *Value) Power(other *Value) *Value {
 	base := v.ToFloat()
 	exp := other.ToFloat()
 	result := pow(base, exp)
-	
+
 	// Return integer if possible
 	if result == float64(int64(result)) && result >= -9223372036854775808 && result <= 9223372036854775807 {
 		return NewInt(int64(result))
@@ -633,11 +633,11 @@ func convertArrayKey(key *Value) interface{} {
 func (v *Value) arrayEqual(other *Value) bool {
 	arr1 := v.Data.(*Array)
 	arr2 := other.Data.(*Array)
-	
+
 	if len(arr1.Elements) != len(arr2.Elements) {
 		return false
 	}
-	
+
 	for key, val1 := range arr1.Elements {
 		val2, exists := arr2.Elements[key]
 		if !exists || !val1.Equal(val2) {
@@ -650,11 +650,11 @@ func (v *Value) arrayEqual(other *Value) bool {
 func (v *Value) arrayIdentical(other *Value) bool {
 	arr1 := v.Data.(*Array)
 	arr2 := other.Data.(*Array)
-	
+
 	if len(arr1.Elements) != len(arr2.Elements) {
 		return false
 	}
-	
+
 	for key, val1 := range arr1.Elements {
 		val2, exists := arr2.Elements[key]
 		if !exists || !val1.Identical(val2) {
@@ -667,13 +667,13 @@ func (v *Value) arrayIdentical(other *Value) bool {
 func (v *Value) arrayUnion(other *Value) *Value {
 	result := NewArray()
 	resultArr := result.Data.(*Array)
-	
+
 	// Copy from left operand first
 	arr1 := v.Data.(*Array)
 	for key, val := range arr1.Elements {
 		resultArr.Elements[key] = val
 	}
-	
+
 	// Add from right operand (don't overwrite existing keys)
 	arr2 := other.Data.(*Array)
 	for key, val := range arr2.Elements {
@@ -681,7 +681,7 @@ func (v *Value) arrayUnion(other *Value) *Value {
 			resultArr.Elements[key] = val
 		}
 	}
-	
+
 	return result
 }
 
@@ -702,7 +702,7 @@ func pow(base, exp float64) float64 {
 	if exp < 0 {
 		return 1.0 / pow(base, -exp)
 	}
-	
+
 	result := 1.0
 	for exp > 0 {
 		if int64(exp)%2 == 1 {

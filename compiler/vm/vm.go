@@ -7,7 +7,7 @@ import (
 
 	"github.com/wudi/php-parser/compiler/opcodes"
 	runtimeRegistry "github.com/wudi/php-parser/compiler/runtime"
-	
+	"github.com/wudi/php-parser/compiler/values"
 )
 
 // ExecutionContext represents the runtime execution state

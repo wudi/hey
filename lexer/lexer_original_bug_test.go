@@ -22,7 +22,7 @@ for($i=0; $i<3; $i++) {
 	}{
 		// <?php
 		{T_OPEN_TAG, "<?php\n"},
-		
+
 		// $arr = [1,2,3];
 		{T_VARIABLE, "$arr"},
 		{TOKEN_EQUAL, "="},
@@ -34,7 +34,7 @@ for($i=0; $i<3; $i++) {
 		{T_LNUMBER, "3"},
 		{TOKEN_RBRACKET, "]"},
 		{TOKEN_SEMICOLON, ";"},
-		
+
 		// for($i=0; $i<3; $i++) {
 		{T_FOR, "for"},
 		{TOKEN_LPAREN, "("},
@@ -50,7 +50,7 @@ for($i=0; $i<3; $i++) {
 		{T_INC, "++"},
 		{TOKEN_RPAREN, ")"},
 		{TOKEN_LBRACE, "{"},
-		
+
 		// echo "$arr[$i]\n";
 		{T_ECHO, "echo"},
 		{TOKEN_QUOTE, "\""},
@@ -61,7 +61,7 @@ for($i=0; $i<3; $i++) {
 		{T_ENCAPSED_AND_WHITESPACE, "\n"},
 		{TOKEN_QUOTE, "\""},
 		{TOKEN_SEMICOLON, ";"},
-		
+
 		// }
 		{TOKEN_RBRACE, "}"},
 		{T_EOF, ""},

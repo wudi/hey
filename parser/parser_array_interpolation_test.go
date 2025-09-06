@@ -21,22 +21,22 @@ func TestParser_InterpolatedStringArrayAccess(t *testing.T) {
 			input: `<?php echo "$arr[0]";`,
 			validate: func(t *testing.T, prog *ast.Program) {
 				assert.Len(t, prog.Body, 1)
-				
+
 				echoStmt, ok := prog.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Expected echo statement")
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				
+
 				interpolatedStr, ok := echoStmt.Arguments.Arguments[0].(*ast.InterpolatedStringExpression)
 				assert.True(t, ok, "Expected interpolated string")
 				assert.Len(t, interpolatedStr.Parts, 1)
-				
+
 				arrayAccess, ok := interpolatedStr.Parts[0].(*ast.ArrayAccessExpression)
 				assert.True(t, ok, "Expected array access expression")
-				
+
 				variable, ok := arrayAccess.Array.(*ast.Variable)
 				assert.True(t, ok, "Expected variable")
 				assert.Equal(t, "$arr", variable.Name)
-				
+
 				index, ok := (*arrayAccess.Index).(*ast.NumberLiteral)
 				assert.True(t, ok, "Expected number literal")
 				assert.Equal(t, "0", index.Value)
@@ -47,22 +47,22 @@ func TestParser_InterpolatedStringArrayAccess(t *testing.T) {
 			input: `<?php echo "$arr[$i]";`,
 			validate: func(t *testing.T, prog *ast.Program) {
 				assert.Len(t, prog.Body, 1)
-				
+
 				echoStmt, ok := prog.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Expected echo statement")
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				
+
 				interpolatedStr, ok := echoStmt.Arguments.Arguments[0].(*ast.InterpolatedStringExpression)
 				assert.True(t, ok, "Expected interpolated string")
 				assert.Len(t, interpolatedStr.Parts, 1)
-				
+
 				arrayAccess, ok := interpolatedStr.Parts[0].(*ast.ArrayAccessExpression)
 				assert.True(t, ok, "Expected array access expression")
-				
+
 				variable, ok := arrayAccess.Array.(*ast.Variable)
 				assert.True(t, ok, "Expected variable")
 				assert.Equal(t, "$arr", variable.Name)
-				
+
 				indexVar, ok := (*arrayAccess.Index).(*ast.Variable)
 				assert.True(t, ok, "Expected variable")
 				assert.Equal(t, "$i", indexVar.Name)
@@ -73,25 +73,25 @@ func TestParser_InterpolatedStringArrayAccess(t *testing.T) {
 			input: `<?php echo "Value: $arr[0] found";`,
 			validate: func(t *testing.T, prog *ast.Program) {
 				assert.Len(t, prog.Body, 1)
-				
+
 				echoStmt, ok := prog.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Expected echo statement")
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				
+
 				interpolatedStr, ok := echoStmt.Arguments.Arguments[0].(*ast.InterpolatedStringExpression)
 				assert.True(t, ok, "Expected interpolated string")
 				assert.Len(t, interpolatedStr.Parts, 3)
-				
+
 				// Check first part (prefix)
 				prefix, ok := interpolatedStr.Parts[0].(*ast.StringLiteral)
 				assert.True(t, ok, "Expected string literal")
 				assert.Equal(t, "Value: ", prefix.Value)
-				
+
 				// Check second part (array access)
 				_, ok = interpolatedStr.Parts[1].(*ast.ArrayAccessExpression)
 				assert.True(t, ok, "Expected array access expression")
-				
-				// Check third part (suffix)  
+
+				// Check third part (suffix)
 				suffix, ok := interpolatedStr.Parts[2].(*ast.StringLiteral)
 				assert.True(t, ok, "Expected string literal")
 				assert.Equal(t, " found", suffix.Value)
@@ -102,23 +102,23 @@ func TestParser_InterpolatedStringArrayAccess(t *testing.T) {
 			input: `<?php echo "$arr[$i+1]";`,
 			validate: func(t *testing.T, prog *ast.Program) {
 				assert.Len(t, prog.Body, 1)
-				
+
 				echoStmt, ok := prog.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Expected echo statement")
 				assert.Len(t, echoStmt.Arguments.Arguments, 1)
-				
+
 				interpolatedStr, ok := echoStmt.Arguments.Arguments[0].(*ast.InterpolatedStringExpression)
 				assert.True(t, ok, "Expected interpolated string")
-				
+
 				// This is a edge case: invalid syntax gets parsed with graceful fallback
 				// The exact parsing behavior may vary, but should not crash
 				assert.GreaterOrEqual(t, len(interpolatedStr.Parts), 1, "Should have at least one part")
-				
+
 				// First part should be just the variable (not array access)
 				variable, ok := interpolatedStr.Parts[0].(*ast.Variable)
 				assert.True(t, ok, "Expected variable (not array access)")
 				assert.Equal(t, "$arr", variable.Name)
-				
+
 				// Additional parts may contain the invalid syntax as literals
 			},
 		},
@@ -127,27 +127,27 @@ func TestParser_InterpolatedStringArrayAccess(t *testing.T) {
 			input: `<?php echo "$a[0] and $b[1]";`,
 			validate: func(t *testing.T, prog *ast.Program) {
 				assert.Len(t, prog.Body, 1)
-				
+
 				echoStmt, ok := prog.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Expected echo statement")
-				
+
 				interpolatedStr, ok := echoStmt.Arguments.Arguments[0].(*ast.InterpolatedStringExpression)
 				assert.True(t, ok, "Expected interpolated string")
-				
+
 				// Should have parts: $a[0], " and ", $b[1]
 				assert.Len(t, interpolatedStr.Parts, 3)
-				
+
 				// First array access
 				arrayAccess1, ok := interpolatedStr.Parts[0].(*ast.ArrayAccessExpression)
 				assert.True(t, ok, "Expected first array access")
 				variable1, _ := arrayAccess1.Array.(*ast.Variable)
 				assert.Equal(t, "$a", variable1.Name)
-				
+
 				// Middle text
 				text, ok := interpolatedStr.Parts[1].(*ast.StringLiteral)
 				assert.True(t, ok, "Expected string literal")
 				assert.Equal(t, " and ", text.Value)
-				
+
 				// Second array access
 				arrayAccess2, ok := interpolatedStr.Parts[2].(*ast.ArrayAccessExpression)
 				assert.True(t, ok, "Expected second array access")
@@ -160,21 +160,21 @@ func TestParser_InterpolatedStringArrayAccess(t *testing.T) {
 			input: `<?php echo "$arr[key]";`,
 			validate: func(t *testing.T, prog *ast.Program) {
 				assert.Len(t, prog.Body, 1)
-				
+
 				echoStmt, ok := prog.Body[0].(*ast.EchoStatement)
 				assert.True(t, ok, "Expected echo statement")
-				
+
 				interpolatedStr, ok := echoStmt.Arguments.Arguments[0].(*ast.InterpolatedStringExpression)
 				assert.True(t, ok, "Expected interpolated string")
 				assert.Len(t, interpolatedStr.Parts, 1)
-				
+
 				arrayAccess, ok := interpolatedStr.Parts[0].(*ast.ArrayAccessExpression)
 				assert.True(t, ok, "Expected array access expression")
-				
+
 				variable, ok := arrayAccess.Array.(*ast.Variable)
 				assert.True(t, ok, "Expected variable")
 				assert.Equal(t, "$arr", variable.Name)
-				
+
 				// String key should be parsed as string literal (T_STRING becomes StringLiteral)
 				stringLit, ok := (*arrayAccess.Index).(*ast.StringLiteral)
 				assert.True(t, ok, "Expected string literal for string key")
@@ -187,10 +187,10 @@ func TestParser_InterpolatedStringArrayAccess(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := New(lexer.New(tt.input))
 			prog := p.ParseProgram()
-			
+
 			assert.Empty(t, p.Errors(), "Parser should not have errors")
 			assert.NotNil(t, prog, "Program should not be nil")
-			
+
 			tt.validate(t, prog)
 		})
 	}
@@ -263,15 +263,15 @@ func TestLexer_VarOffsetStateHandling(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			l := lexer.New("<?php echo " + tt.input + ";")
-			
+
 			// Skip opening tokens (T_OPEN_TAG, T_ECHO)
 			l.NextToken() // T_OPEN_TAG
 			l.NextToken() // T_ECHO
-			
+
 			// Test the interpolated string tokens
 			for i, expectedType := range tt.expected {
 				token := l.NextToken()
-				assert.Equal(t, expectedType, token.Type, 
+				assert.Equal(t, expectedType, token.Type,
 					"Token %d: expected %s, got %s", i, expectedType.String(), token.Type.String())
 				assert.Equal(t, tt.values[i], token.Value,
 					"Token %d value: expected %q, got %q", i, tt.values[i], token.Value)

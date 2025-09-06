@@ -39,17 +39,17 @@ func (o *Optimizer) AddPass(pass OptimizationPass) {
 func (o *Optimizer) Optimize(instructions []opcodes.Instruction, constants []*values.Value) ([]opcodes.Instruction, []*values.Value) {
 	currentInstructions := make([]opcodes.Instruction, len(instructions))
 	copy(currentInstructions, instructions)
-	
+
 	currentConstants := make([]*values.Value, len(constants))
 	copy(currentConstants, constants)
-	
+
 	totalChanges := 0
 	iteration := 0
 	maxIterations := 10 // Prevent infinite loops
-	
+
 	for iteration < maxIterations {
 		iterationChanges := 0
-		
+
 		for _, pass := range o.passes {
 			optimized, newConstants, changed := pass.Optimize(currentInstructions, currentConstants)
 			if changed {
@@ -58,15 +58,15 @@ func (o *Optimizer) Optimize(instructions []opcodes.Instruction, constants []*va
 				iterationChanges++
 			}
 		}
-		
+
 		if iterationChanges == 0 {
 			break // No more optimizations possible
 		}
-		
+
 		totalChanges += iterationChanges
 		iteration++
 	}
-	
+
 	return currentInstructions, currentConstants
 }
 
@@ -81,12 +81,12 @@ func (p *ConstantFoldingPass) Optimize(instructions []opcodes.Instruction, const
 	optimized := make([]opcodes.Instruction, 0, len(instructions))
 	newConstants := make([]*values.Value, len(constants))
 	copy(newConstants, constants)
-	
+
 	changed := false
-	
+
 	for i := 0; i < len(instructions); i++ {
 		inst := instructions[i]
-		
+
 		// Look for arithmetic operations on constants
 		if p.isArithmeticOp(inst.Opcode) && p.areBothConstants(inst) {
 			// Perform constant folding
@@ -94,7 +94,7 @@ func (p *ConstantFoldingPass) Optimize(instructions []opcodes.Instruction, const
 				// Replace with a simple constant load
 				constIndex := uint32(len(newConstants))
 				newConstants = append(newConstants, newConst)
-				
+
 				opType1, opType2 := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.DecodeResultType(inst.OpType2))
 				optimized = append(optimized, opcodes.Instruction{
 					Opcode:  opcodes.OP_QM_ASSIGN,
@@ -108,10 +108,10 @@ func (p *ConstantFoldingPass) Optimize(instructions []opcodes.Instruction, const
 				continue
 			}
 		}
-		
+
 		optimized = append(optimized, inst)
 	}
-	
+
 	return optimized, newConstants, changed
 }
 
@@ -144,10 +144,10 @@ func (p *ConstantFoldingPass) foldConstantOperation(inst opcodes.Instruction, co
 	if int(inst.Op1) >= len(constants) || int(inst.Op2) >= len(constants) {
 		return false, nil
 	}
-	
+
 	op1 := constants[inst.Op1]
 	op2 := constants[inst.Op2]
-	
+
 	switch inst.Opcode {
 	case opcodes.OP_ADD:
 		return true, op1.Add(op2)
@@ -215,11 +215,11 @@ func (p *DeadCodeEliminationPass) Optimize(instructions []opcodes.Instruction, c
 	// Build reachability graph
 	reachable := make([]bool, len(instructions))
 	p.markReachable(instructions, reachable, 0)
-	
+
 	// Remove unreachable instructions
 	optimized := make([]opcodes.Instruction, 0, len(instructions))
 	changed := false
-	
+
 	for i, inst := range instructions {
 		if reachable[i] {
 			optimized = append(optimized, inst)
@@ -227,7 +227,7 @@ func (p *DeadCodeEliminationPass) Optimize(instructions []opcodes.Instruction, c
 			changed = true
 		}
 	}
-	
+
 	return optimized, constants, changed
 }
 
@@ -235,10 +235,10 @@ func (p *DeadCodeEliminationPass) markReachable(instructions []opcodes.Instructi
 	if start >= len(instructions) || reachable[start] {
 		return
 	}
-	
+
 	reachable[start] = true
 	inst := instructions[start]
-	
+
 	switch inst.Opcode {
 	case opcodes.OP_JMP:
 		// Unconditional jump
@@ -247,7 +247,7 @@ func (p *DeadCodeEliminationPass) markReachable(instructions []opcodes.Instructi
 			p.markReachable(instructions, reachable, target)
 		}
 		// Don't mark next instruction as reachable for unconditional jump
-		
+
 	case opcodes.OP_JMPZ, opcodes.OP_JMPNZ:
 		// Conditional jump - both paths are reachable
 		if opcodes.DecodeOpType2(inst.OpType1) == opcodes.IS_CONST {
@@ -255,11 +255,11 @@ func (p *DeadCodeEliminationPass) markReachable(instructions []opcodes.Instructi
 			p.markReachable(instructions, reachable, target)
 		}
 		p.markReachable(instructions, reachable, start+1)
-		
+
 	case opcodes.OP_RETURN, opcodes.OP_EXIT, opcodes.OP_THROW:
 		// These instructions terminate execution
 		// Don't mark next instruction as reachable
-		
+
 	default:
 		// Regular instruction - mark next as reachable
 		p.markReachable(instructions, reachable, start+1)
@@ -276,7 +276,7 @@ func (p *PeepholeOptimizationPass) Name() string {
 func (p *PeepholeOptimizationPass) Optimize(instructions []opcodes.Instruction, constants []*values.Value) ([]opcodes.Instruction, []*values.Value, bool) {
 	optimized := make([]opcodes.Instruction, 0, len(instructions))
 	changed := false
-	
+
 	for i := 0; i < len(instructions); {
 		// Look for patterns to optimize
 		if i < len(instructions)-1 {
@@ -290,7 +290,7 @@ func (p *PeepholeOptimizationPass) Optimize(instructions []opcodes.Instruction, 
 				changed = true
 				continue
 			}
-			
+
 			// Pattern: Assignment to temp that's never used
 			if p.isUnusedTempAssignment(instructions, i) {
 				// Skip this instruction
@@ -299,11 +299,11 @@ func (p *PeepholeOptimizationPass) Optimize(instructions []opcodes.Instruction, 
 				continue
 			}
 		}
-		
+
 		optimized = append(optimized, instructions[i])
 		i++
 	}
-	
+
 	return optimized, constants, changed
 }
 
@@ -317,25 +317,25 @@ func (p *PeepholeOptimizationPass) isRedundantAssignFetch(inst1, inst2 opcodes.I
 
 func (p *PeepholeOptimizationPass) isUnusedTempAssignment(instructions []opcodes.Instruction, index int) bool {
 	inst := instructions[index]
-	
+
 	// Only optimize temporary variable assignments
 	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_TMP_VAR {
 		return false
 	}
-	
+
 	tempVar := inst.Result
-	
+
 	// Check if this temp is used later
 	for i := index + 1; i < len(instructions); i++ {
 		later := instructions[i]
-		
+
 		// Check all operands
 		if (opcodes.DecodeOpType1(later.OpType1) == opcodes.IS_TMP_VAR && later.Op1 == tempVar) ||
 			(opcodes.DecodeOpType2(later.OpType1) == opcodes.IS_TMP_VAR && later.Op2 == tempVar) {
 			return false // Temp is used
 		}
 	}
-	
+
 	return true // Temp is never used
 }
 
@@ -350,17 +350,17 @@ func (p *JumpOptimizationPass) Optimize(instructions []opcodes.Instruction, cons
 	optimized := make([]opcodes.Instruction, len(instructions))
 	copy(optimized, instructions)
 	changed := false
-	
+
 	for i := 0; i < len(optimized); i++ {
 		inst := optimized[i]
-		
+
 		// Optimize jumps to next instruction
 		if p.isJumpToNext(inst, i) {
 			optimized[i] = opcodes.Instruction{Opcode: opcodes.OP_NOP}
 			changed = true
 			continue
 		}
-		
+
 		// Optimize jump chains (jump to jump)
 		if p.isJump(inst.Opcode) {
 			if newTarget := p.resolveJumpChain(optimized, inst, constants); newTarget != -1 {
@@ -374,7 +374,7 @@ func (p *JumpOptimizationPass) Optimize(instructions []opcodes.Instruction, cons
 			}
 		}
 	}
-	
+
 	return optimized, constants, changed
 }
 
@@ -382,7 +382,7 @@ func (p *JumpOptimizationPass) isJumpToNext(inst opcodes.Instruction, currentInd
 	if !p.isJump(inst.Opcode) {
 		return false
 	}
-	
+
 	var target int
 	if opcodes.DecodeOpType1(inst.OpType1) == opcodes.IS_CONST {
 		target = int(inst.Op1)
@@ -391,7 +391,7 @@ func (p *JumpOptimizationPass) isJumpToNext(inst opcodes.Instruction, currentInd
 	} else {
 		return false
 	}
-	
+
 	return target == currentIndex+1
 }
 
@@ -406,7 +406,7 @@ func (p *JumpOptimizationPass) isJump(opcode opcodes.Opcode) bool {
 
 func (p *JumpOptimizationPass) resolveJumpChain(instructions []opcodes.Instruction, inst opcodes.Instruction, constants []*values.Value) int {
 	visited := make(map[int]bool)
-	
+
 	var target int
 	if opcodes.DecodeOpType1(inst.OpType1) == opcodes.IS_CONST {
 		target = int(inst.Op1)
@@ -415,12 +415,12 @@ func (p *JumpOptimizationPass) resolveJumpChain(instructions []opcodes.Instructi
 	} else {
 		return -1
 	}
-	
+
 	// Follow jump chain
 	for target >= 0 && target < len(instructions) && !visited[target] {
 		visited[target] = true
 		targetInst := instructions[target]
-		
+
 		// Only follow unconditional jumps in chains
 		if targetInst.Opcode == opcodes.OP_JMP && opcodes.DecodeOpType1(targetInst.OpType1) == opcodes.IS_CONST {
 			newTarget := int(targetInst.Op1)
@@ -429,20 +429,20 @@ func (p *JumpOptimizationPass) resolveJumpChain(instructions []opcodes.Instructi
 				continue
 			}
 		}
-		
+
 		break
 	}
-	
+
 	// Return new target if it's different from original
 	originalTarget := int(inst.Op1)
 	if inst.Opcode != opcodes.OP_JMP {
 		originalTarget = int(inst.Op2)
 	}
-	
+
 	if target != originalTarget {
 		return target
 	}
-	
+
 	return -1
 }
 
@@ -456,65 +456,65 @@ func (p *TemporaryEliminationPass) Name() string {
 func (p *TemporaryEliminationPass) Optimize(instructions []opcodes.Instruction, constants []*values.Value) ([]opcodes.Instruction, []*values.Value, bool) {
 	// This is a simplified implementation
 	// A full implementation would perform register allocation
-	
+
 	// For now, just identify and merge temporary variables that have the same lifetime
 	optimized := make([]opcodes.Instruction, len(instructions))
 	copy(optimized, instructions)
-	
+
 	// This pass would be quite complex to implement fully
 	// It requires liveness analysis and register allocation
-	
+
 	return optimized, constants, false
 }
 
 // OptimizationStats tracks optimization statistics
 type OptimizationStats struct {
-	PassStats    map[string]int
-	OriginalSize int
+	PassStats     map[string]int
+	OriginalSize  int
 	OptimizedSize int
-	Iterations   int
+	Iterations    int
 }
 
 func (o *Optimizer) OptimizeWithStats(instructions []opcodes.Instruction, constants []*values.Value) ([]opcodes.Instruction, []*values.Value, *OptimizationStats) {
 	stats := &OptimizationStats{
-		PassStats:     make(map[string]int),
-		OriginalSize:  len(instructions),
-		Iterations:    0,
+		PassStats:    make(map[string]int),
+		OriginalSize: len(instructions),
+		Iterations:   0,
 	}
-	
+
 	currentInstructions := make([]opcodes.Instruction, len(instructions))
 	copy(currentInstructions, instructions)
-	
+
 	currentConstants := make([]*values.Value, len(constants))
 	copy(currentConstants, constants)
-	
+
 	maxIterations := 10
-	
+
 	for stats.Iterations < maxIterations {
 		iterationChanges := false
-		
+
 		for _, pass := range o.passes {
 			optimized, newConstants, changed := pass.Optimize(currentInstructions, currentConstants)
-			
+
 			if changed {
 				currentInstructions = optimized
 				currentConstants = newConstants
 				iterationChanges = true
-				
+
 				// Update stats
 				passName := pass.Name()
 				stats.PassStats[passName]++
 			}
 		}
-		
+
 		if !iterationChanges {
 			break
 		}
-		
+
 		stats.Iterations++
 	}
-	
+
 	stats.OptimizedSize = len(currentInstructions)
-	
+
 	return currentInstructions, currentConstants, stats
 }

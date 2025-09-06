@@ -74,17 +74,26 @@ func demo2() {
 	// This represents: 5 + 3 (which can be constant folded)
 	originalInstructions := []opcodes.Instruction{
 		{
-			Opcode:  opcodes.OP_ADD,
-			OpType1: func() byte { op1, _ := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_CONST, opcodes.IS_TMP_VAR); return op1 }(),
-			OpType2: func() byte { _, op2 := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_CONST, opcodes.IS_TMP_VAR); return op2 }(),
-			Op1:     0, // constant index for 5
-			Op2:     1, // constant index for 3
-			Result:  100, // temp variable
+			Opcode: opcodes.OP_ADD,
+			OpType1: func() byte {
+				op1, _ := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_CONST, opcodes.IS_TMP_VAR)
+				return op1
+			}(),
+			OpType2: func() byte {
+				_, op2 := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_CONST, opcodes.IS_TMP_VAR)
+				return op2
+			}(),
+			Op1:    0,   // constant index for 5
+			Op2:    1,   // constant index for 3
+			Result: 100, // temp variable
 		},
 		{
-			Opcode:  opcodes.OP_ECHO,
-			OpType1: func() byte { op1, _ := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_UNUSED, opcodes.IS_UNUSED); return op1 }(),
-			Op1:     100, // temp variable with result
+			Opcode: opcodes.OP_ECHO,
+			OpType1: func() byte {
+				op1, _ := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_UNUSED, opcodes.IS_UNUSED)
+				return op1
+			}(),
+			Op1: 100, // temp variable with result
 		},
 	}
 
@@ -131,35 +140,56 @@ func demo3() {
 	instructions := []opcodes.Instruction{
 		// Load constants
 		{
-			Opcode:  opcodes.OP_QM_ASSIGN,
-			OpType1: func() byte { op1, _ := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR); return op1 }(),
-			OpType2: func() byte { _, op2 := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR); return op2 }(),
-			Op1:     0, // integer 10
-			Result:  100,
+			Opcode: opcodes.OP_QM_ASSIGN,
+			OpType1: func() byte {
+				op1, _ := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR)
+				return op1
+			}(),
+			OpType2: func() byte {
+				_, op2 := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR)
+				return op2
+			}(),
+			Op1:    0, // integer 10
+			Result: 100,
 		},
 		{
-			Opcode:  opcodes.OP_QM_ASSIGN,
-			OpType1: func() byte { op1, _ := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR); return op1 }(),
-			OpType2: func() byte { _, op2 := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR); return op2 }(),
-			Op1:     1, // integer 20
-			Result:  101,
+			Opcode: opcodes.OP_QM_ASSIGN,
+			OpType1: func() byte {
+				op1, _ := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR)
+				return op1
+			}(),
+			OpType2: func() byte {
+				_, op2 := opcodes.EncodeOpTypes(opcodes.IS_CONST, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR)
+				return op2
+			}(),
+			Op1:    1, // integer 20
+			Result: 101,
 		},
 
 		// Add them
 		{
-			Opcode:  opcodes.OP_ADD,
-			OpType1: func() byte { op1, _ := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR); return op1 }(),
-			OpType2: func() byte { _, op2 := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR); return op2 }(),
-			Op1:     100,
-			Op2:     101,
-			Result:  102,
+			Opcode: opcodes.OP_ADD,
+			OpType1: func() byte {
+				op1, _ := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
+				return op1
+			}(),
+			OpType2: func() byte {
+				_, op2 := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
+				return op2
+			}(),
+			Op1:    100,
+			Op2:    101,
+			Result: 102,
 		},
 
 		// Echo result
 		{
-			Opcode:  opcodes.OP_ECHO,
-			OpType1: func() byte { op1, _ := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_UNUSED, opcodes.IS_UNUSED); return op1 }(),
-			Op1:     102,
+			Opcode: opcodes.OP_ECHO,
+			OpType1: func() byte {
+				op1, _ := opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_UNUSED, opcodes.IS_UNUSED)
+				return op1
+			}(),
+			Op1: 102,
 		},
 	}
 

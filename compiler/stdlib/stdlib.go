@@ -57,14 +57,14 @@ type Property struct {
 
 // Method represents a class method
 type Method struct {
-	Name         string
-	Visibility   string
-	IsStatic     bool
-	IsAbstract   bool
-	IsFinal      bool
-	Parameters   []Parameter
-	Handler      FunctionHandler
-	IsVariadic   bool
+	Name       string
+	Visibility string
+	IsStatic   bool
+	IsAbstract bool
+	IsFinal    bool
+	Parameters []Parameter
+	Handler    FunctionHandler
+	IsVariadic bool
 }
 
 // NewStandardLibrary creates a new standard library instance
@@ -78,13 +78,13 @@ func NewStandardLibrary() *StandardLibrary {
 
 	// Initialize built-in constants
 	stdlib.initConstants()
-	
+
 	// Initialize built-in variables
 	stdlib.initVariables()
-	
+
 	// Initialize built-in functions
 	stdlib.initFunctions()
-	
+
 	// Initialize built-in classes
 	stdlib.initClasses()
 

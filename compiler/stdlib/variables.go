@@ -8,39 +8,39 @@ import (
 func (stdlib *StandardLibrary) initVariables() {
 	// Initialize $_SERVER superglobal
 	stdlib.Variables["_SERVER"] = createServerArray()
-	
+
 	// Initialize $_GET superglobal
 	stdlib.Variables["_GET"] = values.NewArray()
-	
-	// Initialize $_POST superglobal  
+
+	// Initialize $_POST superglobal
 	stdlib.Variables["_POST"] = values.NewArray()
-	
+
 	// Initialize $_FILES superglobal
 	stdlib.Variables["_FILES"] = values.NewArray()
-	
+
 	// Initialize $_COOKIE superglobal
 	stdlib.Variables["_COOKIE"] = values.NewArray()
-	
+
 	// Initialize $_SESSION superglobal
 	stdlib.Variables["_SESSION"] = values.NewArray()
-	
+
 	// Initialize $_REQUEST superglobal
 	stdlib.Variables["_REQUEST"] = values.NewArray()
-	
+
 	// Initialize $_ENV superglobal
 	stdlib.Variables["_ENV"] = createEnvArray()
-	
+
 	// Initialize $GLOBALS superglobal
 	stdlib.Variables["GLOBALS"] = values.NewArray()
-	
+
 	// Initialize $argc (command line argument count)
 	stdlib.Variables["argc"] = values.NewInt(0)
-	
+
 	// Initialize $argv (command line arguments)
 	argv := values.NewArray()
 	argv.ArraySet(values.NewInt(0), values.NewString("php-parser"))
 	stdlib.Variables["argv"] = argv
-	
+
 	// Initialize $http_response_header
 	stdlib.Variables["http_response_header"] = values.NewArray()
 }
@@ -48,7 +48,7 @@ func (stdlib *StandardLibrary) initVariables() {
 // createServerArray creates the $_SERVER superglobal array
 func createServerArray() *values.Value {
 	server := values.NewArray()
-	
+
 	// Basic server information
 	server.ArraySet(values.NewString("SERVER_SOFTWARE"), values.NewString("PHP-Parser/1.0"))
 	server.ArraySet(values.NewString("SERVER_NAME"), values.NewString("localhost"))
@@ -83,14 +83,14 @@ func createServerArray() *values.Value {
 	// CLI-specific values
 	server.ArraySet(values.NewString("PHP_CLI_PROCESS_TITLE"), values.NewString("php"))
 	server.ArraySet(values.NewString("_"), values.NewString("/usr/bin/php"))
-	
+
 	return server
 }
 
 // createEnvArray creates the $_ENV superglobal array
 func createEnvArray() *values.Value {
 	env := values.NewArray()
-	
+
 	// Common environment variables
 	env.ArraySet(values.NewString("PATH"), values.NewString("/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"))
 	env.ArraySet(values.NewString("HOME"), values.NewString("/home/user"))
@@ -100,7 +100,7 @@ func createEnvArray() *values.Value {
 	env.ArraySet(values.NewString("TERM"), values.NewString("xterm"))
 	env.ArraySet(values.NewString("PWD"), values.NewString("/"))
 	env.ArraySet(values.NewString("TMPDIR"), values.NewString("/tmp"))
-	
+
 	return env
 }
 

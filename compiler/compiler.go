@@ -19,16 +19,16 @@ type ForwardJump struct {
 
 // Compiler compiles AST to bytecode
 type Compiler struct {
-	instructions    []opcodes.Instruction
-	constants       []*values.Value
-	scopes          []*Scope
-	labels          map[string]int
-	forwardJumps    map[string][]ForwardJump
-	nextTemp        uint32
-	nextLabel       int
-	functions       map[string]*vm.Function
-	classes         map[string]*vm.Class
-	currentClass    *vm.Class  // Current class being compiled
+	instructions []opcodes.Instruction
+	constants    []*values.Value
+	scopes       []*Scope
+	labels       map[string]int
+	forwardJumps map[string][]ForwardJump
+	nextTemp     uint32
+	nextLabel    int
+	functions    map[string]*vm.Function
+	classes      map[string]*vm.Class
+	currentClass *vm.Class // Current class being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -209,14 +209,14 @@ func (c *Compiler) compileBinaryOp(expr *ast.BinaryExpression) error {
 	if err != nil {
 		return err
 	}
-	leftResult := c.nextTemp - 1  // The last allocated temp contains the left result
+	leftResult := c.nextTemp - 1 // The last allocated temp contains the left result
 
-	// Compile right operand  
+	// Compile right operand
 	err = c.compileNode(expr.Right)
 	if err != nil {
 		return err
 	}
-	rightResult := c.nextTemp - 1  // The last allocated temp contains the right result
+	rightResult := c.nextTemp - 1 // The last allocated temp contains the right result
 
 	// Generate operation
 	result := c.allocateTemp()
@@ -254,33 +254,33 @@ func (c *Compiler) compileIncrementDecrement(expr *ast.UnaryExpression) error {
 		// Handle simple variables
 		return c.compileSimpleIncDec(expr, variable)
 	}
-	
+
 	// Check if it's a static property access
 	if staticProp, ok := expr.Operand.(*ast.StaticPropertyAccessExpression); ok {
 		// Handle static property increment/decrement
 		return c.compileStaticPropIncDec(expr, staticProp)
 	}
-	
+
 	// Check if it's a static access (like self::$counter)
 	if staticAccess, ok := expr.Operand.(*ast.StaticAccessExpression); ok {
 		// Handle static access increment/decrement
 		return c.compileStaticAccessIncDec(expr, staticAccess)
 	}
-	
+
 	return fmt.Errorf("increment/decrement can only be applied to variables or static properties")
 }
 
 func (c *Compiler) compileSimpleIncDec(expr *ast.UnaryExpression, variable *ast.Variable) error {
 
 	varSlot := c.getVariableSlot(variable.Name)
-	
+
 	// Read current value from variable
 	currentVal := c.allocateTemp()
 	c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, varSlot, 0, 0, opcodes.IS_TMP_VAR, currentVal)
 
 	// Create constant 1 for increment/decrement
 	oneConstant := c.addConstant(values.NewInt(1))
-	
+
 	// Calculate new value
 	newVal := c.allocateTemp()
 	if expr.Operator == "++" {
@@ -292,7 +292,7 @@ func (c *Compiler) compileSimpleIncDec(expr *ast.UnaryExpression, variable *ast.
 	// Write new value back to variable
 	c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, newVal, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, varSlot)
 
-	// Expression result handling: 
+	// Expression result handling:
 	// For standalone increment statements, we don't need to preserve the return value
 	// The variable has been modified, which is the primary effect
 	return nil
@@ -300,11 +300,11 @@ func (c *Compiler) compileSimpleIncDec(expr *ast.UnaryExpression, variable *ast.
 
 func (c *Compiler) compileStaticPropIncDec(expr *ast.UnaryExpression, staticProp *ast.StaticPropertyAccessExpression) error {
 	// Implement static property increment/decrement (e.g., TestClass::$counter++)
-	
+
 	// Step 1: Compile class expression (supports both static and dynamic class names)
 	var classOperandType opcodes.OpType
 	var classOperand uint32
-	
+
 	switch class := staticProp.Class.(type) {
 	case *ast.IdentifierNode:
 		// Static class name like MyClass::$prop
@@ -323,11 +323,11 @@ func (c *Compiler) compileStaticPropIncDec(expr *ast.UnaryExpression, staticProp
 		classOperand = c.nextTemp - 1
 		classOperandType = opcodes.IS_TMP_VAR
 	}
-	
-	// Step 2: Compile property expression 
+
+	// Step 2: Compile property expression
 	var propOperandType opcodes.OpType
 	var propOperand uint32
-	
+
 	switch property := staticProp.Property.(type) {
 	case *ast.Variable:
 		// Simple static property like ::$prop
@@ -347,17 +347,17 @@ func (c *Compiler) compileStaticPropIncDec(expr *ast.UnaryExpression, staticProp
 		propOperand = c.nextTemp - 1
 		propOperandType = opcodes.IS_TMP_VAR
 	}
-	
+
 	// Step 3: Read current value from static property
 	currentVal := c.allocateTemp()
 	c.emit(opcodes.OP_FETCH_STATIC_PROP_R,
 		classOperandType, classOperand,
 		propOperandType, propOperand,
 		opcodes.IS_TMP_VAR, currentVal)
-	
+
 	// Step 4: Create constant 1 for increment/decrement
 	oneConstant := c.addConstant(values.NewInt(1))
-	
+
 	// Step 5: Calculate new value
 	newVal := c.allocateTemp()
 	if expr.Operator == "++" {
@@ -365,25 +365,25 @@ func (c *Compiler) compileStaticPropIncDec(expr *ast.UnaryExpression, staticProp
 	} else { // "--"
 		c.emit(opcodes.OP_SUB, opcodes.IS_TMP_VAR, currentVal, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
 	}
-	
+
 	// Step 6: Write new value back to static property
 	c.emit(opcodes.OP_FETCH_STATIC_PROP_W,
 		classOperandType, classOperand,
 		propOperandType, propOperand,
 		opcodes.IS_TMP_VAR, newVal)
-	
+
 	return nil
 }
 
 func (c *Compiler) compileStaticAccessIncDec(expr *ast.UnaryExpression, staticAccess *ast.StaticAccessExpression) error {
 	// For static access increment/decrement, we'll create a simplified implementation
 	// This handles cases like self::$counter++
-	
+
 	// For now, just create a temp result to avoid errors
 	result := c.allocateTemp()
 	constant := c.addConstant(values.NewInt(1))
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
-	
+
 	return nil
 }
 
@@ -420,11 +420,11 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 		}
 	} else if arrayAccess, ok := expr.Left.(*ast.ArrayAccessExpression); ok {
 		// Handle array assignment: $arr[index] = value or $arr[] = value
-		
+
 		// Compile array variable
 		if arrayVar, ok := arrayAccess.Array.(*ast.Variable); ok {
 			arraySlot := c.getVariableSlot(arrayVar.Name)
-			
+
 			if arrayAccess.Index == nil {
 				// Array append: $arr[] = value
 				// Use ADD_ARRAY_ELEMENT instruction
@@ -498,41 +498,41 @@ func (c *Compiler) compileVariable(expr *ast.Variable) error {
 	if len(expr.Name) > 3 && expr.Name[0] == '$' && expr.Name[1] == '{' && expr.Name[len(expr.Name)-1] == '}' {
 		// This is ${...} syntax - extract the inner expression
 		innerExpr := expr.Name[2 : len(expr.Name)-1] // Remove ${ and }
-		
+
 		// For now, handle simple cases like ${$varName}
 		if len(innerExpr) > 1 && innerExpr[0] == '$' {
 			// This is ${$varName} - compile as variable variable
 			varName := innerExpr // Keep the full $varName
-			
+
 			// Create a temporary variable for the variable name
 			nameSlot := c.getVariableSlot(varName)
 			nameResult := c.allocateTemp()
-			
+
 			// Emit binding for the name variable
 			nameConstant := c.addConstant(values.NewString(varName))
 			c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, nameSlot, opcodes.IS_CONST, nameConstant, 0, 0)
-			
+
 			// Fetch the name variable value
 			c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, nameSlot, 0, 0, opcodes.IS_TMP_VAR, nameResult)
-			
+
 			// Use dynamic fetch with the name
 			result := c.allocateTemp()
 			c.emit(opcodes.OP_FETCH_R_DYNAMIC,
 				opcodes.IS_TMP_VAR, nameResult,
 				0, 0,
 				opcodes.IS_TMP_VAR, result)
-			
+
 			return nil
 		}
 	}
-	
+
 	// Regular variable handling
 	varSlot := c.getVariableSlot(expr.Name)
-	
+
 	// Emit variable name binding for variable variables support
 	nameConstant := c.addConstant(values.NewString(expr.Name))
 	c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, varSlot, opcodes.IS_CONST, nameConstant, 0, 0)
-	
+
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_FETCH_R, opcodes.IS_VAR, varSlot, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
@@ -541,33 +541,33 @@ func (c *Compiler) compileVariable(expr *ast.Variable) error {
 func (c *Compiler) compileVariableVariable(expr *ast.VariableVariableExpression) error {
 	// Variable variables: ${expression}
 	// 1. Evaluate the inner expression to get the variable name
-	// 2. Convert result to string if needed  
+	// 2. Convert result to string if needed
 	// 3. Use that string as variable name for lookup
-	
+
 	// Compile the inner expression that will give us the variable name
 	err := c.compileNode(expr.Expression)
 	if err != nil {
 		return fmt.Errorf("failed to compile variable variable expression: %w", err)
 	}
-	
+
 	// The result of the expression is in the last allocated temp
 	nameOperand := c.nextTemp - 1
 	result := c.allocateTemp()
-	
+
 	// Use OP_FETCH_R_DYNAMIC to fetch variable by computed name
 	// The VM will need to convert nameOperand to string and use it for variable lookup
 	c.emit(opcodes.OP_FETCH_R_DYNAMIC,
 		opcodes.IS_TMP_VAR, nameOperand, // Variable name (from expression)
 		0, 0, // Unused operands
 		opcodes.IS_TMP_VAR, result) // Result
-	
+
 	return nil
 }
 
 func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
 	// Handle special literal keywords
 	var constant uint32
-	
+
 	switch expr.Name {
 	case "null":
 		constant = c.addConstant(values.NewNull())
@@ -579,7 +579,7 @@ func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
 		// Identifiers are typically constants or function names
 		constant = c.addConstant(values.NewString(expr.Name))
 	}
-	
+
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
 	return nil
@@ -587,7 +587,7 @@ func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
 
 func (c *Compiler) compileNumberLiteral(expr *ast.NumberLiteral) error {
 	var constant uint32
-	
+
 	if expr.Kind == "integer" {
 		value, err := strconv.ParseInt(expr.Value, 10, 64)
 		if err != nil {
@@ -782,7 +782,7 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 	if staticAccess, ok := expr.Callee.(*ast.StaticAccessExpression); ok {
 		return c.compileStaticMethodCall(expr, staticAccess)
 	}
-	
+
 	// Compile callee expression for regular function calls
 	err := c.compileNode(expr.Callee)
 	if err != nil {
@@ -790,7 +790,7 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 	}
 	calleeResult := c.allocateTemp()
 	c.emitMove(calleeResult)
-	
+
 	// Get number of arguments
 	var numArgs uint32
 	if expr.Arguments != nil {
@@ -825,7 +825,7 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 
 func (c *Compiler) compileStaticMethodCall(callExpr *ast.CallExpression, staticAccess *ast.StaticAccessExpression) error {
 	// Handle static method calls like parent::__construct(), Class::method(), etc.
-	
+
 	// Get class name
 	var className string
 	switch class := staticAccess.Class.(type) {
@@ -837,7 +837,7 @@ func (c *Compiler) compileStaticMethodCall(callExpr *ast.CallExpression, staticA
 	default:
 		return fmt.Errorf("unsupported class expression in static method call: %T", staticAccess.Class)
 	}
-	
+
 	// Get method name
 	var methodName string
 	if method, ok := staticAccess.Property.(*ast.IdentifierNode); ok {
@@ -845,23 +845,23 @@ func (c *Compiler) compileStaticMethodCall(callExpr *ast.CallExpression, staticA
 	} else {
 		return fmt.Errorf("unsupported method name type in static method call: %T", staticAccess.Property)
 	}
-	
+
 	// Get number of arguments
 	var numArgs uint32
 	if callExpr.Arguments != nil {
 		numArgs = uint32(len(callExpr.Arguments.Arguments))
 	}
-	
+
 	// Initialize static method call
 	classConstant := c.addConstant(values.NewString(className))
 	methodConstant := c.addConstant(values.NewString(methodName))
 	argCountConstant := c.addConstant(values.NewInt(int64(numArgs)))
-	
-	c.emit(opcodes.OP_INIT_STATIC_METHOD_CALL, 
+
+	c.emit(opcodes.OP_INIT_STATIC_METHOD_CALL,
 		opcodes.IS_CONST, classConstant,
 		opcodes.IS_CONST, methodConstant,
 		opcodes.IS_CONST, argCountConstant)
-	
+
 	// Compile and send arguments
 	if callExpr.Arguments != nil {
 		for i, arg := range callExpr.Arguments.Arguments {
@@ -871,16 +871,16 @@ func (c *Compiler) compileStaticMethodCall(callExpr *ast.CallExpression, staticA
 			}
 			argResult := c.allocateTemp()
 			c.emitMove(argResult)
-			
+
 			argNum := c.addConstant(values.NewInt(int64(i)))
 			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
 		}
 	}
-	
+
 	// Execute static method call
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_STATIC_METHOD_CALL, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
-	
+
 	return nil
 }
 
@@ -900,7 +900,7 @@ func (c *Compiler) compileMethodCall(expr *ast.MethodCallExpression) error {
 	}
 	methodResult := c.allocateTemp()
 	c.emitMove(methodResult)
-	
+
 	// Get number of arguments
 	var numArgs uint32
 	if expr.Arguments != nil {
@@ -1141,7 +1141,7 @@ func (c *Compiler) emit(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint3
 func (c *Compiler) emitMove(target uint32) {
 	// Move the result from the previous compilation to the target temp variable
 	// We need to get the source temp before allocating target, so this must be called correctly
-	source := c.nextTemp - 2  // -1 for the target that was just allocated, -1 more for the actual source
+	source := c.nextTemp - 2 // -1 for the target that was just allocated, -1 more for the actual source
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, source, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, target)
 }
 
@@ -1171,7 +1171,7 @@ func (c *Compiler) addLabel(name string) uint32 {
 	if pos, exists := c.labels[name]; exists {
 		return uint32(pos)
 	}
-	
+
 	// Return a placeholder value (we'll use the label name as a constant)
 	// This will be resolved when the label is placed
 	return uint32(0xFFFF) // Placeholder value that will be patched
@@ -1189,7 +1189,7 @@ func (c *Compiler) addForwardJump(instructionIndex int, labelName string, operan
 func (c *Compiler) placeLabel(name string) {
 	pos := len(c.instructions)
 	c.labels[name] = pos
-	
+
 	// Resolve all forward jumps to this label
 	if jumps, exists := c.forwardJumps[name]; exists {
 		for _, jump := range jumps {
@@ -1224,10 +1224,10 @@ func (c *Compiler) emitJump(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 u
 		}
 		return
 	}
-	
+
 	// Forward jump - add placeholder constant for the jump target
 	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
-	
+
 	// For unconditional jumps, the target goes in Op1
 	// For conditional jumps, condition is Op1 and target is Op2
 	if opcode == opcodes.OP_JMP {
@@ -1235,7 +1235,7 @@ func (c *Compiler) emitJump(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 u
 	} else {
 		c.emit(opcode, op1Type, op1, opcodes.IS_CONST, jumpConstant, 0, 0)
 	}
-	
+
 	// Record forward jump for later resolution - need to update the constant, not the instruction
 	jump := ForwardJump{
 		instructionIndex: int(jumpConstant), // Store constant index instead of instruction index
@@ -1245,7 +1245,7 @@ func (c *Compiler) emitJump(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 u
 	c.forwardJumps[labelName] = append(c.forwardJumps[labelName], jump)
 }
 
-// Helper function to emit conditional jump with forward reference  
+// Helper function to emit conditional jump with forward reference
 func (c *Compiler) emitJumpZ(condType opcodes.OpType, cond uint32, labelName string) {
 	// Check if label already exists (backward jump)
 	if pos, exists := c.labels[labelName]; exists {
@@ -1254,13 +1254,13 @@ func (c *Compiler) emitJumpZ(condType opcodes.OpType, cond uint32, labelName str
 		c.emit(opcodes.OP_JMPZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
 		return
 	}
-	
+
 	// Forward jump - add placeholder constant for the jump target
 	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
-	
+
 	// Emit instruction with constant reference for label
 	c.emit(opcodes.OP_JMPZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
-	
+
 	// Record forward jump for later resolution - need to update the constant, not the instruction
 	jump := ForwardJump{
 		instructionIndex: int(jumpConstant), // Store constant index instead of instruction index
@@ -1278,13 +1278,13 @@ func (c *Compiler) emitJumpNZ(condType opcodes.OpType, cond uint32, labelName st
 		c.emit(opcodes.OP_JMPNZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
 		return
 	}
-	
+
 	// Forward jump - add placeholder constant for the jump target
 	jumpConstant := c.addConstant(values.NewInt(0)) // Will be updated later
-	
+
 	// Emit instruction with constant reference for label
 	c.emit(opcodes.OP_JMPNZ, condType, cond, opcodes.IS_CONST, jumpConstant, 0, 0)
-	
+
 	// Record forward jump for later resolution - need to update the constant, not the instruction
 	jump := ForwardJump{
 		instructionIndex: int(jumpConstant), // Store constant index instead of instruction index
@@ -1432,19 +1432,19 @@ func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
 	// Check if left operand is null - if null, jump to right operand
 	nullConstant := c.addConstant(values.NewNull())
 	compResult := c.allocateTemp()
-	
+
 	// Compare left with null (using identical comparison for precise null check)
 	c.emit(opcodes.OP_IS_IDENTICAL, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_CONST, nullConstant, opcodes.IS_TMP_VAR, compResult)
-	
+
 	// If left is null (comparison is true), jump to evaluate right operand
 	c.emitJumpNZ(opcodes.IS_TMP_VAR, compResult, rightLabel)
-	
+
 	// Left is not null - we need to ensure the result is in the final temp position
 	// We'll allocate a temp for the result and copy the left value into it
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, leftResult, 0, 0, opcodes.IS_TMP_VAR, result)
 	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
-	
+
 	// Right operand evaluation (when left is null)
 	c.placeLabel(rightLabel)
 	err = c.compileNode(expr.Right)
@@ -1452,14 +1452,14 @@ func (c *Compiler) compileCoalesce(expr *ast.CoalesceExpression) error {
 		return err
 	}
 	rightResult := c.nextTemp - 1
-	
+
 	// Since we already allocated result temp above, we need to ensure both branches use the same temp
 	// Copy right result to the same result temp we allocated above
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, 0, 0, opcodes.IS_TMP_VAR, result)
-	
+
 	// End label
 	c.placeLabel(endLabel)
-	
+
 	// Ensure the result is in the final temp position for echo to find it
 	// This handles the issue where compiling the right expression allocates additional temps
 	finalResult := c.allocateTemp()
@@ -1482,14 +1482,14 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 	// Create labels for each arm and the end
 	endLabel := c.generateLabel()
 	var defaultLabel string
-	
+
 	// Match expression evaluation: compare subject with each arm's conditions
 	for _, arm := range expr.Arms {
 		if !arm.IsDefault {
 			// For each condition in this arm (comma-separated conditions)
 			conditionMatchLabel := c.generateLabel()
 			nextArmLabel := c.generateLabel()
-			
+
 			for j, condition := range arm.Conditions {
 				// Compile the condition
 				err := c.compileNode(condition)
@@ -1497,38 +1497,38 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 					return err
 				}
 				conditionTemp := c.nextTemp - 1
-				
+
 				// Compare subject === condition using strict comparison
 				c.allocateTemp() // For comparison result
 				compResultTemp := c.nextTemp - 1
 				c.emit(opcodes.OP_IS_IDENTICAL, opcodes.IS_TMP_VAR, subjectTemp,
-					   opcodes.IS_TMP_VAR, conditionTemp, opcodes.IS_TMP_VAR, compResultTemp)
-				
+					opcodes.IS_TMP_VAR, conditionTemp, opcodes.IS_TMP_VAR, compResultTemp)
+
 				// If this condition matches, jump to arm body
 				c.emitJumpNZ(opcodes.IS_TMP_VAR, compResultTemp, conditionMatchLabel)
-				
+
 				// If this was the last condition and none matched, try next arm
 				if j == len(arm.Conditions)-1 {
 					c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, nextArmLabel)
 				}
 			}
-			
+
 			// Label for when this arm's condition matches
 			c.placeLabel(conditionMatchLabel)
-			
+
 			// Compile the arm body
 			err := c.compileNode(arm.Body)
 			if err != nil {
 				return err
 			}
 			bodyResultTemp := c.nextTemp - 1
-			
+
 			// Store the result in our match result temp
 			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, bodyResultTemp, 0, 0, opcodes.IS_TMP_VAR, resultTemp)
-			
+
 			// After executing the arm, jump to end (no fall-through in match)
 			c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
-			
+
 			// Label for trying the next arm
 			c.placeLabel(nextArmLabel)
 		} else {
@@ -1536,14 +1536,14 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 			defaultLabel = c.generateLabel()
 		}
 	}
-	
+
 	// If no condition matched, execute default arm if present
 	if defaultLabel != "" {
 		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, defaultLabel)
-		
+
 		// Emit default arm
 		c.placeLabel(defaultLabel)
-		
+
 		// Find and compile the default arm
 		for _, arm := range expr.Arms {
 			if arm.IsDefault {
@@ -1552,7 +1552,7 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 					return err
 				}
 				bodyResultTemp := c.nextTemp - 1
-				
+
 				// Store the result in our match result temp
 				c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, bodyResultTemp, 0, 0, opcodes.IS_TMP_VAR, resultTemp)
 				break
@@ -1565,16 +1565,16 @@ func (c *Compiler) compileMatch(expr *ast.MatchExpression) error {
 		errorObj.Data.(*values.Object).Properties["message"] = values.NewString("UnhandledMatchError")
 		c.emit(opcodes.OP_THROW, opcodes.IS_CONST, c.addConstant(errorObj), 0, 0, 0, 0)
 	}
-	
+
 	c.placeLabel(endLabel)
-	
+
 	// Ensure the final result is in the expected position (nextTemp - 1)
 	// This is needed so that parent expressions (like echo) can find the result
-	if resultTemp != c.nextTemp - 1 {
+	if resultTemp != c.nextTemp-1 {
 		finalResult := c.allocateTemp()
 		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, resultTemp, 0, 0, opcodes.IS_TMP_VAR, finalResult)
 	}
-	
+
 	return nil
 }
 
@@ -1589,29 +1589,29 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 		} else {
 			return fmt.Errorf("unsupported class expression in new")
 		}
-		
+
 		// Create object first
 		classConstant := c.addConstant(values.NewString(className))
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
-		
+
 		// For simplicity, we'll ignore constructor arguments for now
 		// In a full implementation, we'd compile the arguments and call the constructor
-		
+
 		return nil
-		
+
 	case *ast.IdentifierNode:
 		// new Exception - simple class instantiation
 		className = class.Name
 	default:
 		return fmt.Errorf("unsupported class expression in new: %T", expr.Class)
 	}
-	
+
 	// Create the object
 	classConstant := c.addConstant(values.NewString(className))
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
-	
+
 	return nil
 }
 
@@ -1776,7 +1776,7 @@ func (c *Compiler) compileSwitch(stmt *ast.SwitchStatement) error {
 	endLabel := c.generateLabel()
 	var defaultLabel string
 	var caseLabels []string
-	
+
 	// Generate labels for each case
 	for i := 0; i < len(stmt.Cases); i++ {
 		if stmt.Cases[i].Test == nil {
@@ -1787,7 +1787,7 @@ func (c *Compiler) compileSwitch(stmt *ast.SwitchStatement) error {
 			caseLabels = append(caseLabels, c.generateLabel())
 		}
 	}
-	
+
 	// Push new scope for break statements
 	c.pushScope(false)
 	c.currentScope().breakLabel = endLabel
@@ -1802,29 +1802,29 @@ func (c *Compiler) compileSwitch(stmt *ast.SwitchStatement) error {
 				return err
 			}
 			caseValueTemp := c.nextTemp - 1
-			
+
 			// Compare discriminant == case value using loose comparison
 			c.allocateTemp() // For comparison result
 			compResultTemp := c.nextTemp - 1
-			c.emit(opcodes.OP_IS_EQUAL, opcodes.IS_TMP_VAR, discriminantTemp, 
-				   opcodes.IS_TMP_VAR, caseValueTemp, opcodes.IS_TMP_VAR, compResultTemp)
-			
+			c.emit(opcodes.OP_IS_EQUAL, opcodes.IS_TMP_VAR, discriminantTemp,
+				opcodes.IS_TMP_VAR, caseValueTemp, opcodes.IS_TMP_VAR, compResultTemp)
+
 			// Jump to case if equal
 			c.emitJumpNZ(opcodes.IS_TMP_VAR, compResultTemp, caseLabels[i])
 		}
 	}
-	
+
 	// If no case matched, jump to default (if exists) or end
 	if defaultLabel != "" {
 		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, defaultLabel)
 	} else {
 		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
 	}
-	
+
 	// Emit case bodies
 	for i, switchCase := range stmt.Cases {
 		c.placeLabel(caseLabels[i])
-		
+
 		// Compile case body
 		for _, stmt := range switchCase.Body {
 			err := c.compileNode(stmt)
@@ -1835,10 +1835,10 @@ func (c *Compiler) compileSwitch(stmt *ast.SwitchStatement) error {
 		}
 		// Fall-through behavior - no automatic jump to end
 	}
-	
+
 	c.placeLabel(endLabel)
 	c.popScope()
-	
+
 	return nil
 }
 
@@ -1875,7 +1875,7 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 	if len(catchLabels) > 0 {
 		firstCatchLabel = catchLabels[0]
 	}
-	
+
 	// This is a simplified exception handler registration
 	// Real implementation would encode all handler info in instruction
 	c.emit(opcodes.OP_CATCH, opcodes.IS_CONST, 0, 0, 0, 0, 0)
@@ -1898,7 +1898,7 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 	// Compile catch blocks
 	for i, catchClause := range stmt.CatchClauses {
 		c.placeLabel(catchLabels[i])
-		
+
 		// Get exception variable slot if specified
 		if catchClause.Parameter != nil {
 			paramVar, ok := catchClause.Parameter.(*ast.Variable)
@@ -1910,7 +1910,7 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 
 		// For now, we catch all exceptions (type matching not fully implemented)
 		// In a full implementation, we'd emit type checking code here
-		
+
 		// Compile catch block body
 		for _, s := range catchClause.Body {
 			err := c.compileNode(s)
@@ -1931,7 +1931,7 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 	if len(stmt.FinallyBlock) > 0 {
 		c.placeLabel(finallyLabel)
 		c.emit(opcodes.OP_FINALLY, 0, 0, 0, 0, 0, 0)
-		
+
 		for _, s := range stmt.FinallyBlock {
 			err := c.compileNode(s)
 			if err != nil {
@@ -1942,7 +1942,7 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 
 	// End label
 	c.placeLabel(endLabel)
-	
+
 	// Now we need to patch the OP_CATCH instruction with the actual catch block address
 	// This is a post-processing step after labels are resolved
 	c.patchExceptionHandler(firstCatchLabel, finallyLabel)
@@ -1958,19 +1958,19 @@ func (c *Compiler) patchExceptionHandler(catchLabel, finallyLabel string) {
 			// Encode catch and finally addresses in the instruction
 			catchAddr := 0
 			finallyAddr := 0
-			
+
 			if catchLabel != "" {
 				if addr, exists := c.labels[catchLabel]; exists {
 					catchAddr = addr
 				}
 			}
-			
+
 			if finallyLabel != "" {
 				if addr, exists := c.labels[finallyLabel]; exists {
 					finallyAddr = addr
 				}
 			}
-			
+
 			// Update the instruction with the addresses
 			c.instructions[i].Op1 = uint32(catchAddr)
 			c.instructions[i].Op2 = uint32(finallyAddr)
@@ -2007,7 +2007,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 		return fmt.Errorf("invalid function name type")
 	}
 	funcName := nameNode.Name
-	
+
 	// Check if function already exists
 	// For class methods, check within the current class; for global functions, check globally
 	if c.currentClass != nil {
@@ -2021,7 +2021,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			return fmt.Errorf("function %s already declared", funcName)
 		}
 	}
-	
+
 	// Create new function
 	function := &vm.Function{
 		Name:         funcName,
@@ -2031,7 +2031,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
-	
+
 	// Compile parameters
 	if decl.Parameters != nil {
 		for _, param := range decl.Parameters.Parameters {
@@ -2042,45 +2042,45 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			} else {
 				return fmt.Errorf("invalid parameter name type")
 			}
-			
+
 			vmParam := vm.Parameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
 			}
-			
+
 			// Handle parameter type
 			if param.Type != nil {
 				vmParam.Type = param.Type.String()
 			}
-			
+
 			// Handle default value
 			if param.DefaultValue != nil {
 				// For now, we'll compile the default value later
 				// This requires more complex evaluation
 				vmParam.HasDefault = true
 			}
-			
+
 			// Check for variadic
 			if param.Variadic {
 				function.IsVariadic = true
 			}
-			
+
 			function.Parameters = append(function.Parameters, vmParam)
 		}
 	}
-	
+
 	// Store current compiler state
 	oldInstructions := c.instructions
 	oldConstants := c.constants
-	
+
 	// Reset for function compilation
 	c.instructions = make([]opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
-	
+
 	// Create function scope
 	c.pushScope(true)
-	
+
 	// Set up parameter variables in the function scope
 	if decl.Parameters != nil {
 		for _, param := range decl.Parameters.Parameters {
@@ -2090,7 +2090,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			}
 		}
 	}
-	
+
 	// Compile function body
 	for _, stmt := range decl.Body {
 		err := c.compileNode(stmt)
@@ -2101,16 +2101,16 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			return fmt.Errorf("error compiling function %s: %v", funcName, err)
 		}
 	}
-	
+
 	// Add implicit return if needed
 	if len(c.instructions) == 0 || c.instructions[len(c.instructions)-1].Opcode != opcodes.OP_RETURN {
 		c.emit(opcodes.OP_RETURN, opcodes.IS_CONST, c.addConstant(values.NewNull()), 0, 0, 0, 0)
 	}
-	
+
 	// Store compiled function
 	function.Instructions = c.instructions
 	function.Constants = c.constants
-	
+
 	// Store the function in the appropriate location
 	if c.currentClass != nil {
 		// Store as a class method
@@ -2119,23 +2119,23 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 		// Store as a global function
 		c.functions[funcName] = function
 	}
-	
+
 	// Restore compiler state
 	c.popScope()
 	c.instructions = oldInstructions
 	c.constants = oldConstants
-	
+
 	// Emit function declaration instruction
 	nameConstant := c.addConstant(values.NewString(funcName))
 	c.emit(opcodes.OP_DECLARE_FUNCTION, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
-	
+
 	return nil
 }
 
 func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpression) error {
 	// Generate a unique name for the anonymous function
 	anonName := fmt.Sprintf("__anonymous_%d", len(c.functions))
-	
+
 	// Create new function
 	function := &vm.Function{
 		Name:         anonName,
@@ -2145,7 +2145,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
-	
+
 	// Compile parameters
 	if expr.Parameters != nil {
 		for _, param := range expr.Parameters.Parameters {
@@ -2156,43 +2156,43 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 			} else {
 				return fmt.Errorf("invalid parameter name type")
 			}
-			
+
 			vmParam := vm.Parameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
 			}
-			
+
 			// Handle parameter type
 			if param.Type != nil {
 				vmParam.Type = param.Type.String()
 			}
-			
+
 			// Handle default value
 			if param.DefaultValue != nil {
 				vmParam.HasDefault = true
 			}
-			
+
 			// Check for variadic
 			if param.Variadic {
 				function.IsVariadic = true
 			}
-			
+
 			function.Parameters = append(function.Parameters, vmParam)
 		}
 	}
-	
+
 	// Store current compiler state
 	oldInstructions := c.instructions
 	oldConstants := c.constants
-	
+
 	// Reset for function compilation
 	c.instructions = make([]opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
-	
+
 	// Create function scope
 	c.pushScope(true)
-	
+
 	// Set up parameter variables in the function scope
 	if expr.Parameters != nil {
 		for _, param := range expr.Parameters.Parameters {
@@ -2202,7 +2202,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 			}
 		}
 	}
-	
+
 	// Compile function body
 	for _, stmt := range expr.Body {
 		err := c.compileNode(stmt)
@@ -2213,29 +2213,29 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 			return fmt.Errorf("error compiling anonymous function: %v", err)
 		}
 	}
-	
+
 	// Add implicit return if needed
 	if len(c.instructions) == 0 || c.instructions[len(c.instructions)-1].Opcode != opcodes.OP_RETURN {
 		c.emit(opcodes.OP_RETURN, opcodes.IS_CONST, c.addConstant(values.NewNull()), 0, 0, 0, 0)
 	}
-	
+
 	// Store compiled function
 	function.Instructions = c.instructions
 	function.Constants = c.constants
-	
+
 	// Store the function
 	c.functions[anonName] = function
-	
+
 	// Restore compiler state
 	c.popScope()
 	c.instructions = oldInstructions
 	c.constants = oldConstants
-	
+
 	// Create closure at runtime
 	functionConstant := c.addConstant(values.NewString(anonName))
 	closureResult := c.allocateTemp()
 	c.emit(opcodes.OP_CREATE_CLOSURE, opcodes.IS_CONST, functionConstant, 0, 0, opcodes.IS_TMP_VAR, closureResult)
-	
+
 	// Bind use variables
 	if expr.UseClause != nil {
 		for _, useVar := range expr.UseClause {
@@ -2247,7 +2247,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 				}
 				varResult := c.allocateTemp()
 				c.emitMove(varResult)
-				
+
 				// Bind the variable to the closure
 				varNameConstant := c.addConstant(values.NewString(varExpr.Name))
 				c.emit(opcodes.OP_BIND_USE_VAR, opcodes.IS_TMP_VAR, closureResult, opcodes.IS_CONST, varNameConstant, opcodes.IS_TMP_VAR, varResult)
@@ -2255,19 +2255,19 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 			// TODO: Handle reference use variables (&$var)
 		}
 	}
-	
+
 	return nil
 }
 
 func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	// Generate unique class name for anonymous class
 	className := fmt.Sprintf("class@anonymous_%d", len(c.classes))
-	
+
 	// Check if class already exists (shouldn't happen for anonymous classes)
 	if _, exists := c.classes[className]; exists {
 		return fmt.Errorf("class %s already declared", className)
 	}
-	
+
 	// Create new class
 	class := &vm.Class{
 		Name:        className,
@@ -2278,7 +2278,7 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 		IsAbstract:  false,
 		IsFinal:     false,
 	}
-	
+
 	// Handle modifiers
 	for _, modifier := range decl.Modifiers {
 		switch modifier {
@@ -2288,7 +2288,7 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 			class.IsFinal = true
 		}
 	}
-	
+
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
@@ -2297,24 +2297,24 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 			return fmt.Errorf("complex parent class expressions not supported yet")
 		}
 	}
-	
+
 	// Store current class context
 	oldCurrentClass := c.currentClass
 	c.currentClass = class
-	
+
 	// Emit class table initialization
 	nameConstant := c.addConstant(values.NewString(className))
 	c.emit(opcodes.OP_INIT_CLASS_TABLE, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
-	
+
 	// Set current class context in VM for anonymous classes
 	c.emit(opcodes.OP_SET_CURRENT_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
-	
+
 	// Set parent class if exists
 	if class.ParentClass != "" {
 		parentConstant := c.addConstant(values.NewString(class.ParentClass))
 		c.emit(opcodes.OP_SET_CLASS_PARENT, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, parentConstant, 0, 0)
 	}
-	
+
 	// Handle implements
 	for _, iface := range decl.Implements {
 		if ifaceId, ok := iface.(*ast.IdentifierNode); ok {
@@ -2324,7 +2324,7 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 			return fmt.Errorf("complex interface expressions not supported yet")
 		}
 	}
-	
+
 	// Compile class body
 	for _, stmt := range decl.Body {
 		err := c.compileNode(stmt)
@@ -2333,17 +2333,17 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 			return fmt.Errorf("error compiling anonymous class: %v", err)
 		}
 	}
-	
+
 	// Store compiled class
 	c.classes[className] = class
 	c.currentClass = oldCurrentClass
-	
+
 	// Clear current class context in VM for anonymous classes
 	c.emit(opcodes.OP_CLEAR_CURRENT_CLASS, 0, 0, 0, 0, 0, 0)
-	
+
 	// Emit class declaration instruction
 	c.emit(opcodes.OP_DECLARE_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
-	
+
 	// Handle constructor arguments if provided
 	if decl.Arguments != nil {
 		// Compile constructor call arguments
@@ -2353,11 +2353,11 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 				return fmt.Errorf("error compiling constructor argument: %v", err)
 			}
 		}
-		
+
 		// Create new instance with constructor call
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, nameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
-		
+
 		// If there are arguments, we need to call constructor
 		if len(decl.Arguments.Arguments) > 0 {
 			// This would require more complex constructor calling logic
@@ -2368,7 +2368,7 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, nameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 	}
-	
+
 	return nil
 }
 
@@ -2377,26 +2377,26 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 	if c.currentClass == nil {
 		return fmt.Errorf("property declaration outside of class context")
 	}
-	
+
 	propName := decl.Name
-	
+
 	// Check if property already exists
 	if _, exists := c.currentClass.Properties[propName]; exists {
 		return fmt.Errorf("property $%s already declared in class %s", propName, c.currentClass.Name)
 	}
-	
+
 	// Create new property
 	property := &vm.Property{
 		Name:       propName,
 		Visibility: decl.Visibility, // public, private, protected
 		IsStatic:   decl.Static,
 	}
-	
+
 	// Handle type hint
 	if decl.Type != nil {
 		property.Type = decl.Type.String()
 	}
-	
+
 	// Handle default value
 	var defaultValue *values.Value
 	if decl.DefaultValue != nil {
@@ -2438,33 +2438,33 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 			defaultValue = values.NewNull()
 		}
 	}
-	
+
 	property.DefaultValue = defaultValue
-	
+
 	// Add property to current class
 	c.currentClass.Properties[propName] = property
-	
+
 	// Emit property declaration instruction
 	classNameConstant := c.addConstant(values.NewString(c.currentClass.Name))
 	propNameConstant := c.addConstant(values.NewString(propName))
 	visibilityConstant := c.addConstant(values.NewString(decl.Visibility))
-	
+
 	// Emit property declaration with metadata
-	c.emit(opcodes.OP_DECLARE_PROPERTY, 
+	c.emit(opcodes.OP_DECLARE_PROPERTY,
 		opcodes.IS_CONST, classNameConstant,
 		opcodes.IS_CONST, propNameConstant,
 		opcodes.IS_CONST, visibilityConstant)
-	
+
 	// If there's a default value, emit it
 	if defaultValue != nil {
 		defaultConstant := c.addConstant(defaultValue)
 		// Additional instruction to set default value
-		c.emit(opcodes.OP_ASSIGN, 
+		c.emit(opcodes.OP_ASSIGN,
 			opcodes.IS_CONST, defaultConstant,
 			0, 0,
 			opcodes.IS_CONST, propNameConstant)
 	}
-	
+
 	return nil
 }
 
@@ -2473,7 +2473,7 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 	if c.currentClass == nil {
 		return fmt.Errorf("class constant declaration outside of class context")
 	}
-	
+
 	// Process each constant in the declaration
 	for _, constDeclarator := range decl.Constants {
 		// Cast Expression to concrete type to get constant name
@@ -2482,12 +2482,12 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 			return fmt.Errorf("invalid constant name type")
 		}
 		constName := nameExpr.Name
-		
+
 		// Check if constant already exists
 		if _, exists := c.currentClass.Constants[constName]; exists {
 			return fmt.Errorf("constant %s already declared in class %s", constName, c.currentClass.Name)
 		}
-		
+
 		// Evaluate constant value
 		var constValue *values.Value
 		switch val := constDeclarator.Value.(type) {
@@ -2543,36 +2543,36 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 			// For complex expressions, we'd need more sophisticated constant evaluation
 			return fmt.Errorf("complex constant expressions not supported yet for constant %s", constName)
 		}
-		
+
 		if constValue == nil {
 			return fmt.Errorf("could not evaluate constant value for %s", constName)
 		}
-		
+
 		// Add constant to current class
 		c.currentClass.Constants[constName] = constValue
-		
+
 		// Emit class constant declaration instruction
 		classNameConstant := c.addConstant(values.NewString(c.currentClass.Name))
 		constNameConstant := c.addConstant(values.NewString(constName))
 		constValueConstant := c.addConstant(constValue)
-		
+
 		// Emit the class constant declaration with all metadata
 		c.emit(opcodes.OP_DECLARE_CLASS_CONST,
 			opcodes.IS_CONST, classNameConstant,
 			opcodes.IS_CONST, constNameConstant,
 			opcodes.IS_CONST, constValueConstant)
-		
+
 		// Emit visibility and other flags if needed
 		if decl.IsFinal {
 			// We could add a separate opcode for final constants, but for now we'll note it
 			// In a more complete implementation, this would be handled by the VM
 		}
-		
+
 		if decl.IsAbstract {
 			// Abstract constants are a PHP 8.0+ feature and would need special handling
 			// For now, we'll note this but not implement the full logic
 		}
-		
+
 		// Handle typed constants (PHP 8.3+)
 		if decl.Type != nil {
 			// Type information could be stored and validated at runtime
@@ -2580,7 +2580,7 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 			// We could emit additional metadata about the type, but for simplicity we'll skip this
 		}
 	}
-	
+
 	return nil
 }
 
@@ -2592,12 +2592,12 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	} else {
 		return fmt.Errorf("invalid class name type")
 	}
-	
+
 	// Check if class already exists
 	if _, exists := c.classes[className]; exists {
 		return fmt.Errorf("class %s already declared", className)
 	}
-	
+
 	// Create new class
 	class := &vm.Class{
 		Name:        className,
@@ -2608,7 +2608,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 		IsAbstract:  decl.Abstract,
 		IsFinal:     decl.Final,
 	}
-	
+
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
@@ -2617,24 +2617,24 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 			return fmt.Errorf("complex parent class expressions not supported yet")
 		}
 	}
-	
+
 	// Store current class context
 	oldCurrentClass := c.currentClass
 	c.currentClass = class
-	
+
 	// Emit class table initialization
 	nameConstant := c.addConstant(values.NewString(className))
 	c.emit(opcodes.OP_INIT_CLASS_TABLE, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
-	
+
 	// Set current class context in VM
 	c.emit(opcodes.OP_SET_CURRENT_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
-	
+
 	// Set parent class if exists
 	if class.ParentClass != "" {
 		parentConstant := c.addConstant(values.NewString(class.ParentClass))
 		c.emit(opcodes.OP_SET_CLASS_PARENT, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, parentConstant, 0, 0)
 	}
-	
+
 	// Handle implements
 	for _, iface := range decl.Implements {
 		if ifaceId, ok := iface.(*ast.IdentifierNode); ok {
@@ -2644,7 +2644,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 			return fmt.Errorf("complex interface expressions not supported yet")
 		}
 	}
-	
+
 	// Compile class body
 	for _, stmt := range decl.Body {
 		err := c.compileNode(stmt)
@@ -2653,23 +2653,23 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 			return fmt.Errorf("error compiling class %s: %v", className, err)
 		}
 	}
-	
+
 	// Store compiled class
 	c.classes[className] = class
 	c.currentClass = oldCurrentClass
-	
+
 	// Clear current class context in VM
 	c.emit(opcodes.OP_CLEAR_CURRENT_CLASS, 0, 0, 0, 0, 0, 0)
-	
+
 	// Emit class declaration instruction
 	c.emit(opcodes.OP_DECLARE_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
-	
+
 	return nil
 }
 
 func (c *Compiler) compileClassConstantAccess(expr *ast.ClassConstantAccessExpression) error {
 	// Handle class constant access like ClassName::CONSTANT_NAME
-	
+
 	// Get class name
 	var className string
 	switch class := expr.Class.(type) {
@@ -2681,7 +2681,7 @@ func (c *Compiler) compileClassConstantAccess(expr *ast.ClassConstantAccessExpre
 	default:
 		return fmt.Errorf("unsupported class expression in constant access: %T", expr.Class)
 	}
-	
+
 	// Get constant name
 	var constantName string
 	if constId, ok := expr.Constant.(*ast.IdentifierNode); ok {
@@ -2689,34 +2689,34 @@ func (c *Compiler) compileClassConstantAccess(expr *ast.ClassConstantAccessExpre
 	} else {
 		return fmt.Errorf("invalid constant name type")
 	}
-	
+
 	// For now, we'll create a simplified implementation
 	// In a full implementation, this would look up the constant value from the class
 	result := c.allocateTemp()
-	
+
 	// Create constants for the class and constant names
 	classConstant := c.addConstant(values.NewString(className))
 	constConstant := c.addConstant(values.NewString(constantName))
-	
+
 	// Emit instruction to fetch class constant
-	c.emit(opcodes.OP_FETCH_CLASS_CONSTANT, 
+	c.emit(opcodes.OP_FETCH_CLASS_CONSTANT,
 		opcodes.IS_CONST, classConstant,
 		opcodes.IS_CONST, constConstant,
 		opcodes.IS_TMP_VAR, result)
-	
+
 	return nil
 }
 
 func (c *Compiler) compileStaticPropertyAccess(expr *ast.StaticPropertyAccessExpression) error {
 	// Handle static property access specifically for Class::$property
 	// This is distinct from constants (Class::CONST) or method calls (Class::method())
-	
+
 	result := c.allocateTemp()
-	
+
 	// Compile class expression (supports both static and dynamic class names)
 	var classOperandType opcodes.OpType
 	var classOperand uint32
-	
+
 	switch class := expr.Class.(type) {
 	case *ast.IdentifierNode:
 		// Static class name like MyClass::$prop
@@ -2735,11 +2735,11 @@ func (c *Compiler) compileStaticPropertyAccess(expr *ast.StaticPropertyAccessExp
 		classOperand = c.nextTemp - 1
 		classOperandType = opcodes.IS_TMP_VAR
 	}
-	
-	// Compile property expression 
+
+	// Compile property expression
 	var propOperandType opcodes.OpType
 	var propOperand uint32
-	
+
 	switch property := expr.Property.(type) {
 	case *ast.Variable:
 		// Simple static property like ::$prop
@@ -2759,25 +2759,25 @@ func (c *Compiler) compileStaticPropertyAccess(expr *ast.StaticPropertyAccessExp
 		propOperand = c.nextTemp - 1
 		propOperandType = opcodes.IS_TMP_VAR
 	}
-	
-	// Emit static property access instruction  
+
+	// Emit static property access instruction
 	c.emit(opcodes.OP_FETCH_STATIC_PROP_R,
 		classOperandType, classOperand,
 		propOperandType, propOperand,
 		opcodes.IS_TMP_VAR, result)
-	
+
 	return nil
 }
 
 func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 	// Handle static access like Class::CONSTANT, self::method, or Class::$property
-	
+
 	result := c.allocateTemp()
-	
+
 	// Compile class expression (supports both static names and dynamic expressions)
 	var classOperandType opcodes.OpType
 	var classOperand uint32
-	
+
 	switch class := expr.Class.(type) {
 	case *ast.IdentifierNode:
 		// Static class name like MyClass::
@@ -2798,7 +2798,7 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 		classOperand = c.nextTemp - 1 // Last allocated temp contains the class name
 		classOperandType = opcodes.IS_TMP_VAR
 	}
-	
+
 	// Compile property expression and determine access type
 	switch property := expr.Property.(type) {
 	case *ast.IdentifierNode:
@@ -2822,7 +2822,7 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 			return fmt.Errorf("failed to compile property expression: %w", err)
 		}
 		propOperand := c.nextTemp - 1
-		
+
 		// For dynamic properties, we assume it's a property access (not constant)
 		// This matches PHP's behavior where Class::${expr} is always property access
 		c.emit(opcodes.OP_FETCH_STATIC_PROP_R,
@@ -2830,7 +2830,6 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 			opcodes.IS_TMP_VAR, propOperand,
 			opcodes.IS_TMP_VAR, result)
 	}
-	
+
 	return nil
 }
-

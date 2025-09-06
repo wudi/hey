@@ -12,13 +12,13 @@ import (
 func (stdlib *StandardLibrary) initClasses() {
 	// Exception class hierarchy
 	stdlib.initExceptionClasses()
-	
+
 	// stdClass - the default PHP object
 	stdlib.initStdClass()
-	
+
 	// DateTime classes
 	stdlib.initDateTimeClasses()
-	
+
 	// Reflection classes
 	stdlib.initReflectionClasses()
 }
@@ -35,7 +35,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		IsAbstract: true,
 		IsFinal:    false,
 	}
-	
+
 	throwable.Methods["getMessage"] = &Method{
 		Name:       "getMessage",
 		Visibility: "public",
@@ -45,7 +45,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	throwable.Methods["getCode"] = &Method{
 		Name:       "getCode",
 		Visibility: "public",
@@ -55,7 +55,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	throwable.Methods["getFile"] = &Method{
 		Name:       "getFile",
 		Visibility: "public",
@@ -65,7 +65,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	throwable.Methods["getLine"] = &Method{
 		Name:       "getLine",
 		Visibility: "public",
@@ -75,7 +75,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	throwable.Methods["getTrace"] = &Method{
 		Name:       "getTrace",
 		Visibility: "public",
@@ -85,7 +85,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	throwable.Methods["getTraceAsString"] = &Method{
 		Name:       "getTraceAsString",
 		Visibility: "public",
@@ -95,7 +95,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	throwable.Methods["getPrevious"] = &Method{
 		Name:       "getPrevious",
 		Visibility: "public",
@@ -105,7 +105,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	throwable.Methods["__toString"] = &Method{
 		Name:       "__toString",
 		Visibility: "public",
@@ -115,9 +115,9 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    nil, // Abstract method
 	}
-	
+
 	stdlib.Classes["Throwable"] = throwable
-	
+
 	// Exception class
 	exception := &Class{
 		Name:       "Exception",
@@ -128,7 +128,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	// Exception properties
 	exception.Properties["message"] = &Property{
 		Name:         "message",
@@ -137,7 +137,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Type:         "string",
 		DefaultValue: values.NewString(""),
 	}
-	
+
 	exception.Properties["code"] = &Property{
 		Name:         "code",
 		Visibility:   "protected",
@@ -145,7 +145,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Type:         "int",
 		DefaultValue: values.NewInt(0),
 	}
-	
+
 	exception.Properties["file"] = &Property{
 		Name:         "file",
 		Visibility:   "protected",
@@ -153,7 +153,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Type:         "string",
 		DefaultValue: values.NewString(""),
 	}
-	
+
 	exception.Properties["line"] = &Property{
 		Name:         "line",
 		Visibility:   "protected",
@@ -161,7 +161,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Type:         "int",
 		DefaultValue: values.NewInt(0),
 	}
-	
+
 	exception.Properties["trace"] = &Property{
 		Name:         "trace",
 		Visibility:   "private",
@@ -169,7 +169,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Type:         "array",
 		DefaultValue: values.NewArray(),
 	}
-	
+
 	exception.Properties["previous"] = &Property{
 		Name:         "previous",
 		Visibility:   "private",
@@ -177,7 +177,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Type:         "Throwable",
 		DefaultValue: values.NewNull(),
 	}
-	
+
 	// Exception methods
 	exception.Methods["__construct"] = &Method{
 		Name:       "__construct",
@@ -192,7 +192,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		},
 		Handler: exceptionConstructHandler,
 	}
-	
+
 	exception.Methods["getMessage"] = &Method{
 		Name:       "getMessage",
 		Visibility: "public",
@@ -202,7 +202,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionGetMessageHandler,
 	}
-	
+
 	exception.Methods["getCode"] = &Method{
 		Name:       "getCode",
 		Visibility: "public",
@@ -212,7 +212,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionGetCodeHandler,
 	}
-	
+
 	exception.Methods["getFile"] = &Method{
 		Name:       "getFile",
 		Visibility: "public",
@@ -222,7 +222,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionGetFileHandler,
 	}
-	
+
 	exception.Methods["getLine"] = &Method{
 		Name:       "getLine",
 		Visibility: "public",
@@ -232,7 +232,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionGetLineHandler,
 	}
-	
+
 	exception.Methods["getTrace"] = &Method{
 		Name:       "getTrace",
 		Visibility: "public",
@@ -242,7 +242,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionGetTraceHandler,
 	}
-	
+
 	exception.Methods["getTraceAsString"] = &Method{
 		Name:       "getTraceAsString",
 		Visibility: "public",
@@ -252,7 +252,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionGetTraceAsStringHandler,
 	}
-	
+
 	exception.Methods["getPrevious"] = &Method{
 		Name:       "getPrevious",
 		Visibility: "public",
@@ -262,7 +262,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionGetPreviousHandler,
 	}
-	
+
 	exception.Methods["__toString"] = &Method{
 		Name:       "__toString",
 		Visibility: "public",
@@ -272,9 +272,9 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		Parameters: []Parameter{},
 		Handler:    exceptionToStringHandler,
 	}
-	
+
 	stdlib.Classes["Exception"] = exception
-	
+
 	// Error class (PHP 7+)
 	error := &Class{
 		Name:       "Error",
@@ -285,14 +285,14 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	// Copy methods from Exception
 	for name, method := range exception.Methods {
 		error.Methods[name] = method
 	}
-	
+
 	stdlib.Classes["Error"] = error
-	
+
 	// RuntimeException
 	runtimeException := &Class{
 		Name:       "RuntimeException",
@@ -303,9 +303,9 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	stdlib.Classes["RuntimeException"] = runtimeException
-	
+
 	// InvalidArgumentException
 	invalidArgumentException := &Class{
 		Name:       "InvalidArgumentException",
@@ -316,9 +316,9 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	stdlib.Classes["InvalidArgumentException"] = invalidArgumentException
-	
+
 	// TypeError (PHP 7+)
 	typeError := &Class{
 		Name:       "TypeError",
@@ -329,7 +329,7 @@ func (stdlib *StandardLibrary) initExceptionClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	stdlib.Classes["TypeError"] = typeError
 }
 
@@ -344,7 +344,7 @@ func (stdlib *StandardLibrary) initStdClass() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	stdlib.Classes["stdClass"] = stdClass
 }
 
@@ -360,7 +360,7 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	// DateTime constants
 	dateTime.Constants["ATOM"] = values.NewString("Y-m-d\\TH:i:sP")
 	dateTime.Constants["COOKIE"] = values.NewString("l, d-M-Y H:i:s T")
@@ -375,7 +375,7 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 	dateTime.Constants["RFC3339_EXTENDED"] = values.NewString("Y-m-d\\TH:i:s.vP")
 	dateTime.Constants["RSS"] = values.NewString("D, d M Y H:i:s O")
 	dateTime.Constants["W3C"] = values.NewString("Y-m-d\\TH:i:sP")
-	
+
 	// DateTime methods
 	dateTime.Methods["__construct"] = &Method{
 		Name:       "__construct",
@@ -389,7 +389,7 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 		},
 		Handler: dateTimeConstructHandler,
 	}
-	
+
 	dateTime.Methods["format"] = &Method{
 		Name:       "format",
 		Visibility: "public",
@@ -401,7 +401,7 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 		},
 		Handler: dateTimeFormatHandler,
 	}
-	
+
 	dateTime.Methods["getTimestamp"] = &Method{
 		Name:       "getTimestamp",
 		Visibility: "public",
@@ -411,9 +411,9 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 		Parameters: []Parameter{},
 		Handler:    dateTimeGetTimestampHandler,
 	}
-	
+
 	stdlib.Classes["DateTime"] = dateTime
-	
+
 	// DateTimeZone class
 	dateTimeZone := &Class{
 		Name:       "DateTimeZone",
@@ -424,7 +424,7 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	dateTimeZone.Methods["__construct"] = &Method{
 		Name:       "__construct",
 		Visibility: "public",
@@ -436,7 +436,7 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 		},
 		Handler: dateTimeZoneConstructHandler,
 	}
-	
+
 	dateTimeZone.Methods["getName"] = &Method{
 		Name:       "getName",
 		Visibility: "public",
@@ -446,7 +446,7 @@ func (stdlib *StandardLibrary) initDateTimeClasses() {
 		Parameters: []Parameter{},
 		Handler:    dateTimeZoneGetNameHandler,
 	}
-	
+
 	stdlib.Classes["DateTimeZone"] = dateTimeZone
 }
 
@@ -462,7 +462,7 @@ func (stdlib *StandardLibrary) initReflectionClasses() {
 		IsAbstract: false,
 		IsFinal:    false,
 	}
-	
+
 	reflectionClass.Properties["name"] = &Property{
 		Name:         "name",
 		Visibility:   "public",
@@ -470,7 +470,7 @@ func (stdlib *StandardLibrary) initReflectionClasses() {
 		Type:         "string",
 		DefaultValue: values.NewString(""),
 	}
-	
+
 	reflectionClass.Methods["__construct"] = &Method{
 		Name:       "__construct",
 		Visibility: "public",
@@ -482,7 +482,7 @@ func (stdlib *StandardLibrary) initReflectionClasses() {
 		},
 		Handler: reflectionClassConstructHandler,
 	}
-	
+
 	reflectionClass.Methods["getName"] = &Method{
 		Name:       "getName",
 		Visibility: "public",
@@ -492,7 +492,7 @@ func (stdlib *StandardLibrary) initReflectionClasses() {
 		Parameters: []Parameter{},
 		Handler:    reflectionClassGetNameHandler,
 	}
-	
+
 	reflectionClass.Methods["getParentClass"] = &Method{
 		Name:       "getParentClass",
 		Visibility: "public",
@@ -502,7 +502,7 @@ func (stdlib *StandardLibrary) initReflectionClasses() {
 		Parameters: []Parameter{},
 		Handler:    reflectionClassGetParentClassHandler,
 	}
-	
+
 	reflectionClass.Methods["hasMethod"] = &Method{
 		Name:       "hasMethod",
 		Visibility: "public",
@@ -514,7 +514,7 @@ func (stdlib *StandardLibrary) initReflectionClasses() {
 		},
 		Handler: reflectionClassHasMethodHandler,
 	}
-	
+
 	stdlib.Classes["ReflectionClass"] = reflectionClass
 }
 
@@ -576,7 +576,7 @@ func dateTimeFormatHandler(ctx *vm.ExecutionContext, args []*values.Value) (*val
 	if len(args) < 1 {
 		return nil, fmt.Errorf("DateTime::format() expects exactly 1 parameter, %d given", len(args))
 	}
-	
+
 	format := args[0].ToString()
 	// Simplified formatting - would use internal timestamp
 	formatted := strings.ReplaceAll(format, "Y", "2024")
@@ -585,7 +585,7 @@ func dateTimeFormatHandler(ctx *vm.ExecutionContext, args []*values.Value) (*val
 	formatted = strings.ReplaceAll(formatted, "H", "12")
 	formatted = strings.ReplaceAll(formatted, "i", "00")
 	formatted = strings.ReplaceAll(formatted, "s", "00")
-	
+
 	return values.NewString(formatted), nil
 }
 
@@ -600,7 +600,7 @@ func dateTimeZoneConstructHandler(ctx *vm.ExecutionContext, args []*values.Value
 	if len(args) < 1 {
 		return nil, fmt.Errorf("DateTimeZone::__construct() expects exactly 1 parameter, %d given", len(args))
 	}
-	
+
 	// Would validate and store timezone
 	return values.NewNull(), nil
 }
@@ -616,7 +616,7 @@ func reflectionClassConstructHandler(ctx *vm.ExecutionContext, args []*values.Va
 	if len(args) < 1 {
 		return nil, fmt.Errorf("ReflectionClass::__construct() expects exactly 1 parameter, %d given", len(args))
 	}
-	
+
 	// Would set up reflection for the given class/object
 	return values.NewNull(), nil
 }
@@ -635,7 +635,7 @@ func reflectionClassHasMethodHandler(ctx *vm.ExecutionContext, args []*values.Va
 	if len(args) < 1 {
 		return nil, fmt.Errorf("ReflectionClass::hasMethod() expects exactly 1 parameter, %d given", len(args))
 	}
-	
+
 	// Would check if class has the specified method
 	return values.NewBool(false), nil
 }

@@ -978,14 +978,14 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 			// 读取变量
 			l.readChar() // 跳过 $
 			identifier := l.readIdentifier()
-			
+
 			// 检查是否后面跟着 [ 表示数组访问
 			if l.ch == '[' {
 				// 进入变量偏移状态来处理数组访问
 				l.stateStack.Push(l.state) // 保存当前状态
 				l.state = ST_VAR_OFFSET
 			}
-			
+
 			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
 		}
 
@@ -1600,14 +1600,14 @@ func (l *Lexer) nextTokenInVarOffset() Token {
 			// 并将该字符作为 T_ENCAPSED_AND_WHITESPACE 返回
 			ch := l.ch
 			l.readChar()
-			
+
 			// 退出 VAR_OFFSET 状态，返回到之前的状态
 			if !l.stateStack.IsEmpty() {
 				l.state = l.stateStack.Pop()
 			} else {
 				l.state = ST_IN_SCRIPTING
 			}
-			
+
 			return Token{Type: T_ENCAPSED_AND_WHITESPACE, Value: string(ch), Position: pos}
 		}
 	}
