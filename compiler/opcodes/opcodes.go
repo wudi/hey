@@ -136,11 +136,18 @@ const (
 	OP_INIT_METHOD_CALL
 	OP_INIT_STATIC_METHOD_CALL
 
-	// Argument passing
-	OP_SEND_VAL    // Send value argument
-	OP_SEND_VAR    // Send variable argument
-	OP_SEND_REF    // Send reference argument
-	OP_SEND_UNPACK // Send unpacked arguments (...$args)
+	// Argument receiving (in function definition)
+	OP_RECV          // Receive required argument
+	OP_RECV_INIT     // Receive argument with default value
+	OP_RECV_VARIADIC // Receive variadic arguments (...$args)
+
+	// Argument passing (in function call)
+	OP_SEND_VAL        // Send value argument
+	OP_SEND_VAR        // Send variable argument
+	OP_SEND_VAR_EX     // Send variable argument with extended info
+	OP_SEND_VAR_NO_REF // Send variable without reference
+	OP_SEND_REF        // Send reference argument
+	OP_SEND_UNPACK     // Send unpacked arguments (...$args)
 
 	// Function calls
 	OP_DO_FCALL         // Execute function call
@@ -158,9 +165,9 @@ const (
 	OP_YIELD_FROM // yield from
 )
 
-// Array Operations (112-131)
+// Array Operations (120-139)
 const (
-	OP_INIT_ARRAY Opcode = iota + 112
+	OP_INIT_ARRAY Opcode = iota + 120
 	OP_ADD_ARRAY_ELEMENT
 	OP_ADD_ARRAY_UNPACK
 
@@ -181,9 +188,9 @@ const (
 	OP_CAST_OBJECT
 )
 
-// Class Operations (132-161)
+// Class Operations (140-169)
 const (
-	OP_NEW Opcode = iota + 132
+	OP_NEW Opcode = iota + 140
 	OP_CLONE
 	OP_INIT_CTOR_CALL
 	OP_CALL_CTOR
@@ -205,9 +212,9 @@ const (
 	OP_VERIFY_RETURN_TYPE
 )
 
-// Special Operations (160-179)
+// Special Operations (170-199)
 const (
-	OP_EXIT Opcode = iota + 160
+	OP_EXIT Opcode = iota + 170
 	OP_ECHO
 	OP_PRINT
 	OP_INCLUDE
@@ -215,6 +222,10 @@ const (
 	OP_REQUIRE
 	OP_REQUIRE_ONCE
 	OP_EVAL
+
+	// Error suppression
+	OP_BEGIN_SILENCE // Begin error suppression (@)
+	OP_END_SILENCE   // End error suppression
 
 	// Global operations
 	OP_FETCH_GLOBALS
@@ -232,9 +243,9 @@ const (
 	OP_MATCH     // match expression
 )
 
-// Declaration Operations (180-199)
+// Declaration Operations (200-219)
 const (
-	OP_DECLARE_FUNCTION Opcode = iota + 180
+	OP_DECLARE_FUNCTION Opcode = iota + 200
 	OP_DECLARE_CLASS
 	OP_DECLARE_PROPERTY
 	OP_DECLARE_CLASS_CONST
@@ -245,9 +256,9 @@ const (
 	OP_CLEAR_CURRENT_CLASS
 )
 
-// Closure Operations (200-219)
+// Closure Operations (220-239)
 const (
-	OP_CREATE_CLOSURE Opcode = iota + 200 // Create a closure
+	OP_CREATE_CLOSURE Opcode = iota + 220 // Create a closure
 	OP_BIND_USE_VAR                       // Bind a use variable to closure
 	OP_INVOKE_CLOSURE                     // Invoke a closure
 )
@@ -414,10 +425,18 @@ var opcodeNames = map[Opcode]string{
 	OP_INIT_METHOD_CALL:        "INIT_METHOD_CALL",
 	OP_INIT_STATIC_METHOD_CALL: "INIT_STATIC_METHOD_CALL",
 
-	OP_SEND_VAL:    "SEND_VAL",
-	OP_SEND_VAR:    "SEND_VAR",
-	OP_SEND_REF:    "SEND_REF",
-	OP_SEND_UNPACK: "SEND_UNPACK",
+	// Argument receiving
+	OP_RECV:          "RECV",
+	OP_RECV_INIT:     "RECV_INIT",
+	OP_RECV_VARIADIC: "RECV_VARIADIC",
+
+	// Argument passing
+	OP_SEND_VAL:        "SEND_VAL",
+	OP_SEND_VAR:        "SEND_VAR",
+	OP_SEND_VAR_EX:     "SEND_VAR_EX",
+	OP_SEND_VAR_NO_REF: "SEND_VAR_NO_REF",
+	OP_SEND_REF:        "SEND_REF",
+	OP_SEND_UNPACK:     "SEND_UNPACK",
 
 	OP_DO_FCALL:         "DO_FCALL",
 	OP_DO_ICALL:         "DO_ICALL",
@@ -479,6 +498,10 @@ var opcodeNames = map[Opcode]string{
 	OP_REQUIRE:      "REQUIRE",
 	OP_REQUIRE_ONCE: "REQUIRE_ONCE",
 	OP_EVAL:         "EVAL",
+
+	// Error suppression
+	OP_BEGIN_SILENCE: "BEGIN_SILENCE",
+	OP_END_SILENCE:   "END_SILENCE",
 
 	OP_FETCH_GLOBALS:     "FETCH_GLOBALS",
 	OP_BIND_GLOBAL:       "BIND_GLOBAL",

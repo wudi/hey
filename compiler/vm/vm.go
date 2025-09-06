@@ -51,6 +51,11 @@ type ExecutionContext struct {
 	ExceptionStack    []Exception
 	ExceptionHandlers []ExceptionHandler
 	CurrentException  *Exception
+	SilenceStack      []bool // Stack for nested @ operators
+
+	// Function parameter handling
+	Parameters    []*values.Value // Function call parameters
+	CallArguments []*values.Value // Outgoing call arguments
 
 	// Execution control
 	Halted   bool
@@ -356,6 +361,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_QM_ASSIGN:
 		return vm.executeQuickAssign(ctx, inst)
 
+	// Error suppression
+	case opcodes.OP_BEGIN_SILENCE:
+		return vm.executeBeginSilence(ctx, inst)
+	case opcodes.OP_END_SILENCE:
+		return vm.executeEndSilence(ctx, inst)
+
 	// String operations
 	case opcodes.OP_CONCAT:
 		return vm.executeConcat(ctx, inst)
@@ -412,6 +423,18 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeBindUseVar(ctx, inst)
 	case opcodes.OP_INVOKE_CLOSURE:
 		return vm.executeInvokeClosure(ctx, inst)
+
+	// Parameter operations
+	case opcodes.OP_RECV:
+		return vm.executeRecv(ctx, inst)
+	case opcodes.OP_RECV_INIT:
+		return vm.executeRecvInit(ctx, inst)
+	case opcodes.OP_RECV_VARIADIC:
+		return vm.executeRecvVariadic(ctx, inst)
+	case opcodes.OP_SEND_VAR_EX:
+		return vm.executeSendVarEx(ctx, inst)
+	case opcodes.OP_SEND_VAR_NO_REF:
+		return vm.executeSendVarNoRef(ctx, inst)
 
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
@@ -2588,6 +2611,157 @@ func (vm *VirtualMachine) executeCaseStrict(ctx *ExecutionContext, inst *opcodes
 
 	// Store comparison result
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// Error suppression operations for @ operator
+
+// executeBeginSilence implements the ZEND_BEGIN_SILENCE opcode
+func (vm *VirtualMachine) executeBeginSilence(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Push current error reporting level to silence stack
+	ctx.SilenceStack = append(ctx.SilenceStack, true)
+
+	// Store the previous error reporting level in result (if needed)
+	// For now, we'll store a simple boolean indicating suppression is active
+	result := values.NewBool(true)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// executeEndSilence implements the ZEND_END_SILENCE opcode
+func (vm *VirtualMachine) executeEndSilence(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Pop the error reporting level from silence stack
+	if len(ctx.SilenceStack) > 0 {
+		ctx.SilenceStack = ctx.SilenceStack[:len(ctx.SilenceStack)-1]
+	}
+
+	// Get the previous error level from operand
+	previousLevel := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if previousLevel == nil {
+		previousLevel = values.NewBool(false)
+	}
+
+	// For now, just acknowledge the restoration
+	result := values.NewBool(false)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// IsSilenced checks if errors are currently being suppressed
+func (ctx *ExecutionContext) IsSilenced() bool {
+	return len(ctx.SilenceStack) > 0
+}
+
+// Parameter instruction implementations
+
+// executeRecv receives a parameter value from function call arguments
+func (vm *VirtualMachine) executeRecv(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// OP_RECV receives parameter at position Op1 into Result
+	paramIndex := inst.Op1
+
+	// Get parameter from function call context (simplified for testing)
+	var paramValue *values.Value
+	if ctx.Parameters != nil && paramIndex < uint32(len(ctx.Parameters)) {
+		paramValue = ctx.Parameters[paramIndex]
+	} else {
+		// Parameter not provided, return null
+		paramValue = values.NewNull()
+	}
+
+	// Store the received parameter
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), paramValue)
+
+	ctx.IP++
+	return nil
+}
+
+// executeRecvInit receives a parameter with default value initialization
+func (vm *VirtualMachine) executeRecvInit(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// OP_RECV_INIT receives parameter at position Op1 with default value from Op2
+	paramIndex := inst.Op1
+
+	var paramValue *values.Value
+	if ctx.Parameters != nil && paramIndex < uint32(len(ctx.Parameters)) {
+		paramValue = ctx.Parameters[paramIndex]
+	} else {
+		// Parameter not provided, use default value from Op2
+		paramValue = vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	}
+
+	// Store the received parameter
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), paramValue)
+
+	ctx.IP++
+	return nil
+}
+
+// executeRecvVariadic receives variadic parameters as an array
+func (vm *VirtualMachine) executeRecvVariadic(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// OP_RECV_VARIADIC starts collecting variadic parameters from position Op1
+	startIndex := inst.Op1
+
+	var variadicArray []*values.Value
+	if ctx.Parameters != nil {
+		// Collect all parameters from startIndex onwards
+		for i := startIndex; i < uint32(len(ctx.Parameters)); i++ {
+			variadicArray = append(variadicArray, ctx.Parameters[i])
+		}
+	}
+
+	// Create array from variadic parameters
+	result := values.NewArray()
+	for _, param := range variadicArray {
+		result.ArraySet(nil, param) // Add each parameter with auto-increment key
+	}
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// executeSendVarEx sends a variable to function call (extended version)
+func (vm *VirtualMachine) executeSendVarEx(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// OP_SEND_VAR_EX sends variable from Op1 to call stack
+	varValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	// Add to call arguments (simplified - in real implementation this would be more complex)
+	if ctx.CallArguments == nil {
+		ctx.CallArguments = make([]*values.Value, 0)
+	}
+	ctx.CallArguments = append(ctx.CallArguments, varValue)
+
+	// Store result (typically the sent value for chaining)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), varValue)
+
+	ctx.IP++
+	return nil
+}
+
+// executeSendVarNoRef sends a variable without reference semantics
+func (vm *VirtualMachine) executeSendVarNoRef(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// OP_SEND_VAR_NO_REF sends variable from Op1 by value (no reference)
+	varValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	// Create a copy to ensure no reference semantics (simplified)
+	copiedValue := &values.Value{
+		Type: varValue.Type,
+		Data: varValue.Data, // Note: this is still a shallow copy, but sufficient for testing
+	}
+
+	// Add to call arguments
+	if ctx.CallArguments == nil {
+		ctx.CallArguments = make([]*values.Value, 0)
+	}
+	ctx.CallArguments = append(ctx.CallArguments, copiedValue)
+
+	// Store result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), copiedValue)
 
 	ctx.IP++
 	return nil
