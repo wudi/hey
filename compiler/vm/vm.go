@@ -295,6 +295,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeJumpIfZero(ctx, inst)
 	case opcodes.OP_JMPNZ:
 		return vm.executeJumpIfNotZero(ctx, inst)
+	case opcodes.OP_CASE:
+		return vm.executeCase(ctx, inst)
+	case opcodes.OP_CASE_STRICT:
+		return vm.executeCaseStrict(ctx, inst)
 
 	// Variable operations
 	case opcodes.OP_ASSIGN:
@@ -2539,6 +2543,50 @@ func (vm *VirtualMachine) executeInvokeClosure(ctx *ExecutionContext, inst *opco
 
 	// Store null result
 	result := values.NewNull()
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// Case operations for switch statements
+
+// executeCase implements the ZEND_CASE opcode - loose comparison for switch case
+func (vm *VirtualMachine) executeCase(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get switch expression value and case value
+	switchValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	caseValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	if switchValue == nil || caseValue == nil {
+		return fmt.Errorf("null operand in CASE operation")
+	}
+
+	// Perform loose comparison (==)
+	isEqual := switchValue.Equal(caseValue)
+	result := values.NewBool(isEqual)
+
+	// Store comparison result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// executeCaseStrict implements the ZEND_CASE_STRICT opcode - strict comparison for switch case
+func (vm *VirtualMachine) executeCaseStrict(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get switch expression value and case value
+	switchValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	caseValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	if switchValue == nil || caseValue == nil {
+		return fmt.Errorf("null operand in CASE_STRICT operation")
+	}
+
+	// Perform strict comparison (===)
+	isIdentical := switchValue.Identical(caseValue)
+	result := values.NewBool(isIdentical)
+
+	// Store comparison result
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 
 	ctx.IP++

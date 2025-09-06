@@ -67,6 +67,8 @@ const (
 	OP_JMPNZ          // Jump if not zero (true)
 	OP_JMPZ_EX        // Jump if zero with extended info
 	OP_JMPNZ_EX
+	OP_CASE        // Switch case comparison
+	OP_CASE_STRICT // Switch case strict comparison
 
 	// Switch operations
 	OP_SWITCH_LONG   // Integer switch case
@@ -80,6 +82,7 @@ const (
 	// Loop operations
 	OP_FE_RESET // foreach reset
 	OP_FE_FETCH // foreach fetch
+	OP_FE_FREE  // foreach cleanup
 )
 
 // Variable Operations (60-91)
@@ -348,6 +351,8 @@ var opcodeNames = map[Opcode]string{
 	OP_JMPNZ:         "JMPNZ",
 	OP_JMPZ_EX:       "JMPZ_EX",
 	OP_JMPNZ_EX:      "JMPNZ_EX",
+	OP_CASE:          "CASE",
+	OP_CASE_STRICT:   "CASE_STRICT",
 	OP_SWITCH_LONG:   "SWITCH_LONG",
 	OP_SWITCH_STRING: "SWITCH_STRING",
 
@@ -359,6 +364,7 @@ var opcodeNames = map[Opcode]string{
 	// Loop operations
 	OP_FE_RESET: "FE_RESET",
 	OP_FE_FETCH: "FE_FETCH",
+	OP_FE_FREE:  "FE_FREE",
 
 	// Variables
 	OP_ASSIGN:     "ASSIGN",
