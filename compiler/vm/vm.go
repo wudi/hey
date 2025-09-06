@@ -2,6 +2,8 @@ package vm
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -62,6 +64,9 @@ type ExecutionContext struct {
 
 	// Output buffer
 	OutputBuffer []string // Captured output from echo/print statements
+
+	// File inclusion tracking
+	IncludedFiles map[string]bool // Track files included with include_once/require_once
 
 	// Execution control
 	Halted   bool
@@ -173,6 +178,7 @@ func NewExecutionContext() *ExecutionContext {
 		CurrentException:  nil,
 		RopeBuffers:       make(map[uint32][]string),
 		OutputBuffer:      make([]string, 0),
+		IncludedFiles:     make(map[string]bool),
 		Halted:            false,
 		ExitCode:          0,
 	}
@@ -377,6 +383,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeReturn(ctx, inst)
 	case opcodes.OP_EXIT:
 		return vm.executeExit(ctx, inst)
+	case opcodes.OP_INCLUDE:
+		return vm.executeInclude(ctx, inst)
+	case opcodes.OP_INCLUDE_ONCE:
+		return vm.executeIncludeOnce(ctx, inst)
+	case opcodes.OP_REQUIRE:
+		return vm.executeRequire(ctx, inst)
+	case opcodes.OP_REQUIRE_ONCE:
+		return vm.executeRequireOnce(ctx, inst)
 	case opcodes.OP_THROW:
 		return vm.executeThrow(ctx, inst)
 	case opcodes.OP_CATCH:
@@ -1153,6 +1167,149 @@ func (vm *VirtualMachine) executeExit(ctx *ExecutionContext, inst *opcodes.Instr
 	}
 	ctx.Halted = true
 	return nil
+}
+
+func (vm *VirtualMachine) executeInclude(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	filePathValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	path := filePathValue.ToString()
+
+	result, err := vm.includeFile(ctx, path, false)
+	if err != nil {
+		// PHP include continues on failure, returns false
+		result = values.NewBool(false)
+	}
+
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeIncludeOnce(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	filePathValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	path := filePathValue.ToString()
+
+	// Convert to absolute path for tracking
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		absPath = path
+	}
+
+	// Check if already included
+	if ctx.IncludedFiles[absPath] {
+		// Return true for already included files
+		result := values.NewBool(true)
+		if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+			vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+		}
+		ctx.IP++
+		return nil
+	}
+
+	result, err := vm.includeFile(ctx, path, false)
+	if err != nil {
+		// PHP include_once continues on failure, returns false
+		result = values.NewBool(false)
+	} else {
+		// Mark as included on success
+		ctx.IncludedFiles[absPath] = true
+	}
+
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeRequire(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	filePathValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	path := filePathValue.ToString()
+
+	result, err := vm.includeFile(ctx, path, true)
+	if err != nil {
+		// PHP require fails on error
+		return err
+	}
+
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeRequireOnce(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	filePathValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	path := filePathValue.ToString()
+
+	// Convert to absolute path for tracking
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		absPath = path
+	}
+
+	// Check if already included
+	if ctx.IncludedFiles[absPath] {
+		// Return true for already included files
+		result := values.NewBool(true)
+		if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+			vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+		}
+		ctx.IP++
+		return nil
+	}
+
+	result, err := vm.includeFile(ctx, path, true)
+	if err != nil {
+		// PHP require_once fails on error
+		return err
+	}
+
+	// Mark as included on success
+	ctx.IncludedFiles[absPath] = true
+
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// includeFile handles the actual file inclusion logic
+func (vm *VirtualMachine) includeFile(ctx *ExecutionContext, path string, isRequired bool) (*values.Value, error) {
+	// Check if file exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		errMsg := fmt.Sprintf("failed to open stream: No such file or directory")
+		if isRequired {
+			return nil, fmt.Errorf("require(%s): %s", path, errMsg)
+		} else {
+			return nil, fmt.Errorf("include(%s): %s", path, errMsg)
+		}
+	}
+
+	// Read file content
+	content, err := os.ReadFile(path)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to read file: %v", err)
+		if isRequired {
+			return nil, fmt.Errorf("require(%s): %s", path, errMsg)
+		} else {
+			return nil, fmt.Errorf("include(%s): %s", path, errMsg)
+		}
+	}
+
+	// For now, we'll simulate successful inclusion by returning the file size
+	// In a real implementation, we'd parse and execute the PHP file
+	// TODO: Implement actual PHP file parsing and execution
+	result := values.NewInt(int64(len(content)))
+
+	return result, nil
 }
 
 func (vm *VirtualMachine) executeThrow(ctx *ExecutionContext, inst *opcodes.Instruction) error {
