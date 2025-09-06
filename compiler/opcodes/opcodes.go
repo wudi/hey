@@ -87,23 +87,16 @@ const (
 
 // Variable Operations (60-91)
 const (
-	OP_ASSIGN     Opcode = iota + 60
-	OP_ASSIGN_REF        // =& reference assignment
-
-	// Assignment operators
-	OP_ASSIGN_ADD      // +=
-	OP_ASSIGN_SUB      // -=
-	OP_ASSIGN_MUL      // *=
-	OP_ASSIGN_DIV      // /=
-	OP_ASSIGN_MOD      // %=
-	OP_ASSIGN_POW      // **=
-	OP_ASSIGN_CONCAT   // .=
-	OP_ASSIGN_BW_OR    // |=
-	OP_ASSIGN_BW_AND   // &=
-	OP_ASSIGN_BW_XOR   // ^=
-	OP_ASSIGN_SL       // <<=
-	OP_ASSIGN_SR       // >>=
-	OP_ASSIGN_COALESCE // ??=
+	OP_ASSIGN                Opcode = iota + 60
+	OP_ASSIGN_DIM                   // $var[key] = value
+	OP_ASSIGN_OBJ                   // $obj->prop = value
+	OP_ASSIGN_STATIC_PROP           // Class::$prop = value
+	OP_ASSIGN_OP                    // Compound assignment (+=, -=, *=, etc.)
+	OP_ASSIGN_DIM_OP                // $var[key] += value
+	OP_ASSIGN_OBJ_OP                // $obj->prop += value
+	OP_ASSIGN_STATIC_PROP_OP        // Class::$prop += value
+	OP_ASSIGN_REF                   // =& reference assignment
+	OP_QM_ASSIGN                    // Ternary assignment
 
 	// Variable fetching
 	OP_FETCH_R         // Read variable
@@ -251,9 +244,8 @@ const (
 	OP_DECLARE_CONST
 
 	// Special values
-	OP_QM_ASSIGN // Ternary operator assignment
-	OP_COALESCE  // ?? null coalescing
-	OP_MATCH     // match expression
+	OP_COALESCE // ?? null coalescing
+	OP_MATCH    // match expression
 )
 
 // Declaration Operations (200-219)
@@ -390,24 +382,17 @@ var opcodeNames = map[Opcode]string{
 	OP_FE_FETCH: "FE_FETCH",
 	OP_FE_FREE:  "FE_FREE",
 
-	// Variables
-	OP_ASSIGN:     "ASSIGN",
-	OP_ASSIGN_REF: "ASSIGN_REF",
-
-	// Assignment operators
-	OP_ASSIGN_ADD:      "ASSIGN_ADD",
-	OP_ASSIGN_SUB:      "ASSIGN_SUB",
-	OP_ASSIGN_MUL:      "ASSIGN_MUL",
-	OP_ASSIGN_DIV:      "ASSIGN_DIV",
-	OP_ASSIGN_MOD:      "ASSIGN_MOD",
-	OP_ASSIGN_POW:      "ASSIGN_POW",
-	OP_ASSIGN_CONCAT:   "ASSIGN_CONCAT",
-	OP_ASSIGN_BW_OR:    "ASSIGN_BW_OR",
-	OP_ASSIGN_BW_AND:   "ASSIGN_BW_AND",
-	OP_ASSIGN_BW_XOR:   "ASSIGN_BW_XOR",
-	OP_ASSIGN_SL:       "ASSIGN_SL",
-	OP_ASSIGN_SR:       "ASSIGN_SR",
-	OP_ASSIGN_COALESCE: "ASSIGN_COALESCE",
+	// Variables and Assignment
+	OP_ASSIGN:                "ASSIGN",
+	OP_ASSIGN_DIM:            "ASSIGN_DIM",
+	OP_ASSIGN_OBJ:            "ASSIGN_OBJ",
+	OP_ASSIGN_STATIC_PROP:    "ASSIGN_STATIC_PROP",
+	OP_ASSIGN_OP:             "ASSIGN_OP",
+	OP_ASSIGN_DIM_OP:         "ASSIGN_DIM_OP",
+	OP_ASSIGN_OBJ_OP:         "ASSIGN_OBJ_OP",
+	OP_ASSIGN_STATIC_PROP_OP: "ASSIGN_STATIC_PROP_OP",
+	OP_ASSIGN_REF:            "ASSIGN_REF",
+	OP_QM_ASSIGN:             "QM_ASSIGN",
 
 	// Variable operations
 	OP_FETCH_R:         "FETCH_R",
@@ -537,9 +522,8 @@ var opcodeNames = map[Opcode]string{
 	OP_FETCH_CONSTANT: "FETCH_CONSTANT",
 	OP_DECLARE_CONST:  "DECLARE_CONST",
 
-	OP_QM_ASSIGN: "QM_ASSIGN",
-	OP_COALESCE:  "COALESCE",
-	OP_MATCH:     "MATCH",
+	OP_COALESCE: "COALESCE",
+	OP_MATCH:    "MATCH",
 
 	// Declaration operations
 	OP_DECLARE_FUNCTION:    "DECLARE_FUNCTION",

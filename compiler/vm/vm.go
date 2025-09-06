@@ -308,6 +308,21 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	// Variable operations
 	case opcodes.OP_ASSIGN:
 		return vm.executeAssign(ctx, inst)
+	case opcodes.OP_ASSIGN_DIM:
+		return vm.executeAssignDim(ctx, inst)
+	case opcodes.OP_ASSIGN_OBJ:
+		return vm.executeAssignObj(ctx, inst)
+	case opcodes.OP_ASSIGN_OP:
+		return vm.executeAssignOp(ctx, inst)
+	case opcodes.OP_ASSIGN_DIM_OP:
+		return vm.executeAssignDimOp(ctx, inst)
+	case opcodes.OP_ASSIGN_OBJ_OP:
+		return vm.executeAssignObjOp(ctx, inst)
+	case opcodes.OP_ASSIGN_REF:
+		return vm.executeAssignRef(ctx, inst)
+	case opcodes.OP_QM_ASSIGN:
+		return vm.executeQmAssign(ctx, inst)
+
 	case opcodes.OP_FETCH_R:
 		return vm.executeFetchRead(ctx, inst)
 	case opcodes.OP_FETCH_W:
@@ -358,8 +373,6 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeCatch(ctx, inst)
 	case opcodes.OP_FINALLY:
 		return vm.executeFinally(ctx, inst)
-	case opcodes.OP_QM_ASSIGN:
-		return vm.executeQuickAssign(ctx, inst)
 
 	// Error suppression
 	case opcodes.OP_BEGIN_SILENCE:
@@ -3281,4 +3294,151 @@ func convertArrayKey(key *values.Value) interface{} {
 	} else {
 		return key.ToString() // Convert everything else to string
 	}
+}
+
+// Binary operation types for ASSIGN_OP (matching PHP's Zend Engine)
+const (
+	ZEND_ADD    = 1
+	ZEND_SUB    = 2
+	ZEND_MUL    = 3
+	ZEND_DIV    = 4
+	ZEND_MOD    = 5
+	ZEND_SL     = 6 // <<
+	ZEND_SR     = 7 // >>
+	ZEND_CONCAT = 8
+	ZEND_BW_OR  = 9  // |
+	ZEND_BW_AND = 10 // &
+	ZEND_BW_XOR = 11 // ^
+	ZEND_POW    = 12
+)
+
+// Assignment operation implementations
+
+// executeAssignOp performs compound assignment operations (+=, -=, *=, etc.)
+func (vm *VirtualMachine) executeAssignOp(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	variable := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	value := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	// The operation type is stored in the Reserved field (matching PHP's extended_value)
+	opType := inst.Reserved
+
+	var result *values.Value
+
+	switch opType {
+	case ZEND_ADD:
+		result = variable.Add(value)
+	case ZEND_SUB:
+		result = variable.Subtract(value)
+	case ZEND_MUL:
+		result = variable.Multiply(value)
+	case ZEND_DIV:
+		result = variable.Divide(value)
+	case ZEND_MOD:
+		result = variable.Modulo(value)
+	case ZEND_POW:
+		result = variable.Power(value)
+	case ZEND_CONCAT:
+		result = values.NewString(variable.ToString() + value.ToString())
+	case ZEND_BW_OR:
+		result = values.NewInt(variable.ToInt() | value.ToInt())
+	case ZEND_BW_AND:
+		result = values.NewInt(variable.ToInt() & value.ToInt())
+	case ZEND_BW_XOR:
+		result = values.NewInt(variable.ToInt() ^ value.ToInt())
+	case ZEND_SL:
+		result = values.NewInt(variable.ToInt() << value.ToInt())
+	case ZEND_SR:
+		result = values.NewInt(variable.ToInt() >> value.ToInt())
+	default:
+		return fmt.Errorf("unknown assignment operation type: %d", opType)
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeAssignDim performs $var[key] = value
+func (vm *VirtualMachine) executeAssignDim(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// For now, this is a simplified implementation
+	// In real PHP, this would require handling OP_DATA or the next instruction for the value
+	// Op1: array variable, Op2: key, value needs to be passed separately
+
+	// For demonstration, let's assume the value is in a temporary variable with index from Reserved field
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	key := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	// Simplified: get value from Reserved field as temp var index
+	valueIndex := uint32(inst.Reserved)
+	value := ctx.Temporaries[valueIndex]
+	if value == nil {
+		value = values.NewNull()
+	}
+
+	if !array.IsArray() {
+		// Convert to array if not already
+		array = values.NewArray()
+		// Store the new array back to the variable
+		vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), array)
+	}
+
+	array.ArraySet(key, value)
+	// Store result (the assigned value) in Result location
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+
+	ctx.IP++
+	return nil
+}
+
+// executeAssignObj performs $obj->prop = value
+func (vm *VirtualMachine) executeAssignObj(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	object := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	prop := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	// Simplified: get value from Reserved field as temp var index
+	valueIndex := uint32(inst.Reserved)
+	value := ctx.Temporaries[valueIndex]
+	if value == nil {
+		value = values.NewNull()
+	}
+
+	if !object.IsObject() {
+		// In PHP, this would create a stdClass object or throw an error
+		// For now, return error
+		return fmt.Errorf("trying to assign to property of non-object")
+	}
+
+	object.ObjectSet(prop.ToString(), value)
+	// Store result (the assigned value) in Result location
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+
+	ctx.IP++
+	return nil
+}
+
+// executeAssignDimOp performs $var[key] += value (compound assignment on array element)
+func (vm *VirtualMachine) executeAssignDimOp(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// This would require reading the current array element, performing the operation,
+	// then storing it back. For now, return a simple implementation.
+	return fmt.Errorf("OP_ASSIGN_DIM_OP not yet fully implemented")
+}
+
+// executeAssignObjOp performs $obj->prop += value (compound assignment on object property)
+func (vm *VirtualMachine) executeAssignObjOp(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Similar to ASSIGN_DIM_OP, this would require reading, operating, and storing back.
+	return fmt.Errorf("OP_ASSIGN_OBJ_OP not yet fully implemented")
+}
+
+// executeAssignRef performs $var =& $other (reference assignment)
+func (vm *VirtualMachine) executeAssignRef(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Reference assignment would require implementing PHP's reference semantics
+	return fmt.Errorf("OP_ASSIGN_REF not yet fully implemented")
+}
+
+// executeQmAssign performs ternary assignment (?:)
+func (vm *VirtualMachine) executeQmAssign(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+	ctx.IP++
+	return nil
 }
