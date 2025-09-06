@@ -431,6 +431,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	// Object operations
 	case opcodes.OP_NEW:
 		return vm.executeNew(ctx, inst)
+	case opcodes.OP_CLONE:
+		return vm.executeClone(ctx, inst)
 	case opcodes.OP_FETCH_CLASS_CONSTANT:
 		return vm.executeFetchClassConstant(ctx, inst)
 	case opcodes.OP_FETCH_STATIC_PROP_R:
@@ -2248,6 +2250,85 @@ func (vm *VirtualMachine) executeNew(ctx *ExecutionContext, inst *opcodes.Instru
 
 	ctx.IP++
 	return nil
+}
+
+func (vm *VirtualMachine) executeClone(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the object to clone
+	originalObject := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	// PHP validation: Can only clone objects
+	if !originalObject.IsObject() {
+		return fmt.Errorf("__clone method called on non-object")
+	}
+
+	// Create a deep copy of the object
+	clonedObject := vm.cloneObject(originalObject)
+
+	// Store the result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), clonedObject)
+
+	ctx.IP++
+	return nil
+}
+
+// cloneObject performs a deep copy of an object
+func (vm *VirtualMachine) cloneObject(original *values.Value) *values.Value {
+	if !original.IsObject() {
+		return original // Should not happen, but safe fallback
+	}
+
+	originalObj := original.Data.(values.Object)
+
+	// Create new object with same class
+	clonedObj := values.Object{
+		ClassName:  originalObj.ClassName,
+		Properties: make(map[string]*values.Value),
+	}
+
+	// Deep copy all properties
+	for key, prop := range originalObj.Properties {
+		clonedObj.Properties[key] = vm.deepCopyValue(prop)
+	}
+
+	return &values.Value{
+		Type: values.TypeObject,
+		Data: clonedObj,
+	}
+}
+
+// deepCopyValue recursively copies values
+func (vm *VirtualMachine) deepCopyValue(original *values.Value) *values.Value {
+	if original == nil {
+		return nil
+	}
+
+	switch original.Type {
+	case values.TypeObject:
+		return vm.cloneObject(original)
+	case values.TypeArray:
+		originalArray := original.Data.(*values.Array)
+		clonedArray := &values.Array{
+			Elements:  make(map[interface{}]*values.Value),
+			NextIndex: originalArray.NextIndex,
+			IsIndexed: originalArray.IsIndexed,
+		}
+
+		// Deep copy array elements
+		for key, element := range originalArray.Elements {
+			clonedArray.Elements[key] = vm.deepCopyValue(element)
+		}
+
+		return &values.Value{
+			Type: values.TypeArray,
+			Data: clonedArray,
+		}
+	default:
+		// Primitive types can be shallow copied
+		return &values.Value{
+			Type: original.Type,
+			Data: original.Data,
+		}
+	}
 }
 
 // ForeachIterator represents the state of a foreach loop
