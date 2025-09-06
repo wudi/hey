@@ -60,6 +60,9 @@ type ExecutionContext struct {
 	// ROPE string concatenation buffer
 	RopeBuffers map[uint32][]string // ROPE buffer per temporary variable
 
+	// Output buffer
+	OutputBuffer []string // Captured output from echo/print statements
+
 	// Execution control
 	Halted   bool
 	ExitCode int
@@ -169,6 +172,7 @@ func NewExecutionContext() *ExecutionContext {
 		ExceptionHandlers: make([]ExceptionHandler, 0),
 		CurrentException:  nil,
 		RopeBuffers:       make(map[uint32][]string),
+		OutputBuffer:      make([]string, 0),
 		Halted:            false,
 		ExitCode:          0,
 	}
@@ -367,6 +371,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	// Special operations
 	case opcodes.OP_ECHO:
 		return vm.executeEcho(ctx, inst)
+	case opcodes.OP_PRINT:
+		return vm.executePrint(ctx, inst)
 	case opcodes.OP_RETURN:
 		return vm.executeReturn(ctx, inst)
 	case opcodes.OP_EXIT:
@@ -1084,22 +1090,59 @@ func (vm *VirtualMachine) executeFetchObjWrite(ctx *ExecutionContext, inst *opco
 
 func (vm *VirtualMachine) executeEcho(ctx *ExecutionContext, inst *opcodes.Instruction) error {
 	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
-	fmt.Print(value.ToString())
+	output := value.ToString()
+
+	// Add to output buffer for testing
+	ctx.OutputBuffer = append(ctx.OutputBuffer, output)
+
+	// Also print to stdout for real output
+	fmt.Print(output)
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executePrint(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Print is like echo but returns 1
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	output := value.ToString()
+
+	// Add to output buffer for testing
+	ctx.OutputBuffer = append(ctx.OutputBuffer, output)
+
+	// Also print to stdout for real output
+	fmt.Print(output)
+
+	// Print always returns 1
+	result := values.NewInt(1)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 
 	ctx.IP++
 	return nil
 }
 
 func (vm *VirtualMachine) executeReturn(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	var returnValue *values.Value
+
 	// Get return value if present
 	if opcodes.DecodeOpType1(inst.OpType1) != opcodes.IS_UNUSED {
-		returnValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
-		// Push return value onto stack so the caller can retrieve it
-		ctx.Stack = append(ctx.Stack, returnValue)
+		returnValue = vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	} else {
+		// Return null when no return value specified
+		returnValue = values.NewNull()
 	}
+
+	// Store return value in result if specified
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), returnValue)
+	}
+
+	// Also push return value onto stack so the caller can retrieve it
+	ctx.Stack = append(ctx.Stack, returnValue)
 
 	// Halt execution for this context (function returns)
 	ctx.Halted = true
+	ctx.IP++
 	return nil
 }
 
