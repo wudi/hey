@@ -402,6 +402,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_FE_FETCH:
 		return vm.executeForeachFetch(ctx, inst)
 
+	// Type casting and conversion
+	case opcodes.OP_CAST:
+		return vm.executeCast(ctx, inst)
+	case opcodes.OP_BOOL:
+		return vm.executeBool(ctx, inst)
+
 	// Object operations
 	case opcodes.OP_NEW:
 		return vm.executeNew(ctx, inst)
@@ -1279,6 +1285,89 @@ func (vm *VirtualMachine) executeRopeEnd(ctx *ExecutionContext, inst *opcodes.In
 
 	// Clean up buffer
 	delete(ctx.RopeBuffers, bufferID)
+
+	ctx.IP++
+	return nil
+}
+
+// Type casting and conversion operations
+
+func (vm *VirtualMachine) executeCast(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the value to cast
+	val := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	// Cast type is stored in Reserved field
+	castType := inst.Reserved
+
+	var result *values.Value
+
+	switch castType {
+	case opcodes.CAST_IS_LONG:
+		// Cast to integer
+		result = values.NewInt(val.ToInt())
+	case opcodes.CAST_IS_DOUBLE:
+		// Cast to float
+		result = values.NewFloat(val.ToFloat())
+	case opcodes.CAST_IS_STRING:
+		// Cast to string
+		result = values.NewString(val.ToString())
+	case opcodes.CAST_IS_ARRAY:
+		// Cast to array
+		if val.IsArray() {
+			// Already an array, just copy
+			result = val
+		} else if val.IsNull() {
+			// NULL becomes empty array
+			result = values.NewArray()
+		} else {
+			// Other types become single-element array
+			arr := values.NewArray()
+			arr.ArraySet(values.NewInt(0), val)
+			result = arr
+		}
+	case opcodes.CAST_IS_OBJECT:
+		// Cast to object
+		if val.IsObject() {
+			// Already an object, just copy
+			result = val
+		} else {
+			// Create stdClass object
+			obj := values.NewObject("stdClass")
+			if val.IsArray() {
+				// Convert array properties to object properties
+				// This is a simplified implementation
+				result = obj
+			} else if !val.IsNull() {
+				// Set scalar property
+				obj.ObjectSet("scalar", val)
+				result = obj
+			} else {
+				result = obj
+			}
+		}
+	case opcodes.CAST_IS_NULL:
+		// Cast to null (unset)
+		result = values.NewNull()
+	default:
+		return fmt.Errorf("unknown cast type: %d", castType)
+	}
+
+	// Store result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeBool(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the value to convert to boolean
+	val := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	// Convert to boolean using PHP semantics
+	result := values.NewBool(val.ToBool())
+
+	// Store result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 
 	ctx.IP++
 	return nil

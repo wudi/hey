@@ -83,6 +83,10 @@ const (
 	OP_FE_RESET // foreach reset
 	OP_FE_FETCH // foreach fetch
 	OP_FE_FREE  // foreach cleanup
+
+	// Type casting and conversion operations
+	OP_CAST // Type casting (int, float, string, array, object)
+	OP_BOOL // Boolean conversion
 )
 
 // Variable Operations (60-91)
@@ -385,6 +389,10 @@ var opcodeNames = map[Opcode]string{
 	OP_FE_FETCH: "FE_FETCH",
 	OP_FE_FREE:  "FE_FREE",
 
+	// Type casting and conversion
+	OP_CAST: "CAST",
+	OP_BOOL: "BOOL",
+
 	// Variables and Assignment
 	OP_ASSIGN:                "ASSIGN",
 	OP_ASSIGN_DIM:            "ASSIGN_DIM",
@@ -584,3 +592,15 @@ func (ot OpType) String() string {
 		return "UNKNOWN"
 	}
 }
+
+// Cast type constants (matching PHP's internal type constants)
+const (
+	CAST_IS_NULL   = 1 // (unset)
+	CAST_IS_FALSE  = 2 // false boolean
+	CAST_IS_TRUE   = 3 // true boolean
+	CAST_IS_LONG   = 4 // (int)
+	CAST_IS_DOUBLE = 5 // (float)
+	CAST_IS_STRING = 6 // (string)
+	CAST_IS_ARRAY  = 7 // (array)
+	CAST_IS_OBJECT = 8 // (object)
+)
