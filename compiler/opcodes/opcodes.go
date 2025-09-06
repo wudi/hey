@@ -165,7 +165,7 @@ const (
 	OP_YIELD_FROM // yield from
 )
 
-// Array Operations (120-139)
+// Array and String Operations (120-149)
 const (
 	OP_INIT_ARRAY Opcode = iota + 120
 	OP_ADD_ARRAY_ELEMENT
@@ -174,6 +174,10 @@ const (
 	// Array functions
 	OP_COUNT
 	OP_IN_ARRAY
+	OP_ARRAY_KEY_EXISTS // Check if array key exists
+	OP_ARRAY_VALUES     // Get array values
+	OP_ARRAY_KEYS       // Get array keys
+	OP_ARRAY_MERGE      // Merge arrays
 
 	// String operations
 	OP_CONCAT
@@ -197,9 +201,9 @@ const (
 	OP_VERIFY_ARG_TYPE // Verify argument type for typed parameters
 )
 
-// Class Operations (140-169)
+// Class Operations (150-179)
 const (
-	OP_NEW Opcode = iota + 140
+	OP_NEW Opcode = iota + 150
 	OP_CLONE
 	OP_INIT_CTOR_CALL
 	OP_CALL_CTOR
@@ -221,9 +225,9 @@ const (
 	OP_VERIFY_RETURN_TYPE
 )
 
-// Special Operations (170-199)
+// Special Operations (180-199)
 const (
-	OP_EXIT Opcode = iota + 170
+	OP_EXIT Opcode = iota + 180
 	OP_ECHO
 	OP_PRINT
 	OP_INCLUDE
@@ -464,8 +468,12 @@ var opcodeNames = map[Opcode]string{
 	OP_ADD_ARRAY_ELEMENT: "ADD_ARRAY_ELEMENT",
 	OP_ADD_ARRAY_UNPACK:  "ADD_ARRAY_UNPACK",
 
-	OP_COUNT:    "COUNT",
-	OP_IN_ARRAY: "IN_ARRAY",
+	OP_COUNT:            "COUNT",
+	OP_IN_ARRAY:         "IN_ARRAY",
+	OP_ARRAY_KEY_EXISTS: "ARRAY_KEY_EXISTS",
+	OP_ARRAY_VALUES:     "ARRAY_VALUES",
+	OP_ARRAY_KEYS:       "ARRAY_KEYS",
+	OP_ARRAY_MERGE:      "ARRAY_MERGE",
 
 	// Strings
 	OP_CONCAT:      "CONCAT",

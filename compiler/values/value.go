@@ -141,6 +141,18 @@ func (v *Value) IsNumeric() bool {
 	return v.Type == TypeInt || v.Type == TypeFloat
 }
 
+func (v *Value) IsNumericString() bool {
+	if v.Type != TypeString {
+		return false
+	}
+	s := strings.TrimSpace(v.Data.(string))
+	if s == "" {
+		return true // Empty string is considered numeric (converts to 0)
+	}
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
 func (v *Value) IsString() bool {
 	return v.Type == TypeString
 }
@@ -423,8 +435,8 @@ func (v *Value) Equal(other *Value) bool {
 		return v.ToInt() == other.ToInt()
 	}
 
-	// String/numeric comparisons
-	if (v.IsString() && other.IsNumeric()) || (v.IsNumeric() && other.IsString()) {
+	// String/numeric comparisons - only for numeric strings
+	if (v.IsNumericString() && other.IsNumeric()) || (v.IsNumeric() && other.IsNumericString()) {
 		return v.ToFloat() == other.ToFloat()
 	}
 

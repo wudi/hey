@@ -468,6 +468,20 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_STRTOUPPER:
 		return vm.executeStrtoupper(ctx, inst)
 
+	// Array operations
+	case opcodes.OP_COUNT:
+		return vm.executeCount(ctx, inst)
+	case opcodes.OP_IN_ARRAY:
+		return vm.executeInArray(ctx, inst)
+	case opcodes.OP_ARRAY_KEY_EXISTS:
+		return vm.executeArrayKeyExists(ctx, inst)
+	case opcodes.OP_ARRAY_VALUES:
+		return vm.executeArrayValues(ctx, inst)
+	case opcodes.OP_ARRAY_KEYS:
+		return vm.executeArrayKeys(ctx, inst)
+	case opcodes.OP_ARRAY_MERGE:
+		return vm.executeArrayMerge(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -3088,4 +3102,183 @@ func (vm *VirtualMachine) executeStrtoupper(ctx *ExecutionContext, inst *opcodes
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 	ctx.IP++
 	return nil
+}
+
+// Array instruction implementations
+
+// executeCount returns the count/length of an array or string
+func (vm *VirtualMachine) executeCount(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	var count int64
+	if value.IsArray() {
+		count = int64(value.ArrayCount())
+	} else if value.IsString() {
+		count = int64(len(value.ToString()))
+	} else {
+		count = 0 // For other types, count is 0 (or could be 1 for non-null values)
+	}
+
+	result := values.NewInt(count)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeInArray checks if a value exists in an array
+func (vm *VirtualMachine) executeInArray(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	needle := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	haystack := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	var found bool
+	if haystack.IsArray() {
+		// Check each array element for equality
+		arr := haystack.Data.(*values.Array)
+		for _, element := range arr.Elements {
+			if element.Equal(needle) {
+				found = true
+				break
+			}
+		}
+	}
+
+	result := values.NewBool(found)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeArrayKeyExists checks if an array key exists
+func (vm *VirtualMachine) executeArrayKeyExists(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	key := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	array := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	var exists bool
+	if array.IsArray() {
+		// In PHP, array_key_exists returns true even for null values
+		// We need to check if the key actually exists in the elements map
+		arr := array.Data.(*values.Array)
+		keyValue := convertArrayKey(key)
+		_, exists = arr.Elements[keyValue]
+	}
+
+	result := values.NewBool(exists)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeArrayValues returns all values from an array
+func (vm *VirtualMachine) executeArrayValues(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	result := values.NewArray()
+	if array.IsArray() {
+		arr := array.Data.(*values.Array)
+		index := int64(0)
+
+		// Add all values with sequential numeric indices
+		for _, element := range arr.Elements {
+			result.ArraySet(values.NewInt(index), element)
+			index++
+		}
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeArrayKeys returns all keys from an array
+func (vm *VirtualMachine) executeArrayKeys(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	result := values.NewArray()
+	if array.IsArray() {
+		arr := array.Data.(*values.Array)
+		index := int64(0)
+
+		// Add all keys with sequential numeric indices
+		for key := range arr.Elements {
+			var keyValue *values.Value
+			switch k := key.(type) {
+			case int64:
+				keyValue = values.NewInt(k)
+			case string:
+				keyValue = values.NewString(k)
+			default:
+				keyValue = values.NewString(fmt.Sprintf("%v", k))
+			}
+			result.ArraySet(values.NewInt(index), keyValue)
+			index++
+		}
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeArrayMerge merges two arrays with proper PHP array_merge semantics
+func (vm *VirtualMachine) executeArrayMerge(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array1 := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	array2 := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	result := values.NewArray()
+	var numericIndex int64 = 0
+
+	// Add elements from first array
+	if array1.IsArray() {
+		arr1 := array1.Data.(*values.Array)
+		for key, element := range arr1.Elements {
+			switch k := key.(type) {
+			case int64:
+				// Re-index numeric keys starting from 0
+				result.ArraySet(values.NewInt(numericIndex), element)
+				numericIndex++
+			case string:
+				// Keep string keys as-is
+				result.ArraySet(values.NewString(k), element)
+			default:
+				// Fallback: treat as numeric
+				result.ArraySet(values.NewInt(numericIndex), element)
+				numericIndex++
+			}
+		}
+	}
+
+	// Add elements from second array
+	if array2.IsArray() {
+		arr2 := array2.Data.(*values.Array)
+		for key, element := range arr2.Elements {
+			switch k := key.(type) {
+			case int64:
+				// Re-index numeric keys continuing from current index
+				result.ArraySet(values.NewInt(numericIndex), element)
+				numericIndex++
+			case string:
+				// Keep string keys as-is
+				result.ArraySet(values.NewString(k), element)
+			default:
+				// Fallback: treat as numeric
+				result.ArraySet(values.NewInt(numericIndex), element)
+				numericIndex++
+			}
+		}
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// convertArrayKey converts a Value to an appropriate map key (helper function)
+func convertArrayKey(key *values.Value) interface{} {
+	if key.IsInt() {
+		return key.ToInt()
+	} else if key.IsString() {
+		return key.ToString()
+	} else {
+		return key.ToString() // Convert everything else to string
+	}
 }
