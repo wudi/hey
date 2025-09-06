@@ -178,6 +178,11 @@ const (
 	// String operations
 	OP_CONCAT
 	OP_FAST_CONCAT // Optimized concatenation
+	OP_STRLEN      // String length
+	OP_SUBSTR      // Substring extraction
+	OP_STRPOS      // String position/find
+	OP_STRTOLOWER  // Convert to lowercase
+	OP_STRTOUPPER  // Convert to uppercase
 
 	// Type casting
 	OP_CAST_BOOL
@@ -465,6 +470,11 @@ var opcodeNames = map[Opcode]string{
 	// Strings
 	OP_CONCAT:      "CONCAT",
 	OP_FAST_CONCAT: "FAST_CONCAT",
+	OP_STRLEN:      "STRLEN",
+	OP_SUBSTR:      "SUBSTR",
+	OP_STRPOS:      "STRPOS",
+	OP_STRTOLOWER:  "STRTOLOWER",
+	OP_STRTOUPPER:  "STRTOUPPER",
 
 	// Casting
 	OP_CAST_BOOL:   "CAST_BOOL",

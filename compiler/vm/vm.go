@@ -456,6 +456,18 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_INSTANCEOF:
 		return vm.executeInstanceof(ctx, inst)
 
+	// String operations
+	case opcodes.OP_STRLEN:
+		return vm.executeStrlen(ctx, inst)
+	case opcodes.OP_SUBSTR:
+		return vm.executeSubstr(ctx, inst)
+	case opcodes.OP_STRPOS:
+		return vm.executeStrpos(ctx, inst)
+	case opcodes.OP_STRTOLOWER:
+		return vm.executeStrtolower(ctx, inst)
+	case opcodes.OP_STRTOUPPER:
+		return vm.executeStrtoupper(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -2960,6 +2972,119 @@ func (vm *VirtualMachine) executeInstanceof(ctx *ExecutionContext, inst *opcodes
 	}
 
 	result := values.NewBool(isInstance)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// String instruction implementations
+
+// executeStrlen returns the length of a string
+func (vm *VirtualMachine) executeStrlen(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	str := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	var length int64
+	if str.IsString() {
+		length = int64(len(str.ToString()))
+	} else {
+		// Convert to string first, then get length
+		length = int64(len(str.ToString()))
+	}
+
+	result := values.NewInt(length)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeSubstr extracts a substring from a string
+func (vm *VirtualMachine) executeSubstr(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	str := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	start := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	// For simplicity, assume Op2 contains start position, and length is implicit (rest of string)
+	// In a full implementation, there would be a third operand for length
+
+	var result *values.Value
+	if str.IsString() && start.IsInt() {
+		s := str.ToString()
+		startPos := int(start.ToInt())
+
+		if startPos < 0 {
+			startPos = len(s) + startPos // Negative indices count from end
+			if startPos < 0 {
+				startPos = 0 // If still negative, start from beginning
+			}
+		}
+
+		if startPos >= len(s) {
+			result = values.NewString("") // Out of bounds
+		} else {
+			result = values.NewString(s[startPos:])
+		}
+	} else {
+		result = values.NewString("") // Invalid input
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeStrpos finds the position of a substring in a string
+func (vm *VirtualMachine) executeStrpos(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	haystack := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	needle := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	var result *values.Value
+	if haystack.IsString() && needle.IsString() {
+		h := haystack.ToString()
+		n := needle.ToString()
+
+		pos := strings.Index(h, n)
+		if pos == -1 {
+			result = values.NewBool(false) // Not found (PHP returns false)
+		} else {
+			result = values.NewInt(int64(pos))
+		}
+	} else {
+		result = values.NewBool(false) // Invalid input
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeStrtolower converts a string to lowercase
+func (vm *VirtualMachine) executeStrtolower(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	str := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	var result *values.Value
+	if str.IsString() {
+		result = values.NewString(strings.ToLower(str.ToString()))
+	} else {
+		// Convert to string first, then to lowercase
+		result = values.NewString(strings.ToLower(str.ToString()))
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeStrtoupper converts a string to uppercase
+func (vm *VirtualMachine) executeStrtoupper(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	str := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	var result *values.Value
+	if str.IsString() {
+		result = values.NewString(strings.ToUpper(str.ToString()))
+	} else {
+		// Convert to string first, then to uppercase
+		result = values.NewString(strings.ToUpper(str.ToString()))
+	}
+
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 	ctx.IP++
 	return nil
