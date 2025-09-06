@@ -186,6 +186,10 @@ const (
 	OP_CAST_STRING
 	OP_CAST_ARRAY
 	OP_CAST_OBJECT
+
+	// Additional type checking opcodes
+	OP_IS_TYPE         // is_* type checking functions (is_int, is_string, etc.)
+	OP_VERIFY_ARG_TYPE // Verify argument type for typed parameters
 )
 
 // Class Operations (140-169)
@@ -469,6 +473,10 @@ var opcodeNames = map[Opcode]string{
 	OP_CAST_STRING: "CAST_STRING",
 	OP_CAST_ARRAY:  "CAST_ARRAY",
 	OP_CAST_OBJECT: "CAST_OBJECT",
+
+	// Type checking
+	OP_IS_TYPE:         "IS_TYPE",
+	OP_VERIFY_ARG_TYPE: "VERIFY_ARG_TYPE",
 
 	// Classes
 	OP_NEW:            "NEW",

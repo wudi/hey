@@ -436,6 +436,26 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_SEND_VAR_NO_REF:
 		return vm.executeSendVarNoRef(ctx, inst)
 
+	// Type checking and casting operations
+	case opcodes.OP_CAST_BOOL:
+		return vm.executeCastBool(ctx, inst)
+	case opcodes.OP_CAST_LONG:
+		return vm.executeCastLong(ctx, inst)
+	case opcodes.OP_CAST_DOUBLE:
+		return vm.executeCastDouble(ctx, inst)
+	case opcodes.OP_CAST_STRING:
+		return vm.executeCastString(ctx, inst)
+	case opcodes.OP_CAST_ARRAY:
+		return vm.executeCastArray(ctx, inst)
+	case opcodes.OP_CAST_OBJECT:
+		return vm.executeCastObject(ctx, inst)
+	case opcodes.OP_IS_TYPE:
+		return vm.executeIsType(ctx, inst)
+	case opcodes.OP_VERIFY_ARG_TYPE:
+		return vm.executeVerifyArgType(ctx, inst)
+	case opcodes.OP_INSTANCEOF:
+		return vm.executeInstanceof(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -2763,6 +2783,184 @@ func (vm *VirtualMachine) executeSendVarNoRef(ctx *ExecutionContext, inst *opcod
 	// Store result
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), copiedValue)
 
+	ctx.IP++
+	return nil
+}
+
+// Type checking and casting instruction implementations
+
+// executeCastBool casts a value to boolean
+func (vm *VirtualMachine) executeCastBool(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	result := values.NewBool(value.ToBool())
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeCastLong casts a value to integer (long)
+func (vm *VirtualMachine) executeCastLong(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	result := values.NewInt(value.ToInt())
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeCastDouble casts a value to float (double)
+func (vm *VirtualMachine) executeCastDouble(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	result := values.NewFloat(value.ToFloat())
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeCastString casts a value to string
+func (vm *VirtualMachine) executeCastString(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	result := values.NewString(value.ToString())
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeCastArray casts a value to array
+func (vm *VirtualMachine) executeCastArray(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	var result *values.Value
+	if value.IsArray() {
+		// Already an array, just return it
+		result = value
+	} else if value.IsNull() {
+		// null -> empty array
+		result = values.NewArray()
+	} else {
+		// Other types -> array with single element at index 0
+		result = values.NewArray()
+		result.ArraySet(values.NewInt(0), value)
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeCastObject casts a value to object
+func (vm *VirtualMachine) executeCastObject(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	var result *values.Value
+	if value.IsObject() {
+		// Already an object, just return it
+		result = value
+	} else if value.IsArray() {
+		// Array -> stdClass object with array elements as properties
+		result = values.NewObject("stdClass")
+		// Convert array elements to object properties (simplified)
+		result = value // For now, just return the value (in real implementation, would convert)
+	} else {
+		// Other types -> stdClass with scalar property
+		result = values.NewObject("stdClass")
+		// In a real implementation, would set a "scalar" property
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeIsType performs is_* type checking functions (is_int, is_string, etc.)
+func (vm *VirtualMachine) executeIsType(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	typeCheck := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	var isType bool
+	if typeCheck.IsString() {
+		typeName := typeCheck.ToString()
+		switch typeName {
+		case "int", "integer":
+			isType = value.IsInt()
+		case "float", "double":
+			isType = value.IsFloat()
+		case "string":
+			isType = value.IsString()
+		case "bool", "boolean":
+			isType = value.IsBool()
+		case "array":
+			isType = value.IsArray()
+		case "object":
+			isType = value.IsObject()
+		case "null":
+			isType = value.IsNull()
+		default:
+			isType = false
+		}
+	} else {
+		isType = false
+	}
+
+	result := values.NewBool(isType)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	ctx.IP++
+	return nil
+}
+
+// executeVerifyArgType verifies argument type for typed parameters
+func (vm *VirtualMachine) executeVerifyArgType(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	argument := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	expectedType := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	var isValid bool
+	if expectedType.IsString() {
+		typeName := expectedType.ToString()
+		switch typeName {
+		case "int", "integer":
+			isValid = argument.IsInt()
+		case "float", "double":
+			isValid = argument.IsFloat()
+		case "string":
+			isValid = argument.IsString()
+		case "bool", "boolean":
+			isValid = argument.IsBool()
+		case "array":
+			isValid = argument.IsArray()
+		case "object":
+			isValid = argument.IsObject()
+		default:
+			isValid = true // Unknown type, assume valid for now
+		}
+	} else {
+		isValid = true // No type constraint
+	}
+
+	if !isValid {
+		return fmt.Errorf("argument type verification failed: expected %s, got %s",
+			expectedType.ToString(), argument.Type.String())
+	}
+
+	// Return the argument if valid
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), argument)
+	ctx.IP++
+	return nil
+}
+
+// executeInstanceof performs instanceof operator
+func (vm *VirtualMachine) executeInstanceof(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	object := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	className := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	var isInstance bool
+	if object.IsObject() && className.IsString() {
+		// Get object's class name and compare
+		if objData, ok := object.Data.(*values.Object); ok {
+			isInstance = objData.ClassName == className.ToString()
+		}
+	}
+
+	result := values.NewBool(isInstance)
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
 	ctx.IP++
 	return nil
 }
