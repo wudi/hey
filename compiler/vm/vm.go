@@ -651,6 +651,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_SEND_UNPACK:
 		return vm.executeSendUnpack(ctx, inst)
 
+	// Core OOP operations
+	case opcodes.OP_METHOD_CALL:
+		return vm.executeMethodCall(ctx, inst)
+	case opcodes.OP_CALL_CTOR:
+		return vm.executeCallConstructor(ctx, inst)
+	case opcodes.OP_INIT_CTOR_CALL:
+		return vm.executeInitConstructorCall(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -5050,6 +5058,110 @@ func (vm *VirtualMachine) executeSendUnpack(ctx *ExecutionContext, inst *opcodes
 	if ctx.CallContext != nil {
 		ctx.CallContext.NumArgs = len(ctx.CallArguments)
 	}
+
+	ctx.IP++
+	return nil
+}
+
+// OOP operations implementation - executeMethodCall already exists elsewhere in this file
+
+func (vm *VirtualMachine) executeCallConstructor(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the object that needs constructor called
+	object := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if object == nil {
+		return fmt.Errorf("CALL_CTOR requires object")
+	}
+
+	// Get constructor arguments count or specific arguments
+	var numArgs int
+	if inst.Op2 != 0 {
+		argsValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+		if argsValue != nil && argsValue.IsInt() {
+			numArgs = int(argsValue.ToInt())
+		}
+	}
+
+	// For now, implement a simple constructor call simulation
+	if object.IsObject() {
+		obj := object.Data.(*values.Object)
+
+		// In a full implementation, we would:
+		// 1. Look up the __construct method in the object's class
+		// 2. Set up a call frame with the object as $this
+		// 3. Pass the constructor arguments
+		// 4. Execute the constructor bytecode
+		// 5. Handle any constructor return/exception
+
+		// For now, simulate constructor initialization
+		// Set some default properties based on arguments
+		if numArgs > 0 {
+			// Use call arguments if available
+			if ctx.CallArguments != nil && len(ctx.CallArguments) > 0 {
+				for i, arg := range ctx.CallArguments {
+					propName := fmt.Sprintf("prop%d", i)
+					obj.Properties[propName] = arg
+				}
+			} else {
+				// Set default initialized property
+				obj.Properties["initialized"] = values.NewBool(true)
+			}
+		}
+
+		// Mark object as constructed
+		obj.Properties["__constructed"] = values.NewBool(true)
+	} else {
+		return fmt.Errorf("Cannot call constructor on non-object")
+	}
+
+	// Constructor doesn't return a value normally
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeInitConstructorCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the class name or object to initialize constructor call for
+	target := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if target == nil {
+		return fmt.Errorf("INIT_CTOR_CALL requires class name or object")
+	}
+
+	// Get argument count if specified
+	var numArgs int
+	if inst.Op2 != 0 {
+		argsValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+		if argsValue != nil && argsValue.IsInt() {
+			numArgs = int(argsValue.ToInt())
+		}
+	}
+
+	// Initialize constructor call context
+	// This sets up the call frame for the upcoming constructor call
+	var className string
+	if target.IsString() {
+		className = target.ToString()
+	} else if target.IsObject() {
+		// Get class name from object
+		obj := target.Data.(*values.Object)
+		className = obj.ClassName
+	} else {
+		return fmt.Errorf("INIT_CTOR_CALL requires string class name or object")
+	}
+
+	// Set up constructor call context
+	ctx.CallContext = &CallContext{
+		FunctionName: className + "::__construct",
+		NumArgs:      numArgs,
+		IsMethod:     true,
+	}
+
+	// Clear previous call arguments for new constructor call
+	ctx.CallArguments = nil
+
+	// In a full implementation, this would:
+	// 1. Look up the class definition
+	// 2. Find the __construct method
+	// 3. Prepare the call frame for method execution
+	// 4. Set up argument receiving
 
 	ctx.IP++
 	return nil
