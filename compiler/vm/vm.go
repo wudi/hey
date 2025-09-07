@@ -76,11 +76,13 @@ type ExecutionContext struct {
 
 // CallFrame represents a function call frame
 type CallFrame struct {
-	Function   *Function
-	ReturnIP   int
-	Variables  map[uint32]*values.Value
-	ThisObject *values.Value
-	Arguments  []*values.Value
+	Function    *Function
+	ReturnIP    int
+	Variables   map[uint32]*values.Value
+	ThisObject  *values.Value
+	Arguments   []*values.Value
+	ReturnValue *values.Value // Return value from function
+	ReturnByRef bool          // Whether the return is by reference
 }
 
 // Function represents a compiled PHP function
@@ -590,6 +592,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeForeachFree(ctx, inst)
 	case opcodes.OP_EVAL:
 		return vm.executeEval(ctx, inst)
+
+	// Advanced function call operations
+	case opcodes.OP_INIT_FCALL_BY_NAME:
+		return vm.executeInitFunctionCallByName(ctx, inst)
+	case opcodes.OP_RETURN_BY_REF:
+		return vm.executeReturnByRef(ctx, inst)
 
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
@@ -4423,5 +4431,73 @@ func (vm *VirtualMachine) executeEval(ctx *ExecutionContext, inst *opcodes.Instr
 	}
 
 	ctx.IP++
+	return nil
+}
+
+// executeInitFunctionCallByName initializes a function call by name (INIT_FCALL_BY_NAME)
+func (vm *VirtualMachine) executeInitFunctionCallByName(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the function name
+	nameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if nameValue == nil || !nameValue.IsString() {
+		return fmt.Errorf("INIT_FCALL_BY_NAME requires string function name")
+	}
+
+	functionName := nameValue.ToString()
+
+	// Initialize the call context for the function call
+	ctx.CallContext = &CallContext{
+		FunctionName: functionName,
+		NumArgs:      0, // Will be set as arguments are added
+	}
+
+	// Clear any existing call arguments from previous calls
+	ctx.CallArguments = nil
+
+	// Store the number of expected arguments if provided
+	// In PHP, INIT_FCALL_BY_NAME can specify the number of arguments
+	if inst.Op2 != 0 {
+		argCountValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+		if argCountValue != nil && argCountValue.IsInt() {
+			ctx.CallContext.NumArgs = int(argCountValue.ToInt())
+		}
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeReturnByRef executes a return by reference statement (RETURN_BY_REF)
+func (vm *VirtualMachine) executeReturnByRef(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the value to return by reference
+	returnValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if returnValue == nil {
+		returnValue = values.NewNull()
+	}
+
+	// For return by reference, we need to preserve the reference to the original variable
+	// This is different from regular return which copies the value
+
+	// In a complete implementation, this would:
+	// 1. Check that the return value is a valid reference (variable, array element, object property)
+	// 2. Store the reference (memory address) rather than the value
+	// 3. Set up the calling context to receive a reference
+
+	// For now, we'll implement a basic version that behaves like regular return
+	// but marks the return as being by reference for future use
+
+	// Set the return value in the current call frame
+	if len(ctx.CallStack) > 0 {
+		// Pop the current call frame and set its return value
+		ctx.CallStack[len(ctx.CallStack)-1].ReturnValue = returnValue
+		ctx.CallStack[len(ctx.CallStack)-1].ReturnByRef = true
+		ctx.CallStack = ctx.CallStack[:len(ctx.CallStack)-1]
+	} else {
+		// Global return - halt execution with return value
+		ctx.Halted = true
+		ctx.ExitCode = 0
+		// In a real implementation, the return value would be available to the caller
+	}
+
+	// For return by reference, we don't advance IP as execution should halt/return
 	return nil
 }
