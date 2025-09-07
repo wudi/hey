@@ -389,12 +389,26 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeInitFunctionCall(ctx, inst)
 	case opcodes.OP_SEND_VAL:
 		return vm.executeSendValue(ctx, inst)
+	case opcodes.OP_SEND_REF:
+		return vm.executeSendReference(ctx, inst)
+	case opcodes.OP_SEND_VAR:
+		return vm.executeSendVariable(ctx, inst)
 	case opcodes.OP_DO_FCALL:
 		return vm.executeDoFunctionCall(ctx, inst)
+	case opcodes.OP_DO_ICALL:
+		return vm.executeDoInternalCall(ctx, inst)
+	case opcodes.OP_DO_UCALL:
+		return vm.executeDoUserCall(ctx, inst)
 	case opcodes.OP_INIT_METHOD_CALL:
 		return vm.executeInitMethodCall(ctx, inst)
 	case opcodes.OP_DO_FCALL_BY_NAME:
 		return vm.executeDoFunctionCallByName(ctx, inst)
+
+	// Variable operations
+	case opcodes.OP_UNSET_VAR:
+		return vm.executeUnsetVar(ctx, inst)
+	case opcodes.OP_ISSET_ISEMPTY_VAR:
+		return vm.executeIssetIsEmptyVar(ctx, inst)
 
 	// Special operations
 	case opcodes.OP_ECHO:
@@ -4100,6 +4114,77 @@ func (vm *VirtualMachine) executeFetchObjUnset(ctx *ExecutionContext, inst *opco
 		object.ObjectUnset(propName)
 	}
 
+	ctx.IP++
+	return nil
+}
+
+// executeSendReference sends a reference parameter for function calls
+func (vm *VirtualMachine) executeSendReference(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the variable reference to send
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if value == nil {
+		value = values.NewNull()
+	}
+
+	// Add to call arguments - in PHP references are passed by reference
+	ctx.CallArguments = append(ctx.CallArguments, value)
+	ctx.IP++
+	return nil
+}
+
+// executeSendVariable sends a variable parameter for function calls
+func (vm *VirtualMachine) executeSendVariable(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the variable value to send
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if value == nil {
+		value = values.NewNull()
+	}
+
+	// Add to call arguments
+	ctx.CallArguments = append(ctx.CallArguments, value)
+	ctx.IP++
+	return nil
+}
+
+// executeDoInternalCall executes an internal (built-in) function call
+func (vm *VirtualMachine) executeDoInternalCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Internal calls are similar to regular function calls but optimized for built-ins
+	// For now, delegate to regular function call
+	return vm.executeDoFunctionCall(ctx, inst)
+}
+
+// executeDoUserCall executes a user-defined function call
+func (vm *VirtualMachine) executeDoUserCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// User calls handle user-defined functions
+	// For now, delegate to regular function call
+	return vm.executeDoFunctionCall(ctx, inst)
+}
+
+// executeUnsetVar unsets a variable (unset($var))
+func (vm *VirtualMachine) executeUnsetVar(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Remove the variable from storage
+	switch opcodes.DecodeOpType1(inst.OpType1) {
+	case opcodes.IS_VAR:
+		delete(ctx.Variables, inst.Op1)
+	case opcodes.IS_TMP_VAR:
+		delete(ctx.Temporaries, inst.Op1)
+	case opcodes.IS_CV:
+		// For compiled variables, we might need to handle differently
+		delete(ctx.Variables, inst.Op1)
+	}
+	ctx.IP++
+	return nil
+}
+
+// executeIssetIsEmptyVar checks if variable is set or empty (isset($var) / empty($var))
+func (vm *VirtualMachine) executeIssetIsEmptyVar(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	// The opcode parameter determines if this is isset() or empty() check
+	// For now, implement isset() behavior
+	isset := value != nil && !value.IsNull()
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(isset))
 	ctx.IP++
 	return nil
 }
