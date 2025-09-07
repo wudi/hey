@@ -1520,7 +1520,8 @@ func (vm *VirtualMachine) parseAndExecute(ctx *ExecutionContext, content, filePa
 
 	// If no compiler callback is available, we can't proceed with full execution
 	// but we can still return success for the parsing phase
-	return values.NewInt(1), nil
+	// Return the actual file size as PHP include/require does
+	return values.NewInt(int64(len(content))), nil
 }
 
 func (vm *VirtualMachine) executeThrow(ctx *ExecutionContext, inst *opcodes.Instruction) error {
