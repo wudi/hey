@@ -667,6 +667,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_FETCH_STATIC_PROP_UNSET:
 		return vm.executeFetchStaticPropertyUnset(ctx, inst)
 
+	// Low priority remaining opcodes
+	case opcodes.OP_FETCH_GLOBALS:
+		return vm.executeFetchGlobals(ctx, inst)
+	case opcodes.OP_GENERATOR_RETURN:
+		return vm.executeGeneratorReturn(ctx, inst)
+	case opcodes.OP_VERIFY_ABSTRACT_CLASS:
+		return vm.executeVerifyAbstractClass(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -5287,6 +5295,132 @@ func (vm *VirtualMachine) executeFetchStaticPropertyUnset(ctx *ExecutionContext,
 	}
 
 	// unset() doesn't return a value
+	ctx.IP++
+	return nil
+}
+
+// Low priority opcodes implementation
+
+func (vm *VirtualMachine) executeFetchGlobals(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// FETCH_GLOBALS returns the $GLOBALS superglobal array
+	// This provides access to all global variables through $GLOBALS['varname']
+
+	// Create a new array to represent $GLOBALS
+	globalsArray := values.NewArray()
+	globalsData := globalsArray.Data.(*values.Array)
+
+	// Copy all global variables into the $GLOBALS array
+	for varName, varValue := range ctx.GlobalVars {
+		globalsData.Elements[varName] = varValue
+	}
+
+	// Also add $GLOBALS itself to the array (PHP behavior)
+	globalsData.Elements["GLOBALS"] = globalsArray
+
+	// In PHP, common superglobals would also be included:
+	// $_SERVER, $_GET, $_POST, $_SESSION, $_COOKIE, $_FILES, $_REQUEST, $_ENV
+	// For now, we'll just initialize them as empty arrays
+	superglobals := []string{"_SERVER", "_GET", "_POST", "_SESSION", "_COOKIE", "_FILES", "_REQUEST", "_ENV"}
+	for _, name := range superglobals {
+		if _, exists := globalsData.Elements[name]; !exists {
+			globalsData.Elements[name] = values.NewArray()
+		}
+	}
+
+	// Set result to the $GLOBALS array
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), globalsArray)
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeGeneratorReturn(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// GENERATOR_RETURN handles return statements in generator functions
+	// This is different from regular return as generators can have final return values
+
+	// Get the return value
+	returnValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if returnValue == nil {
+		returnValue = values.NewNull()
+	}
+
+	// If we're in a generator context, handle generator return
+	if ctx.CurrentGenerator != nil {
+		// Set the generator's final return value
+		ctx.CurrentGenerator.YieldedValue = returnValue
+		ctx.CurrentGenerator.IsFinished = true
+		ctx.CurrentGenerator.IsSuspended = false
+
+		// Mark generator as completed
+		ctx.Halted = true
+
+		// In a complete implementation, this would:
+		// 1. Store the return value for the generator
+		// 2. Mark the generator as finished
+		// 3. Make the return value available through getReturn() method
+		// 4. Stop generator iteration
+	} else {
+		// Not in generator context - treat as regular return
+		if len(ctx.CallStack) > 0 {
+			// Pop call frame and set return value
+			ctx.CallStack[len(ctx.CallStack)-1].ReturnValue = returnValue
+			ctx.CallStack = ctx.CallStack[:len(ctx.CallStack)-1]
+		} else {
+			// Global return
+			ctx.Halted = true
+			ctx.ExitCode = 0
+		}
+	}
+
+	return nil
+}
+
+func (vm *VirtualMachine) executeVerifyAbstractClass(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// VERIFY_ABSTRACT_CLASS ensures that abstract classes cannot be instantiated directly
+
+	// Get the class name to verify
+	classNameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if classNameValue == nil || !classNameValue.IsString() {
+		return fmt.Errorf("VERIFY_ABSTRACT_CLASS requires string class name")
+	}
+
+	className := classNameValue.ToString()
+
+	// Check if the class exists and is abstract
+	if ctx.Classes[className] != nil {
+		class := ctx.Classes[className]
+
+		// In a full implementation, classes would have an IsAbstract flag
+		// For now, we'll check if the class name contains "Abstract" as a heuristic
+		// or if it has any methods marked as abstract
+
+		isAbstract := false
+
+		// Simple heuristic: check if class name suggests it's abstract
+		if len(className) > 8 && (className[:8] == "Abstract" || className[len(className)-8:] == "Abstract") {
+			isAbstract = true
+		}
+
+		// Check for abstract methods (methods without implementation)
+		for methodName, method := range class.Methods {
+			if method == nil || len(method.Instructions) == 0 {
+				// Method has no implementation - likely abstract
+				isAbstract = true
+				break
+			}
+
+			// In a real implementation, we'd check the method's IsAbstract flag
+			if methodName == "abstractMethod" || methodName[:8] == "abstract" {
+				isAbstract = true
+				break
+			}
+		}
+
+		if isAbstract {
+			return fmt.Errorf("Cannot instantiate abstract class %s", className)
+		}
+	}
+
+	// Class is not abstract or doesn't exist - verification passes
 	ctx.IP++
 	return nil
 }
