@@ -659,6 +659,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_INIT_CTOR_CALL:
 		return vm.executeInitConstructorCall(ctx, inst)
 
+	// Static property operations
+	case opcodes.OP_FETCH_STATIC_PROP_IS:
+		return vm.executeFetchStaticPropertyIsset(ctx, inst)
+	case opcodes.OP_FETCH_STATIC_PROP_RW:
+		return vm.executeFetchStaticPropertyReadWrite(ctx, inst)
+	case opcodes.OP_FETCH_STATIC_PROP_UNSET:
+		return vm.executeFetchStaticPropertyUnset(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -5163,6 +5171,122 @@ func (vm *VirtualMachine) executeInitConstructorCall(ctx *ExecutionContext, inst
 	// 3. Prepare the call frame for method execution
 	// 4. Set up argument receiving
 
+	ctx.IP++
+	return nil
+}
+
+// Static property operations implementation
+
+func (vm *VirtualMachine) executeFetchStaticPropertyIsset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the class name
+	classNameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if classNameValue == nil || !classNameValue.IsString() {
+		return fmt.Errorf("FETCH_STATIC_PROP_IS requires string class name")
+	}
+
+	// Get the property name
+	propNameValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if propNameValue == nil || !propNameValue.IsString() {
+		return fmt.Errorf("FETCH_STATIC_PROP_IS requires string property name")
+	}
+
+	className := classNameValue.ToString()
+	propName := propNameValue.ToString()
+
+	// Check if static property exists and is set
+	isset := false
+	if ctx.Classes[className] != nil {
+		if prop := ctx.Classes[className].Properties[propName]; prop != nil {
+			if prop.IsStatic && prop.DefaultValue != nil && !prop.DefaultValue.IsNull() {
+				isset = true
+			}
+		}
+	}
+
+	// Set result
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(isset))
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeFetchStaticPropertyReadWrite(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the class name
+	classNameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if classNameValue == nil || !classNameValue.IsString() {
+		return fmt.Errorf("FETCH_STATIC_PROP_RW requires string class name")
+	}
+
+	// Get the property name
+	propNameValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if propNameValue == nil || !propNameValue.IsString() {
+		return fmt.Errorf("FETCH_STATIC_PROP_RW requires string property name")
+	}
+
+	className := classNameValue.ToString()
+	propName := propNameValue.ToString()
+
+	// Find or create the class
+	if ctx.Classes[className] == nil {
+		ctx.Classes[className] = &Class{
+			Name:       className,
+			Properties: make(map[string]*Property),
+			Methods:    make(map[string]*Function),
+			Constants:  make(map[string]*values.Value),
+		}
+	}
+
+	// Find or create the static property for read-write access
+	var propValue *values.Value
+	if ctx.Classes[className].Properties[propName] == nil {
+		// Create property if it doesn't exist
+		propValue = values.NewNull()
+		ctx.Classes[className].Properties[propName] = &Property{
+			Name:         propName,
+			DefaultValue: propValue,
+			Visibility:   "public",
+			IsStatic:     true,
+		}
+	} else {
+		propValue = ctx.Classes[className].Properties[propName].DefaultValue
+		if propValue == nil {
+			propValue = values.NewNull()
+			ctx.Classes[className].Properties[propName].DefaultValue = propValue
+		}
+	}
+
+	// Set result to the property value for read-write access
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), propValue)
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeFetchStaticPropertyUnset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the class name
+	classNameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if classNameValue == nil || !classNameValue.IsString() {
+		return fmt.Errorf("FETCH_STATIC_PROP_UNSET requires string class name")
+	}
+
+	// Get the property name
+	propNameValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if propNameValue == nil || !propNameValue.IsString() {
+		return fmt.Errorf("FETCH_STATIC_PROP_UNSET requires string property name")
+	}
+
+	className := classNameValue.ToString()
+	propName := propNameValue.ToString()
+
+	// Remove the static property if it exists
+	if ctx.Classes[className] != nil {
+		if ctx.Classes[className].Properties[propName] != nil {
+			// Set property value to null (PHP unset behavior for static properties)
+			ctx.Classes[className].Properties[propName].DefaultValue = values.NewNull()
+			// Or completely remove the property
+			delete(ctx.Classes[className].Properties, propName)
+		}
+	}
+
+	// unset() doesn't return a value
 	ctx.IP++
 	return nil
 }

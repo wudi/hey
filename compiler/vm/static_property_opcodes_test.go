@@ -7,41 +7,56 @@ import (
 	"github.com/wudi/php-parser/compiler/values"
 )
 
-func TestAssignStaticPropertyOpcode(t *testing.T) {
+func TestFetchStaticPropertyIssetOpcode(t *testing.T) {
 	tests := []struct {
-		name           string
-		className      string
-		propertyName   string
-		assignValue    *values.Value
-		expectedResult *values.Value
+		name        string
+		className   string
+		propName    string
+		setupClass  bool
+		setupProp   bool
+		propValue   *values.Value
+		expectedSet bool
+		expectError bool
 	}{
 		{
-			name:           "assign string to static property",
-			className:      "TestClass",
-			propertyName:   "testProp",
-			assignValue:    values.NewString("hello world"),
-			expectedResult: values.NewString("hello world"),
+			name:        "property exists and is set",
+			className:   "TestClass",
+			propName:    "staticProp",
+			setupClass:  true,
+			setupProp:   true,
+			propValue:   values.NewString("test_value"),
+			expectedSet: true,
+			expectError: false,
 		},
 		{
-			name:           "assign int to static property",
-			className:      "MathClass",
-			propertyName:   "counter",
-			assignValue:    values.NewInt(42),
-			expectedResult: values.NewInt(42),
+			name:        "property exists but is null",
+			className:   "TestClass",
+			propName:    "nullProp",
+			setupClass:  true,
+			setupProp:   true,
+			propValue:   values.NewNull(),
+			expectedSet: false,
+			expectError: false,
 		},
 		{
-			name:           "assign bool to static property",
-			className:      "ConfigClass",
-			propertyName:   "enabled",
-			assignValue:    values.NewBool(true),
-			expectedResult: values.NewBool(true),
+			name:        "property doesn't exist",
+			className:   "TestClass",
+			propName:    "nonExistentProp",
+			setupClass:  true,
+			setupProp:   false,
+			propValue:   nil,
+			expectedSet: false,
+			expectError: false,
 		},
 		{
-			name:           "assign null to static property",
-			className:      "TestClass",
-			propertyName:   "nullable",
-			assignValue:    values.NewNull(),
-			expectedResult: values.NewNull(),
+			name:        "class doesn't exist",
+			className:   "NonExistentClass",
+			propName:    "anyProp",
+			setupClass:  false,
+			setupProp:   false,
+			propValue:   nil,
+			expectedSet: false,
+			expectError: false,
 		},
 	}
 
@@ -50,254 +65,302 @@ func TestAssignStaticPropertyOpcode(t *testing.T) {
 			vm := NewVirtualMachine()
 			ctx := NewExecutionContext()
 
-			// Setup operands: class name, property name, and value
-			ctx.Temporaries[1] = values.NewString(tt.className)
-			ctx.Temporaries[2] = values.NewString(tt.propertyName)
-			ctx.Temporaries[3] = tt.assignValue
-
-			// Create ASSIGN_STATIC_PROP instruction
-			inst := &opcodes.Instruction{
-				Opcode: opcodes.OP_ASSIGN_STATIC_PROP,
-				Op1:    1, // Class name
-				Op2:    2, // Property name
-				Result: 3, // Value to assign
-			}
-			inst.OpType1, inst.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
-
-			err := vm.executeAssignStaticProperty(ctx, inst)
-			if err != nil {
-				t.Fatalf("executeAssignStaticProperty failed: %v", err)
-			}
-
-			// Check that the class was created
-			if ctx.Classes[tt.className] == nil {
-				t.Fatal("Class should have been created")
-			}
-
-			// Check that the property was created
-			prop := ctx.Classes[tt.className].Properties[tt.propertyName]
-			if prop == nil {
-				t.Fatal("Property should have been created")
-			}
-
-			// Check that the property is marked as static
-			if !prop.IsStatic {
-				t.Error("Property should be marked as static")
-			}
-
-			// Check that the property has correct value
-			if prop.DefaultValue == nil {
-				t.Fatal("Property value should not be nil")
-			}
-
-			// Compare values based on type
-			if tt.expectedResult.IsNull() {
-				if !prop.DefaultValue.IsNull() {
-					t.Errorf("Expected null value, got %v", prop.DefaultValue)
-				}
-			} else if tt.expectedResult.IsString() {
-				if !prop.DefaultValue.IsString() || prop.DefaultValue.ToString() != tt.expectedResult.ToString() {
-					t.Errorf("Expected string %q, got %v", tt.expectedResult.ToString(), prop.DefaultValue)
-				}
-			} else if tt.expectedResult.IsInt() {
-				if !prop.DefaultValue.IsInt() || prop.DefaultValue.ToInt() != tt.expectedResult.ToInt() {
-					t.Errorf("Expected int %d, got %v", tt.expectedResult.ToInt(), prop.DefaultValue)
-				}
-			} else if tt.expectedResult.IsBool() {
-				if !prop.DefaultValue.IsBool() || prop.DefaultValue.ToBool() != tt.expectedResult.ToBool() {
-					t.Errorf("Expected bool %t, got %v", tt.expectedResult.ToBool(), prop.DefaultValue)
-				}
-			}
-		})
-	}
-}
-
-func TestAssignStaticPropertyUpdate(t *testing.T) {
-	vm := NewVirtualMachine()
-	ctx := NewExecutionContext()
-
-	className := "TestClass"
-	propertyName := "updateProp"
-
-	// First assignment
-	ctx.Temporaries[1] = values.NewString(className)
-	ctx.Temporaries[2] = values.NewString(propertyName)
-	ctx.Temporaries[3] = values.NewString("initial")
-
-	inst := &opcodes.Instruction{
-		Opcode: opcodes.OP_ASSIGN_STATIC_PROP,
-		Op1:    1,
-		Op2:    2,
-		Result: 3,
-	}
-	inst.OpType1, inst.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
-
-	err := vm.executeAssignStaticProperty(ctx, inst)
-	if err != nil {
-		t.Fatalf("First assignment failed: %v", err)
-	}
-
-	// Check first assignment
-	if ctx.Classes[className].Properties[propertyName].DefaultValue.ToString() != "initial" {
-		t.Errorf("Expected 'initial', got %v", ctx.Classes[className].Properties[propertyName].DefaultValue)
-	}
-
-	// Second assignment to same property
-	ctx.Temporaries[3] = values.NewString("updated")
-
-	err = vm.executeAssignStaticProperty(ctx, inst)
-	if err != nil {
-		t.Fatalf("Second assignment failed: %v", err)
-	}
-
-	// Check that property was updated
-	if ctx.Classes[className].Properties[propertyName].DefaultValue.ToString() != "updated" {
-		t.Errorf("Expected 'updated', got %v", ctx.Classes[className].Properties[propertyName].DefaultValue)
-	}
-}
-
-func TestAssignStaticPropertyOpOpcode(t *testing.T) {
-	tests := []struct {
-		name           string
-		initialValue   *values.Value
-		operandValue   *values.Value
-		expectedResult interface{}
-	}{
-		{
-			name:           "int addition",
-			initialValue:   values.NewInt(10),
-			operandValue:   values.NewInt(5),
-			expectedResult: int64(15),
-		},
-		{
-			name:           "string concatenation",
-			initialValue:   values.NewString("hello"),
-			operandValue:   values.NewString(" world"),
-			expectedResult: "hello world",
-		},
-		{
-			name:           "float addition",
-			initialValue:   values.NewFloat(3.14),
-			operandValue:   values.NewFloat(2.86),
-			expectedResult: 6.0,
-		},
-		{
-			name:           "mixed int and float addition",
-			initialValue:   values.NewInt(10),
-			operandValue:   values.NewFloat(5.5),
-			expectedResult: 15.5,
-		},
-		{
-			name:           "null property initialization",
-			initialValue:   nil, // Property doesn't exist
-			operandValue:   values.NewInt(42),
-			expectedResult: int64(42), // null + 42 = 42
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			vm := NewVirtualMachine()
-			ctx := NewExecutionContext()
-
-			className := "TestClass"
-			propertyName := "compoundProp"
-
-			// Setup class and property if initial value is provided
-			if tt.initialValue != nil {
-				ctx.Classes[className] = &Class{
-					Name:       className,
+			// Setup class if needed
+			if tt.setupClass {
+				ctx.Classes[tt.className] = &Class{
+					Name:       tt.className,
 					Properties: make(map[string]*Property),
 					Methods:    make(map[string]*Function),
 					Constants:  make(map[string]*values.Value),
 				}
-				ctx.Classes[className].Properties[propertyName] = &Property{
-					Name:         propertyName,
-					DefaultValue: tt.initialValue,
-					Visibility:   "public",
-					IsStatic:     true,
+
+				// Setup property if needed
+				if tt.setupProp {
+					ctx.Classes[tt.className].Properties[tt.propName] = &Property{
+						Name:         tt.propName,
+						DefaultValue: tt.propValue,
+						Visibility:   "public",
+						IsStatic:     true,
+					}
 				}
 			}
 
-			// Setup operands
-			ctx.Temporaries[1] = values.NewString(className)
-			ctx.Temporaries[2] = values.NewString(propertyName)
-			ctx.Temporaries[3] = tt.operandValue
+			// Setup instruction operands
+			ctx.Temporaries[1] = values.NewString(tt.className)
+			ctx.Temporaries[2] = values.NewString(tt.propName)
 
-			// Create ASSIGN_STATIC_PROP_OP instruction
+			// Create FETCH_STATIC_PROP_IS instruction
 			inst := &opcodes.Instruction{
-				Opcode: opcodes.OP_ASSIGN_STATIC_PROP_OP,
+				Opcode: opcodes.OP_FETCH_STATIC_PROP_IS,
 				Op1:    1, // Class name
 				Op2:    2, // Property name
-				Result: 3, // Operand value
+				Result: 3, // Result location
 			}
 			inst.OpType1, inst.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
 
-			err := vm.executeAssignStaticPropertyOp(ctx, inst)
+			err := vm.executeFetchStaticPropertyIsset(ctx, inst)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				return
+			}
+
 			if err != nil {
-				t.Fatalf("executeAssignStaticPropertyOp failed: %v", err)
+				t.Fatalf("executeFetchStaticPropertyIsset failed: %v", err)
 			}
 
 			// Check result
-			prop := ctx.Classes[className].Properties[propertyName]
-			if prop == nil {
-				t.Fatal("Property should exist after operation")
-			}
-
-			result := prop.DefaultValue
+			result := ctx.Temporaries[3]
 			if result == nil {
-				t.Fatal("Property value should not be nil")
+				t.Fatal("Result should not be nil")
 			}
 
-			// Check result value based on expected type
-			switch expected := tt.expectedResult.(type) {
-			case int64:
-				if !result.IsInt() || result.ToInt() != expected {
-					t.Errorf("Expected int %d, got %v", expected, result)
-				}
-			case string:
-				if !result.IsString() || result.ToString() != expected {
-					t.Errorf("Expected string %q, got %v", expected, result)
-				}
-			case float64:
-				if !result.IsFloat() || result.ToFloat() != expected {
-					t.Errorf("Expected float %f, got %v", expected, result)
-				}
-			default:
-				t.Fatalf("Unknown expected result type: %T", expected)
+			if !result.IsBool() {
+				t.Errorf("Expected boolean result, got %T", result.Data)
+			}
+
+			if result.ToBool() != tt.expectedSet {
+				t.Errorf("Expected isset=%t, got isset=%t", tt.expectedSet, result.ToBool())
 			}
 		})
 	}
 }
 
-func TestAssignStaticPropertyErrors(t *testing.T) {
+func TestFetchStaticPropertyReadWriteOpcode(t *testing.T) {
+	tests := []struct {
+		name         string
+		className    string
+		propName     string
+		setupClass   bool
+		setupProp    bool
+		initialValue *values.Value
+		expectError  bool
+	}{
+		{
+			name:         "existing property read-write",
+			className:    "TestClass",
+			propName:     "existingProp",
+			setupClass:   true,
+			setupProp:    true,
+			initialValue: values.NewString("initial_value"),
+			expectError:  false,
+		},
+		{
+			name:         "non-existing property - should create",
+			className:    "TestClass",
+			propName:     "newProp",
+			setupClass:   true,
+			setupProp:    false,
+			initialValue: nil,
+			expectError:  false,
+		},
+		{
+			name:         "non-existing class - should create",
+			className:    "NewClass",
+			propName:     "newProp",
+			setupClass:   false,
+			setupProp:    false,
+			initialValue: nil,
+			expectError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vm := NewVirtualMachine()
+			ctx := NewExecutionContext()
+
+			// Setup class if needed
+			if tt.setupClass {
+				ctx.Classes[tt.className] = &Class{
+					Name:       tt.className,
+					Properties: make(map[string]*Property),
+					Methods:    make(map[string]*Function),
+					Constants:  make(map[string]*values.Value),
+				}
+
+				// Setup property if needed
+				if tt.setupProp {
+					ctx.Classes[tt.className].Properties[tt.propName] = &Property{
+						Name:         tt.propName,
+						DefaultValue: tt.initialValue,
+						Visibility:   "public",
+						IsStatic:     true,
+					}
+				}
+			}
+
+			// Setup instruction operands
+			ctx.Temporaries[1] = values.NewString(tt.className)
+			ctx.Temporaries[2] = values.NewString(tt.propName)
+
+			// Create FETCH_STATIC_PROP_RW instruction
+			inst := &opcodes.Instruction{
+				Opcode: opcodes.OP_FETCH_STATIC_PROP_RW,
+				Op1:    1, // Class name
+				Op2:    2, // Property name
+				Result: 3, // Result location
+			}
+			inst.OpType1, inst.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
+
+			err := vm.executeFetchStaticPropertyReadWrite(ctx, inst)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("executeFetchStaticPropertyReadWrite failed: %v", err)
+			}
+
+			// Check result
+			result := ctx.Temporaries[3]
+			if result == nil {
+				t.Fatal("Result should not be nil")
+			}
+
+			// Check that class and property were created if needed
+			if ctx.Classes[tt.className] == nil {
+				t.Errorf("Class %s should exist", tt.className)
+			}
+
+			if ctx.Classes[tt.className].Properties[tt.propName] == nil {
+				t.Errorf("Property %s should exist", tt.propName)
+			}
+
+			// Check that the property is marked as static
+			prop := ctx.Classes[tt.className].Properties[tt.propName]
+			if !prop.IsStatic {
+				t.Error("Property should be marked as static")
+			}
+
+			// Check that result matches expected value
+			if tt.initialValue != nil {
+				if !valuesEqualForTest(result, tt.initialValue) {
+					t.Errorf("Expected result %v, got %v", tt.initialValue, result)
+				}
+			} else {
+				// Should be null for newly created properties
+				if !result.IsNull() {
+					t.Errorf("Expected null for new property, got %v", result)
+				}
+			}
+		})
+	}
+}
+
+func TestFetchStaticPropertyUnsetOpcode(t *testing.T) {
 	vm := NewVirtualMachine()
 	ctx := NewExecutionContext()
 
-	// Test with non-string class name
+	// Setup class with property
+	className := "TestClass"
+	propName := "testProp"
+	ctx.Classes[className] = &Class{
+		Name:       className,
+		Properties: make(map[string]*Property),
+		Methods:    make(map[string]*Function),
+		Constants:  make(map[string]*values.Value),
+	}
+	ctx.Classes[className].Properties[propName] = &Property{
+		Name:         propName,
+		DefaultValue: values.NewString("test_value"),
+		Visibility:   "public",
+		IsStatic:     true,
+	}
+
+	// Setup instruction operands
+	ctx.Temporaries[1] = values.NewString(className)
+	ctx.Temporaries[2] = values.NewString(propName)
+
+	// Create FETCH_STATIC_PROP_UNSET instruction
+	inst := &opcodes.Instruction{
+		Opcode: opcodes.OP_FETCH_STATIC_PROP_UNSET,
+		Op1:    1, // Class name
+		Op2:    2, // Property name
+		Result: 0, // Unused
+	}
+	inst.OpType1, inst.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_UNUSED)
+
+	err := vm.executeFetchStaticPropertyUnset(ctx, inst)
+	if err != nil {
+		t.Fatalf("executeFetchStaticPropertyUnset failed: %v", err)
+	}
+
+	// Check that property was removed
+	if _, exists := ctx.Classes[className].Properties[propName]; exists {
+		t.Error("Property should have been removed")
+	}
+}
+
+func TestStaticPropertyOpcodeErrors(t *testing.T) {
+	vm := NewVirtualMachine()
+	ctx := NewExecutionContext()
+
+	// Test FETCH_STATIC_PROP_IS with non-string class name
 	ctx.Temporaries[1] = values.NewInt(123) // Invalid class name
 	ctx.Temporaries[2] = values.NewString("prop")
-	ctx.Temporaries[3] = values.NewString("value")
 
-	inst := &opcodes.Instruction{
-		Opcode: opcodes.OP_ASSIGN_STATIC_PROP,
+	inst1 := &opcodes.Instruction{
+		Opcode: opcodes.OP_FETCH_STATIC_PROP_IS,
 		Op1:    1,
 		Op2:    2,
 		Result: 3,
 	}
-	inst.OpType1, inst.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
+	inst1.OpType1, inst1.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
 
-	err := vm.executeAssignStaticProperty(ctx, inst)
+	err := vm.executeFetchStaticPropertyIsset(ctx, inst1)
 	if err == nil {
-		t.Error("Expected error for non-string class name")
+		t.Error("Expected error for non-string class name in FETCH_STATIC_PROP_IS")
 	}
 
-	// Test with non-string property name
+	// Test FETCH_STATIC_PROP_RW with non-string property name
 	ctx.Temporaries[1] = values.NewString("TestClass")
 	ctx.Temporaries[2] = values.NewInt(456) // Invalid property name
 
-	err = vm.executeAssignStaticProperty(ctx, inst)
+	inst2 := &opcodes.Instruction{
+		Opcode: opcodes.OP_FETCH_STATIC_PROP_RW,
+		Op1:    1,
+		Op2:    2,
+		Result: 3,
+	}
+	inst2.OpType1, inst2.OpType2 = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR, opcodes.IS_TMP_VAR)
+
+	err = vm.executeFetchStaticPropertyReadWrite(ctx, inst2)
 	if err == nil {
-		t.Error("Expected error for non-string property name")
+		t.Error("Expected error for non-string property name in FETCH_STATIC_PROP_RW")
+	}
+}
+
+// Helper function to compare values for testing
+func valuesEqualForTest(a, b *values.Value) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Type != b.Type {
+		return false
+	}
+
+	switch a.Type {
+	case values.TypeNull:
+		return true
+	case values.TypeBool:
+		return a.ToBool() == b.ToBool()
+	case values.TypeInt:
+		return a.ToInt() == b.ToInt()
+	case values.TypeFloat:
+		return a.ToFloat() == b.ToFloat()
+	case values.TypeString:
+		return a.ToString() == b.ToString()
+	default:
+		return a == b
 	}
 }
