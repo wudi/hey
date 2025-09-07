@@ -137,7 +137,7 @@ func (gen *AMD64CodeGenerator) GetTargetArch() string {
 
 // SupportsOpcode 检查是否支持指定的opcode
 func (gen *AMD64CodeGenerator) SupportsOpcode(opcode opcodes.Opcode) bool {
-	// 支持基本的算术和控制流操作
+	// 目前支持基本的算术和控制流操作
 	switch opcode {
 	case opcodes.OP_ADD, opcodes.OP_SUB, opcodes.OP_MUL, opcodes.OP_DIV:
 		return true
@@ -146,13 +146,6 @@ func (gen *AMD64CodeGenerator) SupportsOpcode(opcode opcodes.Opcode) bool {
 	case opcodes.OP_ASSIGN, opcodes.OP_FETCH_R, opcodes.OP_FETCH_W:
 		return true
 	case opcodes.OP_RETURN, opcodes.OP_NOP:
-		return true
-	// 增加更多支持的指令
-	case opcodes.OP_BOOL, opcodes.OP_CAST:
-		return true
-	case opcodes.OP_IS_EQUAL, opcodes.OP_IS_NOT_EQUAL:
-		return true
-	case opcodes.OP_IS_SMALLER, opcodes.OP_IS_SMALLER_OR_EQUAL:
 		return true
 	default:
 		return false
@@ -178,10 +171,6 @@ func (gen *AMD64CodeGenerator) compileInstruction(inst *opcodes.Instruction, ind
 		return gen.compileJmpNZ(inst)
 	case opcodes.OP_ASSIGN:
 		return gen.compileAssign(inst)
-	case opcodes.OP_FETCH_R:
-		return gen.compileFetchR(inst)
-	case opcodes.OP_FETCH_W:
-		return gen.compileFetchW(inst)
 	case opcodes.OP_RETURN:
 		return gen.compileReturn(inst)
 	case opcodes.OP_NOP:
@@ -221,97 +210,23 @@ func (gen *AMD64CodeGenerator) emitEpilog() error {
 	return nil
 }
 
-// 基本指令编译方法（增强实现）
+// 基本指令编译方法（简化实现）
 func (gen *AMD64CodeGenerator) compileAdd(inst *opcodes.Instruction) error {
-	// 获取操作数寄存器
-	srcReg1, err := gen.getOperandRegister(inst.Op1, inst.OpType1)
-	if err != nil {
-		return fmt.Errorf("failed to get src1 register: %v", err)
-	}
-
-	srcReg2, err := gen.getOperandRegister(inst.Op2, inst.OpType2)
-	if err != nil {
-		return fmt.Errorf("failed to get src2 register: %v", err)
-	}
-
-	dstReg, err := gen.allocateResultRegister(inst.Result)
-	if err != nil {
-		return fmt.Errorf("failed to allocate result register: %v", err)
-	}
-
-	// 生成实际的ADD指令
-	// mov dst, src1
-	if err := gen.emitMov(dstReg, srcReg1); err != nil {
-		return err
-	}
-
-	// add dst, src2
-	if err := gen.emitAdd(dstReg, srcReg2); err != nil {
-		return err
-	}
-
+	// 这里实现ADD指令的机器码生成
+	// 简化版本：生成 add rax, rbx
+	gen.emitBytes([]byte{0x48, 0x01, 0xd8})
 	return nil
 }
 
 func (gen *AMD64CodeGenerator) compileSub(inst *opcodes.Instruction) error {
-	// 获取操作数寄存器
-	srcReg1, err := gen.getOperandRegister(inst.Op1, inst.OpType1)
-	if err != nil {
-		return fmt.Errorf("failed to get src1 register: %v", err)
-	}
-
-	srcReg2, err := gen.getOperandRegister(inst.Op2, inst.OpType2)
-	if err != nil {
-		return fmt.Errorf("failed to get src2 register: %v", err)
-	}
-
-	dstReg, err := gen.allocateResultRegister(inst.Result)
-	if err != nil {
-		return fmt.Errorf("failed to allocate result register: %v", err)
-	}
-
-	// 生成SUB指令: dst = src1 - src2
-	// mov dst, src1
-	if err := gen.emitMov(dstReg, srcReg1); err != nil {
-		return err
-	}
-
-	// sub dst, src2
-	if err := gen.emitSub(dstReg, srcReg2); err != nil {
-		return err
-	}
-
+	// 生成 sub rax, rbx
+	gen.emitBytes([]byte{0x48, 0x29, 0xd8})
 	return nil
 }
 
 func (gen *AMD64CodeGenerator) compileMul(inst *opcodes.Instruction) error {
-	// 获取操作数寄存器
-	srcReg1, err := gen.getOperandRegister(inst.Op1, inst.OpType1)
-	if err != nil {
-		return fmt.Errorf("failed to get src1 register: %v", err)
-	}
-
-	srcReg2, err := gen.getOperandRegister(inst.Op2, inst.OpType2)
-	if err != nil {
-		return fmt.Errorf("failed to get src2 register: %v", err)
-	}
-
-	dstReg, err := gen.allocateResultRegister(inst.Result)
-	if err != nil {
-		return fmt.Errorf("failed to allocate result register: %v", err)
-	}
-
-	// 生成MUL指令: dst = src1 * src2
-	// mov dst, src1
-	if err := gen.emitMov(dstReg, srcReg1); err != nil {
-		return err
-	}
-
-	// imul dst, src2
-	if err := gen.emitIMul(dstReg, srcReg2); err != nil {
-		return err
-	}
-
+	// 生成 imul rax, rbx
+	gen.emitBytes([]byte{0x48, 0x0f, 0xaf, 0xc3})
 	return nil
 }
 
@@ -416,21 +331,15 @@ func (gen *AMD64CodeGenerator) fixupJumps() error {
 
 // 分配可执行内存（平台相关）
 func (gen *AMD64CodeGenerator) allocateExecutableMemory(code []byte) ([]byte, error) {
-	// 使用真正的可执行内存分配
-	execMem, err := AllocateExecutableMemory(len(code))
-	if err != nil {
-		return nil, fmt.Errorf("failed to allocate executable memory: %v", err)
-	}
+	// 这里需要使用系统调用分配可执行内存
+	// 在实际实现中需要使用mmap或VirtualAlloc
 
-	// 将机器码写入可执行内存
-	err = execMem.WriteBytes(0, code)
-	if err != nil {
-		execMem.Free()
-		return nil, fmt.Errorf("failed to write machine code: %v", err)
-	}
+	// 简化版本：直接返回代码（仅用于演示）
+	// 注意：这在实际运行中是不安全的
+	executableCode := make([]byte, len(code))
+	copy(executableCode, code)
 
-	// 返回可执行内存的数据切片
-	return execMem.Data, nil
+	return executableCode, nil
 }
 
 // 寄存器分配器方法
@@ -468,193 +377,4 @@ func (ra *RegisterAllocator) freeRegister(reg string) {
 		delete(ra.regToVar, reg)
 		delete(ra.varToReg, varID)
 	}
-}
-
-// 增强的指令编码方法
-
-// getOperandRegister 获取操作数对应的寄存器
-func (gen *AMD64CodeGenerator) getOperandRegister(operand uint32, opType byte) (string, error) {
-	switch opcodes.OpType(opType) {
-	case opcodes.IS_VAR:
-		// 变量 - 分配寄存器
-		return gen.regAllocator.allocateRegister(operand)
-	case opcodes.IS_TMP_VAR:
-		// 临时变量 - 分配寄存器
-		return gen.regAllocator.allocateRegister(operand + 1000) // 偏移避免冲突
-	case opcodes.IS_CONST:
-		// 常量 - 加载到寄存器
-		reg, err := gen.regAllocator.allocateRegister(operand + 2000) // 偏移避免冲突
-		if err != nil {
-			return "", err
-		}
-		// 加载常量到寄存器
-		err = gen.emitLoadConstant(reg, int64(operand))
-		return reg, err
-	default:
-		return "", fmt.Errorf("unsupported operand type: %d", opType)
-	}
-}
-
-// allocateResultRegister 为结果分配寄存器
-func (gen *AMD64CodeGenerator) allocateResultRegister(result uint32) (string, error) {
-	return gen.regAllocator.allocateRegister(result + 3000) // 偏移避免冲突
-}
-
-// 具体指令编码方法
-
-// emitMov 生成MOV指令 (mov dst, src)
-func (gen *AMD64CodeGenerator) emitMov(dst, src string) error {
-	dstCode := gen.getRegisterCode(dst)
-	srcCode := gen.getRegisterCode(src)
-
-	if dstCode == -1 || srcCode == -1 {
-		return fmt.Errorf("invalid register: dst=%s, src=%s", dst, src)
-	}
-
-	// REX.W + ModR/M
-	gen.emitByte(0x48)                                        // REX.W
-	gen.emitByte(0x89)                                        // MOV r/m64, r64
-	gen.emitByte(0xc0 | (byte(srcCode) << 3) | byte(dstCode)) // ModR/M
-
-	return nil
-}
-
-// emitAdd 生成ADD指令 (add dst, src)
-func (gen *AMD64CodeGenerator) emitAdd(dst, src string) error {
-	dstCode := gen.getRegisterCode(dst)
-	srcCode := gen.getRegisterCode(src)
-
-	if dstCode == -1 || srcCode == -1 {
-		return fmt.Errorf("invalid register: dst=%s, src=%s", dst, src)
-	}
-
-	// REX.W + ADD
-	gen.emitByte(0x48)                                        // REX.W
-	gen.emitByte(0x01)                                        // ADD r/m64, r64
-	gen.emitByte(0xc0 | (byte(srcCode) << 3) | byte(dstCode)) // ModR/M
-
-	return nil
-}
-
-// emitSub 生成SUB指令 (sub dst, src)
-func (gen *AMD64CodeGenerator) emitSub(dst, src string) error {
-	dstCode := gen.getRegisterCode(dst)
-	srcCode := gen.getRegisterCode(src)
-
-	if dstCode == -1 || srcCode == -1 {
-		return fmt.Errorf("invalid register: dst=%s, src=%s", dst, src)
-	}
-
-	// REX.W + SUB
-	gen.emitByte(0x48)                                        // REX.W
-	gen.emitByte(0x29)                                        // SUB r/m64, r64
-	gen.emitByte(0xc0 | (byte(srcCode) << 3) | byte(dstCode)) // ModR/M
-
-	return nil
-}
-
-// emitIMul 生成IMUL指令 (imul dst, src)
-func (gen *AMD64CodeGenerator) emitIMul(dst, src string) error {
-	dstCode := gen.getRegisterCode(dst)
-	srcCode := gen.getRegisterCode(src)
-
-	if dstCode == -1 || srcCode == -1 {
-		return fmt.Errorf("invalid register: dst=%s, src=%s", dst, src)
-	}
-
-	// REX.W + IMUL
-	gen.emitByte(0x48)                                        // REX.W
-	gen.emitByte(0x0f)                                        // Two-byte opcode prefix
-	gen.emitByte(0xaf)                                        // IMUL r64, r/m64
-	gen.emitByte(0xc0 | (byte(dstCode) << 3) | byte(srcCode)) // ModR/M
-
-	return nil
-}
-
-// emitLoadConstant 加载常量到寄存器
-func (gen *AMD64CodeGenerator) emitLoadConstant(reg string, value int64) error {
-	regCode := gen.getRegisterCode(reg)
-	if regCode == -1 {
-		return fmt.Errorf("invalid register: %s", reg)
-	}
-
-	// MOV r64, imm64
-	gen.emitByte(0x48)                 // REX.W
-	gen.emitByte(0xb8 + byte(regCode)) // MOV r64, imm64
-
-	// 小端序64位立即数
-	gen.emitByte(byte(value))
-	gen.emitByte(byte(value >> 8))
-	gen.emitByte(byte(value >> 16))
-	gen.emitByte(byte(value >> 24))
-	gen.emitByte(byte(value >> 32))
-	gen.emitByte(byte(value >> 40))
-	gen.emitByte(byte(value >> 48))
-	gen.emitByte(byte(value >> 56))
-
-	return nil
-}
-
-// getRegisterCode 获取寄存器的编码
-func (gen *AMD64CodeGenerator) getRegisterCode(reg string) int {
-	switch reg {
-	case RAX:
-		return 0
-	case RCX:
-		return 1
-	case RDX:
-		return 2
-	case RBX:
-		return 3
-	case RSP:
-		return 4
-	case RBP:
-		return 5
-	case RSI:
-		return 6
-	case RDI:
-		return 7
-	case R8:
-		return 0 // R8-R15 need REX.B
-	case R9:
-		return 1
-	case R10:
-		return 2
-	case R11:
-		return 3
-	case R12:
-		return 4
-	case R13:
-		return 5
-	case R14:
-		return 6
-	case R15:
-		return 7
-	default:
-		return -1
-	}
-}
-
-// compileFetchR 编译FETCH_R指令
-func (gen *AMD64CodeGenerator) compileFetchR(inst *opcodes.Instruction) error {
-	// FETCH_R 是读取变量值
-	srcReg, err := gen.getOperandRegister(inst.Op1, inst.OpType1)
-	if err != nil {
-		return fmt.Errorf("failed to get source register: %v", err)
-	}
-
-	dstReg, err := gen.allocateResultRegister(inst.Result)
-	if err != nil {
-		return fmt.Errorf("failed to allocate result register: %v", err)
-	}
-
-	// 简单的移动操作
-	return gen.emitMov(dstReg, srcReg)
-}
-
-// compileFetchW 编译FETCH_W指令
-func (gen *AMD64CodeGenerator) compileFetchW(inst *opcodes.Instruction) error {
-	// FETCH_W 是获取变量引用用于写入
-	// 这里简化处理，与 FETCH_R 相同
-	return gen.compileFetchR(inst)
 }
