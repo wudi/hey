@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/wudi/php-parser/compiler/jit"
 	"github.com/wudi/php-parser/compiler/opcodes"
 	runtimeRegistry "github.com/wudi/php-parser/compiler/runtime"
 	"github.com/wudi/php-parser/compiler/values"
@@ -166,16 +167,67 @@ type VirtualMachine struct {
 	MemoryLimit int64
 	TimeLimit   int
 	DebugMode   bool
+
+	// JIT编译器集成
+	JITCompiler *jit.JITCompiler
+	JITEnabled  bool
 }
 
 // NewVirtualMachine creates a new VM instance
 func NewVirtualMachine() *VirtualMachine {
-	return &VirtualMachine{
+	vm := &VirtualMachine{
 		StackSize:   10000,
 		MemoryLimit: 128 * 1024 * 1024, // 128MB
 		TimeLimit:   30,                // 30 seconds
 		DebugMode:   false,
+		JITEnabled:  true, // 默认启用JIT
 	}
+
+	// 创建默认的JIT编译器
+	if jitCompiler, err := jit.NewJITCompiler(jit.DefaultConfig()); err == nil {
+		vm.JITCompiler = jitCompiler
+	} else {
+		// JIT初始化失败，禁用JIT
+		vm.JITEnabled = false
+	}
+
+	return vm
+}
+
+// NewVirtualMachineWithJIT creates a new VM instance with custom JIT configuration
+func NewVirtualMachineWithJIT(jitConfig *jit.Config) (*VirtualMachine, error) {
+	vm := NewVirtualMachine()
+
+	if jitConfig != nil {
+		var err error
+		vm.JITCompiler, err = jit.NewJITCompiler(jitConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create JIT compiler: %v", err)
+		}
+		vm.JITEnabled = true
+	}
+
+	return vm, nil
+}
+
+// executeCompiledFunction executes a JIT-compiled function
+func (vm *VirtualMachine) executeCompiledFunction(ctx *ExecutionContext, compiledFunc *jit.CompiledFunction, args []*values.Value) (*values.Value, error) {
+	// 目前我们的AMD64代码生成器还不完整，所以这里先返回一个模拟的结果
+	// 在实际实现中，这里会：
+	// 1. 设置函数调用约定（参数传递）
+	// 2. 调用生成的机器码
+	// 3. 处理返回值
+
+	// 为了演示，我们先返回一个简单的结果
+	// 实际的JIT执行需要使用unsafe包和系统调用来执行机器码
+
+	if vm.DebugMode {
+		fmt.Printf("Executing JIT compiled function: %s\n", compiledFunc.Name)
+	}
+
+	// 模拟JIT执行：目前返回错误以回退到字节码执行
+	// 在真正的实现中，这里会执行compiledFunc.MachineCode
+	return nil, fmt.Errorf("JIT execution not yet fully implemented")
 }
 
 // NewExecutionContext creates a new execution context
@@ -1962,6 +2014,72 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 		return fmt.Errorf("function %s not found", functionName)
 	}
 
+	// JIT编译优化：检查是否可以使用JIT编译版本
+	if vm.JITEnabled && vm.JITCompiler != nil {
+		// 记录函数调用用于热点检测
+		vm.JITCompiler.RecordFunctionCall(functionName)
+
+		// 检查是否有已编译的JIT版本
+		if compiledFunc, exists := vm.JITCompiler.GetCompiledFunction(functionName); exists {
+			// 执行JIT编译的机器码
+			result, err := vm.executeCompiledFunction(ctx, compiledFunc, ctx.CallContext.Arguments)
+			if err != nil {
+				// JIT执行失败，回退到字节码解释执行
+				if vm.DebugMode {
+					fmt.Printf("JIT execution failed for %s: %v, falling back to bytecode\n", functionName, err)
+				}
+			} else {
+				// JIT执行成功，返回结果
+				vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+				// Pop call context from stack
+				if len(ctx.CallContextStack) > 0 {
+					ctx.CallContext = ctx.CallContextStack[len(ctx.CallContextStack)-1]
+					ctx.CallContextStack = ctx.CallContextStack[:len(ctx.CallContextStack)-1]
+				} else {
+					ctx.CallContext = nil
+				}
+
+				ctx.IP++
+				return nil
+			}
+		}
+
+		// 检查是否应该JIT编译此函数
+		if vm.JITCompiler.ShouldCompile(functionName) {
+			// 尝试JIT编译
+			compiledFunc, err := vm.JITCompiler.CompileFunction(functionName, function.Instructions)
+			if err != nil {
+				if vm.DebugMode {
+					fmt.Printf("JIT compilation failed for %s: %v\n", functionName, err)
+				}
+			} else {
+				// 编译成功，尝试执行JIT版本
+				result, err := vm.executeCompiledFunction(ctx, compiledFunc, ctx.CallContext.Arguments)
+				if err != nil {
+					if vm.DebugMode {
+						fmt.Printf("JIT execution failed for %s: %v, falling back to bytecode\n", functionName, err)
+					}
+				} else {
+					// JIT执行成功，返回结果
+					vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+					// Pop call context from stack
+					if len(ctx.CallContextStack) > 0 {
+						ctx.CallContext = ctx.CallContextStack[len(ctx.CallContextStack)-1]
+						ctx.CallContextStack = ctx.CallContextStack[:len(ctx.CallContextStack)-1]
+					} else {
+						ctx.CallContext = nil
+					}
+
+					ctx.IP++
+					return nil
+				}
+			}
+		}
+	}
+
+	// 回退到字节码解释执行
 	// Create new execution context for function
 	functionCtx := NewExecutionContext()
 	functionCtx.Instructions = function.Instructions
