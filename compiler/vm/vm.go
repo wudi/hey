@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/wudi/php-parser/compiler/jit"
 	"github.com/wudi/php-parser/compiler/opcodes"
@@ -212,22 +213,63 @@ func NewVirtualMachineWithJIT(jitConfig *jit.Config) (*VirtualMachine, error) {
 
 // executeCompiledFunction executes a JIT-compiled function
 func (vm *VirtualMachine) executeCompiledFunction(ctx *ExecutionContext, compiledFunc *jit.CompiledFunction, args []*values.Value) (*values.Value, error) {
-	// 目前我们的AMD64代码生成器还不完整，所以这里先返回一个模拟的结果
-	// 在实际实现中，这里会：
-	// 1. 设置函数调用约定（参数传递）
-	// 2. 调用生成的机器码
-	// 3. 处理返回值
-
-	// 为了演示，我们先返回一个简单的结果
-	// 实际的JIT执行需要使用unsafe包和系统调用来执行机器码
-
 	if vm.DebugMode {
 		fmt.Printf("Executing JIT compiled function: %s\n", compiledFunc.Name)
 	}
 
-	// 模拟JIT执行：目前返回错误以回退到字节码执行
-	// 在真正的实现中，这里会执行compiledFunc.MachineCode
-	return nil, fmt.Errorf("JIT execution not yet fully implemented")
+	// 检查是否支持JIT执行
+	if !jit.IsJITExecutionSupported() {
+		if vm.DebugMode {
+			fmt.Printf("JIT execution not supported on this platform, falling back to simulation\n")
+		}
+	}
+
+	// 尝试执行JIT编译的函数
+	// 创建JIT函数包装器
+	jitFunc := &jit.JITFunction{
+		CompiledFunction: compiledFunc,
+	}
+
+	// 执行JIT函数
+	result, err := jitFunc.Execute(args)
+	if err != nil {
+		return nil, fmt.Errorf("JIT execution failed: %v", err)
+	}
+
+	// 更新执行统计
+	compiledFunc.ExecutionCount++
+
+	if vm.DebugMode {
+		fmt.Printf("JIT execution successful, result: %v\n", result)
+	}
+
+	return result, nil
+}
+
+// executeJITFunction executes a fully compiled JIT function
+func (vm *VirtualMachine) executeJITFunction(ctx *ExecutionContext, jitFunc *jit.JITFunction, args []*values.Value) (*values.Value, error) {
+	if vm.DebugMode {
+		fmt.Printf("Executing JIT function: %s\n", jitFunc.Name)
+	}
+
+	startTime := time.Now()
+
+	// 执行JIT函数
+	result, err := jitFunc.Execute(args)
+	if err != nil {
+		return nil, fmt.Errorf("JIT function execution failed: %v", err)
+	}
+
+	// 更新统计
+	executionTime := time.Since(startTime)
+	jitFunc.ExecutionCount++
+	jitFunc.ExecutionTime += executionTime
+
+	if vm.DebugMode {
+		fmt.Printf("JIT function executed in %v\n", executionTime)
+	}
+
+	return result, nil
 }
 
 // NewExecutionContext creates a new execution context

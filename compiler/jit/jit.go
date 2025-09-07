@@ -234,6 +234,35 @@ func (jit *JITCompiler) CompileFunction(functionName string, bytecode []opcodes.
 	return compiledFunc, nil
 }
 
+// CompileToExecutable 编译函数到可执行的JIT函数
+func (jit *JITCompiler) CompileToExecutable(functionName string, bytecode []opcodes.Instruction) (*JITFunction, error) {
+	// 检查是否应该编译
+	if !jit.ShouldCompile(functionName) {
+		return nil, fmt.Errorf("function %s is not eligible for compilation", functionName)
+	}
+
+	// 获取AMD64代码生成器
+	amd64Gen, ok := jit.codeGenerator.(*AMD64CodeGenerator)
+	if !ok {
+		return nil, fmt.Errorf("executable compilation only supported for AMD64")
+	}
+
+	// 应用优化
+	optimizedBytecode := bytecode
+	var appliedOptimizations []Optimization
+	if jit.config.EnableOptimizations {
+		optimizedBytecode, appliedOptimizations = jit.applyOptimizations(bytecode)
+	}
+
+	// 编译到可执行函数
+	jitFunc, err := amd64Gen.CompileToExecutable(functionName, optimizedBytecode, appliedOptimizations)
+	if err != nil {
+		return nil, err
+	}
+
+	return jitFunc, nil
+}
+
 // GetCompiledFunction 获取已编译的函数
 func (jit *JITCompiler) GetCompiledFunction(functionName string) (*CompiledFunction, bool) {
 	if compiled, exists := jit.compiledCode.Load(functionName); exists {
