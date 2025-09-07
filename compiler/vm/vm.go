@@ -12,6 +12,18 @@ import (
 	"github.com/wudi/php-parser/compiler/values"
 )
 
+// Generator represents a PHP generator state
+type Generator struct {
+	Function     *Function                // The generator function
+	Context      *ExecutionContext        // Saved execution context
+	Variables    map[uint32]*values.Value // Generator local variables
+	IP           int                      // Current instruction pointer in generator
+	YieldedKey   *values.Value            // Last yielded key
+	YieldedValue *values.Value            // Last yielded value
+	IsFinished   bool                     // Whether generator has finished
+	IsSuspended  bool                     // Whether generator is suspended at yield
+}
+
 // ExecutionContext represents the runtime execution state
 type ExecutionContext struct {
 	// Bytecode execution
@@ -68,6 +80,10 @@ type ExecutionContext struct {
 
 	// File inclusion tracking
 	IncludedFiles map[string]bool // Track files included with include_once/require_once
+
+	// Generator state
+	CurrentGenerator *Generator            // Current executing generator
+	Generators       map[uint32]*Generator // Active generators by ID
 
 	// Execution control
 	Halted   bool
@@ -183,6 +199,8 @@ func NewExecutionContext() *ExecutionContext {
 		RopeBuffers:       make(map[uint32][]string),
 		OutputBuffer:      make([]string, 0),
 		IncludedFiles:     make(map[string]bool),
+		CurrentGenerator:  nil,
+		Generators:        make(map[uint32]*Generator),
 		Halted:            false,
 		ExitCode:          0,
 	}
@@ -598,6 +616,22 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeInitFunctionCallByName(ctx, inst)
 	case opcodes.OP_RETURN_BY_REF:
 		return vm.executeReturnByRef(ctx, inst)
+
+	// Generator operations
+	case opcodes.OP_YIELD:
+		return vm.executeYield(ctx, inst)
+	case opcodes.OP_YIELD_FROM:
+		return vm.executeYieldFrom(ctx, inst)
+
+	// Array and variable operations
+	case opcodes.OP_ADD_ARRAY_UNPACK:
+		return vm.executeAddArrayUnpack(ctx, inst)
+	case opcodes.OP_BIND_GLOBAL:
+		return vm.executeBindGlobal(ctx, inst)
+
+	// Match expression
+	case opcodes.OP_MATCH:
+		return vm.executeMatch(ctx, inst)
 
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
@@ -4500,4 +4534,266 @@ func (vm *VirtualMachine) executeReturnByRef(ctx *ExecutionContext, inst *opcode
 
 	// For return by reference, we don't advance IP as execution should halt/return
 	return nil
+}
+
+// executeYield implements the yield operation for generators
+func (vm *VirtualMachine) executeYield(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the value to yield (optional)
+	var yieldValue *values.Value
+	if inst.Op1 != 0 {
+		yieldValue = vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+		if yieldValue == nil {
+			yieldValue = values.NewNull()
+		}
+	} else {
+		yieldValue = values.NewNull()
+	}
+
+	// Get the key to yield (optional)
+	var yieldKey *values.Value
+	if inst.Op2 != 0 {
+		yieldKey = vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+		if yieldKey == nil {
+			yieldKey = values.NewInt(0) // Default numeric key
+		}
+	} else {
+		// Auto-increment key if not specified
+		if ctx.CurrentGenerator != nil {
+			ctx.CurrentGenerator.YieldedKey = values.NewInt(int64(ctx.CurrentGenerator.IP))
+		} else {
+			yieldKey = values.NewInt(0)
+		}
+	}
+
+	// If we're in a generator context, suspend execution
+	if ctx.CurrentGenerator != nil {
+		ctx.CurrentGenerator.YieldedValue = yieldValue
+		if yieldKey != nil {
+			ctx.CurrentGenerator.YieldedKey = yieldKey
+		}
+		ctx.CurrentGenerator.IsSuspended = true
+		ctx.CurrentGenerator.IP = ctx.IP + 1 // Save next instruction
+
+		// Set result to the yielded value (for iterator interface)
+		if inst.Result != 0 {
+			vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), yieldValue)
+		}
+
+		// Suspend execution - caller will resume generator later
+		ctx.Halted = true
+		return nil
+	} else {
+		// Not in generator context - treat as expression that returns the value
+		if inst.Result != 0 {
+			vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), yieldValue)
+		}
+		ctx.IP++
+		return nil
+	}
+}
+
+// executeYieldFrom implements yield from for generator delegation
+func (vm *VirtualMachine) executeYieldFrom(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the iterator/generator to yield from
+	iteratorValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if iteratorValue == nil {
+		return fmt.Errorf("YIELD_FROM requires an iterator or generator")
+	}
+
+	// For now, implement a basic version that yields all values from an array
+	// In a complete implementation, this would handle:
+	// 1. Other generators (recursive yield from)
+	// 2. Iterators and traversable objects
+	// 3. Proper exception handling and return values
+
+	if iteratorValue.IsArray() {
+		// Yield each element from the array
+		arrayData := iteratorValue.Data.(*values.Array)
+		for key, value := range arrayData.Elements {
+			if ctx.CurrentGenerator != nil {
+				// Convert key to proper type
+				var keyValue *values.Value
+				switch k := key.(type) {
+				case int:
+					keyValue = values.NewInt(int64(k))
+				case string:
+					keyValue = values.NewString(k)
+				default:
+					keyValue = values.NewString(fmt.Sprintf("%v", k))
+				}
+
+				ctx.CurrentGenerator.YieldedKey = keyValue
+				ctx.CurrentGenerator.YieldedValue = value
+				ctx.CurrentGenerator.IsSuspended = true
+
+				// In a real implementation, this would suspend and resume for each value
+				// For simplicity, we'll just yield the last value
+			}
+		}
+	}
+
+	// Set result to the final return value (null for basic arrays)
+	if inst.Result != 0 {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewNull())
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeAddArrayUnpack implements array unpacking (...$array)
+func (vm *VirtualMachine) executeAddArrayUnpack(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the target array
+	targetArray := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+	if targetArray == nil || !targetArray.IsArray() {
+		return fmt.Errorf("ADD_ARRAY_UNPACK requires target array")
+	}
+
+	// Get the source array to unpack
+	sourceArray := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if sourceArray == nil {
+		// Nothing to unpack
+		ctx.IP++
+		return nil
+	}
+
+	// Unpack source array elements into target array
+	if sourceArray.IsArray() {
+		targetData := targetArray.Data.(*values.Array)
+		sourceData := sourceArray.Data.(*values.Array)
+
+		// Add all elements from source to target, maintaining order by key
+		// For array unpacking, we iterate through numeric keys in order
+		for i := int64(0); i < sourceData.NextIndex; i++ {
+			if value, exists := sourceData.Elements[int(i)]; exists {
+				targetData.Elements[int(targetData.NextIndex)] = value
+				targetData.NextIndex++
+			}
+		}
+	} else {
+		// For non-arrays, treat as single element
+		targetData := targetArray.Data.(*values.Array)
+		targetData.Elements[int(targetData.NextIndex)] = sourceArray
+		targetData.NextIndex++
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeBindGlobal binds a local variable to a global variable
+func (vm *VirtualMachine) executeBindGlobal(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the variable name to bind
+	nameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if nameValue == nil || !nameValue.IsString() {
+		return fmt.Errorf("BIND_GLOBAL requires string variable name")
+	}
+
+	varName := nameValue.ToString()
+
+	// Get the local variable slot
+	localSlot := inst.Op2
+
+	// Create binding between local variable and global
+	// In PHP, global $var; creates a reference to the global variable
+	if ctx.GlobalVars[varName] == nil {
+		// Initialize global variable if it doesn't exist
+		ctx.GlobalVars[varName] = values.NewNull()
+	}
+
+	// Bind local slot to global variable
+	ctx.Variables[localSlot] = ctx.GlobalVars[varName]
+
+	// Also update the variable name mapping
+	ctx.VarSlotNames[localSlot] = varName
+
+	ctx.IP++
+	return nil
+}
+
+// executeMatch implements the match expression (PHP 8 feature)
+func (vm *VirtualMachine) executeMatch(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the value to match against
+	matchValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if matchValue == nil {
+		matchValue = values.NewNull()
+	}
+
+	// Get the match cases (typically an array of conditions and results)
+	casesValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if casesValue == nil || !casesValue.IsArray() {
+		return fmt.Errorf("MATCH requires array of cases")
+	}
+
+	// Process match cases
+	casesData := casesValue.Data.(*values.Array)
+	var result *values.Value = nil
+
+	// Look for matching case
+	for key, caseValue := range casesData.Elements {
+		// In a real implementation, we'd have structured match cases
+		// For now, implement simple value matching
+		var keyValue *values.Value
+		switch k := key.(type) {
+		case int:
+			keyValue = values.NewInt(int64(k))
+		case string:
+			keyValue = values.NewString(k)
+		default:
+			continue
+		}
+
+		// Check if match value equals case key (strict equality)
+		if vm.isStrictlyEqual(matchValue, keyValue) {
+			result = caseValue
+			break
+		}
+	}
+
+	// If no match found, check for default case (usually last element)
+	if result == nil {
+		// Look for default case - in PHP match, this would be handled by the compiler
+		// For simplicity, we'll return null if no match
+		result = values.NewNull()
+	}
+
+	// Set the result
+	if inst.Result != 0 {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// Helper function for strict equality comparison
+func (vm *VirtualMachine) isStrictlyEqual(a, b *values.Value) bool {
+	if a == nil && b == nil {
+		return true
+	}
+	if a == nil || b == nil {
+		return false
+	}
+
+	// Check type first
+	if a.Type != b.Type {
+		return false
+	}
+
+	// Check value based on type
+	switch a.Type {
+	case values.TypeNull:
+		return true
+	case values.TypeBool:
+		return a.ToBool() == b.ToBool()
+	case values.TypeInt:
+		return a.ToInt() == b.ToInt()
+	case values.TypeFloat:
+		return a.ToFloat() == b.ToFloat()
+	case values.TypeString:
+		return a.ToString() == b.ToString()
+	default:
+		// For complex types, use reference equality
+		return a == b
+	}
 }
