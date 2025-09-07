@@ -33,8 +33,9 @@ type ExecutionContext struct {
 	CallStack []CallFrame
 
 	// Global state
-	GlobalVars map[string]*values.Value
-	Functions  map[string]*Function
+	GlobalVars      map[string]*values.Value
+	GlobalConstants map[string]*values.Value // Global named constants
+	Functions       map[string]*Function
 
 	// Loop state
 	ForeachIterators map[uint32]*ForeachIterator // Foreach iterator state
@@ -170,6 +171,7 @@ func NewExecutionContext() *ExecutionContext {
 		VarSlotNames:      make(map[uint32]string),
 		CallStack:         make([]CallFrame, 0),
 		GlobalVars:        make(map[string]*values.Value),
+		GlobalConstants:   make(map[string]*values.Value),
 		Functions:         make(map[string]*Function),
 		ForeachIterators:  make(map[uint32]*ForeachIterator),
 		Classes:           make(map[string]*Class),
@@ -570,6 +572,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeArrayKeys(ctx, inst)
 	case opcodes.OP_ARRAY_MERGE:
 		return vm.executeArrayMerge(ctx, inst)
+
+	// Constant operations
+	case opcodes.OP_FETCH_CONSTANT:
+		return vm.executeFetchConstant(ctx, inst)
+	case opcodes.OP_COALESCE:
+		return vm.executeCoalesce(ctx, inst)
 
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
@@ -4185,6 +4193,49 @@ func (vm *VirtualMachine) executeIssetIsEmptyVar(ctx *ExecutionContext, inst *op
 	isset := value != nil && !value.IsNull()
 
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(isset))
+	ctx.IP++
+	return nil
+}
+
+// executeFetchConstant fetches a constant value by name
+func (vm *VirtualMachine) executeFetchConstant(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the constant name
+	nameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if nameValue == nil || !nameValue.IsString() {
+		return fmt.Errorf("FETCH_CONSTANT requires string constant name")
+	}
+
+	constName := nameValue.ToString()
+
+	// Look up the constant in the global constants map
+	if constValue, exists := ctx.GlobalConstants[constName]; exists {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), constValue)
+	} else {
+		// Return NULL if constant doesn't exist (PHP behavior)
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewNull())
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeCoalesce implements the null coalescing operator (??)
+func (vm *VirtualMachine) executeCoalesce(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the left operand
+	leftValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+
+	// If left value exists and is not null, use it
+	if leftValue != nil && !leftValue.IsNull() {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), leftValue)
+	} else {
+		// Otherwise use the right operand
+		rightValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+		if rightValue == nil {
+			rightValue = values.NewNull()
+		}
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), rightValue)
+	}
+
 	ctx.IP++
 	return nil
 }
