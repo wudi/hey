@@ -579,6 +579,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_COALESCE:
 		return vm.executeCoalesce(ctx, inst)
 
+	// Static property operations
+	case opcodes.OP_ASSIGN_STATIC_PROP:
+		return vm.executeAssignStaticProperty(ctx, inst)
+	case opcodes.OP_ASSIGN_STATIC_PROP_OP:
+		return vm.executeAssignStaticPropertyOp(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -4235,6 +4241,123 @@ func (vm *VirtualMachine) executeCoalesce(ctx *ExecutionContext, inst *opcodes.I
 		}
 		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), rightValue)
 	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeAssignStaticProperty assigns a value to a static class property (Class::$property = $value)
+func (vm *VirtualMachine) executeAssignStaticProperty(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the class name
+	classNameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if classNameValue == nil || !classNameValue.IsString() {
+		return fmt.Errorf("ASSIGN_STATIC_PROP requires string class name")
+	}
+
+	// Get the property name
+	propNameValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if propNameValue == nil || !propNameValue.IsString() {
+		return fmt.Errorf("ASSIGN_STATIC_PROP requires string property name")
+	}
+
+	// Get the value to assign from the result operand
+	value := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+	if value == nil {
+		value = values.NewNull()
+	}
+
+	className := classNameValue.ToString()
+	propName := propNameValue.ToString()
+
+	// Find or create the class
+	if ctx.Classes[className] == nil {
+		ctx.Classes[className] = &Class{
+			Name:       className,
+			Properties: make(map[string]*Property),
+			Methods:    make(map[string]*Function),
+			Constants:  make(map[string]*values.Value),
+		}
+	}
+
+	// Find or create the static property
+	if ctx.Classes[className].Properties[propName] == nil {
+		ctx.Classes[className].Properties[propName] = &Property{
+			Name:         propName,
+			DefaultValue: value,
+			Visibility:   "public", // Default visibility
+			IsStatic:     true,
+		}
+	} else {
+		// Update existing static property value
+		ctx.Classes[className].Properties[propName].DefaultValue = value
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeAssignStaticPropertyOp performs compound assignment on static property (Class::$prop += $value)
+func (vm *VirtualMachine) executeAssignStaticPropertyOp(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the class name
+	classNameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if classNameValue == nil || !classNameValue.IsString() {
+		return fmt.Errorf("ASSIGN_STATIC_PROP_OP requires string class name")
+	}
+
+	// Get the property name
+	propNameValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if propNameValue == nil || !propNameValue.IsString() {
+		return fmt.Errorf("ASSIGN_STATIC_PROP_OP requires string property name")
+	}
+
+	// Get the operand value (right side of assignment)
+	operandValue := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+	if operandValue == nil {
+		operandValue = values.NewNull()
+	}
+
+	className := classNameValue.ToString()
+	propName := propNameValue.ToString()
+
+	// Find the class and property
+	var currentValue *values.Value
+	if ctx.Classes[className] != nil && ctx.Classes[className].Properties[propName] != nil {
+		currentValue = ctx.Classes[className].Properties[propName].DefaultValue
+	} else {
+		// Property doesn't exist, create it with default value for compound operation
+		currentValue = values.NewNull()
+		if ctx.Classes[className] == nil {
+			ctx.Classes[className] = &Class{
+				Name:       className,
+				Properties: make(map[string]*Property),
+				Methods:    make(map[string]*Function),
+				Constants:  make(map[string]*values.Value),
+			}
+		}
+		ctx.Classes[className].Properties[propName] = &Property{
+			Name:         propName,
+			DefaultValue: currentValue,
+			Visibility:   "public",
+			IsStatic:     true,
+		}
+	}
+
+	// For now, implement += operation (most common compound assignment)
+	// In a full implementation, the opcode would specify which operation
+	var result *values.Value
+	if currentValue.IsInt() && operandValue.IsInt() {
+		result = values.NewInt(currentValue.ToInt() + operandValue.ToInt())
+	} else if currentValue.IsFloat() || operandValue.IsFloat() {
+		result = values.NewFloat(currentValue.ToFloat() + operandValue.ToFloat())
+	} else if currentValue.IsString() || operandValue.IsString() {
+		result = values.NewString(currentValue.ToString() + operandValue.ToString())
+	} else {
+		// Default to addition for other types
+		result = currentValue.Add(operandValue)
+	}
+
+	// Update the static property
+	ctx.Classes[className].Properties[propName].DefaultValue = result
 
 	ctx.IP++
 	return nil
