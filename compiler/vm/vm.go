@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/compiler/jit"
 	"github.com/wudi/php-parser/compiler/opcodes"
 	runtimeRegistry "github.com/wudi/php-parser/compiler/runtime"
 	"github.com/wudi/php-parser/compiler/values"
@@ -173,10 +172,6 @@ type VirtualMachine struct {
 	MemoryLimit int64
 	TimeLimit   int
 	DebugMode   bool
-
-	// JIT编译器集成
-	JITCompiler *jit.JITCompiler
-	JITEnabled  bool
 
 	// Compiler callback for include/require functionality
 	CompilerCallback CompilerCallbackFunc
