@@ -314,6 +314,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeJumpIfZero(ctx, inst)
 	case opcodes.OP_JMPNZ:
 		return vm.executeJumpIfNotZero(ctx, inst)
+	case opcodes.OP_JMPZ_EX:
+		return vm.executeJumpIfZeroEx(ctx, inst)
+	case opcodes.OP_JMPNZ_EX:
+		return vm.executeJumpIfNotZeroEx(ctx, inst)
 	case opcodes.OP_CASE:
 		return vm.executeCase(ctx, inst)
 	case opcodes.OP_CASE_STRICT:
@@ -341,6 +345,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeFetchRead(ctx, inst)
 	case opcodes.OP_FETCH_W:
 		return vm.executeFetchWrite(ctx, inst)
+	case opcodes.OP_FETCH_RW:
+		return vm.executeFetchReadWrite(ctx, inst)
+	case opcodes.OP_FETCH_IS:
+		return vm.executeFetchIsset(ctx, inst)
+	case opcodes.OP_FETCH_UNSET:
+		return vm.executeFetchUnset(ctx, inst)
 	case opcodes.OP_FETCH_R_DYNAMIC:
 		return vm.executeFetchReadDynamic(ctx, inst)
 	case opcodes.OP_BIND_VAR_NAME:
@@ -355,12 +365,24 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeFetchDimRead(ctx, inst)
 	case opcodes.OP_FETCH_DIM_W:
 		return vm.executeFetchDimWrite(ctx, inst)
+	case opcodes.OP_FETCH_DIM_RW:
+		return vm.executeFetchDimReadWrite(ctx, inst)
+	case opcodes.OP_FETCH_DIM_IS:
+		return vm.executeFetchDimIsset(ctx, inst)
+	case opcodes.OP_FETCH_DIM_UNSET:
+		return vm.executeFetchDimUnset(ctx, inst)
 
 	// Object operations
 	case opcodes.OP_FETCH_OBJ_R:
 		return vm.executeFetchObjRead(ctx, inst)
 	case opcodes.OP_FETCH_OBJ_W:
 		return vm.executeFetchObjWrite(ctx, inst)
+	case opcodes.OP_FETCH_OBJ_RW:
+		return vm.executeFetchObjReadWrite(ctx, inst)
+	case opcodes.OP_FETCH_OBJ_IS:
+		return vm.executeFetchObjIsset(ctx, inst)
+	case opcodes.OP_FETCH_OBJ_UNSET:
+		return vm.executeFetchObjUnset(ctx, inst)
 
 	// Function operations
 	case opcodes.OP_INIT_FCALL:
@@ -3896,6 +3918,188 @@ func (vm *VirtualMachine) executeAssignRef(ctx *ExecutionContext, inst *opcodes.
 func (vm *VirtualMachine) executeQmAssign(ctx *ExecutionContext, inst *opcodes.Instruction) error {
 	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+	ctx.IP++
+	return nil
+}
+
+// executeJumpIfZeroEx performs conditional jump with extended info (stores condition result)
+func (vm *VirtualMachine) executeJumpIfZeroEx(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	condition := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	conditionBool := condition.ToBool()
+
+	// Store condition result in result operand if specified
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(conditionBool))
+	}
+
+	if !conditionBool {
+		target := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+		if target == nil || !target.IsInt() {
+			return fmt.Errorf("invalid jump target")
+		}
+		ctx.IP = int(target.ToInt())
+	} else {
+		ctx.IP++
+	}
+	return nil
+}
+
+// executeJumpIfNotZeroEx performs conditional jump with extended info (stores condition result)
+func (vm *VirtualMachine) executeJumpIfNotZeroEx(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	condition := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	conditionBool := condition.ToBool()
+
+	// Store condition result in result operand if specified
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(conditionBool))
+	}
+
+	if conditionBool {
+		target := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+		if target == nil || !target.IsInt() {
+			return fmt.Errorf("invalid jump target")
+		}
+		ctx.IP = int(target.ToInt())
+	} else {
+		ctx.IP++
+	}
+	return nil
+}
+
+// executeFetchReadWrite prepares variable for read-write access
+func (vm *VirtualMachine) executeFetchReadWrite(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// For RW mode, we need to create the variable if it doesn't exist
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if value == nil {
+		value = values.NewNull()
+		vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), value)
+	}
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+	ctx.IP++
+	return nil
+}
+
+// executeFetchIsset checks if variable is set (for isset())
+func (vm *VirtualMachine) executeFetchIsset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	isset := value != nil && !value.IsNull()
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(isset))
+	ctx.IP++
+	return nil
+}
+
+// executeFetchUnset unsets a variable
+func (vm *VirtualMachine) executeFetchUnset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// For unset, we remove the variable from storage
+	switch opcodes.DecodeOpType1(inst.OpType1) {
+	case opcodes.IS_VAR:
+		delete(ctx.Variables, inst.Op1)
+	case opcodes.IS_TMP_VAR:
+		delete(ctx.Temporaries, inst.Op1)
+	}
+	ctx.IP++
+	return nil
+}
+
+// executeFetchDimReadWrite prepares array element for read-write access
+func (vm *VirtualMachine) executeFetchDimReadWrite(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	key := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	if array == nil || !array.IsArray() {
+		// Create array if it doesn't exist
+		array = values.NewArray()
+		vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), array)
+	}
+
+	element := array.ArrayGet(key)
+	if element == nil {
+		element = values.NewNull()
+		array.ArraySet(key, element)
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), element)
+	ctx.IP++
+	return nil
+}
+
+// executeFetchDimIsset checks if array key is set
+func (vm *VirtualMachine) executeFetchDimIsset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	key := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	isset := false
+	if array != nil && array.IsArray() {
+		element := array.ArrayGet(key)
+		isset = element != nil && !element.IsNull()
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(isset))
+	ctx.IP++
+	return nil
+}
+
+// executeFetchDimUnset unsets an array element
+func (vm *VirtualMachine) executeFetchDimUnset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	key := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	if array != nil && array.IsArray() {
+		array.ArrayUnset(key)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeFetchObjReadWrite prepares object property for read-write access
+func (vm *VirtualMachine) executeFetchObjReadWrite(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	object := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	property := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	if object == nil || !object.IsObject() {
+		return fmt.Errorf("cannot access property on non-object")
+	}
+
+	propName := property.ToString()
+	value := object.ObjectGet(propName)
+	if value == nil {
+		value = values.NewNull()
+		object.ObjectSet(propName, value)
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+	ctx.IP++
+	return nil
+}
+
+// executeFetchObjIsset checks if object property is set
+func (vm *VirtualMachine) executeFetchObjIsset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	object := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	property := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	isset := false
+	if object != nil && object.IsObject() {
+		propName := property.ToString()
+		value := object.ObjectGet(propName)
+		isset = value != nil && !value.IsNull()
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(isset))
+	ctx.IP++
+	return nil
+}
+
+// executeFetchObjUnset unsets an object property
+func (vm *VirtualMachine) executeFetchObjUnset(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	object := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	property := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	if object != nil && object.IsObject() {
+		propName := property.ToString()
+		object.ObjectUnset(propName)
+	}
+
 	ctx.IP++
 	return nil
 }
