@@ -633,6 +633,24 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_MATCH:
 		return vm.executeMatch(ctx, inst)
 
+	// Switch operations
+	case opcodes.OP_SWITCH_LONG:
+		return vm.executeSwitchLong(ctx, inst)
+	case opcodes.OP_SWITCH_STRING:
+		return vm.executeSwitchString(ctx, inst)
+
+	// Declaration operations
+	case opcodes.OP_DECLARE_CONST:
+		return vm.executeDeclareConst(ctx, inst)
+
+	// Verification operations
+	case opcodes.OP_VERIFY_RETURN_TYPE:
+		return vm.executeVerifyReturnType(ctx, inst)
+
+	// Advanced parameter operations
+	case opcodes.OP_SEND_UNPACK:
+		return vm.executeSendUnpack(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -4796,4 +4814,243 @@ func (vm *VirtualMachine) isStrictlyEqual(a, b *values.Value) bool {
 		// For complex types, use reference equality
 		return a == b
 	}
+}
+
+// executeSwitchLong implements optimized integer switch statements
+func (vm *VirtualMachine) executeSwitchLong(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the switch value
+	switchValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if switchValue == nil {
+		switchValue = values.NewNull()
+	}
+
+	// Get the jump table (array of case values and jump targets)
+	jumpTableValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if jumpTableValue == nil || !jumpTableValue.IsArray() {
+		return fmt.Errorf("SWITCH_LONG requires array jump table")
+	}
+
+	// Convert switch value to integer for comparison
+	switchInt := switchValue.ToInt()
+	jumpTable := jumpTableValue.Data.(*values.Array)
+
+	// Look for matching case
+	var targetIP *values.Value
+	for key, target := range jumpTable.Elements {
+		// Keys should be integers representing case values
+		var keyInt int64
+		switch k := key.(type) {
+		case int:
+			keyInt = int64(k)
+		case int64:
+			keyInt = k
+		default:
+			continue // Skip non-integer keys
+		}
+
+		if keyInt == switchInt {
+			targetIP = target
+			break
+		}
+	}
+
+	// If no match found, check for default case (usually stored at key -1 or special key)
+	if targetIP == nil {
+		if defaultTarget, exists := jumpTable.Elements[-1]; exists {
+			targetIP = defaultTarget
+		}
+	}
+
+	// Jump to target instruction or continue to next
+	if targetIP != nil && targetIP.IsInt() {
+		ctx.IP = int(targetIP.ToInt())
+	} else {
+		ctx.IP++ // No match, continue
+	}
+
+	return nil
+}
+
+// executeSwitchString implements optimized string switch statements
+func (vm *VirtualMachine) executeSwitchString(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the switch value
+	switchValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if switchValue == nil {
+		switchValue = values.NewNull()
+	}
+
+	// Get the jump table
+	jumpTableValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if jumpTableValue == nil || !jumpTableValue.IsArray() {
+		return fmt.Errorf("SWITCH_STRING requires array jump table")
+	}
+
+	// Convert switch value to string for comparison
+	switchStr := switchValue.ToString()
+	jumpTable := jumpTableValue.Data.(*values.Array)
+
+	// Look for matching case
+	var targetIP *values.Value
+	for key, target := range jumpTable.Elements {
+		// Keys should be strings representing case values
+		var keyStr string
+		switch k := key.(type) {
+		case string:
+			keyStr = k
+		default:
+			keyStr = fmt.Sprintf("%v", k)
+		}
+
+		if keyStr == switchStr {
+			targetIP = target
+			break
+		}
+	}
+
+	// If no match found, check for default case
+	if targetIP == nil {
+		if defaultTarget, exists := jumpTable.Elements["__default__"]; exists {
+			targetIP = defaultTarget
+		}
+	}
+
+	// Jump to target instruction or continue to next
+	if targetIP != nil && targetIP.IsInt() {
+		ctx.IP = int(targetIP.ToInt())
+	} else {
+		ctx.IP++ // No match, continue
+	}
+
+	return nil
+}
+
+// executeDeclareConst declares a constant (const NAME = value)
+func (vm *VirtualMachine) executeDeclareConst(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the constant name
+	nameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if nameValue == nil || !nameValue.IsString() {
+		return fmt.Errorf("DECLARE_CONST requires string constant name")
+	}
+
+	// Get the constant value
+	constValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if constValue == nil {
+		constValue = values.NewNull()
+	}
+
+	constName := nameValue.ToString()
+
+	// Check if constant already exists
+	if _, exists := ctx.GlobalConstants[constName]; exists {
+		// In PHP, redeclaring a constant is a warning but doesn't fail
+		// For now, we'll just ignore the redeclaration
+		ctx.IP++
+		return nil
+	}
+
+	// Declare the constant
+	ctx.GlobalConstants[constName] = constValue
+
+	ctx.IP++
+	return nil
+}
+
+// executeVerifyReturnType verifies function return type
+func (vm *VirtualMachine) executeVerifyReturnType(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the return value
+	returnValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if returnValue == nil {
+		returnValue = values.NewNull()
+	}
+
+	// Get the expected type information
+	expectedTypeValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if expectedTypeValue == nil || !expectedTypeValue.IsString() {
+		// No type constraint, allow any value
+		ctx.IP++
+		return nil
+	}
+
+	expectedType := expectedTypeValue.ToString()
+
+	// Verify the return type matches expectation
+	var isValid bool
+	switch expectedType {
+	case "int", "integer":
+		isValid = returnValue.IsInt()
+	case "float", "double":
+		isValid = returnValue.IsFloat()
+	case "string":
+		isValid = returnValue.IsString()
+	case "bool", "boolean":
+		isValid = returnValue.IsBool()
+	case "array":
+		isValid = returnValue.IsArray()
+	case "object":
+		isValid = returnValue.IsObject()
+	case "null":
+		isValid = returnValue.IsNull()
+	case "mixed":
+		isValid = true // Mixed allows any type
+	default:
+		// For class names or complex types, assume valid for now
+		isValid = true
+	}
+
+	if !isValid {
+		actualType := "unknown"
+		if returnValue.IsInt() {
+			actualType = "int"
+		} else if returnValue.IsFloat() {
+			actualType = "float"
+		} else if returnValue.IsString() {
+			actualType = "string"
+		} else if returnValue.IsBool() {
+			actualType = "bool"
+		} else if returnValue.IsArray() {
+			actualType = "array"
+		} else if returnValue.IsObject() {
+			actualType = "object"
+		} else if returnValue.IsNull() {
+			actualType = "null"
+		}
+		return fmt.Errorf("return value type mismatch: expected %s, got %s", expectedType, actualType)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeSendUnpack sends unpacked arguments (...$args)
+func (vm *VirtualMachine) executeSendUnpack(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the array of arguments to unpack
+	argsValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if argsValue == nil {
+		// Nothing to unpack
+		ctx.IP++
+		return nil
+	}
+
+	// Unpack arguments and add to call arguments
+	if argsValue.IsArray() {
+		argsData := argsValue.Data.(*values.Array)
+
+		// Add each array element as a separate argument
+		for i := int64(0); i < argsData.NextIndex; i++ {
+			if arg, exists := argsData.Elements[int(i)]; exists {
+				ctx.CallArguments = append(ctx.CallArguments, arg)
+			}
+		}
+	} else {
+		// For non-arrays, add as single argument
+		ctx.CallArguments = append(ctx.CallArguments, argsValue)
+	}
+
+	// Update argument count in call context if available
+	if ctx.CallContext != nil {
+		ctx.CallContext.NumArgs = len(ctx.CallArguments)
+	}
+
+	ctx.IP++
+	return nil
 }
