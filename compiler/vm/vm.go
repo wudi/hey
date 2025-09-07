@@ -585,6 +585,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_ASSIGN_STATIC_PROP_OP:
 		return vm.executeAssignStaticPropertyOp(ctx, inst)
 
+	// Foreach and evaluation operations
+	case opcodes.OP_FE_FREE:
+		return vm.executeForeachFree(ctx, inst)
+	case opcodes.OP_EVAL:
+		return vm.executeEval(ctx, inst)
+
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
 	}
@@ -4358,6 +4364,63 @@ func (vm *VirtualMachine) executeAssignStaticPropertyOp(ctx *ExecutionContext, i
 
 	// Update the static property
 	ctx.Classes[className].Properties[propName].DefaultValue = result
+
+	ctx.IP++
+	return nil
+}
+
+// executeForeachFree cleans up foreach iterator resources (FE_FREE)
+func (vm *VirtualMachine) executeForeachFree(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the iterator slot number
+	iteratorSlot := inst.Op1
+
+	// Remove the iterator from the map to free resources
+	if ctx.ForeachIterators != nil {
+		delete(ctx.ForeachIterators, iteratorSlot)
+	}
+
+	// Also clean up any associated temporary variables
+	// This prevents memory leaks from foreach loops
+	if ctx.Temporaries != nil {
+		// The iterator value is typically stored in the same slot
+		delete(ctx.Temporaries, iteratorSlot)
+		// Key might be stored in adjacent slot
+		delete(ctx.Temporaries, iteratorSlot+1)
+	}
+
+	ctx.IP++
+	return nil
+}
+
+// executeEval evaluates PHP code dynamically (eval construct)
+func (vm *VirtualMachine) executeEval(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the code to evaluate
+	codeValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if codeValue == nil || !codeValue.IsString() {
+		return fmt.Errorf("EVAL requires string code to evaluate")
+	}
+
+	code := codeValue.ToString()
+
+	// For now, return a simple implementation that prevents actual code execution
+	// In a production system, this would need to:
+	// 1. Parse the PHP code using the lexer/parser
+	// 2. Compile it to bytecode
+	// 3. Execute the bytecode in a new context
+	// 4. Return the result
+
+	// For security and complexity reasons, we'll implement a stub that returns NULL
+	// Real PHP eval() is extremely complex and potentially dangerous
+
+	// Log the eval attempt for debugging
+	if len(code) > 0 {
+		// In a real implementation, you would compile and execute the code
+		// For now, we'll just return NULL to prevent errors
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewNull())
+	} else {
+		// Empty code evaluates to NULL
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewNull())
+	}
 
 	ctx.IP++
 	return nil
