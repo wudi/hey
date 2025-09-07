@@ -8,6 +8,7 @@ import (
 	"github.com/wudi/php-parser/compiler/opcodes"
 	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/compiler/vm"
+	"github.com/wudi/php-parser/lexer"
 )
 
 // ForwardJump represents a jump that needs to be resolved later
@@ -151,6 +152,8 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileStaticAccess(n)
 	case *ast.AnonymousFunctionExpression:
 		return c.compileAnonymousFunction(n)
+	case *ast.IncludeOrEvalExpression:
+		return c.compileIncludeOrEval(n)
 
 	// Statements
 	case *ast.ExpressionStatement:
@@ -2855,6 +2858,46 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 			opcodes.IS_TMP_VAR, propOperand,
 			opcodes.IS_TMP_VAR, result)
 	}
+
+	return nil
+}
+
+// compileIncludeOrEval compiles include/require/eval expressions
+func (c *Compiler) compileIncludeOrEval(expr *ast.IncludeOrEvalExpression) error {
+	// Compile the argument expression (file path for include/require, code for eval)
+	if err := c.compileNode(expr.Expr); err != nil {
+		return err
+	}
+
+	// Get the result of the argument expression
+	argOperand := c.nextTemp - 1
+
+	// Allocate temporary for the result
+	result := c.allocateTemp()
+
+	// Emit the appropriate opcode based on the token type
+	var opcode opcodes.Opcode
+	switch expr.Type {
+	case lexer.T_INCLUDE:
+		opcode = opcodes.OP_INCLUDE
+	case lexer.T_INCLUDE_ONCE:
+		opcode = opcodes.OP_INCLUDE_ONCE
+	case lexer.T_REQUIRE:
+		opcode = opcodes.OP_REQUIRE
+	case lexer.T_REQUIRE_ONCE:
+		opcode = opcodes.OP_REQUIRE_ONCE
+	case lexer.T_EVAL:
+		// eval is not yet implemented, but we can add the skeleton
+		return fmt.Errorf("eval() is not yet supported")
+	default:
+		return fmt.Errorf("unsupported include/require/eval type: %v", expr.Type)
+	}
+
+	// Emit the instruction: OPCODE result, arg
+	c.emit(opcode,
+		opcodes.IS_TMP_VAR, argOperand,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
 
 	return nil
 }

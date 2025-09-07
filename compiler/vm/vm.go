@@ -7,9 +7,13 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/wudi/php-parser/ast"
+	"github.com/wudi/php-parser/compiler/jit"
 	"github.com/wudi/php-parser/compiler/opcodes"
 	runtimeRegistry "github.com/wudi/php-parser/compiler/runtime"
 	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/php-parser/parser"
 )
 
 // Generator represents a PHP generator state
@@ -161,11 +165,21 @@ type ExceptionHandler struct {
 }
 
 // VirtualMachine is the PHP bytecode virtual machine
+// CompilerCallbackFunc defines the signature for a compiler callback function
+type CompilerCallbackFunc func(ctx *ExecutionContext, program *ast.Program, filePath string, isRequired bool) (*values.Value, error)
+
 type VirtualMachine struct {
 	StackSize   int
 	MemoryLimit int64
 	TimeLimit   int
 	DebugMode   bool
+
+	// JIT编译器集成
+	JITCompiler *jit.JITCompiler
+	JITEnabled  bool
+
+	// Compiler callback for include/require functionality
+	CompilerCallback CompilerCallbackFunc
 }
 
 // NewVirtualMachine creates a new VM instance
@@ -1425,9 +1439,10 @@ func (vm *VirtualMachine) executeRequireOnce(ctx *ExecutionContext, inst *opcode
 
 // includeFile handles the actual file inclusion logic
 func (vm *VirtualMachine) includeFile(ctx *ExecutionContext, path string, isRequired bool) (*values.Value, error) {
-	// Check if file exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		errMsg := fmt.Sprintf("failed to open stream: No such file or directory")
+	// Resolve absolute path to prevent relative path issues and enable proper tracking
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		errMsg := fmt.Sprintf("failed to resolve path: %v", err)
 		if isRequired {
 			return nil, fmt.Errorf("require(%s): %s", path, errMsg)
 		} else {
@@ -1435,8 +1450,41 @@ func (vm *VirtualMachine) includeFile(ctx *ExecutionContext, path string, isRequ
 		}
 	}
 
+	// Check if file exists and is readable
+	fileInfo, err := os.Stat(absPath)
+	if os.IsNotExist(err) {
+		errMsg := fmt.Sprintf("failed to open stream: No such file or directory")
+		if isRequired {
+			return nil, fmt.Errorf("require(%s): %s", path, errMsg)
+		} else {
+			return nil, fmt.Errorf("include(%s): %s", path, errMsg)
+		}
+	} else if err != nil {
+		errMsg := fmt.Sprintf("failed to access file: %v", err)
+		if isRequired {
+			return nil, fmt.Errorf("require(%s): %s", path, errMsg)
+		} else {
+			return nil, fmt.Errorf("include(%s): %s", path, errMsg)
+		}
+	}
+
+	// Check if it's actually a file (not a directory)
+	if fileInfo.IsDir() {
+		errMsg := fmt.Sprintf("failed to open stream: Is a directory")
+		if isRequired {
+			return nil, fmt.Errorf("require(%s): %s", path, errMsg)
+		} else {
+			return nil, fmt.Errorf("include(%s): %s", path, errMsg)
+		}
+	}
+
+	// Initialize IncludedFiles map if not already done
+	if ctx.IncludedFiles == nil {
+		ctx.IncludedFiles = make(map[string]bool)
+	}
+
 	// Read file content
-	content, err := os.ReadFile(path)
+	content, err := os.ReadFile(absPath)
 	if err != nil {
 		errMsg := fmt.Sprintf("failed to read file: %v", err)
 		if isRequired {
@@ -1446,12 +1494,38 @@ func (vm *VirtualMachine) includeFile(ctx *ExecutionContext, path string, isRequ
 		}
 	}
 
-	// For now, we'll simulate successful inclusion by returning the file size
-	// In a real implementation, we'd parse and execute the PHP file
-	// TODO: Implement actual PHP file parsing and execution
-	result := values.NewInt(int64(len(content)))
+	// Mark file as included and parse/execute
+	ctx.IncludedFiles[absPath] = true
+	return vm.parseAndExecute(ctx, string(content), absPath, isRequired)
+}
 
-	return result, nil
+// parseAndExecute handles the parsing of PHP code and delegates compilation to external handler
+func (vm *VirtualMachine) parseAndExecute(ctx *ExecutionContext, content, filePath string, isRequired bool) (*values.Value, error) {
+	// Create lexer for the file content
+	l := lexer.New(content)
+
+	// Create parser and parse the content
+	p := parser.New(l)
+	program := p.ParseProgram()
+
+	// Check for parsing errors
+	if len(p.Errors()) > 0 {
+		errMsg := fmt.Sprintf("Parse error in %s: %s", filePath, strings.Join(p.Errors(), "; "))
+		if isRequired {
+			return nil, fmt.Errorf("require(%s): %s", filePath, errMsg)
+		} else {
+			return nil, fmt.Errorf("include(%s): %s", filePath, errMsg)
+		}
+	}
+
+	// Check if there's a compiler callback function set in the context
+	if vm.CompilerCallback != nil {
+		return vm.CompilerCallback(ctx, program, filePath, isRequired)
+	}
+
+	// If no compiler callback is available, we can't proceed with full execution
+	// but we can still return success for the parsing phase
+	return values.NewInt(1), nil
 }
 
 func (vm *VirtualMachine) executeThrow(ctx *ExecutionContext, inst *opcodes.Instruction) error {

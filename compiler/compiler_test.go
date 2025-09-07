@@ -2,10 +2,13 @@ package compiler
 
 import (
 	"bytes"
+	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/runtime"
 	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/compiler/vm"
@@ -2528,4 +2531,127 @@ $fn("Alice");`,
 			_ = comp // Use the compiler to avoid unused variable warning
 		})
 	}
+}
+
+// TestIncludeRequireIntegration tests the complete include/require functionality
+func TestIncludeRequireIntegration(t *testing.T) {
+	// Initialize runtime if not already done
+	if runtime.GlobalRegistry == nil {
+		err := runtime.Bootstrap()
+		require.NoError(t, err, "Failed to bootstrap runtime")
+	}
+
+	// Initialize VM integration
+	if runtime.GlobalVMIntegration == nil {
+		err := runtime.InitializeVMIntegration()
+		require.NoError(t, err, "Failed to initialize VM integration")
+	}
+
+	// Create VM and set up compiler callback
+	vmachine := vm.NewVirtualMachine()
+
+	// Set up the compiler callback for include functionality
+	vmachine.CompilerCallback = func(ctx *vm.ExecutionContext, program *ast.Program, filePath string, isRequired bool) (*values.Value, error) {
+		// Create a new compiler for the included file
+		comp := NewCompiler()
+		if err := comp.Compile(program); err != nil {
+			return nil, fmt.Errorf("compilation error in %s: %v", filePath, err)
+		}
+
+		// Execute the compiled bytecode in the SAME context to share variables
+		// This is the correct behavior - included files share variable scope in PHP
+		err := vmachine.Execute(ctx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+		if err != nil {
+			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
+		}
+
+		// Return 1 on successful inclusion (PHP convention)
+		return values.NewInt(1), nil
+	}
+
+	testCases := []struct {
+		name           string
+		phpCode        string
+		expectedOutput string
+		expectError    bool
+		errorContains  string
+	}{
+		{
+			name: "Basic include success",
+			phpCode: `<?php
+echo "Before include\n";
+include "test_include1.php";`,
+			expectedOutput: "Before include\nThis is from included file 1\n",
+			expectError:    false,
+		},
+		{
+			name: "Include with function definition",
+			phpCode: `<?php
+include "test_include3.php";`,
+			expectedOutput: "Include 3 executed\n",
+			expectError:    false,
+		},
+		{
+			name: "Require non-existent file",
+			phpCode: `<?php
+echo "Before require\n";
+require "nonexistent.php";
+echo "After require\n";`,
+			expectError:   true,
+			errorContains: "No such file or directory",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Parse main program
+			l := lexer.New(tc.phpCode)
+			p := parser.New(l)
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser errors: %v", p.Errors())
+
+			// Compile main program
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile main program")
+
+			// Create execution context
+			vmCtx := vm.NewExecutionContext()
+
+			// Initialize global variables from runtime
+			if vmCtx.GlobalVars == nil {
+				vmCtx.GlobalVars = make(map[string]*values.Value)
+			}
+
+			variables := runtime.GlobalVMIntegration.GetAllVariables()
+			for name, value := range variables {
+				vmCtx.GlobalVars[name] = value
+			}
+
+			// Execute the program
+			err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+
+			if tc.expectError {
+				require.Error(t, err, "Expected error for test case: %s", tc.name)
+				if tc.errorContains != "" {
+					require.Contains(t, err.Error(), tc.errorContains, "Error should contain expected text")
+				}
+			} else {
+				require.NoError(t, err, "Execution failed for test case: %s", tc.name)
+
+				// Check output if specified
+				if tc.expectedOutput != "" {
+					actualOutput := strings.Join(vmCtx.OutputBuffer, "")
+					require.Equal(t, tc.expectedOutput, actualOutput, "Output mismatch for test case: %s", tc.name)
+				}
+			}
+		})
+	}
+}
+
+// TestIncludeOnceRequireOnce tests the _once variants of include/require
+func TestIncludeOnceRequireOnce(t *testing.T) {
+	// This test would be implemented when include_once and require_once opcodes are added
+	// For now, we test that the tracking mechanism works
+	t.Skip("include_once and require_once opcodes not yet implemented")
 }
