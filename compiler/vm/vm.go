@@ -2061,7 +2061,7 @@ func (vm *VirtualMachine) executeInitFunctionCall(ctx *ExecutionContext, inst *o
 		functionName = "__closure__" // Special marker for callable objects
 		isCallable = true
 	} else {
-		return fmt.Errorf("function name must be a string or callable object")
+		return fmt.Errorf("function name must be a string or callable object, got type %v", fnameValue.Type)
 	}
 
 	// Get number of arguments from operand 2 (this follows the existing pattern)
@@ -2144,7 +2144,35 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 		return vm.executeMethodCall(ctx, inst)
 	}
 
-	// Check for runtime registered functions first
+	// Handle callable objects (closures) first
+	if functionName == "__closure__" && ctx.CallContext.Object != nil {
+		if ctx.CallContext.Object.IsCallable() {
+			closure := ctx.CallContext.Object.ClosureGet()
+			if closure != nil {
+				result, err := vm.ExecuteClosure(ctx, closure, ctx.CallContext.Arguments)
+				if err != nil {
+					return err
+				}
+
+				// Store result
+				vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+				// Pop call context from stack
+				if len(ctx.CallContextStack) > 0 {
+					ctx.CallContext = ctx.CallContextStack[len(ctx.CallContextStack)-1]
+					ctx.CallContextStack = ctx.CallContextStack[:len(ctx.CallContextStack)-1]
+				} else {
+					ctx.CallContext = nil
+				}
+
+				ctx.IP++
+				return nil
+			}
+		}
+		return fmt.Errorf("invalid callable object")
+	}
+
+	// Check for runtime registered functions
 	if runtimeRegistry.GlobalVMIntegration != nil && runtimeRegistry.GlobalVMIntegration.HasFunction(functionName) {
 		result, err := runtimeRegistry.GlobalVMIntegration.CallFunction(ctx, functionName, ctx.CallContext.Arguments)
 		if err != nil {
@@ -2388,14 +2416,16 @@ func (vm *VirtualMachine) getValue(ctx *ExecutionContext, operand uint32, opType
 
 	case opcodes.IS_VAR:
 		if val, exists := ctx.Variables[operand]; exists {
-			return val
+			// If it's a reference, return the dereferenced value
+			return val.Deref()
 		}
 		return values.NewNull()
 
 	case opcodes.IS_CV:
 		// Compiled variables (cached lookups)
 		if val, exists := ctx.Variables[operand]; exists {
-			return val
+			// If it's a reference, return the dereferenced value
+			return val.Deref()
 		}
 		return values.NewNull()
 
@@ -2410,7 +2440,16 @@ func (vm *VirtualMachine) setValue(ctx *ExecutionContext, operand uint32, opType
 		ctx.Temporaries[operand] = value
 
 	case opcodes.IS_VAR, opcodes.IS_CV:
-		ctx.Variables[operand] = value
+		// Check if the current variable slot contains a reference
+		if currentVal, exists := ctx.Variables[operand]; exists && currentVal.IsReference() {
+			// If it's a reference, update the target of the reference
+			ref := currentVal.Data.(*values.Reference)
+			ref.Target = value
+		} else {
+			// Otherwise, set the value directly
+			ctx.Variables[operand] = value
+		}
+
 		// Also update GlobalVars for variable variables to work
 		if varName, exists := ctx.VarSlotNames[operand]; exists {
 			ctx.GlobalVars[varName] = value
@@ -3389,12 +3428,24 @@ func (vm *VirtualMachine) executeMethodCall(ctx *ExecutionContext, inst *opcodes
 // Closure execution functions
 
 func (vm *VirtualMachine) executeCreateClosure(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// Op1 contains the function index or reference
-	functionRef := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	// Op1 contains the function name as a string value
+	functionRefValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 
-	// Create a new closure with empty bound variables (use variables will be bound separately)
+	if !functionRefValue.IsString() {
+		return fmt.Errorf("function reference must be a string, got %v", functionRefValue.Type)
+	}
+
+	functionName := functionRefValue.ToString()
+
+	// Look up the actual function object
+	function, exists := ctx.Functions[functionName]
+	if !exists {
+		return fmt.Errorf("function %s not found for closure creation", functionName)
+	}
+
+	// Create a new closure with the actual function object and empty bound variables
 	boundVars := make(map[string]*values.Value)
-	closure := values.NewClosure(functionRef, boundVars, "anonymous")
+	closure := values.NewClosure(function, boundVars, functionName)
 
 	// Store the closure in the result location
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), closure)
@@ -3424,11 +3475,29 @@ func (vm *VirtualMachine) executeBindUseVar(ctx *ExecutionContext, inst *opcodes
 	isReference := (extFlags & opcodes.EXT_FLAG_REFERENCE) != 0
 
 	if isReference {
-		// For reference binding, we need to bind the same value object so changes are reflected
-		// This ensures that modifications inside the closure affect the original variable
-		closure.BoundVars[varName] = varValue
-		// TODO: Implement proper reference semantics - this currently just copies the value
-		// For full PHP compatibility, we need shared storage between original and bound variables
+		// For reference binding, we need to create a reference that both
+		// the original variable and the closure's bound variable share
+
+		// The key insight is that we need to create a reference object that
+		// wraps the actual value, and both locations point to this reference
+
+		// Create a reference that both the original and closure will share
+		refValue := values.NewReference(varValue)
+
+		// The closure should get the reference
+		closure.BoundVars[varName] = refValue
+
+		// We also need to update the original variable to use the same reference
+		// Find the variable slot that contains the original value and replace it
+		if ctx.Variables != nil {
+			for slot, val := range ctx.Variables {
+				// Use identity comparison to avoid infinite recursion
+				if val == varValue {
+					ctx.Variables[slot] = refValue
+					break
+				}
+			}
+		}
 	} else {
 		// Normal value binding - copy the value
 		closure.BoundVars[varName] = varValue

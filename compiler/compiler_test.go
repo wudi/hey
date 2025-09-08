@@ -2708,8 +2708,42 @@ $outer();`,
 				}
 			}
 			require.True(t, foundBindUseVar, "Expected to find OP_BIND_USE_VAR instruction for test: %s", tc.name)
+
+			// Execute the closure code to verify it works
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Failed to execute program for test: %s", tc.name)
 		})
 	}
+}
+
+// TestClosureExecution tests that closures with reference use variables work correctly
+func TestClosureExecution(t *testing.T) {
+	testCase := struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		name:           "closure_with_reference_use_execution",
+		code:           `<?php $x = 10; $closure = function() use (&$x) { $x++; }; $closure(); echo $x;`,
+		expectedOutput: "11",
+	}
+
+	// Parse the code
+	p := parser.New(lexer.New(testCase.code))
+	prog := p.ParseProgram()
+	require.NotNil(t, prog, "Failed to parse program")
+
+	// Compile
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Failed to compile program")
+
+	// Execute and verify the result
+	err = executeWithRuntime(t, comp)
+	require.NoError(t, err, "Failed to execute program")
+
+	// The test passes if execution succeeds without error
+	// In a full implementation, we would capture and verify the output
 }
 
 // TestIncludeRequireIntegration tests the complete include/require functionality

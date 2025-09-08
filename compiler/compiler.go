@@ -20,18 +20,19 @@ type ForwardJump struct {
 
 // Compiler compiles AST to bytecode
 type Compiler struct {
-	instructions []opcodes.Instruction
-	constants    []*values.Value
-	scopes       []*Scope
-	labels       map[string]int
-	forwardJumps map[string][]ForwardJump
-	nextTemp     uint32
-	nextLabel    int
-	functions    map[string]*vm.Function
-	classes      map[string]*vm.Class
-	interfaces   map[string]*vm.Interface
-	traits       map[string]*vm.Trait
-	currentClass *vm.Class // Current class being compiled
+	instructions     []opcodes.Instruction
+	constants        []*values.Value
+	scopes           []*Scope
+	labels           map[string]int
+	forwardJumps     map[string][]ForwardJump
+	nextTemp         uint32
+	nextLabel        int
+	nextAnonFunction int // Counter for anonymous functions
+	functions        map[string]*vm.Function
+	classes          map[string]*vm.Class
+	interfaces       map[string]*vm.Interface
+	traits           map[string]*vm.Trait
+	currentClass     *vm.Class // Current class being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -47,18 +48,19 @@ type Scope struct {
 // NewCompiler creates a new bytecode compiler
 func NewCompiler() *Compiler {
 	return &Compiler{
-		instructions: make([]opcodes.Instruction, 0),
-		constants:    make([]*values.Value, 0),
-		scopes:       make([]*Scope, 0),
-		labels:       make(map[string]int),
-		forwardJumps: make(map[string][]ForwardJump),
-		nextTemp:     1000, // Start temp vars at 1000 to avoid conflicts
-		nextLabel:    0,
-		functions:    make(map[string]*vm.Function),
-		classes:      make(map[string]*vm.Class),
-		interfaces:   make(map[string]*vm.Interface),
-		traits:       make(map[string]*vm.Trait),
-		currentClass: nil,
+		instructions:     make([]opcodes.Instruction, 0),
+		constants:        make([]*values.Value, 0),
+		scopes:           make([]*Scope, 0),
+		labels:           make(map[string]int),
+		forwardJumps:     make(map[string][]ForwardJump),
+		nextTemp:         1000, // Start temp vars at 1000 to avoid conflicts
+		nextLabel:        0,
+		nextAnonFunction: 0, // Start anonymous function counter at 0
+		functions:        make(map[string]*vm.Function),
+		classes:          make(map[string]*vm.Class),
+		interfaces:       make(map[string]*vm.Interface),
+		traits:           make(map[string]*vm.Trait),
+		currentClass:     nil,
 	}
 }
 
@@ -987,8 +989,8 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 	if err != nil {
 		return err
 	}
-	calleeResult := c.allocateTemp()
-	c.emitMove(calleeResult)
+	// Use the temp that was allocated by compileNode
+	calleeResult := c.nextTemp - 1
 
 	// Get number of arguments
 	var numArgs uint32
@@ -2405,8 +2407,9 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 }
 
 func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpression) error {
-	// Generate a unique name for the anonymous function
-	anonName := fmt.Sprintf("__anonymous_%d", len(c.functions))
+	// Generate a unique name for the anonymous function using the counter
+	anonName := fmt.Sprintf("__anonymous_%d", c.nextAnonFunction)
+	c.nextAnonFunction++
 
 	// Create new function
 	function := &vm.Function{
@@ -2541,6 +2544,16 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 				}
 			}
 		}
+	}
+
+	// Ensure the closure is available as the result of this expression compilation
+	// The closure is in closureResult, but other parts of the compiler expect the result
+	// to be in the most recently allocated temp. We need to make sure that's the case.
+	// If closureResult is not the most recent temp, we need to move it.
+	expectedResultTemp := c.nextTemp - 1
+	if closureResult != expectedResultTemp {
+		finalResult := c.allocateTemp()
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, closureResult, 0, 0, opcodes.IS_TMP_VAR, finalResult)
 	}
 
 	return nil
