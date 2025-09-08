@@ -327,6 +327,22 @@ func DecodeResultType(encoded byte) OpType {
 	return OpType(encoded >> 4)
 }
 
+// Extended info flags (stored in lower 4 bits of OpType2)
+const (
+	EXT_FLAG_REFERENCE = 0x01 // Variable is bound by reference
+)
+
+// Helper functions for extended flags
+func EncodeOpTypesWithFlags(op1Type, op2Type, resultType OpType, extendedFlags byte) (byte, byte) {
+	opType1 := byte(op1Type)<<4 | byte(op2Type)
+	opType2 := byte(resultType)<<4 | (extendedFlags & 0x0F)
+	return opType1, opType2
+}
+
+func DecodeExtendedFlags(encoded byte) byte {
+	return encoded & 0x0F
+}
+
 // String representations for debugging
 var opcodeNames = map[Opcode]string{
 	OP_NOP: "NOP",

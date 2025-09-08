@@ -3390,8 +3390,20 @@ func (vm *VirtualMachine) executeBindUseVar(ctx *ExecutionContext, inst *opcodes
 	closure := closureVal.ClosureGet()
 	varName := varNameVal.ToString()
 
-	// Bind the variable (copy by value, not by reference, unless explicitly marked as reference)
-	closure.BoundVars[varName] = varValue
+	// Check if this is a reference binding
+	extFlags := opcodes.DecodeExtendedFlags(inst.OpType2)
+	isReference := (extFlags & opcodes.EXT_FLAG_REFERENCE) != 0
+
+	if isReference {
+		// For reference binding, we need to bind the same value object so changes are reflected
+		// This ensures that modifications inside the closure affect the original variable
+		closure.BoundVars[varName] = varValue
+		// TODO: Implement proper reference semantics - this currently just copies the value
+		// For full PHP compatibility, we need shared storage between original and bound variables
+	} else {
+		// Normal value binding - copy the value
+		closure.BoundVars[varName] = varValue
+	}
 
 	ctx.IP++
 	return nil

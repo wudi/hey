@@ -1397,6 +1397,19 @@ func (c *Compiler) emitReserved(opcode opcodes.Opcode, op1Type opcodes.OpType, o
 	c.instructions = append(c.instructions, instruction)
 }
 
+func (c *Compiler) emitWithTypes(opcode opcodes.Opcode, opType1 byte, opType2 byte, op1 uint32, op2 uint32, result uint32) {
+	instruction := opcodes.Instruction{
+		Opcode:  opcode,
+		OpType1: opType1,
+		OpType2: opType2,
+		Op1:     op1,
+		Op2:     op2,
+		Result:  result,
+	}
+
+	c.instructions = append(c.instructions, instruction)
+}
+
 func (c *Compiler) emitMove(target uint32) {
 	// Move the result from the previous compilation to the target temp variable
 	// We need to get the source temp before allocating target, so this must be called correctly
@@ -2499,7 +2512,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	if expr.UseClause != nil {
 		for _, useVar := range expr.UseClause {
 			if varExpr, ok := useVar.(*ast.Variable); ok {
-				// Get the variable value from current scope
+				// Normal variable binding (by value)
 				err := c.compileNode(varExpr)
 				if err != nil {
 					return fmt.Errorf("error compiling use variable %s: %v", varExpr.Name, err)
@@ -2510,8 +2523,23 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 				// Bind the variable to the closure
 				varNameConstant := c.addConstant(values.NewString(varExpr.Name))
 				c.emit(opcodes.OP_BIND_USE_VAR, opcodes.IS_TMP_VAR, closureResult, opcodes.IS_CONST, varNameConstant, opcodes.IS_TMP_VAR, varResult)
+			} else if refExpr, ok := useVar.(*ast.UnaryExpression); ok && refExpr.Operator == "&" {
+				// Reference variable binding (&$var)
+				if varExpr, ok := refExpr.Operand.(*ast.Variable); ok {
+					// Get the variable value from current scope
+					err := c.compileNode(varExpr)
+					if err != nil {
+						return fmt.Errorf("error compiling reference use variable %s: %v", varExpr.Name, err)
+					}
+					varResult := c.allocateTemp()
+					c.emitMove(varResult)
+
+					// Bind the variable to the closure with reference flag
+					varNameConstant := c.addConstant(values.NewString(varExpr.Name))
+					opType1, opType2 := opcodes.EncodeOpTypesWithFlags(opcodes.IS_TMP_VAR, opcodes.IS_CONST, opcodes.IS_TMP_VAR, opcodes.EXT_FLAG_REFERENCE)
+					c.emitWithTypes(opcodes.OP_BIND_USE_VAR, opType1, opType2, closureResult, varNameConstant, varResult)
+				}
 			}
-			// TODO: Handle reference use variables (&$var)
 		}
 	}
 

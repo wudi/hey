@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/ast"
+	"github.com/wudi/php-parser/compiler/opcodes"
 	"github.com/wudi/php-parser/compiler/runtime"
 	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/compiler/vm"
@@ -2618,6 +2619,95 @@ $fn("Alice");`,
 			// For now, we just check that compilation succeeds
 			// Full execution can be implemented later
 			_ = comp // Use the compiler to avoid unused variable warning
+		})
+	}
+}
+
+func TestClosureReferenceUseVariables(t *testing.T) {
+	testCases := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "single_reference_use_variable",
+			code: `<?php
+$x = 10;
+$closure = function() use (&$x) {
+    $x++;
+};
+$closure();`,
+		},
+		{
+			name: "multiple_reference_use_variables",
+			code: `<?php
+$a = 1;
+$b = 2;
+$closure = function() use (&$a, &$b) {
+    $a *= 2;
+    $b *= 3;
+};
+$closure();`,
+		},
+		{
+			name: "mixed_reference_and_value_use",
+			code: `<?php
+$c = 5;
+$d = 6;
+$closure = function() use ($c, &$d) {
+    $c = 100; // won't affect original
+    $d = 200; // will affect original
+};
+$closure();`,
+		},
+		{
+			name: "reference_use_with_array",
+			code: `<?php
+$arr = [1, 2, 3];
+$closure = function() use (&$arr) {
+    $arr[] = 4;
+    $arr[0] = 10;
+};
+$closure();`,
+		},
+		{
+			name: "nested_closure_with_reference_use",
+			code: `<?php
+$x = 1;
+$outer = function() use (&$x) {
+    $inner = function() use (&$x) {
+        $x = 42;
+    };
+    $inner();
+};
+$outer();`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Parse the code
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tc.name)
+
+			// Compile
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile program for test: %s", tc.name)
+
+			// Verify the bytecode was generated
+			bytecode := comp.GetBytecode()
+			require.NotEmpty(t, bytecode, "Expected bytecode to be generated for test: %s", tc.name)
+
+			// Check that we have OP_BIND_USE_VAR instructions
+			foundBindUseVar := false
+			for _, inst := range bytecode {
+				if inst.Opcode == opcodes.OP_BIND_USE_VAR {
+					foundBindUseVar = true
+					break
+				}
+			}
+			require.True(t, foundBindUseVar, "Expected to find OP_BIND_USE_VAR instruction for test: %s", tc.name)
 		})
 	}
 }
