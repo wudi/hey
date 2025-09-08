@@ -44,13 +44,10 @@ func TestEchoOpcode(t *testing.T) {
 				t.Fatalf("ECHO execution failed: %v", err)
 			}
 
-			// Check output buffer
-			if len(ctx.OutputBuffer) != 1 {
-				t.Fatalf("Expected 1 output, got %d", len(ctx.OutputBuffer))
-			}
-
-			if ctx.OutputBuffer[0] != test.expected {
-				t.Errorf("Expected output '%s', got '%s'", test.expected, ctx.OutputBuffer[0])
+			// Check output
+			actualOutput := ctx.GetOutput()
+			if actualOutput != test.expected {
+				t.Errorf("Expected output '%s', got '%s'", test.expected, actualOutput)
 			}
 		})
 	}
@@ -119,16 +116,11 @@ func TestMultipleEchoOpcodes(t *testing.T) {
 		t.Fatalf("Fourth ECHO failed: %v", err)
 	}
 
-	// Check output buffer
-	if len(ctx.OutputBuffer) != 4 {
-		t.Fatalf("Expected 4 outputs, got %d", len(ctx.OutputBuffer))
-	}
-
-	expected := []string{"Hello", " ", "World", "!"}
-	for i, exp := range expected {
-		if ctx.OutputBuffer[i] != exp {
-			t.Errorf("Output %d: expected '%s', got '%s'", i, exp, ctx.OutputBuffer[i])
-		}
+	// Check output
+	actualOutput := ctx.GetOutput()
+	expectedOutput := "Hello World!"
+	if actualOutput != expectedOutput {
+		t.Errorf("Expected output '%s', got '%s'", expectedOutput, actualOutput)
 	}
 }
 
@@ -250,10 +242,11 @@ func TestExitWithStringMessage(t *testing.T) {
 		t.Errorf("Expected exit code 0 for string message, got %d", ctx.ExitCode)
 	}
 
-	// The string should not be in output buffer for exit (unlike die/exit with message)
+	// The string should not be in output for exit (unlike die/exit with message)
 	// This is a simplified implementation
-	if len(ctx.OutputBuffer) != 0 {
-		t.Errorf("Expected no output for exit with string, got %v", ctx.OutputBuffer)
+	actualOutput := ctx.GetOutput()
+	if actualOutput != "" {
+		t.Errorf("Expected no output for exit with string, got '%s'", actualOutput)
 	}
 }
 
@@ -393,16 +386,11 @@ func TestIntegratedOutputFlow(t *testing.T) {
 		t.Fatalf("Second echo failed: %v", err)
 	}
 
-	// Verify output buffer
-	expected := []string{"Start: ", "42", " End"}
-	if len(ctx.OutputBuffer) != 3 {
-		t.Fatalf("Expected 3 outputs, got %d: %v", len(ctx.OutputBuffer), ctx.OutputBuffer)
-	}
-
-	for i, exp := range expected {
-		if ctx.OutputBuffer[i] != exp {
-			t.Errorf("Output %d: expected '%s', got '%s'", i, exp, ctx.OutputBuffer[i])
-		}
+	// Verify output
+	actualOutput := ctx.GetOutput()
+	expectedOutput := "Start: 42 End"
+	if actualOutput != expectedOutput {
+		t.Errorf("Expected output '%s', got '%s'", expectedOutput, actualOutput)
 	}
 
 	// Verify print result

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -208,22 +207,23 @@ foreach(foo(5) as $v) {
 		t.Logf("Function %s: %d instructions, %d constants", name, len(fn.Instructions), len(fn.Constants))
 	}
 
-	// Capture output
-	var buf bytes.Buffer
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
+	// Execute with runtime
 	vmCtx := vm.NewExecutionContext()
+	// Initialize runtime if not already done
+	if runtime.GlobalRegistry == nil {
+		err := runtime.Bootstrap()
+		require.NoError(t, err, "Failed to bootstrap runtime")
+	}
+	// Initialize VM integration
+	if runtime.GlobalVMIntegration == nil {
+		err := runtime.InitializeVMIntegration()
+		require.NoError(t, err, "Failed to initialize VM integration")
+	}
 	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 	require.NoError(t, err, "VM execution failed")
 
-	// Restore stdout and capture output
-	w.Close()
-	os.Stdout = oldStdout
-	buf.ReadFrom(r)
-
-	output := buf.String()
+	// Get output from execution context
+	output := vmCtx.GetOutput()
 	t.Logf("VM Output: %q", output)
 
 	// Check that we got the expected output
@@ -245,22 +245,23 @@ foreach($arr as $v) {
 	err := comp.Compile(prog)
 	require.NoError(t, err, "Compilation failed")
 
-	// Capture output
-	var buf bytes.Buffer
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
+	// Execute with runtime
 	vmCtx := vm.NewExecutionContext()
+	// Initialize runtime if not already done
+	if runtime.GlobalRegistry == nil {
+		err := runtime.Bootstrap()
+		require.NoError(t, err, "Failed to bootstrap runtime")
+	}
+	// Initialize VM integration
+	if runtime.GlobalVMIntegration == nil {
+		err := runtime.InitializeVMIntegration()
+		require.NoError(t, err, "Failed to initialize VM integration")
+	}
 	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 	require.NoError(t, err, "VM execution failed")
 
-	// Restore stdout and capture output
-	w.Close()
-	os.Stdout = oldStdout
-	buf.ReadFrom(r)
-
-	output := buf.String()
+	// Get output from execution context
+	output := vmCtx.GetOutput()
 	t.Logf("Simple foreach VM Output: %q", output)
 
 	// Check that we got the expected output
@@ -2599,8 +2600,11 @@ return "Hello from string return";`,
 		ctx.Variables = includeCtx.Variables
 		ctx.Stack = includeCtx.Stack
 		ctx.IncludedFiles = includeCtx.IncludedFiles
-		// Merge the output buffer from the included file
-		ctx.OutputBuffer = append(ctx.OutputBuffer, includeCtx.OutputBuffer...)
+		// Merge the output from the included file
+		includeOutput := includeCtx.GetOutput()
+		if includeOutput != "" {
+			ctx.WriteOutput(includeOutput)
+		}
 
 		// Check if the included file executed an explicit return statement
 		if includeCtx.Halted && len(includeCtx.Stack) > 0 {
@@ -2724,7 +2728,7 @@ var_dump($val);`, filepath.Join(tmpDir, "return_string.php")),
 
 				// Check output if specified
 				if tc.expectedOutput != "" {
-					actualOutput := strings.Join(vmCtx.OutputBuffer, "")
+					actualOutput := vmCtx.GetOutput()
 					require.Equal(t, tc.expectedOutput, actualOutput, "Output mismatch for test case: %s", tc.name)
 				}
 			}

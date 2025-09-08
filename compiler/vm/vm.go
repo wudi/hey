@@ -1,7 +1,9 @@
 package vm
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -78,8 +80,9 @@ type ExecutionContext struct {
 	// ROPE string concatenation buffer
 	RopeBuffers map[uint32][]string // ROPE buffer per temporary variable
 
-	// Output buffer
-	OutputBuffer []string // Captured output from echo/print statements
+	// Output writer
+	OutputWriter io.Writer     // Output writer for echo/print statements
+	outputBuffer *bytes.Buffer // Internal buffer when no writer is provided
 
 	// File inclusion tracking
 	IncludedFiles map[string]bool // Track files included with include_once/require_once
@@ -95,7 +98,39 @@ type ExecutionContext struct {
 
 // WriteOutput implements the ExecutionContext interface for runtime functions
 func (ctx *ExecutionContext) WriteOutput(output string) {
-	ctx.OutputBuffer = append(ctx.OutputBuffer, output)
+	if ctx.OutputWriter != nil {
+		ctx.OutputWriter.Write([]byte(output))
+	} else {
+		if ctx.outputBuffer == nil {
+			ctx.outputBuffer = &bytes.Buffer{}
+		}
+		ctx.outputBuffer.WriteString(output)
+	}
+}
+
+// SetOutputWriter sets the output writer for the execution context
+func (ctx *ExecutionContext) SetOutputWriter(writer io.Writer) {
+	ctx.OutputWriter = writer
+}
+
+// GetOutput returns the accumulated output as a string (only works when no custom writer is set)
+func (ctx *ExecutionContext) GetOutput() string {
+	if ctx.outputBuffer != nil {
+		return ctx.outputBuffer.String()
+	}
+	return ""
+}
+
+// GetOutputBuffer returns the internal output for compatibility with existing tests
+func (ctx *ExecutionContext) GetOutputBuffer() []string {
+	if ctx.outputBuffer != nil {
+		output := ctx.outputBuffer.String()
+		if output == "" {
+			return nil
+		}
+		return []string{output}
+	}
+	return nil
 }
 
 // CallFrame represents a function call frame
@@ -211,7 +246,6 @@ func NewExecutionContext() *ExecutionContext {
 		ExceptionHandlers: make([]ExceptionHandler, 0),
 		CurrentException:  nil,
 		RopeBuffers:       make(map[uint32][]string),
-		OutputBuffer:      make([]string, 0),
 		IncludedFiles:     make(map[string]bool),
 		CurrentGenerator:  nil,
 		Generators:        make(map[uint32]*Generator),
@@ -1262,11 +1296,8 @@ func (vm *VirtualMachine) executeEcho(ctx *ExecutionContext, inst *opcodes.Instr
 	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	output := value.ToString()
 
-	// Add to output buffer for testing
-	ctx.OutputBuffer = append(ctx.OutputBuffer, output)
-
-	// Also print to stdout for real output
-	fmt.Print(output)
+	// Write output using WriteOutput method
+	ctx.WriteOutput(output)
 
 	ctx.IP++
 	return nil
@@ -1277,11 +1308,8 @@ func (vm *VirtualMachine) executePrint(ctx *ExecutionContext, inst *opcodes.Inst
 	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	output := value.ToString()
 
-	// Add to output buffer for testing
-	ctx.OutputBuffer = append(ctx.OutputBuffer, output)
-
-	// Also print to stdout for real output
-	fmt.Print(output)
+	// Write output using WriteOutput method
+	ctx.WriteOutput(output)
 
 	// Print always returns 1
 	result := values.NewInt(1)
