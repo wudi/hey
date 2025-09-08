@@ -519,7 +519,7 @@ func minHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, erro
 
 func varDumpHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
 	for _, arg := range args {
-		fmt.Println(formatVarDump(arg, 0))
+		ctx.WriteOutput(formatVarDump(arg, 0) + "\n")
 	}
 	return values.NewNull(), nil
 }
@@ -579,8 +579,17 @@ func formatVarDump(value *values.Value, indent int) string {
 		return fmt.Sprintf("%sNULL", prefix)
 	case values.TypeArray:
 		result := fmt.Sprintf("%sarray(%d) {\n", prefix, value.ArrayCount())
-		// Simple array formatting - would need more complex logic for full implementation
-		result += prefix + "}\n"
+		if value.ArrayCount() > 0 {
+			// Access the array data directly
+			if arr, ok := value.Data.(*values.Array); ok {
+				for key, val := range arr.Elements {
+					keyStr := fmt.Sprintf("  [%v]=>", key)
+					result += fmt.Sprintf("%s%s\n", prefix, keyStr)
+					result += formatVarDump(val, indent+1) + "\n"
+				}
+			}
+		}
+		result += prefix + "}"
 		return result
 	default:
 		return fmt.Sprintf("%s%s", prefix, value.ToString())

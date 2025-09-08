@@ -94,6 +94,7 @@ type ExtensionDescriptor struct {
 // ExecutionContext interface for runtime function handlers
 type ExecutionContext interface {
 	// Add methods as needed for function handlers
+	WriteOutput(output string)
 }
 
 // FunctionHandler is the type for runtime function handlers

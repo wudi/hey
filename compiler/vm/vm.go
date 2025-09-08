@@ -93,6 +93,11 @@ type ExecutionContext struct {
 	ExitCode int
 }
 
+// WriteOutput implements the ExecutionContext interface for runtime functions
+func (ctx *ExecutionContext) WriteOutput(output string) {
+	ctx.OutputBuffer = append(ctx.OutputBuffer, output)
+}
+
 // CallFrame represents a function call frame
 type CallFrame struct {
 	Function    *Function
