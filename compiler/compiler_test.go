@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -2547,6 +2548,29 @@ func TestIncludeRequireIntegration(t *testing.T) {
 		require.NoError(t, err, "Failed to initialize VM integration")
 	}
 
+	// Create temporary directory for test files
+	tmpDir, err := os.MkdirTemp("", "php_parser_test_")
+	require.NoError(t, err, "Failed to create temp directory")
+	defer os.RemoveAll(tmpDir)
+
+	// Create test files in temporary directory
+	testFiles := map[string]string{
+		"return_array.php": `<?php
+$arr = [1,2,3];
+return $arr;`,
+		"no_return.php": `<?php
+echo "Hello from no_return.php\n";
+// no return statement`,
+		"return_string.php": `<?php
+return "Hello from string return";`,
+	}
+
+	for filename, content := range testFiles {
+		filePath := filepath.Join(tmpDir, filename)
+		err = os.WriteFile(filePath, []byte(content), 0644)
+		require.NoError(t, err, "Failed to create test file: %s", filename)
+	}
+
 	// Create VM and set up compiler callback
 	vmachine := vm.NewVirtualMachine()
 
@@ -2633,29 +2657,29 @@ echo "After require\n";`,
 		},
 		{
 			name: "Include file with return array",
-			phpCode: `<?php
+			phpCode: fmt.Sprintf(`<?php
 echo "Before include\n";
-$val = include "../b.php";
+$val = include "%s";
 echo "After include\n";
-var_dump($val);`,
+var_dump($val);`, filepath.Join(tmpDir, "return_array.php")),
 			expectedOutput: "Before include\nAfter include\narray(3) {\n  [0]=>\n  int(1)\n  [1]=>\n  int(2)\n  [2]=>\n  int(3)\n}\n",
 			expectError:    false,
 		},
 		{
 			name: "Include file with no return (default 1)",
-			phpCode: `<?php
+			phpCode: fmt.Sprintf(`<?php
 echo "Before include\n";
-$val = include "../c.php";
+$val = include "%s";
 echo "After include\n";
-var_dump($val);`,
-			expectedOutput: "Before include\nHello from c.php\nAfter include\nint(1)\n",
+var_dump($val);`, filepath.Join(tmpDir, "no_return.php")),
+			expectedOutput: "Before include\nHello from no_return.php\nAfter include\nint(1)\n",
 			expectError:    false,
 		},
 		{
 			name: "Include file with return string",
-			phpCode: `<?php
-$val = include "../test_string_return.php";
-var_dump($val);`,
+			phpCode: fmt.Sprintf(`<?php
+$val = include "%s";
+var_dump($val);`, filepath.Join(tmpDir, "return_string.php")),
 			expectedOutput: "string(24) \"Hello from string return\"\n",
 			expectError:    false,
 		},
