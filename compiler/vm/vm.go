@@ -1,7 +1,6 @@
 package vm
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -81,8 +80,7 @@ type ExecutionContext struct {
 	RopeBuffers map[uint32][]string // ROPE buffer per temporary variable
 
 	// Output writer
-	OutputWriter io.Writer     // Output writer for echo/print statements
-	outputBuffer *bytes.Buffer // Internal buffer when no writer is provided
+	OutputWriter io.Writer // Output writer for echo/print statements
 
 	// File inclusion tracking
 	IncludedFiles map[string]bool // Track files included with include_once/require_once
@@ -100,37 +98,12 @@ type ExecutionContext struct {
 func (ctx *ExecutionContext) WriteOutput(output string) {
 	if ctx.OutputWriter != nil {
 		ctx.OutputWriter.Write([]byte(output))
-	} else {
-		if ctx.outputBuffer == nil {
-			ctx.outputBuffer = &bytes.Buffer{}
-		}
-		ctx.outputBuffer.WriteString(output)
 	}
 }
 
 // SetOutputWriter sets the output writer for the execution context
 func (ctx *ExecutionContext) SetOutputWriter(writer io.Writer) {
 	ctx.OutputWriter = writer
-}
-
-// GetOutput returns the accumulated output as a string (only works when no custom writer is set)
-func (ctx *ExecutionContext) GetOutput() string {
-	if ctx.outputBuffer != nil {
-		return ctx.outputBuffer.String()
-	}
-	return ""
-}
-
-// GetOutputBuffer returns the internal output for compatibility with existing tests
-func (ctx *ExecutionContext) GetOutputBuffer() []string {
-	if ctx.outputBuffer != nil {
-		output := ctx.outputBuffer.String()
-		if output == "" {
-			return nil
-		}
-		return []string{output}
-	}
-	return nil
 }
 
 // CallFrame represents a function call frame

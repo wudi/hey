@@ -209,6 +209,9 @@ foreach(foo(5) as $v) {
 
 	// Execute with runtime
 	vmCtx := vm.NewExecutionContext()
+	// Set up output capture
+	var buf bytes.Buffer
+	vmCtx.SetOutputWriter(&buf)
 	// Initialize runtime if not already done
 	if runtime.GlobalRegistry == nil {
 		err := runtime.Bootstrap()
@@ -222,8 +225,8 @@ foreach(foo(5) as $v) {
 	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 	require.NoError(t, err, "VM execution failed")
 
-	// Get output from execution context
-	output := vmCtx.GetOutput()
+	// Get output from buffer
+	output := buf.String()
 	t.Logf("VM Output: %q", output)
 
 	// Check that we got the expected output
@@ -247,6 +250,9 @@ foreach($arr as $v) {
 
 	// Execute with runtime
 	vmCtx := vm.NewExecutionContext()
+	// Set up output capture
+	var buf bytes.Buffer
+	vmCtx.SetOutputWriter(&buf)
 	// Initialize runtime if not already done
 	if runtime.GlobalRegistry == nil {
 		err := runtime.Bootstrap()
@@ -260,8 +266,8 @@ foreach($arr as $v) {
 	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 	require.NoError(t, err, "VM execution failed")
 
-	// Get output from execution context
-	output := vmCtx.GetOutput()
+	// Get output from buffer
+	output := buf.String()
 	t.Logf("Simple foreach VM Output: %q", output)
 
 	// Check that we got the expected output
@@ -2589,6 +2595,7 @@ return "Hello from string return";`,
 		includeCtx.Variables = ctx.Variables         // Share variables
 		includeCtx.Stack = ctx.Stack                 // Share stack
 		includeCtx.IncludedFiles = ctx.IncludedFiles // Share included files tracking
+		includeCtx.OutputWriter = ctx.OutputWriter   // Share output writer
 
 		// Execute the compiled bytecode in the separate context
 		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
@@ -2600,11 +2607,7 @@ return "Hello from string return";`,
 		ctx.Variables = includeCtx.Variables
 		ctx.Stack = includeCtx.Stack
 		ctx.IncludedFiles = includeCtx.IncludedFiles
-		// Merge the output from the included file
-		includeOutput := includeCtx.GetOutput()
-		if includeOutput != "" {
-			ctx.WriteOutput(includeOutput)
-		}
+		// Output merging is now handled automatically by shared OutputWriter
 
 		// Check if the included file executed an explicit return statement
 		if includeCtx.Halted && len(includeCtx.Stack) > 0 {
@@ -2705,6 +2708,12 @@ var_dump($val);`, filepath.Join(tmpDir, "return_string.php")),
 			// Create execution context
 			vmCtx := vm.NewExecutionContext()
 
+			// Set up output capture if needed
+			var buf bytes.Buffer
+			if tc.expectedOutput != "" {
+				vmCtx.SetOutputWriter(&buf)
+			}
+
 			// Initialize global variables from runtime
 			if vmCtx.GlobalVars == nil {
 				vmCtx.GlobalVars = make(map[string]*values.Value)
@@ -2728,7 +2737,7 @@ var_dump($val);`, filepath.Join(tmpDir, "return_string.php")),
 
 				// Check output if specified
 				if tc.expectedOutput != "" {
-					actualOutput := vmCtx.GetOutput()
+					actualOutput := buf.String()
 					require.Equal(t, tc.expectedOutput, actualOutput, "Output mismatch for test case: %s", tc.name)
 				}
 			}
