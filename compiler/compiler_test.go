@@ -1439,6 +1439,85 @@ func TestArrayAccessOutsideInterpolation(t *testing.T) {
 	}
 }
 
+func TestArrayIndexAssignment(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "Array index assignment with integer key",
+			code: `<?php
+				$arr = array();
+				$arr[0] = "test";
+			`,
+		},
+		{
+			name: "Array index assignment with string key",
+			code: `<?php
+				$arr = array();
+				$arr["key"] = "value";
+			`,
+		},
+		{
+			name: "Array append assignment",
+			code: `<?php
+				$arr = array();
+				$arr[] = "append";
+			`,
+		},
+		{
+			name: "Array index then append",
+			code: `<?php
+				$arr = array();
+				$arr[0] = "first";
+				$arr[] = "last";
+			`,
+		},
+		{
+			name: "Array append then index",
+			code: `<?php
+				$arr = array();
+				$arr[] = "first";
+				$arr[1] = "second";
+			`,
+		},
+		{
+			name: "Nested array assignment",
+			code: `<?php
+				$cfg = array();
+				$type = "config";
+				$file = "main.php";
+				$cfg[$type][$file] = false;
+			`,
+		},
+		{
+			name: "Multiple nested array operations",
+			code: `<?php
+				$data = array();
+				$data["users"]["john"]["age"] = 25;
+				$data["users"]["jane"]["age"] = 30;
+				$val = $data["users"]["john"]["age"];
+			`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile array index assignment: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Failed to execute array index assignment: %s", tt.name)
+		})
+	}
+}
+
 func TestTryStatement(t *testing.T) {
 	tests := []struct {
 		name string

@@ -1281,7 +1281,8 @@ func (vm *VirtualMachine) executeAddArrayElement(ctx *ExecutionContext, inst *op
 	array := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
 
 	if !array.IsArray() {
-		return fmt.Errorf("trying to add element to non-array")
+		// Convert to array if not already (similar to executeAssignDim)
+		array = values.NewArray()
 	}
 
 	var key *values.Value
@@ -1291,6 +1292,9 @@ func (vm *VirtualMachine) executeAddArrayElement(ctx *ExecutionContext, inst *op
 
 	value := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
 	array.ArraySet(key, value)
+
+	// Store the array back to ensure modifications are persisted
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), array)
 
 	ctx.IP++
 	return nil
@@ -1314,8 +1318,30 @@ func (vm *VirtualMachine) executeFetchDimRead(ctx *ExecutionContext, inst *opcod
 }
 
 func (vm *VirtualMachine) executeFetchDimWrite(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// This is a simplified implementation
-	return vm.executeFetchDimRead(ctx, inst)
+	// FETCH_DIM_W: Fetch array element for writing, create if doesn't exist
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	key := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	// If array is not an array, convert it to one
+	if !array.IsArray() {
+		array = values.NewArray()
+		// Store the new array back to the source
+		vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), array)
+	}
+
+	// Get or create the element at the key
+	result := array.ArrayGet(key)
+	if result == nil || result.IsNull() {
+		// Create new array at this key for nested access
+		result = values.NewArray()
+		array.ArraySet(key, result)
+	}
+
+	// Store result in temporary
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
 }
 
 // Object operations
@@ -4112,31 +4138,20 @@ func (vm *VirtualMachine) executeAssignOp(ctx *ExecutionContext, inst *opcodes.I
 
 // executeAssignDim performs $var[key] = value
 func (vm *VirtualMachine) executeAssignDim(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// For now, this is a simplified implementation
-	// In real PHP, this would require handling OP_DATA or the next instruction for the value
-	// Op1: array variable, Op2: key, value needs to be passed separately
-
-	// For demonstration, let's assume the value is in a temporary variable with index from Reserved field
+	// Op1: array variable, Op2: key, Result: value to assign
 	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	key := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
-
-	// Simplified: get value from Reserved field as temp var index
-	valueIndex := uint32(inst.Reserved)
-	value := ctx.Temporaries[valueIndex]
-	if value == nil {
-		value = values.NewNull()
-	}
+	value := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
 
 	if !array.IsArray() {
 		// Convert to array if not already
 		array = values.NewArray()
-		// Store the new array back to the variable
-		vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), array)
 	}
 
 	array.ArraySet(key, value)
-	// Store result (the assigned value) in Result location
-	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+
+	// Always store the array back to the variable to ensure modifications are persisted
+	vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), array)
 
 	ctx.IP++
 	return nil

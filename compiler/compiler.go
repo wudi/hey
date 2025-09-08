@@ -513,34 +513,114 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 			c.emit(opcode, opcodes.IS_VAR, varSlot, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, varSlot)
 		}
 	} else if arrayAccess, ok := expr.Left.(*ast.ArrayAccessExpression); ok {
-		// Handle array assignment: $arr[index] = value or $arr[] = value
-
-		// Compile array variable
-		if arrayVar, ok := arrayAccess.Array.(*ast.Variable); ok {
-			arraySlot := c.getVariableSlot(arrayVar.Name)
-
-			if arrayAccess.Index == nil {
-				// Array append: $arr[] = value
-				// Use ADD_ARRAY_ELEMENT instruction
-				c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, arraySlot)
-			} else {
-				// Array index assignment: $arr[index] = value
-				// First compile the index expression
-				err := c.compileNode(*arrayAccess.Index)
-				if err != nil {
-					return err
-				}
-				indexResult := c.nextTemp - 1
-
-				// Emit ASSIGN_DIM instruction: array[index] = value
-				// Op1: array variable, Op2: index, value via Reserved field
-				c.emitReserved(opcodes.OP_ASSIGN_DIM, opcodes.IS_VAR, arraySlot, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_VAR, arraySlot, byte(valueResult))
-			}
-		} else {
-			return fmt.Errorf("complex array expressions not yet supported")
-		}
+		// Handle array assignment: $arr[index] = value or nested assignments like $arr[key1][key2] = value
+		return c.compileArrayAssignment(arrayAccess, valueResult)
 	}
 	return nil
+}
+
+// compileArrayAssignment handles array assignments including nested ones
+// For $arr[key1][key2] = value, this recursively processes the array access chain
+func (c *Compiler) compileArrayAssignment(arrayAccess *ast.ArrayAccessExpression, valueResult uint32) error {
+	// Check if the array part is a simple variable or another array access
+	if baseVar, ok := arrayAccess.Array.(*ast.Variable); ok {
+		// Simple case: $arr[index] = value
+		arraySlot := c.getVariableSlot(baseVar.Name)
+
+		if arrayAccess.Index == nil {
+			// Array append: $arr[] = value
+			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, arraySlot)
+		} else {
+			// Array index assignment: $arr[index] = value
+			err := c.compileNode(*arrayAccess.Index)
+			if err != nil {
+				return err
+			}
+			indexResult := c.nextTemp - 1
+
+			// Emit ASSIGN_DIM instruction: array[index] = value
+			// We'll use a different approach: put value in Op2, key gets compiled separately
+			c.emit(opcodes.OP_ASSIGN_DIM, opcodes.IS_VAR, arraySlot, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, valueResult)
+		}
+	} else if nestedArrayAccess, ok := arrayAccess.Array.(*ast.ArrayAccessExpression); ok {
+		// Nested case: $arr[key1][key2] = value
+		// First, ensure the nested array structure exists by fetching for write access
+
+		// Compile the nested array access for write (this will create intermediate arrays if needed)
+		err := c.compileFetchDimWrite(nestedArrayAccess)
+		if err != nil {
+			return err
+		}
+		nestedArrayResult := c.nextTemp - 1
+
+		if arrayAccess.Index == nil {
+			// Nested array append: $arr[key1][] = value
+			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_TMP_VAR, nestedArrayResult)
+		} else {
+			// Nested array index assignment: $arr[key1][key2] = value
+			err := c.compileNode(*arrayAccess.Index)
+			if err != nil {
+				return err
+			}
+			indexResult := c.nextTemp - 1
+
+			// Emit ASSIGN_DIM instruction with the nested array
+			c.emit(opcodes.OP_ASSIGN_DIM, opcodes.IS_TMP_VAR, nestedArrayResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, valueResult)
+		}
+	} else {
+		return fmt.Errorf("unsupported array expression type in assignment: %T", arrayAccess.Array)
+	}
+
+	return nil
+}
+
+// compileFetchDimWrite compiles an array access for write operations, ensuring intermediate arrays exist
+func (c *Compiler) compileFetchDimWrite(arrayAccess *ast.ArrayAccessExpression) error {
+	if baseVar, ok := arrayAccess.Array.(*ast.Variable); ok {
+		// Simple case: fetch $arr[index] for writing
+		arraySlot := c.getVariableSlot(baseVar.Name)
+
+		if arrayAccess.Index == nil {
+			return fmt.Errorf("cannot fetch array with empty index for writing")
+		}
+
+		err := c.compileNode(*arrayAccess.Index)
+		if err != nil {
+			return err
+		}
+		indexResult := c.nextTemp - 1
+		resultTemp := c.allocateTemp()
+
+		// Emit FETCH_DIM_W instruction to get writable reference to array element
+		c.emit(opcodes.OP_FETCH_DIM_W, opcodes.IS_VAR, arraySlot, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, resultTemp)
+
+		return nil
+	} else if nestedArrayAccess, ok := arrayAccess.Array.(*ast.ArrayAccessExpression); ok {
+		// Nested case: recursively fetch nested array structure for writing
+		err := c.compileFetchDimWrite(nestedArrayAccess)
+		if err != nil {
+			return err
+		}
+		nestedResult := c.nextTemp - 1
+
+		if arrayAccess.Index == nil {
+			return fmt.Errorf("cannot fetch array with empty index for writing")
+		}
+
+		err = c.compileNode(*arrayAccess.Index)
+		if err != nil {
+			return err
+		}
+		indexResult := c.nextTemp - 1
+		resultTemp := c.allocateTemp()
+
+		// Fetch from the nested array result
+		c.emit(opcodes.OP_FETCH_DIM_W, opcodes.IS_TMP_VAR, nestedResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, resultTemp)
+
+		return nil
+	} else {
+		return fmt.Errorf("unsupported array expression type: %T", arrayAccess.Array)
+	}
 }
 
 func (c *Compiler) getOpcodeForAssignmentOperator(operator string) opcodes.Opcode {
