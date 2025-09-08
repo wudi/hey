@@ -1770,7 +1770,7 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 		ParentClass: "",
 		Properties:  make(map[string]*vm.Property),
 		Methods:     make(map[string]*vm.Function),
-		Constants:   make(map[string]*values.Value),
+		Constants:   make(map[string]*vm.ClassConstant),
 		IsAbstract:  false,
 		IsFinal:     true, // Enums are final by default
 	}
@@ -1793,7 +1793,12 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 			caseValue = values.NewString(caseName)
 		}
 
-		enumClass.Constants[caseName] = caseValue
+		enumClass.Constants[caseName] = &vm.ClassConstant{
+			Name:       caseName,
+			Value:      caseValue,
+			Visibility: "public",
+			IsFinal:    true,
+		}
 	}
 
 	// Add enum methods if any

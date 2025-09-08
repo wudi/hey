@@ -2642,7 +2642,7 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 		ParentClass: "",
 		Properties:  make(map[string]*vm.Property),
 		Methods:     make(map[string]*vm.Function),
-		Constants:   make(map[string]*values.Value),
+		Constants:   make(map[string]*vm.ClassConstant),
 		IsAbstract:  false,
 		IsFinal:     false,
 	}
@@ -2842,6 +2842,17 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 		return fmt.Errorf("class constant declaration outside of class context")
 	}
 
+	// Determine visibility - default to public if not specified
+	visibility := "public"
+	if decl.Visibility != "" {
+		visibility = decl.Visibility
+	}
+
+	// Validate visibility + modifier combinations (PHP rules)
+	if visibility == "private" && decl.IsFinal {
+		return fmt.Errorf("private constant cannot be final as it is not visible to other classes")
+	}
+
 	// Process each constant in the declaration
 	for _, constDeclarator := range decl.Constants {
 		// Cast Expression to concrete type to get constant name
@@ -2856,97 +2867,135 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 			return fmt.Errorf("constant %s already declared in class %s", constName, c.currentClass.Name)
 		}
 
-		// Evaluate constant value
-		var constValue *values.Value
-		switch val := constDeclarator.Value.(type) {
-		case *ast.NumberLiteral:
-			if val.Kind == "int" {
-				intValue, err := strconv.ParseInt(val.Value, 10, 64)
-				if err != nil {
-					return fmt.Errorf("invalid integer literal for constant %s: %s", constName, val.Value)
-				}
-				constValue = values.NewInt(intValue)
-			} else if val.Kind == "float" {
-				floatValue, err := strconv.ParseFloat(val.Value, 64)
-				if err != nil {
-					return fmt.Errorf("invalid float literal for constant %s: %s", constName, val.Value)
-				}
-				constValue = values.NewFloat(floatValue)
-			} else {
-				// Handle other numeric types
-				if intValue, err := strconv.ParseInt(val.Value, 10, 64); err == nil {
-					constValue = values.NewInt(intValue)
-				} else if floatValue, err := strconv.ParseFloat(val.Value, 64); err == nil {
-					constValue = values.NewFloat(floatValue)
-				} else {
-					return fmt.Errorf("invalid number literal for constant %s: %s", constName, val.Value)
-				}
-			}
-		case *ast.StringLiteral:
-			constValue = values.NewString(val.Value)
-		case *ast.BooleanLiteral:
-			constValue = values.NewBool(val.Value)
-		case *ast.NullLiteral:
-			constValue = values.NewNull()
-		case *ast.ArrayExpression:
-			// For now, only empty arrays
-			if len(val.Elements) == 0 {
-				constValue = values.NewArray()
-			} else {
-				return fmt.Errorf("complex array constants not supported yet for constant %s", constName)
-			}
-		case *ast.IdentifierNode:
-			// Handle simple constant references like true, false, etc.
-			switch val.Name {
-			case "true":
-				constValue = values.NewBool(true)
-			case "false":
-				constValue = values.NewBool(false)
-			case "null":
-				constValue = values.NewNull()
-			default:
-				return fmt.Errorf("constant references not supported yet for constant %s (identifier: %s)", constName, val.Name)
-			}
-		default:
-			// For complex expressions, we'd need more sophisticated constant evaluation
-			return fmt.Errorf("complex constant expressions not supported yet for constant %s", constName)
+		// Evaluate constant value using a dedicated method
+		constValue, err := c.evaluateClassConstantExpression(constDeclarator.Value)
+		if err != nil {
+			return fmt.Errorf("failed to evaluate constant %s: %v", constName, err)
 		}
 
-		if constValue == nil {
-			return fmt.Errorf("could not evaluate constant value for %s", constName)
-		}
-
-		// Add constant to current class
-		c.currentClass.Constants[constName] = constValue
-
-		// Emit class constant declaration instruction
-		classNameConstant := c.addConstant(values.NewString(c.currentClass.Name))
-		constNameConstant := c.addConstant(values.NewString(constName))
-		constValueConstant := c.addConstant(constValue)
-
-		// Emit the class constant declaration with all metadata
-		c.emit(opcodes.OP_DECLARE_CLASS_CONST,
-			opcodes.IS_CONST, classNameConstant,
-			opcodes.IS_CONST, constNameConstant,
-			opcodes.IS_CONST, constValueConstant)
-
-		// Emit visibility and other flags if needed
-		if decl.IsFinal {
-			// We could add a separate opcode for final constants, but for now we'll note it
-			// In a more complete implementation, this would be handled by the VM
-		}
-
-		if decl.IsAbstract {
-			// Abstract constants are a PHP 8.0+ feature and would need special handling
-			// For now, we'll note this but not implement the full logic
-		}
-
-		// Handle typed constants (PHP 8.3+)
+		// Type validation for PHP 8.3+ typed constants
+		var typeHint string
 		if decl.Type != nil {
-			// Type information could be stored and validated at runtime
-			// For now, we'll store it in the constant metadata
-			// We could emit additional metadata about the type, but for simplicity we'll skip this
+			// Extract type hint from AST
+			typeHint = decl.Type.Name
+			// Validate constant value against type
+			if err := c.validateConstantType(constValue, typeHint); err != nil {
+				return fmt.Errorf("constant %s::%s type mismatch: %v", c.currentClass.Name, constName, err)
+			}
 		}
+
+		// Create class constant with full metadata
+		classConstant := &vm.ClassConstant{
+			Name:       constName,
+			Value:      constValue,
+			Visibility: visibility,
+			Type:       typeHint,
+			IsFinal:    decl.IsFinal,
+			IsAbstract: decl.IsAbstract,
+		}
+
+		// Add constant to current class (no opcode emission needed)
+		c.currentClass.Constants[constName] = classConstant
+	}
+
+	return nil
+}
+
+// evaluateClassConstantExpression evaluates a class constant expression at compile time
+func (c *Compiler) evaluateClassConstantExpression(expr ast.Expression) (*values.Value, error) {
+	switch val := expr.(type) {
+	case *ast.NumberLiteral:
+		if val.Kind == "int" {
+			intValue, err := strconv.ParseInt(val.Value, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid integer literal: %s", val.Value)
+			}
+			return values.NewInt(intValue), nil
+		} else if val.Kind == "float" {
+			floatValue, err := strconv.ParseFloat(val.Value, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid float literal: %s", val.Value)
+			}
+			return values.NewFloat(floatValue), nil
+		} else {
+			// Handle other numeric types
+			if intValue, err := strconv.ParseInt(val.Value, 10, 64); err == nil {
+				return values.NewInt(intValue), nil
+			} else if floatValue, err := strconv.ParseFloat(val.Value, 64); err == nil {
+				return values.NewFloat(floatValue), nil
+			} else {
+				return nil, fmt.Errorf("invalid number literal: %s", val.Value)
+			}
+		}
+	case *ast.StringLiteral:
+		return values.NewString(val.Value), nil
+	case *ast.BooleanLiteral:
+		return values.NewBool(val.Value), nil
+	case *ast.NullLiteral:
+		return values.NewNull(), nil
+	case *ast.ArrayExpression:
+		// For now, only empty arrays are supported
+		if len(val.Elements) == 0 {
+			return values.NewArray(), nil
+		} else {
+			return nil, fmt.Errorf("complex array constants not supported yet")
+		}
+	case *ast.IdentifierNode:
+		// Handle simple constant references like true, false, null
+		switch val.Name {
+		case "true":
+			return values.NewBool(true), nil
+		case "false":
+			return values.NewBool(false), nil
+		case "null":
+			return values.NewNull(), nil
+		default:
+			return nil, fmt.Errorf("undefined constant reference: %s", val.Name)
+		}
+	// TODO: Add support for more complex constant expressions:
+	// - Mathematical expressions with constants
+	// - String concatenation
+	// - Array expressions with constant values
+	// - Class constant references
+	default:
+		return nil, fmt.Errorf("unsupported constant expression type: %T", expr)
+	}
+}
+
+// validateConstantType validates that a constant value matches its declared type
+func (c *Compiler) validateConstantType(value *values.Value, typeHint string) error {
+	if typeHint == "" {
+		return nil // No type constraint
+	}
+
+	switch typeHint {
+	case "string":
+		if !value.IsString() {
+			return fmt.Errorf("expected string, got %s", value.Type.String())
+		}
+	case "int":
+		if !value.IsInt() {
+			return fmt.Errorf("expected int, got %s", value.Type.String())
+		}
+	case "float":
+		if !value.IsFloat() {
+			return fmt.Errorf("expected float, got %s", value.Type.String())
+		}
+	case "bool":
+		if !value.IsBool() {
+			return fmt.Errorf("expected bool, got %s", value.Type.String())
+		}
+	case "array":
+		if !value.IsArray() {
+			return fmt.Errorf("expected array, got %s", value.Type.String())
+		}
+	case "null":
+		if !value.IsNull() {
+			return fmt.Errorf("expected null, got %s", value.Type.String())
+		}
+	default:
+		// For other types (classes, mixed, etc.), we might need more complex validation
+		return fmt.Errorf("unsupported type hint: %s", typeHint)
 	}
 
 	return nil
@@ -2972,7 +3021,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 		ParentClass: "",
 		Properties:  make(map[string]*vm.Property),
 		Methods:     make(map[string]*vm.Function),
-		Constants:   make(map[string]*values.Value),
+		Constants:   make(map[string]*vm.ClassConstant),
 		IsAbstract:  decl.Abstract,
 		IsFinal:     decl.Final,
 	}

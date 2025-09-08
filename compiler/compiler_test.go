@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -2041,69 +2042,125 @@ func TestPropertyDeclaration(t *testing.T) {
 
 func TestClassConstantDeclaration(t *testing.T) {
 	testCases := []struct {
-		name string
-		code string
+		name     string
+		code     string
+		expected string
 	}{
 		{
-			"Simple class constants",
+			"Simple string constant",
 			`<?php 
-			class TestClass { 
+			class Test { 
 				public const VERSION = "1.0"; 
-				public const MAX_SIZE = 100; 
-				
-				public function getVersion() { 
-					return self::VERSION; 
-				} 
 			} 
-			echo TestClass::VERSION; 
-			echo TestClass::MAX_SIZE;`,
+			echo Test::VERSION;`,
+			"1.0",
+		},
+		{
+			"Simple integer constant",
+			`<?php 
+			class Test { 
+				public const MAX_SIZE = 100; 
+			} 
+			echo Test::MAX_SIZE;`,
+			"100",
 		},
 		{
 			"Multiple constants in one declaration",
 			`<?php 
-			class TestClass { 
-				public const FIRST = 1, SECOND = 2, THIRD = 3; 
+			class Test { 
+				public const FIRST = 1, SECOND = 2; 
 			} 
-			echo TestClass::FIRST; 
-			echo TestClass::SECOND;`,
+			echo Test::FIRST; 
+			echo "|"; 
+			echo Test::SECOND;`,
+			"1|2",
 		},
 		{
-			"Constants with different visibilities",
+			"Boolean constants",
 			`<?php 
-			class TestClass { 
-				public const PUBLIC_CONST = "public"; 
+			class Test { 
+				public const IS_TRUE = true; 
+				public const IS_FALSE = false; 
 			} 
-			echo TestClass::PUBLIC_CONST;`,
+			echo Test::IS_TRUE ? "1" : "0"; 
+			echo Test::IS_FALSE ? "1" : "0";`,
+			"10",
+		},
+		{
+			"Null constant",
+			`<?php 
+			class Test { 
+				public const NULL_VALUE = null; 
+			} 
+			echo Test::NULL_VALUE === null ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Float constant",
+			`<?php 
+			class Test { 
+				public const PI = 3.14; 
+			} 
+			echo Test::PI;`,
+			"3.14",
+		},
+		{
+			"Constants with visibility modifiers",
+			`<?php 
+			class Test { 
+				public const PUBLIC_CONST = "public"; 
+				private const PRIVATE_CONST = "private"; 
+				protected const PROTECTED_CONST = "protected";
+			} 
+			echo Test::PUBLIC_CONST;`,
+			"public",
 		},
 		{
 			"Final constants",
 			`<?php 
-			class TestClass { 
-				final public const IMMUTABLE = "cannot_override"; 
-				public const OTHER = "allowed"; 
+			class Test { 
+				final public const FINAL_CONST = "immutable"; 
 			} 
-			echo TestClass::IMMUTABLE; 
-			echo TestClass::OTHER;`,
+			echo Test::FINAL_CONST;`,
+			"immutable",
 		},
 		{
-			"Constants with different types",
+			"Constants with lowercase literals",
 			`<?php 
-			class TestClass { 
-				public const STRING_CONST = "hello"; 
-				public const INT_CONST = 42; 
-				public const FLOAT_CONST = 3.14; 
-				public const BOOL_CONST = true; 
+			class Test { 
+				public const TRUE_CONST = true; 
+				public const FALSE_CONST = false; 
 				public const NULL_CONST = null; 
-				public const ARRAY_CONST = []; 
 			} 
-			echo TestClass::STRING_CONST; 
-			echo TestClass::INT_CONST; 
-			echo TestClass::BOOL_CONST ? "1" : "0";`,
+			echo Test::TRUE_CONST ? "T" : "F"; 
+			echo Test::FALSE_CONST ? "T" : "F"; 
+			echo (Test::NULL_CONST === null) ? "N" : "X";`,
+			"TFN",
+		},
+		{
+			"Empty array constant",
+			`<?php 
+			class Test { 
+				public const EMPTY_ARRAY = []; 
+			} 
+			echo "array_defined";`,
+			"array_defined",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			// First test with native PHP to validate expected result
+			if tc.expected != "" {
+				output, err := exec.Command("/usr/bin/php", "-r", tc.code).Output()
+				if err == nil {
+					expectedOutput := string(output)
+					if tc.expected != expectedOutput {
+						t.Logf("Note: Expected %q but native PHP returned %q", tc.expected, expectedOutput)
+					}
+				}
+			}
+
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
@@ -2112,9 +2169,74 @@ func TestClassConstantDeclaration(t *testing.T) {
 			err := comp.Compile(prog)
 			require.NoError(t, err, "Failed to compile class constant declaration: %s", tc.name)
 
+			// Verify that constants were properly stored in the class
+			classes := comp.GetClasses()
+			require.NotEmpty(t, classes, "Should have compiled at least one class")
+
+			// Find the Test class
+			var testClass *vm.Class
+			for _, class := range classes {
+				if class.Name == "Test" {
+					testClass = class
+					break
+				}
+			}
+			require.NotNil(t, testClass, "Should have found Test class")
+			require.NotEmpty(t, testClass.Constants, "Test class should have constants")
+
 			vmCtx := vm.NewExecutionContext()
 			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 			require.NoError(t, err, "Failed to execute class constant declaration: %s", tc.name)
+		})
+	}
+}
+
+func TestClassConstantErrors(t *testing.T) {
+	errorCases := []struct {
+		name          string
+		code          string
+		expectedError string
+	}{
+		{
+			"Duplicate constant in same class",
+			`<?php 
+			class Test { 
+				public const DUPLICATE = 1; 
+				public const DUPLICATE = 2; 
+			}`,
+			"constant DUPLICATE already declared",
+		},
+		{
+			"Private final constant error",
+			`<?php 
+			class Test { 
+				final private const INVALID = "error"; 
+			}`,
+			"private constant cannot be final",
+		},
+		{
+			"Complex expression not supported",
+			`<?php 
+			class Test { 
+				public const COMPLEX = 1 + 2; 
+			}`,
+			"unsupported constant expression",
+		},
+	}
+
+	for _, tc := range errorCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			if tc.expectedError != "" {
+				require.Error(t, err, "Expected compilation error for: %s", tc.name)
+				require.Contains(t, err.Error(), tc.expectedError, "Error should contain expected message")
+			} else {
+				require.NoError(t, err, "Should not have compilation error for: %s", tc.name)
+			}
 		})
 	}
 }

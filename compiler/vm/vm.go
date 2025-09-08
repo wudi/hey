@@ -150,9 +150,19 @@ type Class struct {
 	ParentClass string
 	Properties  map[string]*Property
 	Methods     map[string]*Function
-	Constants   map[string]*values.Value
+	Constants   map[string]*ClassConstant
 	IsAbstract  bool
 	IsFinal     bool
+}
+
+// ClassConstant represents a class constant with metadata
+type ClassConstant struct {
+	Name       string
+	Value      *values.Value
+	Visibility string // public, private, protected
+	Type       string // Type hint for PHP 8.3+
+	IsFinal    bool   // final const
+	IsAbstract bool   // abstract const (interfaces/abstract classes)
 }
 
 // Property represents a class property
@@ -2902,7 +2912,7 @@ func (vm *VirtualMachine) executeDeclareProperty(ctx *ExecutionContext, inst *op
 			ParentClass: "",
 			Properties:  make(map[string]*Property),
 			Methods:     make(map[string]*Function),
-			Constants:   make(map[string]*values.Value),
+			Constants:   make(map[string]*ClassConstant),
 			IsAbstract:  false,
 			IsFinal:     false,
 		}
@@ -2973,7 +2983,7 @@ func (vm *VirtualMachine) executeInitClassTable(ctx *ExecutionContext, inst *opc
 			ParentClass: "",
 			Properties:  make(map[string]*Property),
 			Methods:     make(map[string]*Function),
-			Constants:   make(map[string]*values.Value),
+			Constants:   make(map[string]*ClassConstant),
 			IsAbstract:  false,
 			IsFinal:     false,
 		}
@@ -3092,8 +3102,8 @@ func (vm *VirtualMachine) executeFetchClassConstant(ctx *ExecutionContext, inst 
 	// Look up the class in the execution context
 	if class, exists := ctx.Classes[classNameStr]; exists {
 		// Check if the constant exists in the class
-		if constantValue, found := class.Constants[constName]; found {
-			result = constantValue
+		if constant, found := class.Constants[constName]; found {
+			result = constant.Value
 		} else {
 			return fmt.Errorf("undefined class constant %s::%s", classNameStr, constName)
 		}
@@ -4830,7 +4840,7 @@ func (vm *VirtualMachine) executeAssignStaticProperty(ctx *ExecutionContext, ins
 			Name:       className,
 			Properties: make(map[string]*Property),
 			Methods:    make(map[string]*Function),
-			Constants:  make(map[string]*values.Value),
+			Constants:  make(map[string]*ClassConstant),
 		}
 	}
 
@@ -4886,7 +4896,7 @@ func (vm *VirtualMachine) executeAssignStaticPropertyOp(ctx *ExecutionContext, i
 				Name:       className,
 				Properties: make(map[string]*Property),
 				Methods:    make(map[string]*Function),
-				Constants:  make(map[string]*values.Value),
+				Constants:  make(map[string]*ClassConstant),
 			}
 		}
 		ctx.Classes[className].Properties[propName] = &Property{
@@ -5704,7 +5714,7 @@ func (vm *VirtualMachine) executeFetchStaticPropertyReadWrite(ctx *ExecutionCont
 			Name:       className,
 			Properties: make(map[string]*Property),
 			Methods:    make(map[string]*Function),
-			Constants:  make(map[string]*values.Value),
+			Constants:  make(map[string]*ClassConstant),
 		}
 	}
 
