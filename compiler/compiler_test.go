@@ -883,6 +883,82 @@ func TestArrayElementIncrementDecrement(t *testing.T) {
 	}
 }
 
+func TestNestedArrayIncrementDecrement(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			"NestedArrayPostIncrement",
+			`<?php 
+			$sum_results = array();
+			$sub = "cat1";
+			$v = "key1";
+			$sum_results[$sub][$v]++;
+			echo $sum_results[$sub][$v];`,
+		},
+		{
+			"NestedArrayPreIncrement",
+			`<?php 
+			$sum_results = array("cat1" => array("key1" => 5));
+			$sub = "cat1";
+			$v = "key1";
+			echo ++$sum_results[$sub][$v];`,
+		},
+		{
+			"NestedArrayPostDecrement",
+			`<?php 
+			$sum_results = array("cat1" => array("key1" => 5));
+			$sub = "cat1";
+			$v = "key1";
+			echo $sum_results[$sub][$v]--;`,
+		},
+		{
+			"NestedArrayPreDecrement",
+			`<?php 
+			$sum_results = array("cat1" => array("key1" => 5));
+			$sub = "cat1";
+			$v = "key1";
+			echo --$sum_results[$sub][$v];`,
+		},
+		{
+			"TripleNestedArrayIncrement",
+			`<?php 
+			$data = array();
+			$a = "level1";
+			$b = "level2"; 
+			$c = "level3";
+			$data[$a][$b][$c]++;
+			echo $data[$a][$b][$c];`,
+		},
+		{
+			"MixedNestedArrayOperations",
+			`<?php 
+			$stats = array("users" => array("active" => 10, "inactive" => 5));
+			$stats["users"]["active"]++;
+			echo $stats["users"]["active"] . " ";
+			echo --$stats["users"]["inactive"];`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			if len(p.Errors()) > 0 {
+				t.Fatalf("parser errors: %v", p.Errors())
+			}
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
+
 func TestPostIncrementExample(t *testing.T) {
 	p := parser.New(lexer.New(`<?php
 $a=1;
