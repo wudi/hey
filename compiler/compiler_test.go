@@ -3386,3 +3386,212 @@ echo $first . " " . $second . " " . $third . "\n";
 		})
 	}
 }
+
+// TestTraitMethods tests the compilation of trait methods
+func TestTraitMethods(t *testing.T) {
+	tests := []struct {
+		name     string
+		phpCode  string
+		expected string
+	}{
+		{
+			name: "Simple trait method",
+			phpCode: `<?php
+trait SimpleTrait {
+    public function greet($name) {
+        return "Hello, " . $name;
+    }
+}
+
+class TestClass {
+    use SimpleTrait;
+}
+
+$obj = new TestClass();
+echo $obj->greet("World") . "\n";
+?>`,
+			expected: "Hello, World\n",
+		},
+		{
+			name: "Trait method with typed parameters",
+			phpCode: `<?php
+trait TypedTrait {
+    public function processData(string $data, int $count) {
+        return str_repeat($data, $count);
+    }
+}
+
+class TestClass {
+    use TypedTrait;
+}
+
+$obj = new TestClass();
+echo $obj->processData("X", 3) . "\n";
+?>`,
+			expected: "XXX\n",
+		},
+		{
+			name: "Trait method with default parameters",
+			phpCode: `<?php
+trait DefaultTrait {
+    public function format($text, $prefix = ">> ", $suffix = " <<") {
+        return $prefix . $text . $suffix;
+    }
+}
+
+class TestClass {
+    use DefaultTrait;
+}
+
+$obj = new TestClass();
+echo $obj->format("test") . "\n";
+echo $obj->format("hello", "* ") . "\n";
+?>`,
+			expected: ">> test <<\n* hello <<\n",
+		},
+		{
+			name: "Trait method accessing $this",
+			phpCode: `<?php
+trait AccessTrait {
+    public function getValue() {
+        return $this->value ?? "no value";
+    }
+    
+    public function setValue($val) {
+        $this->value = $val;
+        return "set to: " . $val;
+    }
+}
+
+class TestClass {
+    use AccessTrait;
+    
+    private $value = "initial";
+}
+
+$obj = new TestClass();
+echo $obj->getValue() . "\n";
+echo $obj->setValue("new value") . "\n";
+echo $obj->getValue() . "\n";
+?>`,
+			expected: "initial\nset to: new value\nnew value\n",
+		},
+		{
+			name: "Multiple traits with methods",
+			phpCode: `<?php
+trait MathTrait {
+    public function add($a, $b) {
+        return $a + $b;
+    }
+}
+
+trait StringTrait {
+    public function concat($a, $b) {
+        return $a . $b;
+    }
+}
+
+class Calculator {
+    use MathTrait, StringTrait;
+}
+
+$calc = new Calculator();
+echo $calc->add(5, 3) . "\n";
+echo $calc->concat("Hello", "World") . "\n";
+?>`,
+			expected: "8\nHelloWorld\n",
+		},
+		{
+			name: "Trait method with return statement",
+			phpCode: `<?php
+trait ReturnTrait {
+    public function checkValue($val) {
+        if ($val > 10) {
+            return "high";
+        }
+        if ($val > 5) {
+            return "medium";
+        }
+        return "low";
+    }
+}
+
+class TestClass {
+    use ReturnTrait;
+}
+
+$obj = new TestClass();
+echo $obj->checkValue(15) . "\n";
+echo $obj->checkValue(7) . "\n";
+echo $obj->checkValue(3) . "\n";
+?>`,
+			expected: "high\nmedium\nlow\n",
+		},
+		{
+			name: "Trait method with variadic parameters",
+			phpCode: `<?php
+trait VariadicTrait {
+    public function sum(...$numbers) {
+        $total = 0;
+        foreach ($numbers as $num) {
+            $total += $num;
+        }
+        return $total;
+    }
+}
+
+class Calculator {
+    use VariadicTrait;
+}
+
+$calc = new Calculator();
+echo $calc->sum(1, 2, 3, 4, 5) . "\n";
+echo $calc->sum(10, 20) . "\n";
+?>`,
+			expected: "15\n30\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse the PHP code
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			// Compile the program
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Verify trait methods were compiled
+			require.Greater(t, len(comp.traits), 0, "No traits were compiled for test: %s", tt.name)
+
+			// Check that trait methods have proper bytecode
+			for traitName, trait := range comp.traits {
+				require.Greater(t, len(trait.Methods), 0, "Trait %s has no methods for test: %s", traitName, tt.name)
+				for methodName, method := range trait.Methods {
+					require.Greater(t, len(method.Instructions), 0, "Method %s in trait %s has no instructions for test: %s", methodName, traitName, tt.name)
+				}
+			}
+
+			// Capture output for verification
+			var buf bytes.Buffer
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Execute with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+
+			// Restore stdout and get output
+			w.Close()
+			os.Stdout = oldStdout
+			buf.ReadFrom(r)
+
+			output := buf.String()
+			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
+		})
+	}
+}

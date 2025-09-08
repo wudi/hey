@@ -616,6 +616,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeDeclareFunction(ctx, inst)
 	case opcodes.OP_DECLARE_CLASS:
 		return vm.executeDeclareClass(ctx, inst)
+	case opcodes.OP_DECLARE_TRAIT:
+		return vm.executeDeclareTrait(ctx, inst)
+	case opcodes.OP_USE_TRAIT:
+		return vm.executeUseTrait(ctx, inst)
 	case opcodes.OP_DECLARE_PROPERTY:
 		return vm.executeDeclareProperty(ctx, inst)
 	case opcodes.OP_DECLARE_CLASS_CONST:
@@ -2643,8 +2647,24 @@ func (vm *VirtualMachine) executeNew(ctx *ExecutionContext, inst *opcodes.Instru
 		return fmt.Errorf("class name must be a string")
 	}
 
+	classNameStr := className.ToString()
+
 	// Create a new object instance
-	newObject := values.NewObject(className.ToString())
+	newObject := values.NewObject(classNameStr)
+
+	// Initialize object properties from class definition
+	if class, exists := ctx.Classes[classNameStr]; exists {
+		for propName, property := range class.Properties {
+			// Initialize property with default value or null
+			var defaultValue *values.Value
+			if property.DefaultValue != nil {
+				defaultValue = property.DefaultValue
+			} else {
+				defaultValue = values.NewNull()
+			}
+			newObject.ObjectSet(propName, defaultValue)
+		}
+	}
 
 	// Store the result
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), newObject)
@@ -2824,6 +2844,34 @@ func (vm *VirtualMachine) executeDeclareClass(ctx *ExecutionContext, inst *opcod
 
 	// Class declaration is handled at compile time - this opcode just registers it
 	// In a full implementation, we would store the class in the VM's class table
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeDeclareTrait(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get trait name from constants
+	traitName := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if !traitName.IsString() {
+		return fmt.Errorf("trait name must be a string")
+	}
+
+	// Trait declaration is handled at compile time - this opcode just registers it
+	// In a full implementation, we would store the trait in the VM's trait table
+
+	ctx.IP++
+	return nil
+}
+
+func (vm *VirtualMachine) executeUseTrait(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get trait name from constants
+	traitName := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if !traitName.IsString() {
+		return fmt.Errorf("trait name must be a string")
+	}
+
+	// Using trait in class is handled at compile time - this opcode just registers the usage
+	// In a full implementation, we would copy trait methods into the current class
 
 	ctx.IP++
 	return nil
@@ -3415,6 +3463,78 @@ func (vm *VirtualMachine) executeMethodCall(ctx *ExecutionContext, inst *opcodes
 	methodCtx.Classes = ctx.Classes
 	methodCtx.CurrentClass = className
 	methodCtx.CurrentObject = object
+
+	// Initialize variable storage
+	if methodCtx.Variables == nil {
+		methodCtx.Variables = make(map[uint32]*values.Value)
+	}
+
+	// Set up $this variable FIRST (slot 0)
+	if object != nil {
+		methodCtx.Variables[0] = object
+	}
+
+	// Map arguments to parameter variable slots
+	// Parameters start from slot 1 (since $this is in slot 0)
+	arguments := ctx.CallContext.Arguments
+
+	if method.IsVariadic && len(method.Parameters) > 0 {
+		// Special handling for variadic functions
+		regularParams := len(method.Parameters) - 1 // All but the last parameter
+
+		// Handle regular (non-variadic) parameters (start from slot 1)
+		for i := 0; i < regularParams; i++ {
+			param := method.Parameters[i]
+			var argValue *values.Value
+			if i < len(arguments) {
+				argValue = arguments[i]
+			} else if param.HasDefault {
+				argValue = param.DefaultValue
+				if argValue == nil {
+					argValue = values.NewNull()
+				}
+			} else {
+				argValue = values.NewNull()
+			}
+			methodCtx.Variables[uint32(i+1)] = argValue // +1 because $this is in slot 0
+		}
+
+		// Handle variadic parameter - collect remaining arguments into an array
+		variadicArgs := make([]*values.Value, 0)
+		if len(arguments) > regularParams {
+			variadicArgs = arguments[regularParams:] // Get remaining arguments
+		}
+
+		// Create an array from the variadic arguments
+		variadicArray := values.NewArray()
+		for _, arg := range variadicArgs {
+			variadicArray.ArraySet(nil, arg) // Use nil key for auto-increment
+		}
+
+		// Assign the variadic array to the last parameter slot
+		methodCtx.Variables[uint32(regularParams+1)] = variadicArray // +1 because $this is in slot 0
+	} else {
+		// Regular (non-variadic) parameter handling (start from slot 1)
+		for i, param := range method.Parameters {
+			var argValue *values.Value
+			if i < len(arguments) {
+				argValue = arguments[i]
+			} else if param.HasDefault {
+				// Use the actual default value
+				argValue = param.DefaultValue
+				if argValue == nil {
+					argValue = values.NewNull()
+				}
+			} else {
+				// Missing required parameter - use null
+				argValue = values.NewNull()
+			}
+
+			// Assign argument to variable slot (parameters are in slots 1, 2, 3, ...)
+			// Slot 0 is reserved for $this
+			methodCtx.Variables[uint32(i+1)] = argValue
+		}
+	}
 
 	// Execute the method
 	result, err := vm.executeMethod(methodCtx, method.Instructions)
@@ -4302,11 +4422,18 @@ func (vm *VirtualMachine) executeAssignObj(ctx *ExecutionContext, inst *opcodes.
 	object := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	prop := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
 
-	// Simplified: get value from Reserved field as temp var index
-	valueIndex := uint32(inst.Reserved)
-	value := ctx.Temporaries[valueIndex]
-	if value == nil {
-		value = values.NewNull()
+	// Get value from Result field or Reserved field (backward compatibility)
+	var value *values.Value
+	if inst.Reserved != 0 {
+		// Legacy format: value is in Reserved field as temp var index
+		valueIndex := uint32(inst.Reserved)
+		value = ctx.Temporaries[valueIndex]
+		if value == nil {
+			value = values.NewNull()
+		}
+	} else {
+		// New format: value is in Result field
+		value = vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
 	}
 
 	if !object.IsObject() {

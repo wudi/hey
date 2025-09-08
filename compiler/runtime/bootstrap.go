@@ -326,6 +326,18 @@ func registerBuiltinFunctions() error {
 			MinArgs: 1,
 			MaxArgs: 2,
 		},
+
+		// String functions
+		{
+			Name:    "str_repeat",
+			Handler: strRepeatHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "input", Type: "string"},
+				{Name: "multiplier", Type: "int"},
+			},
+			MinArgs: 2,
+			MaxArgs: 2,
+		},
 	}
 
 	for _, desc := range functions {
@@ -611,4 +623,21 @@ func formatPrintR(value *values.Value, indent int) string {
 	default:
 		return value.ToString() + "\n"
 	}
+}
+
+// strRepeatHandler implements the str_repeat function
+func strRepeatHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	if len(args) != 2 {
+		return values.NewNull(), fmt.Errorf("str_repeat() expects exactly 2 parameters, %d given", len(args))
+	}
+
+	input := args[0].ToString()
+	multiplier := int(args[1].ToInt())
+
+	if multiplier < 0 {
+		return values.NewString(""), nil
+	}
+
+	result := strings.Repeat(input, multiplier)
+	return values.NewString(result), nil
 }

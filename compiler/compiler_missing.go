@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/wudi/php-parser/ast"
@@ -1827,8 +1828,67 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 			continue
 		}
 
-		// Emit USE_TRAIT opcode
-		traitConstant := c.addConstant(values.NewString(traitName.Name))
+		// Find the trait
+		traitNameStr := traitName.Name
+		trait, exists := c.traits[traitNameStr]
+		if !exists {
+			return fmt.Errorf("trait %s not found", traitNameStr)
+		}
+
+		// Copy trait methods into current class
+		// This implements the PHP behavior where trait methods become class methods
+		for methodName, traitMethod := range trait.Methods {
+			// Check for method conflicts
+			if _, exists := c.currentClass.Methods[methodName]; exists {
+				// In a full implementation, we would handle method precedence rules here
+				// For now, we'll allow the trait method to override
+			}
+
+			// Create a copy of the trait method for the class
+			classMethod := &vm.Function{
+				Name:         traitMethod.Name,
+				Instructions: make([]opcodes.Instruction, len(traitMethod.Instructions)),
+				Constants:    make([]*values.Value, len(traitMethod.Constants)),
+				Parameters:   make([]vm.Parameter, len(traitMethod.Parameters)),
+				IsVariadic:   traitMethod.IsVariadic,
+				IsGenerator:  traitMethod.IsGenerator,
+			}
+
+			// Deep copy instructions
+			copy(classMethod.Instructions, traitMethod.Instructions)
+
+			// Deep copy constants
+			copy(classMethod.Constants, traitMethod.Constants)
+
+			// Deep copy parameters
+			copy(classMethod.Parameters, traitMethod.Parameters)
+
+			// Add the method to the current class
+			c.currentClass.Methods[methodName] = classMethod
+		}
+
+		// Copy trait properties into current class
+		for propName, traitProp := range trait.Properties {
+			// Check for property conflicts
+			if _, exists := c.currentClass.Properties[propName]; exists {
+				// In a full implementation, we would handle property conflicts
+				// For now, we'll allow the trait property to override
+			}
+
+			// Create a copy of the trait property for the class
+			classProp := &vm.Property{
+				Name:       traitProp.Name,
+				Visibility: traitProp.Visibility,
+				IsStatic:   traitProp.IsStatic,
+				Type:       traitProp.Type,
+			}
+
+			// Add the property to the current class
+			c.currentClass.Properties[propName] = classProp
+		}
+
+		// Emit USE_TRAIT opcode for runtime tracking
+		traitConstant := c.addConstant(values.NewString(traitNameStr))
 		c.emit(opcodes.OP_USE_TRAIT,
 			opcodes.IS_CONST, traitConstant,
 			opcodes.IS_UNUSED, 0,
@@ -1843,6 +1903,33 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 
 func (c *Compiler) compileHookedPropertyDeclaration(decl *ast.HookedPropertyDeclaration) error {
 	return fmt.Errorf("hooked property declarations not yet implemented")
+}
+
+// evaluateConstantExpression attempts to evaluate a constant expression at compile time
+// This is a simplified implementation that handles basic literals
+func (c *Compiler) evaluateConstantExpression(expr ast.Node) *values.Value {
+	switch e := expr.(type) {
+	case *ast.StringLiteral:
+		return values.NewString(e.Value)
+	case *ast.NumberLiteral:
+		// Try integer first
+		if intVal, err := strconv.ParseInt(e.Value, 10, 64); err == nil {
+			return values.NewInt(intVal)
+		}
+		// Fall back to float
+		if floatVal, err := strconv.ParseFloat(e.Value, 64); err == nil {
+			return values.NewFloat(floatVal)
+		}
+		// If we can't parse it, use 0
+		return values.NewInt(0)
+	case *ast.BooleanLiteral:
+		return values.NewBool(e.Value)
+	case *ast.NullLiteral:
+		return values.NewNull()
+	default:
+		// For complex expressions, we can't evaluate at compile time
+		return nil
+	}
 }
 
 // Helper methods for trait compilation
@@ -1860,29 +1947,134 @@ func (c *Compiler) compileTraitProperty(trait *vm.Trait, prop *ast.PropertyDecla
 }
 
 func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDeclaration) error {
-	// For now, simplified method compilation - just store the method info
-	// Full method compilation would require compiling the method body
+	// Validate method name
 	if method.Name == nil {
-		return nil
+		return fmt.Errorf("trait method missing name")
 	}
 
-	var methodName string
-	if ident, ok := method.Name.(*ast.IdentifierNode); ok {
-		methodName = ident.Name
-	} else {
-		return nil
+	nameNode, ok := method.Name.(*ast.IdentifierNode)
+	if !ok {
+		return fmt.Errorf("invalid trait method name type")
+	}
+	methodName := nameNode.Name
+
+	// Check if method already exists in trait
+	if _, exists := trait.Methods[methodName]; exists {
+		return fmt.Errorf("method %s already declared in trait %s", methodName, trait.Name)
 	}
 
-	// Create a simplified function for the trait
-	// In a full implementation, we'd compile the method body here
+	// Create new function for the trait method
 	function := &vm.Function{
 		Name:         methodName,
-		Parameters:   make([]vm.Parameter, 0),
-		Instructions: make([]opcodes.Instruction, 0), // Empty for now
+		Instructions: make([]opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
+		Parameters:   make([]vm.Parameter, 0),
+		IsVariadic:   false,
+		IsGenerator:  false,
 	}
 
+	// Compile parameters
+	if method.Parameters != nil {
+		for _, param := range method.Parameters.Parameters {
+			paramName := ""
+			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+				paramName = nameNode.Name
+			} else {
+				return fmt.Errorf("invalid parameter name type in trait method %s", methodName)
+			}
+
+			vmParam := vm.Parameter{
+				Name:        paramName,
+				IsReference: param.ByReference,
+				HasDefault:  param.DefaultValue != nil,
+			}
+
+			// Handle parameter type
+			if param.Type != nil {
+				vmParam.Type = param.Type.String()
+			}
+
+			// Handle default value
+			if param.DefaultValue != nil {
+				vmParam.HasDefault = true
+				// Compile the default value expression
+				// For now, we'll evaluate simple default values at compile time
+				defaultValue := c.evaluateConstantExpression(param.DefaultValue)
+				if defaultValue != nil {
+					vmParam.DefaultValue = defaultValue
+				} else {
+					// If we can't evaluate it at compile time, use null as fallback
+					vmParam.DefaultValue = values.NewNull()
+				}
+			}
+
+			// Check for variadic
+			if param.Variadic {
+				function.IsVariadic = true
+			}
+
+			function.Parameters = append(function.Parameters, vmParam)
+		}
+	}
+
+	// Store current compiler state to restore later
+	oldInstructions := c.instructions
+	oldConstants := c.constants
+	oldCurrentClass := c.currentClass
+
+	// Reset for trait method compilation
+	c.instructions = make([]opcodes.Instruction, 0)
+	c.constants = make([]*values.Value, 0)
+	// Note: we don't set c.currentClass for traits as trait methods are different
+
+	// Create method scope
+	c.pushScope(true)
+
+	// Add implicit $this variable FIRST (to ensure it gets slot 0)
+	thisSlot := c.getOrCreateVariable("this")
+	_ = thisSlot // Ensure it's slot 0
+
+	// Set up parameter variables in the method scope (they get slots 1, 2, 3, ...)
+	if method.Parameters != nil {
+		for _, param := range method.Parameters.Parameters {
+			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+				// Register parameter name in method scope
+				c.getOrCreateVariable(nameNode.Name)
+			}
+		}
+	}
+
+	// Compile method body
+	for _, stmt := range method.Body {
+		err := c.compileNode(stmt)
+		if err != nil {
+			// Restore compiler state on error
+			c.popScope()
+			c.instructions = oldInstructions
+			c.constants = oldConstants
+			c.currentClass = oldCurrentClass
+			return fmt.Errorf("error compiling trait method %s in trait %s: %v", methodName, trait.Name, err)
+		}
+	}
+
+	// Add implicit return if needed
+	if len(c.instructions) == 0 || c.instructions[len(c.instructions)-1].Opcode != opcodes.OP_RETURN {
+		c.emit(opcodes.OP_RETURN, opcodes.IS_CONST, c.addConstant(values.NewNull()), 0, 0, 0, 0)
+	}
+
+	// Store compiled method
+	function.Instructions = c.instructions
+	function.Constants = c.constants
+
+	// Store the method in the trait
 	trait.Methods[methodName] = function
+
+	// Restore compiler state
+	c.popScope()
+	c.instructions = oldInstructions
+	c.constants = oldConstants
+	c.currentClass = oldCurrentClass
+
 	return nil
 }
 

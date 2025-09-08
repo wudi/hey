@@ -520,7 +520,50 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 	} else if listExpr, ok := expr.Left.(*ast.ListExpression); ok {
 		// Handle list assignment: list($a, $b, $c) = $array
 		return c.compileListAssignmentFromValue(listExpr, valueResult)
+	} else if propAccess, ok := expr.Left.(*ast.PropertyAccessExpression); ok {
+		// Handle property assignment: $obj->prop = value
+		return c.compilePropertyAssignment(propAccess, valueResult)
 	}
+	return nil
+}
+
+// compilePropertyAssignment handles property assignments like $obj->prop = value
+func (c *Compiler) compilePropertyAssignment(propAccess *ast.PropertyAccessExpression, valueResult uint32) error {
+	// Special handling for $this
+	var objectOpType opcodes.OpType
+	var objectOperand uint32
+
+	if variable, ok := propAccess.Object.(*ast.Variable); ok && variable.Name == "$this" {
+		// Use $this directly from slot 0
+		objectOpType = opcodes.IS_VAR
+		objectOperand = 0 // $this is always in slot 0
+	} else {
+		// Compile object expression normally
+		err := c.compileNode(propAccess.Object)
+		if err != nil {
+			return err
+		}
+		// Get the result from the previous compilation
+		objectOpType = opcodes.IS_TMP_VAR
+		objectOperand = c.nextTemp - 1
+	}
+
+	// Handle property name as string literal
+	var propConstant uint32
+	if ident, ok := propAccess.Property.(*ast.IdentifierNode); ok {
+		// Property is a simple identifier like "value" in $this->value
+		propConstant = c.addConstant(values.NewString(ident.Name))
+		c.emit(opcodes.OP_ASSIGN_OBJ, objectOpType, objectOperand, opcodes.IS_CONST, propConstant, opcodes.IS_TMP_VAR, valueResult)
+	} else {
+		// Property is an expression - compile it normally
+		err := c.compileNode(propAccess.Property)
+		if err != nil {
+			return err
+		}
+		propResult := c.nextTemp - 1
+		c.emit(opcodes.OP_ASSIGN_OBJ, objectOpType, objectOperand, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, valueResult)
+	}
+
 	return nil
 }
 
@@ -960,23 +1003,45 @@ func (c *Compiler) compileArrayAccess(expr *ast.ArrayAccessExpression) error {
 }
 
 func (c *Compiler) compilePropertyAccess(expr *ast.PropertyAccessExpression) error {
-	// Compile object expression
-	err := c.compileNode(expr.Object)
-	if err != nil {
-		return err
-	}
-	objectResult := c.allocateTemp()
-	c.emitMove(objectResult)
+	// Special handling for $this
+	var objectOpType opcodes.OpType
+	var objectOperand uint32
 
-	// Compile property expression
-	err = c.compileNode(expr.Property)
-	if err != nil {
-		return err
+	if variable, ok := expr.Object.(*ast.Variable); ok && variable.Name == "$this" {
+		// Use $this directly from slot 0
+		objectOpType = opcodes.IS_VAR
+		objectOperand = 0 // $this is always in slot 0
+	} else {
+		// Compile object expression normally
+		err := c.compileNode(expr.Object)
+		if err != nil {
+			return err
+		}
+		// Get the result from the previous compilation - it's in nextTemp-1
+		objectOpType = opcodes.IS_TMP_VAR
+		objectOperand = c.nextTemp - 1
 	}
-	propResult := c.allocateTemp()
-	c.emitMove(propResult)
+
+	// Handle property name as string literal
+	var propConstant uint32
+	if ident, ok := expr.Property.(*ast.IdentifierNode); ok {
+		// Property is a simple identifier like "value" in $this->value
+		propConstant = c.addConstant(values.NewString(ident.Name))
+	} else {
+		// Property is an expression - compile it normally
+		err := c.compileNode(expr.Property)
+		if err != nil {
+			return err
+		}
+		propResult := c.allocateTemp()
+		c.emitMove(propResult)
+		result := c.allocateTemp()
+		c.emit(opcodes.OP_FETCH_OBJ_R, objectOpType, objectOperand, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, result)
+		return nil
+	}
+
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_FETCH_OBJ_R, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, objectResult, opcodes.IS_TMP_VAR, propResult)
+	c.emit(opcodes.OP_FETCH_OBJ_R, objectOpType, objectOperand, opcodes.IS_CONST, propConstant, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }
