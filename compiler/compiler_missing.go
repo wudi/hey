@@ -153,9 +153,39 @@ func (c *Compiler) compileCastExpression(expr *ast.CastExpression) error {
 
 // ErrorSuppressionExpression compilation (@expr)
 func (c *Compiler) compileErrorSuppressionExpression(expr *ast.ErrorSuppressionExpression) error {
-	// For now, just compile the inner expression
-	// In a full implementation, we'd emit BEGIN_SILENCE/END_SILENCE opcodes
-	return c.compileNode(expr.Expression)
+	// Allocate temporary variable to store the previous error reporting level
+	previousErrorLevel := c.allocateTemp()
+
+	// Emit BEGIN_SILENCE instruction - saves current error reporting level to temp var
+	op1Type, op2Type := opcodes.EncodeOpTypes(opcodes.IS_UNUSED, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR)
+	beginInst := opcodes.Instruction{
+		Opcode:  opcodes.OP_BEGIN_SILENCE,
+		OpType1: op1Type,
+		OpType2: op2Type,
+		Op1:     0,
+		Op2:     0,
+		Result:  previousErrorLevel,
+	}
+	c.instructions = append(c.instructions, beginInst)
+
+	// Compile the inner expression (errors will be suppressed during execution)
+	if err := c.compileNode(expr.Expression); err != nil {
+		return err
+	}
+
+	// Emit END_SILENCE instruction - restores previous error reporting level
+	op1Type, op2Type = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_UNUSED, opcodes.IS_UNUSED)
+	endInst := opcodes.Instruction{
+		Opcode:  opcodes.OP_END_SILENCE,
+		OpType1: op1Type,
+		OpType2: op2Type,
+		Op1:     previousErrorLevel, // Use the saved error level from BEGIN_SILENCE
+		Op2:     0,
+		Result:  0,
+	}
+	c.instructions = append(c.instructions, endInst)
+
+	return nil
 }
 
 // EmptyExpression compilation

@@ -3137,3 +3137,75 @@ func TestUnsetIssetIntegration(t *testing.T) {
 		})
 	}
 }
+
+// TestErrorSuppressionExpression tests the @ (error suppression) operator
+func TestErrorSuppressionExpression(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "suppress undefined variable",
+			code:     `<?php $result = @$undefined_var; var_dump($result); ?>`,
+			expected: "NULL\n",
+		},
+		{
+			name:     "suppress array access on null",
+			code:     `<?php $null_var = null; $result = @$null_var["key"]; var_dump($result); ?>`,
+			expected: "NULL\n",
+		},
+		{
+			name:     "nested error suppression",
+			code:     `<?php $result = @(@$undefined_var2["key"]); var_dump($result); ?>`,
+			expected: "NULL\n",
+		},
+		{
+			name:     "suppress array access on undefined variable",
+			code:     `<?php $result = @$undeclared_array[0]; var_dump($result); ?>`,
+			expected: "NULL\n",
+		},
+		{
+			name:     "multiple error suppression in one statement",
+			code:     `<?php $a = @$undefined1; $b = @$undefined2; var_dump($a); var_dump($b); ?>`,
+			expected: "NULL\nNULL\n",
+		},
+		{
+			name:     "error suppression with assignment",
+			code:     `<?php $result = @($x = $undefined_var); var_dump($result); var_dump($x); ?>`,
+			expected: "NULL\nNULL\n",
+		},
+		{
+			name:     "error suppression preserves return value",
+			code:     `<?php $x = 42; $result = @$x; var_dump($result); ?>`,
+			expected: "int(42)\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			p := parser.New(lexer.New(test.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", test.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", test.name)
+
+			// Execute with runtime initialization and output capture
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Runtime initialization failed for test: %s", test.name)
+
+			var buf bytes.Buffer
+			vmCtx := vm.NewExecutionContext()
+			vmCtx.SetOutputWriter(&buf)
+
+			vmachine := vm.NewVirtualMachine()
+			err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Execution failed for test: %s", test.name)
+
+			output := buf.String()
+			require.Equal(t, test.expected, output, "Output mismatch for test: %s", test.name)
+		})
+	}
+}
