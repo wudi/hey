@@ -525,8 +525,16 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 				c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_VAR, arraySlot)
 			} else {
 				// Array index assignment: $arr[index] = value
-				// This is more complex - need to implement proper array index assignment
-				return fmt.Errorf("array index assignment not yet implemented")
+				// First compile the index expression
+				err := c.compileNode(*arrayAccess.Index)
+				if err != nil {
+					return err
+				}
+				indexResult := c.nextTemp - 1
+
+				// Emit ASSIGN_DIM instruction: array[index] = value
+				// Op1: array variable, Op2: index, value via Reserved field
+				c.emitReserved(opcodes.OP_ASSIGN_DIM, opcodes.IS_VAR, arraySlot, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_VAR, arraySlot, byte(valueResult))
 			}
 		} else {
 			return fmt.Errorf("complex array expressions not yet supported")
