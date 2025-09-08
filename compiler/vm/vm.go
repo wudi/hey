@@ -2044,37 +2044,66 @@ func (vm *VirtualMachine) executeShiftRight(ctx *ExecutionContext, inst *opcodes
 // Function call operations (simplified)
 
 func (vm *VirtualMachine) executeInitFunctionCall(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// Get function callee from operand 1 (should be a function name or reference)
-	calleeValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	// INIT_FCALL is for calls to known functions (compile-time determined)
+	// For consistency with the existing codebase and INIT_FCALL_BY_NAME:
+	// Op1 contains the function name (usually as a constant)
+	// Op2 contains the number of arguments expected
 
-	// Get number of arguments from operand 2
+	// Get function name from operand 1 (should be a string constant or callable)
+	fnameValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	var functionName string
+	var isCallable bool
+
+	if fnameValue.IsString() {
+		functionName = fnameValue.ToString()
+	} else if fnameValue.IsCallable() {
+		// Handle callable objects like closures: $closure()
+		functionName = "__closure__" // Special marker for callable objects
+		isCallable = true
+	} else {
+		return fmt.Errorf("function name must be a string or callable object")
+	}
+
+	// Get number of arguments from operand 2 (this follows the existing pattern)
 	numArgsValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
 	if !numArgsValue.IsInt() {
 		return fmt.Errorf("number of arguments must be an integer")
 	}
-
 	numArgs := int(numArgsValue.Data.(int64))
 
-	// Extract function name - for simple cases it might be a string constant
-	var functionName string
-	if calleeValue.IsString() {
-		functionName = calleeValue.ToString()
-	} else {
-		// For more complex cases (variable functions), we'd need more logic here
-		return fmt.Errorf("complex function calls not yet implemented")
+	// In PHP, INIT_FCALL validates function existence at this point
+	// For built-in functions, we can check the runtime registry
+	if runtimeRegistry.GlobalRegistry != nil {
+		if fn, exists := runtimeRegistry.GlobalRegistry.GetFunction(functionName); exists && fn != nil {
+			// Function exists in runtime registry - this is good
+		} else {
+			// Check if it's a user-defined function (would be in vm.functions)
+			// For now, we'll proceed as PHP does - function existence should be
+			// checked at compile time for INIT_FCALL
+		}
 	}
 
-	// Push current call context onto stack if it exists
+	// Push current call context onto stack if it exists (nested calls)
 	if ctx.CallContext != nil {
 		ctx.CallContextStack = append(ctx.CallContextStack, ctx.CallContext)
 	}
 
-	// Initialize call context
+	// Initialize call context for argument collection
 	ctx.CallContext = &CallContext{
 		FunctionName: functionName,
 		Arguments:    make([]*values.Value, 0, numArgs),
 		NumArgs:      numArgs,
+		IsMethod:     false,
+		Object:       nil,
 	}
+
+	// For callable objects, store the callable in the context
+	if isCallable {
+		ctx.CallContext.Object = fnameValue // Store the closure/callable object
+	}
+
+	// Clear any existing call arguments from previous calls
+	ctx.CallArguments = nil
 
 	ctx.IP++
 	return nil

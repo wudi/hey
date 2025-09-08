@@ -119,6 +119,13 @@ func NewClosure(function interface{}, boundVars map[string]*Value, name string) 
 	}
 }
 
+func NewCallable(closure *Closure) *Value {
+	return &Value{
+		Type: TypeCallable,
+		Data: closure,
+	}
+}
+
 // Type checking methods
 
 func (v *Value) IsNull() bool {
@@ -171,6 +178,10 @@ func (v *Value) IsReference() bool {
 
 func (v *Value) IsClosure() bool {
 	return v.Type == TypeCallable && v.Data != nil
+}
+
+func (v *Value) IsCallable() bool {
+	return v.Type == TypeCallable
 }
 
 // Dereferencing for references
