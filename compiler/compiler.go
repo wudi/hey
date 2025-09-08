@@ -2966,12 +2966,57 @@ func (c *Compiler) evaluateClassConstantExpression(expr ast.Expression) (*values
 	case *ast.NullLiteral:
 		return values.NewNull(), nil
 	case *ast.ArrayExpression:
-		// For now, only empty arrays are supported
-		if len(val.Elements) == 0 {
-			return values.NewArray(), nil
-		} else {
-			return nil, fmt.Errorf("complex array constants not supported yet")
+		// Create new array
+		arrayValue := values.NewArray()
+		arrayData := arrayValue.Data.(*values.Array)
+
+		// Process each element
+		for _, element := range val.Elements {
+			if arrayElement, ok := element.(*ast.ArrayElementExpression); ok {
+				// Handle key => value pairs
+				var keyValue interface{}
+				if arrayElement.Key != nil {
+					// Evaluate the key
+					keyVal, err := c.evaluateClassConstantExpression(arrayElement.Key)
+					if err != nil {
+						return nil, fmt.Errorf("failed to evaluate array key: %w", err)
+					}
+					// Convert key to appropriate type for array indexing
+					switch keyVal.Type {
+					case values.TypeString:
+						keyValue = keyVal.Data.(string)
+					case values.TypeInt:
+						keyValue = keyVal.Data.(int64)
+					default:
+						return nil, fmt.Errorf("unsupported array key type: %s", keyVal.Type)
+					}
+				} else {
+					// Auto-index
+					keyValue = arrayData.NextIndex
+					arrayData.NextIndex++
+				}
+
+				// Evaluate the value
+				valueVal, err := c.evaluateClassConstantExpression(arrayElement.Value)
+				if err != nil {
+					return nil, fmt.Errorf("failed to evaluate array value: %w", err)
+				}
+
+				// Set the element
+				arrayData.Elements[keyValue] = valueVal
+			} else {
+				// Direct element (not ArrayElementExpression) - use auto-indexing
+				valueVal, err := c.evaluateClassConstantExpression(element)
+				if err != nil {
+					return nil, fmt.Errorf("failed to evaluate array element: %w", err)
+				}
+
+				arrayData.Elements[arrayData.NextIndex] = valueVal
+				arrayData.NextIndex++
+			}
 		}
+
+		return arrayValue, nil
 	case *ast.IdentifierNode:
 		// Handle simple constant references like true, false, null
 		switch val.Name {

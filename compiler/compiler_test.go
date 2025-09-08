@@ -2322,6 +2322,42 @@ func TestClassConstantDeclaration(t *testing.T) {
 			echo "array_defined";`,
 			"array_defined",
 		},
+		{
+			"Simple indexed array constant",
+			`<?php 
+			class Test { 
+				public const SIMPLE_ARRAY = [1, 2, 3]; 
+			} 
+			echo "array_created";`,
+			"array_created",
+		},
+		{
+			"Mixed type array constant",
+			`<?php 
+			class Test { 
+				public const MIXED_ARRAY = [1, "hello", true, null]; 
+			} 
+			echo "mixed_array_created";`,
+			"mixed_array_created",
+		},
+		{
+			"Associative array constant",
+			`<?php 
+			class Test { 
+				public const ASSOC_ARRAY = ["key1" => "value1", "key2" => "value2"]; 
+			} 
+			echo "assoc_array_created";`,
+			"assoc_array_created",
+		},
+		{
+			"Nested array constant",
+			`<?php 
+			class Test { 
+				public const NESTED_ARRAY = [[1, 2], [3, 4]]; 
+			} 
+			echo "nested_array_created";`,
+			"nested_array_created",
+		},
 	}
 
 	for _, tc := range testCases {
