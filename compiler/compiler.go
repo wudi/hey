@@ -29,6 +29,8 @@ type Compiler struct {
 	nextLabel    int
 	functions    map[string]*vm.Function
 	classes      map[string]*vm.Class
+	interfaces   map[string]*vm.Interface
+	traits       map[string]*vm.Trait
 	currentClass *vm.Class // Current class being compiled
 }
 
@@ -54,6 +56,8 @@ func NewCompiler() *Compiler {
 		nextLabel:    0,
 		functions:    make(map[string]*vm.Function),
 		classes:      make(map[string]*vm.Class),
+		interfaces:   make(map[string]*vm.Interface),
+		traits:       make(map[string]*vm.Trait),
 		currentClass: nil,
 	}
 }

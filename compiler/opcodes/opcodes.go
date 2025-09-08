@@ -266,6 +266,11 @@ const (
 	OP_SET_CLASS_PARENT
 	OP_SET_CURRENT_CLASS
 	OP_CLEAR_CURRENT_CLASS
+
+	// Interface and trait operations
+	OP_DECLARE_INTERFACE // Declare an interface
+	OP_DECLARE_TRAIT     // Declare a trait
+	OP_USE_TRAIT         // Use trait in a class
 )
 
 // Closure Operations (220-239)
@@ -549,6 +554,11 @@ var opcodeNames = map[Opcode]string{
 	OP_SET_CLASS_PARENT:    "SET_CLASS_PARENT",
 	OP_SET_CURRENT_CLASS:   "SET_CURRENT_CLASS",
 	OP_CLEAR_CURRENT_CLASS: "CLEAR_CURRENT_CLASS",
+
+	// Interface and trait operations
+	OP_DECLARE_INTERFACE: "DECLARE_INTERFACE",
+	OP_DECLARE_TRAIT:     "DECLARE_TRAIT",
+	OP_USE_TRAIT:         "USE_TRAIT",
 
 	// Closure operations
 	OP_CREATE_CLOSURE: "CREATE_CLOSURE",

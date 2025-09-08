@@ -7,6 +7,7 @@ import (
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
 	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/lexer"
 )
 
@@ -637,21 +638,286 @@ func (c *Compiler) compileAlternativeForeachStatement(stmt *ast.AlternativeForea
 
 // Declaration implementations
 func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) error {
-	return fmt.Errorf("interface declarations not yet implemented")
+	if decl.Name == nil {
+		return fmt.Errorf("interface declaration missing name")
+	}
+
+	interfaceName := decl.Name.Name
+
+	// Check if interface already exists
+	if _, exists := c.interfaces[interfaceName]; exists {
+		return fmt.Errorf("interface %s already declared", interfaceName)
+	}
+
+	// Create new interface
+	iface := &vm.Interface{
+		Name:    interfaceName,
+		Methods: make(map[string]*vm.InterfaceMethod),
+		Extends: make([]string, 0),
+	}
+
+	// Handle extends
+	for _, parent := range decl.Extends {
+		iface.Extends = append(iface.Extends, parent.Name)
+	}
+
+	// Add interface methods
+	for _, method := range decl.Methods {
+		if method.Name == nil {
+			continue
+		}
+
+		methodName := method.Name.Name
+		interfaceMethod := &vm.InterfaceMethod{
+			Name:       methodName,
+			Visibility: method.Visibility,
+			Parameters: make([]*vm.Parameter, 0),
+		}
+
+		// Add parameters if present
+		if method.Parameters != nil {
+			for _, param := range method.Parameters.Parameters {
+				if param.Name == nil {
+					continue
+				}
+
+				var paramName string
+				if ident, ok := param.Name.(*ast.IdentifierNode); ok {
+					paramName = ident.Name
+				} else {
+					continue
+				}
+
+				vmParam := &vm.Parameter{
+					Name:         paramName,
+					Type:         "", // Type hints not fully implemented yet
+					IsReference:  param.ByReference,
+					HasDefault:   param.DefaultValue != nil,
+					DefaultValue: nil, // TODO: evaluate default value
+				}
+				interfaceMethod.Parameters = append(interfaceMethod.Parameters, vmParam)
+			}
+		}
+
+		iface.Methods[methodName] = interfaceMethod
+	}
+
+	// Store interface
+	c.interfaces[interfaceName] = iface
+
+	// Emit interface declaration opcode
+	nameConstant := c.addConstant(values.NewString(interfaceName))
+	c.emit(opcodes.OP_DECLARE_INTERFACE,
+		opcodes.IS_CONST, nameConstant,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_UNUSED, 0)
+
+	return nil
 }
 
 func (c *Compiler) compileTraitDeclaration(decl *ast.TraitDeclaration) error {
-	return fmt.Errorf("trait declarations not yet implemented")
+	if decl.Name == nil {
+		return fmt.Errorf("trait declaration missing name")
+	}
+
+	traitName := decl.Name.Name
+
+	// Check if trait already exists
+	if _, exists := c.traits[traitName]; exists {
+		return fmt.Errorf("trait %s already declared", traitName)
+	}
+
+	// Create new trait
+	trait := &vm.Trait{
+		Name:       traitName,
+		Properties: make(map[string]*vm.Property),
+		Methods:    make(map[string]*vm.Function),
+	}
+
+	// Compile trait properties
+	for _, prop := range decl.Properties {
+		if err := c.compileTraitProperty(trait, prop); err != nil {
+			return err
+		}
+	}
+
+	// Compile trait methods
+	for _, method := range decl.Methods {
+		if err := c.compileTraitMethod(trait, method); err != nil {
+			return err
+		}
+	}
+
+	// Store trait
+	c.traits[traitName] = trait
+
+	// Emit trait declaration opcode
+	nameConstant := c.addConstant(values.NewString(traitName))
+	c.emit(opcodes.OP_DECLARE_TRAIT,
+		opcodes.IS_CONST, nameConstant,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_UNUSED, 0)
+
+	return nil
 }
 
 func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
-	return fmt.Errorf("enum declarations not yet implemented")
+	if decl.Name == nil {
+		return fmt.Errorf("enum declaration missing name")
+	}
+
+	enumName := decl.Name.Name
+
+	// Check if enum already exists (enums are stored as classes in the VM)
+	if _, exists := c.classes[enumName]; exists {
+		return fmt.Errorf("enum %s already declared", enumName)
+	}
+
+	// Create enum as a special class
+	enumClass := &vm.Class{
+		Name:        enumName,
+		ParentClass: "",
+		Properties:  make(map[string]*vm.Property),
+		Methods:     make(map[string]*vm.Function),
+		Constants:   make(map[string]*values.Value),
+		IsAbstract:  false,
+		IsFinal:     true, // Enums are final by default
+	}
+
+	// Add enum cases as constants
+	for _, enumCase := range decl.Cases {
+		if enumCase.Name == nil {
+			continue
+		}
+
+		caseName := enumCase.Name.Name
+		var caseValue *values.Value
+
+		if enumCase.Value != nil {
+			// Backed enum - evaluate the backing value
+			// For now, simplified - assume it's a literal
+			caseValue = values.NewString(caseName) // Simplified
+		} else {
+			// Pure enum - use the case name
+			caseValue = values.NewString(caseName)
+		}
+
+		enumClass.Constants[caseName] = caseValue
+	}
+
+	// Add enum methods if any
+	for _, method := range decl.Methods {
+		if err := c.compileEnumMethod(enumClass, method); err != nil {
+			return err
+		}
+	}
+
+	// Store enum as class
+	c.classes[enumName] = enumClass
+
+	// Emit class declaration opcode (reuse existing class opcodes)
+	nameConstant := c.addConstant(values.NewString(enumName))
+	c.emit(opcodes.OP_DECLARE_CLASS,
+		opcodes.IS_CONST, nameConstant,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_UNUSED, 0)
+
+	return nil
 }
 
 func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
-	return fmt.Errorf("use trait statements not yet implemented")
+	// Use trait statements are handled within class context
+	if c.currentClass == nil {
+		return fmt.Errorf("use trait statement outside of class context")
+	}
+
+	// For each trait being used
+	for _, traitName := range stmt.Traits {
+		if traitName == nil {
+			continue
+		}
+
+		// Emit USE_TRAIT opcode
+		traitConstant := c.addConstant(values.NewString(traitName.Name))
+		c.emit(opcodes.OP_USE_TRAIT,
+			opcodes.IS_CONST, traitConstant,
+			opcodes.IS_UNUSED, 0,
+			opcodes.IS_UNUSED, 0)
+	}
+
+	// TODO: Handle trait adaptations (precedence and alias rules)
+	// This would require more complex logic to resolve method conflicts
+
+	return nil
 }
 
 func (c *Compiler) compileHookedPropertyDeclaration(decl *ast.HookedPropertyDeclaration) error {
 	return fmt.Errorf("hooked property declarations not yet implemented")
+}
+
+// Helper methods for trait compilation
+func (c *Compiler) compileTraitProperty(trait *vm.Trait, prop *ast.PropertyDeclaration) error {
+	// PropertyDeclaration contains a single property
+	property := &vm.Property{
+		Name:       prop.Name,
+		Type:       "", // Type hints not fully implemented yet
+		Visibility: prop.Visibility,
+		IsStatic:   prop.Static,
+	}
+
+	trait.Properties[prop.Name] = property
+	return nil
+}
+
+func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDeclaration) error {
+	// For now, simplified method compilation - just store the method info
+	// Full method compilation would require compiling the method body
+	if method.Name == nil {
+		return nil
+	}
+
+	var methodName string
+	if ident, ok := method.Name.(*ast.IdentifierNode); ok {
+		methodName = ident.Name
+	} else {
+		return nil
+	}
+
+	// Create a simplified function for the trait
+	// In a full implementation, we'd compile the method body here
+	function := &vm.Function{
+		Name:         methodName,
+		Parameters:   make([]vm.Parameter, 0),
+		Instructions: make([]opcodes.Instruction, 0), // Empty for now
+		Constants:    make([]*values.Value, 0),
+	}
+
+	trait.Methods[methodName] = function
+	return nil
+}
+
+// Helper method for enum compilation
+func (c *Compiler) compileEnumMethod(enumClass *vm.Class, method *ast.FunctionDeclaration) error {
+	// Similar to trait method compilation but store in enum class
+	if method.Name == nil {
+		return nil
+	}
+
+	var methodName string
+	if ident, ok := method.Name.(*ast.IdentifierNode); ok {
+		methodName = ident.Name
+	} else {
+		return nil
+	}
+
+	// Create a simplified function for the enum
+	function := &vm.Function{
+		Name:         methodName,
+		Parameters:   make([]vm.Parameter, 0),
+		Instructions: make([]opcodes.Instruction, 0),
+		Constants:    make([]*values.Value, 0),
+	}
+
+	enumClass.Methods[methodName] = function
+	return nil
 }

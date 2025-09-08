@@ -159,6 +159,27 @@ type Property struct {
 	DefaultValue *values.Value
 }
 
+// Interface represents a PHP interface
+type Interface struct {
+	Name    string
+	Methods map[string]*InterfaceMethod
+	Extends []string // Parent interfaces
+}
+
+// InterfaceMethod represents a method in an interface
+type InterfaceMethod struct {
+	Name       string
+	Visibility string
+	Parameters []*Parameter
+}
+
+// Trait represents a PHP trait
+type Trait struct {
+	Name       string
+	Properties map[string]*Property
+	Methods    map[string]*Function
+}
+
 // Exception represents a runtime exception
 type Exception struct {
 	Value *values.Value
