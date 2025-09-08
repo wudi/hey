@@ -276,6 +276,15 @@ func registerBuiltinFunctions() error {
 			MinArgs: 1,
 			MaxArgs: 1,
 		},
+		{
+			Name:    "is_null",
+			Handler: isNullHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "value", Type: "mixed"},
+			},
+			MinArgs: 1,
+			MaxArgs: 1,
+		},
 
 		// Math functions
 		{
@@ -468,6 +477,10 @@ func isIntHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, er
 
 func isArrayHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
 	return values.NewBool(args[0].IsArray()), nil
+}
+
+func isNullHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	return values.NewBool(args[0].IsNull()), nil
 }
 
 func absHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {

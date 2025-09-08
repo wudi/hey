@@ -104,7 +104,7 @@ func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
 		ParentClass: stdlibClass.Parent,
 		Properties:  make(map[string]*vm.Property),
 		Methods:     make(map[string]*vm.Function),
-		Constants:   stdlibClass.Constants,
+		Constants:   make(map[string]*vm.ClassConstant),
 		IsAbstract:  stdlibClass.IsAbstract,
 		IsFinal:     stdlibClass.IsFinal,
 	}
@@ -117,6 +117,18 @@ func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
 			Visibility:   prop.Visibility,
 			IsStatic:     prop.IsStatic,
 			DefaultValue: prop.DefaultValue,
+		}
+	}
+
+	// Convert constants
+	for name, value := range stdlibClass.Constants {
+		vmClass.Constants[name] = &vm.ClassConstant{
+			Name:       name,
+			Value:      value,
+			Visibility: "public", // Default visibility for stdlib constants
+			Type:       "",       // No type hint
+			IsFinal:    false,
+			IsAbstract: false,
 		}
 	}
 

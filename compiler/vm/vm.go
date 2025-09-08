@@ -41,10 +41,11 @@ type ExecutionContext struct {
 	MaxStackSize int
 
 	// Variable storage
-	Variables    map[uint32]*values.Value // Variable slots
-	Constants    []*values.Value          // Constant pool
-	Temporaries  map[uint32]*values.Value // Temporary variables
-	VarSlotNames map[uint32]string        // Mapping from variable slots to names
+	Variables      map[uint32]*values.Value // Variable slots
+	Constants      []*values.Value          // Constant pool
+	Temporaries    map[uint32]*values.Value // Temporary variables
+	VarSlotNames   map[uint32]string        // Mapping from variable slots to names
+	StaticVarSlots map[uint32]string        // Mapping from variable slots to static storage keys
 
 	// Function call stack
 	CallStack []CallFrame
@@ -234,6 +235,9 @@ type VirtualMachine struct {
 	Optimizer       *VMOptimizer
 	MemoryPool      *MemoryPool
 	EnableProfiling bool
+
+	// Static variable storage
+	StaticVars map[string]*values.Value
 }
 
 // NewVirtualMachine creates a new VM instance
@@ -750,6 +754,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeAddArrayUnpack(ctx, inst)
 	case opcodes.OP_BIND_GLOBAL:
 		return vm.executeBindGlobal(ctx, inst)
+	case opcodes.OP_BIND_STATIC:
+		return vm.executeBindStatic(ctx, inst)
 
 	// Match expression
 	case opcodes.OP_MATCH:
@@ -2479,6 +2485,11 @@ func (vm *VirtualMachine) setValue(ctx *ExecutionContext, operand uint32, opType
 		// Also update GlobalVars for variable variables to work
 		if varName, exists := ctx.VarSlotNames[operand]; exists {
 			ctx.GlobalVars[varName] = value
+		}
+
+		// Also update static storage if this is a static variable
+		if staticKey, exists := ctx.StaticVarSlots[operand]; exists && vm.StaticVars != nil {
+			vm.StaticVars[staticKey] = value
 		}
 
 	// Constants cannot be set
@@ -5223,6 +5234,68 @@ func (vm *VirtualMachine) executeBindGlobal(ctx *ExecutionContext, inst *opcodes
 
 	// Also update the variable name mapping
 	ctx.VarSlotNames[localSlot] = varName
+
+	ctx.IP++
+	return nil
+}
+
+// executeBindStatic binds a local variable to a static variable
+func (vm *VirtualMachine) executeBindStatic(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// Get the variable name (Op2)
+	nameValue := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+	if nameValue == nil || !nameValue.IsString() {
+		return fmt.Errorf("BIND_STATIC requires string variable name")
+	}
+
+	varName := nameValue.ToString()
+
+	// Get the local variable slot (Op1)
+	localSlot := inst.Op1
+
+	// Get the default value if provided (Result slot)
+	var defaultValue *values.Value = nil
+	if opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		defaultValue = vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+	}
+
+	// Create a function-specific static key
+	if vm.StaticVars == nil {
+		vm.StaticVars = make(map[string]*values.Value)
+	}
+
+	// Get current function name from call stack for function-specific static storage
+	var currentFunctionName string = "__main__" // Default for global scope
+	if len(ctx.CallStack) > 0 {
+		currentFrame := ctx.CallStack[len(ctx.CallStack)-1]
+		if currentFrame.Function != nil {
+			currentFunctionName = currentFrame.Function.Name
+		}
+	}
+
+	// Create function-specific key
+	staticKey := fmt.Sprintf("static_%s_%s", currentFunctionName, varName)
+
+	// Check if static variable already exists
+	if vm.StaticVars[staticKey] == nil {
+		// Initialize static variable
+		if defaultValue != nil {
+			vm.StaticVars[staticKey] = defaultValue
+		} else {
+			vm.StaticVars[staticKey] = values.NewNull()
+		}
+	}
+
+	// Bind local slot to static variable
+	ctx.Variables[localSlot] = vm.StaticVars[staticKey]
+
+	// Also update the variable name mapping
+	ctx.VarSlotNames[localSlot] = varName
+
+	// Track that this variable slot is static for synchronization
+	if ctx.StaticVarSlots == nil {
+		ctx.StaticVarSlots = make(map[uint32]string)
+	}
+	ctx.StaticVarSlots[localSlot] = staticKey
 
 	ctx.IP++
 	return nil

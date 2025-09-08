@@ -238,7 +238,7 @@ func TestVerifyAbstractClassOpcode(t *testing.T) {
 					Name:       tt.className,
 					Properties: make(map[string]*Property),
 					Methods:    make(map[string]*Function),
-					Constants:  make(map[string]*values.Value),
+					Constants:  make(map[string]*ClassConstant),
 				}
 
 				if tt.isAbstract {

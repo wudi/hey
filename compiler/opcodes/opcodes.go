@@ -247,6 +247,7 @@ const (
 	// Global operations
 	OP_FETCH_GLOBALS
 	OP_BIND_GLOBAL
+	OP_BIND_STATIC // Bind static variable
 	OP_UNSET_VAR
 	OP_ISSET_ISEMPTY_VAR
 
@@ -565,6 +566,7 @@ var opcodeNames = map[Opcode]string{
 
 	OP_FETCH_GLOBALS:     "FETCH_GLOBALS",
 	OP_BIND_GLOBAL:       "BIND_GLOBAL",
+	OP_BIND_STATIC:       "BIND_STATIC",
 	OP_UNSET_VAR:         "UNSET_VAR",
 	OP_ISSET_ISEMPTY_VAR: "ISSET_ISEMPTY_VAR",
 

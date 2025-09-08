@@ -983,8 +983,42 @@ func (c *Compiler) compileGlobalStatement(stmt *ast.GlobalStatement) error {
 
 // StaticStatement compilation
 func (c *Compiler) compileStaticStatement(stmt *ast.StaticStatement) error {
-	// Static variables not yet fully implemented
-	return fmt.Errorf("static variable declarations not yet implemented")
+	for _, staticVar := range stmt.Variables {
+		// Get variable name
+		variable, ok := staticVar.Variable.(*ast.Variable)
+		if !ok {
+			return fmt.Errorf("invalid static variable: expected variable")
+		}
+
+		varName := variable.Name
+
+		// Allocate variable slot for this static variable
+		varSlot := c.getOrCreateVariable(varName)
+
+		// Compile default value if provided and emit BIND_STATIC instruction
+		if staticVar.DefaultValue != nil {
+			err := c.compileNode(staticVar.DefaultValue)
+			if err != nil {
+				return fmt.Errorf("failed to compile static variable default value: %w", err)
+			}
+			// The result is in the last allocated temp
+			defaultSlot := c.nextTemp - 1
+
+			// Emit BIND_STATIC with default value
+			c.emit(opcodes.OP_BIND_STATIC,
+				opcodes.IS_CV, varSlot, // Variable to bind
+				opcodes.IS_CONST, c.addConstant(values.NewString(varName)), // Variable name
+				opcodes.IS_TMP_VAR, defaultSlot) // Default value
+		} else {
+			// Emit BIND_STATIC without default value (will use null)
+			c.emit(opcodes.OP_BIND_STATIC,
+				opcodes.IS_CV, varSlot, // Variable to bind
+				opcodes.IS_CONST, c.addConstant(values.NewString(varName)), // Variable name
+				opcodes.IS_UNUSED, 0) // No default value
+		}
+	}
+
+	return nil
 }
 
 // UnsetStatement compilation

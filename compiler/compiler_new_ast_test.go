@@ -380,11 +380,6 @@ func TestNotYetImplementedFeatures(t *testing.T) {
 		errorMessage string
 	}{
 		{
-			name:         "Static variable declaration",
-			phpCode:      `<?php function test() { static $x = 1; } ?>`,
-			errorMessage: "static variable declarations not yet implemented",
-		},
-		{
 			name:         "Shell execution",
 			phpCode:      "<?php `ls`; ?>",
 			errorMessage: "shell execution expressions not yet implemented",
