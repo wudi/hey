@@ -395,16 +395,6 @@ func TestNotYetImplementedFeatures(t *testing.T) {
 			errorMessage: "shell execution expressions not yet implemented",
 		},
 		{
-			name:         "Spread expression",
-			phpCode:      `<?php $arr = [...$other]; ?>`,
-			errorMessage: "spread expressions not yet implemented",
-		},
-		{
-			name:         "Arrow function",
-			phpCode:      `<?php $fn = fn($x) => $x * 2; ?>`,
-			errorMessage: "arrow functions not yet implemented",
-		},
-		{
 			name:         "First class callable",
 			phpCode:      `<?php $fn = strlen(...); ?>`,
 			errorMessage: "first-class callables not yet implemented",

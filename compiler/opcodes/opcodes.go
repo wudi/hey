@@ -271,6 +271,11 @@ const (
 	OP_DECLARE_INTERFACE // Declare an interface
 	OP_DECLARE_TRAIT     // Declare a trait
 	OP_USE_TRAIT         // Use trait in a class
+
+	// Advanced control flow
+	OP_GOTO    // Unconditional jump to label
+	OP_LABEL   // Label definition
+	OP_DECLARE // Declare statement
 )
 
 // Closure Operations (220-239)
@@ -559,6 +564,11 @@ var opcodeNames = map[Opcode]string{
 	OP_DECLARE_INTERFACE: "DECLARE_INTERFACE",
 	OP_DECLARE_TRAIT:     "DECLARE_TRAIT",
 	OP_USE_TRAIT:         "USE_TRAIT",
+
+	// Advanced control flow
+	OP_GOTO:    "GOTO",
+	OP_LABEL:   "LABEL",
+	OP_DECLARE: "DECLARE",
 
 	// Closure operations
 	OP_CREATE_CLOSURE: "CREATE_CLOSURE",

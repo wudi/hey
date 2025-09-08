@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
@@ -212,16 +213,37 @@ type VirtualMachine struct {
 
 	// Compiler callback for include/require functionality
 	CompilerCallback CompilerCallbackFunc
+
+	// Enhanced VM features
+	Metrics         *PerformanceMetrics
+	Debugger        *Debugger
+	Optimizer       *VMOptimizer
+	MemoryPool      *MemoryPool
+	EnableProfiling bool
 }
 
 // NewVirtualMachine creates a new VM instance
 func NewVirtualMachine() *VirtualMachine {
 	return &VirtualMachine{
-		StackSize:   10000,
-		MemoryLimit: 128 * 1024 * 1024, // 128MB
-		TimeLimit:   30,                // 30 seconds
-		DebugMode:   false,
+		StackSize:       10000,
+		MemoryLimit:     128 * 1024 * 1024, // 128MB
+		TimeLimit:       30,                // 30 seconds
+		DebugMode:       false,
+		EnableProfiling: false,
+		Metrics:         NewPerformanceMetrics(),
+		Debugger:        NewDebugger(DebugLevelNone, nil),
+		Optimizer:       NewVMOptimizer(),
+		MemoryPool:      NewMemoryPool(),
 	}
+}
+
+// NewVirtualMachineWithProfiling creates a VM instance with profiling enabled
+func NewVirtualMachineWithProfiling(debugLevel DebugLevel) *VirtualMachine {
+	vm := NewVirtualMachine()
+	vm.EnableProfiling = true
+	vm.Debugger = NewDebugger(debugLevel, os.Stderr)
+	vm.Debugger.ProfilerEnabled = true
+	return vm
 }
 
 // NewExecutionContext creates a new execution context
@@ -272,23 +294,53 @@ func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []opcodes.
 	}
 	ctx.IP = 0
 
-	// Main execution loop with computed goto optimization
+	// Main execution loop with enhanced profiling and debugging
+	startTime := time.Now()
 	for ctx.IP < len(ctx.Instructions) && !ctx.Halted {
+		// Record hot spots for optimization
+		if vm.EnableProfiling {
+			vm.Optimizer.RecordHotSpot(ctx.IP)
+		}
+
+		// Check breakpoints
+		if vm.Debugger.ShouldBreak(ctx.IP) {
+			if vm.DebugMode {
+				fmt.Fprintf(os.Stderr, "[DEBUGGER] Breakpoint hit at IP %d\n", ctx.IP)
+				vm.Debugger.PrintVariables(ctx)
+			}
+		}
+
 		if vm.DebugMode {
 			vm.debugInstruction(ctx)
 		}
 
 		inst := ctx.Instructions[ctx.IP]
 
+		// Record instruction execution with timing
+		instStartTime := time.Now()
 		err := vm.executeInstruction(ctx, &inst)
+		instDuration := time.Since(instStartTime)
+
 		if err != nil {
 			return err
 		}
 
-		// Prevent infinite loops in debug mode
+		// Record performance metrics
+		if vm.EnableProfiling {
+			vm.Metrics.RecordInstruction(inst.Opcode.String())
+			vm.Debugger.TraceInstruction(ctx.IP, &inst, ctx, instDuration)
+		}
+
+		// Prevent infinite loops
 		if vm.DebugMode && ctx.IP > 1000000 {
 			return fmt.Errorf("execution limit exceeded (possible infinite loop)")
 		}
+	}
+
+	// Update final metrics
+	if vm.EnableProfiling {
+		vm.Metrics.TotalExecutionTime = time.Since(startTime)
+		vm.Metrics.UpdateExecutionTime()
 	}
 
 	return nil
@@ -720,6 +772,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeGeneratorReturn(ctx, inst)
 	case opcodes.OP_VERIFY_ABSTRACT_CLASS:
 		return vm.executeVerifyAbstractClass(ctx, inst)
+	case opcodes.OP_DECLARE:
+		return vm.executeDeclare(ctx, inst)
 
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
@@ -5524,4 +5578,84 @@ func (vm *VirtualMachine) executeVerifyAbstractClass(ctx *ExecutionContext, inst
 	// Class is not abstract or doesn't exist - verification passes
 	ctx.IP++
 	return nil
+}
+
+func (vm *VirtualMachine) executeDeclare(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// DECLARE opcode for declare statements like declare(strict_types=1)
+	// The compiler has already processed the declarations and emitted this instruction
+	// For most declare directives, this is a no-op at runtime as they affect compile-time behavior
+
+	// In a full implementation, we might:
+	// - Set execution context flags based on the declaration type
+	// - Store ticks settings for tick handling
+	// - Process encoding declarations
+
+	// For our current implementation, we just acknowledge the declare and continue
+	ctx.IP++
+	return nil
+}
+
+// Enhanced VM utility methods
+
+// GetPerformanceReport returns a comprehensive performance report
+func (vm *VirtualMachine) GetPerformanceReport() string {
+	if vm.Metrics == nil {
+		return "Performance metrics not available (profiling disabled)"
+	}
+	return vm.Metrics.GetReport()
+}
+
+// GetDebugReport returns a comprehensive debug report
+func (vm *VirtualMachine) GetDebugReport() string {
+	if vm.Debugger == nil {
+		return "Debug information not available"
+	}
+	return vm.Debugger.GenerateReport()
+}
+
+// SetDebugLevel sets the debugging level
+func (vm *VirtualMachine) SetDebugLevel(level DebugLevel) {
+	if vm.Debugger != nil {
+		vm.Debugger.Level = level
+	}
+}
+
+// SetBreakpoint sets a breakpoint at the specified instruction pointer
+func (vm *VirtualMachine) SetBreakpoint(ip int) {
+	if vm.Debugger != nil {
+		vm.Debugger.SetBreakpoint(ip)
+	}
+}
+
+// WatchVariable adds a variable to the watch list
+func (vm *VirtualMachine) WatchVariable(varName string) {
+	if vm.Debugger != nil {
+		vm.Debugger.WatchVariable(varName)
+	}
+}
+
+// GetHotSpots returns the most frequently executed instruction positions
+func (vm *VirtualMachine) GetHotSpots(limit int) []HotSpot {
+	if vm.Optimizer == nil {
+		return nil
+	}
+	return vm.Optimizer.GetHotSpots(limit)
+}
+
+// GetMemoryStats returns memory pool statistics
+func (vm *VirtualMachine) GetMemoryStats() (allocations, deallocations uint64) {
+	if vm.MemoryPool == nil {
+		return 0, 0
+	}
+	return vm.MemoryPool.GetStats()
+}
+
+// EnableAdvancedProfiling enables all profiling and debugging features
+func (vm *VirtualMachine) EnableAdvancedProfiling() {
+	vm.EnableProfiling = true
+	vm.DebugMode = true
+	if vm.Debugger != nil {
+		vm.Debugger.Level = DebugLevelDetailed
+		vm.Debugger.ProfilerEnabled = true
+	}
 }

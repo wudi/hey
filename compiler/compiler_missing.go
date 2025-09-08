@@ -489,14 +489,144 @@ func (c *Compiler) compileCommaExpression(expr *ast.CommaExpression) error {
 
 // SpreadExpression compilation (...$array)
 func (c *Compiler) compileSpreadExpression(expr *ast.SpreadExpression) error {
-	// For now, just return an error - spread expressions need context-specific handling
-	return fmt.Errorf("spread expressions not yet implemented")
+	// Compile the argument to spread
+	if err := c.compileNode(expr.Argument); err != nil {
+		return err
+	}
+
+	// The argument should now be in the last temporary
+	argTemp := c.nextTemp - 1
+	result := c.allocateTemp()
+
+	// SpreadExpression is context-dependent:
+	// - In function calls, it becomes OP_SEND_UNPACK
+	// - In array literals, it becomes OP_ADD_ARRAY_UNPACK
+	// For now, we'll mark this as a spread and let the parent context handle it
+
+	// Create a temporary marker for spread - the parent node will handle the actual unpacking
+	c.emit(opcodes.OP_QM_ASSIGN,
+		opcodes.IS_TMP_VAR, argTemp,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
+
+	return nil
 }
 
 // ArrowFunctionExpression compilation (fn() => expr)
 func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpression) error {
-	// Similar to anonymous function but simpler
-	return fmt.Errorf("arrow functions not yet implemented")
+	// Generate a unique name for the arrow function
+	arrowName := fmt.Sprintf("__arrow_%d", len(c.functions))
+
+	// Create new function
+	function := &vm.Function{
+		Name:         arrowName,
+		Instructions: make([]opcodes.Instruction, 0),
+		Constants:    make([]*values.Value, 0),
+		Parameters:   make([]vm.Parameter, 0),
+		IsVariadic:   false,
+		IsGenerator:  false,
+	}
+
+	// Compile parameters
+	if expr.Parameters != nil {
+		for _, param := range expr.Parameters.Parameters {
+			paramName := ""
+			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+				paramName = nameNode.Name
+			} else {
+				return fmt.Errorf("invalid parameter name type")
+			}
+
+			vmParam := vm.Parameter{
+				Name:        paramName,
+				IsReference: param.ByReference,
+				HasDefault:  param.DefaultValue != nil,
+			}
+
+			// Handle parameter type
+			if param.Type != nil {
+				vmParam.Type = param.Type.String()
+			}
+
+			// Handle default value
+			if param.DefaultValue != nil {
+				vmParam.HasDefault = true
+			}
+
+			// Check for variadic
+			if param.Variadic {
+				function.IsVariadic = true
+			}
+
+			function.Parameters = append(function.Parameters, vmParam)
+		}
+	}
+
+	// Store current compiler state
+	savedInstructions := c.instructions
+	savedConstants := c.constants
+	savedNextTemp := c.nextTemp
+	savedLabels := c.labels
+
+	// Reset compiler state for function compilation
+	c.instructions = make([]opcodes.Instruction, 0)
+	c.constants = make([]*values.Value, 0)
+	c.nextTemp = 100 // Start temporaries at 100 for function scope
+	c.labels = make(map[string]int)
+
+	// Compile the arrow function body (expression)
+	if err := c.compileNode(expr.Body); err != nil {
+		// Restore compiler state on error
+		c.instructions = savedInstructions
+		c.constants = savedConstants
+		c.nextTemp = savedNextTemp
+		c.labels = savedLabels
+		return err
+	}
+
+	// Arrow functions automatically return their expression result
+	if len(c.instructions) > 0 {
+		// The result should be in the last temporary
+		returnTemp := c.nextTemp - 1
+		c.emit(opcodes.OP_RETURN,
+			opcodes.IS_TMP_VAR, returnTemp,
+			opcodes.IS_UNUSED, 0,
+			opcodes.IS_UNUSED, 0)
+	} else {
+		// If no instructions, return null
+		nullConst := c.addConstant(values.NewNull())
+		c.emit(opcodes.OP_RETURN,
+			opcodes.IS_CONST, nullConst,
+			opcodes.IS_UNUSED, 0,
+			opcodes.IS_UNUSED, 0)
+	}
+
+	// Store compiled function
+	function.Instructions = c.instructions
+	function.Constants = c.constants
+
+	// Restore compiler state
+	c.instructions = savedInstructions
+	c.constants = savedConstants
+	c.nextTemp = savedNextTemp
+	c.labels = savedLabels
+
+	// Add function to functions map
+	if c.functions == nil {
+		c.functions = make(map[string]*vm.Function)
+	}
+	c.functions[arrowName] = function
+
+	// Create a closure for the arrow function
+	result := c.allocateTemp()
+	funcConst := c.addConstant(values.NewString(arrowName))
+
+	c.emit(opcodes.OP_CREATE_CLOSURE,
+		opcodes.IS_CONST, funcConst,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
+
+	return nil
 }
 
 // FirstClassCallable compilation (strlen(...))
@@ -579,11 +709,35 @@ func (c *Compiler) compileDoWhileStatement(stmt *ast.DoWhileStatement) error {
 
 // Placeholder implementations for complex features
 func (c *Compiler) compileGotoStatement(stmt *ast.GotoStatement) error {
-	return fmt.Errorf("goto statements not yet implemented")
+	// Get the target label name
+	var labelName string
+	if ident, ok := stmt.Label.(*ast.IdentifierNode); ok {
+		labelName = ident.Name
+	} else {
+		return fmt.Errorf("goto statement requires identifier label")
+	}
+
+	// Emit unconditional jump to the label
+	// The label resolution will be handled by the existing label system
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, labelName)
+
+	return nil
 }
 
 func (c *Compiler) compileLabelStatement(stmt *ast.LabelStatement) error {
-	return fmt.Errorf("label statements not yet implemented")
+	// Get the label name
+	var labelName string
+	if ident, ok := stmt.Name.(*ast.IdentifierNode); ok {
+		labelName = ident.Name
+	} else {
+		return fmt.Errorf("label statement requires identifier name")
+	}
+
+	// Place the label at the current position
+	// This will resolve any forward jumps to this label
+	c.placeLabel(labelName)
+
+	return nil
 }
 
 func (c *Compiler) compileHaltCompilerStatement(stmt *ast.HaltCompilerStatement) error {
@@ -596,7 +750,35 @@ func (c *Compiler) compileHaltCompilerStatement(stmt *ast.HaltCompilerStatement)
 }
 
 func (c *Compiler) compileDeclareStatement(stmt *ast.DeclareStatement) error {
-	return fmt.Errorf("declare statements not yet implemented")
+	// Compile declare statement: declare(directive=value);
+	// Common directives: strict_types, ticks, encoding
+
+	// Process each declaration
+	for _, decl := range stmt.Declarations {
+		// For now, handle as assignment expressions
+		// In a full implementation, these would set compiler/runtime flags
+		if err := c.compileNode(decl); err != nil {
+			return err
+		}
+	}
+
+	// Emit DECLARE opcode with declarations count
+	declCount := c.addConstant(values.NewInt(int64(len(stmt.Declarations))))
+	c.emit(opcodes.OP_DECLARE,
+		opcodes.IS_CONST, declCount,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_UNUSED, 0)
+
+	// Compile body if present (for declare blocks)
+	if stmt.Body != nil {
+		for _, bodyStmt := range stmt.Body {
+			if err := c.compileNode(bodyStmt); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *Compiler) compileNamespaceStatement(stmt *ast.NamespaceStatement) error {

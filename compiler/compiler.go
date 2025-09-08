@@ -808,6 +808,17 @@ func (c *Compiler) compileArray(expr *ast.ArrayExpression) error {
 
 				c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_TMP_VAR, result)
 			}
+		} else if spreadExpr, ok := element.(*ast.SpreadExpression); ok {
+			// Handle spread expression (...$array)
+			err := c.compileNode(spreadExpr.Argument)
+			if err != nil {
+				return err
+			}
+			valueResult := c.allocateTemp()
+			c.emitMove(valueResult)
+
+			// Use OP_ADD_ARRAY_UNPACK for spread expressions
+			c.emit(opcodes.OP_ADD_ARRAY_UNPACK, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 		} else {
 			// Direct element (not wrapped in ArrayElementExpression) - treat as auto-indexed
 			err := c.compileNode(element)
