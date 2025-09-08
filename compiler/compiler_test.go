@@ -2717,6 +2717,121 @@ echo $obj->GetCounter();`
 	require.Equal(t, "1", output, "Expected '1', got '%s'", output)
 }
 
+func TestPropertyAccessExpression(t *testing.T) {
+	testCases := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			"Simple property access",
+			`<?php
+			class TestClass {
+				public $prop = "property_value";
+			}
+			$obj = new TestClass();
+			echo $obj->prop;`,
+			"property_value",
+		},
+		{
+			"Property access with braces",
+			`<?php
+			class TestClass {
+				public $prop = "brace_value";
+			}
+			$obj = new TestClass();
+			echo $obj->{"prop"};`,
+			"brace_value",
+		},
+		{
+			"Property access via variable property name",
+			`<?php
+			class TestClass {
+				public $dynamicProp = "dynamic_value";
+			}
+			$obj = new TestClass();
+			$propName = "dynamicProp";
+			echo $obj->$propName;`,
+			"dynamic_value",
+		},
+		{
+			"Property access with expression as property name",
+			`<?php
+			class TestClass {
+				public $prop = "expr_value";
+			}
+			$obj = new TestClass();
+			echo $obj->{"pr" . "op"};`,
+			"expr_value",
+		},
+		{
+			"Property assignment and access",
+			`<?php
+			class TestClass {}
+			$obj = new TestClass();
+			$obj->newProp = "new_value";
+			echo $obj->newProp;`,
+			"new_value",
+		},
+		{
+			"Multiple property access",
+			`<?php
+			class TestClass {
+				public $prop1 = "first";
+				public $prop2 = "second";
+			}
+			$obj = new TestClass();
+			echo $obj->prop1 . $obj->prop2;`,
+			"firstsecond",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// First test with native PHP to ensure correctness
+			tmpFile := filepath.Join(os.TempDir(), "test_property_"+tc.name+".php")
+			err := os.WriteFile(tmpFile, []byte(tc.code), 0644)
+			require.NoError(t, err)
+			defer os.Remove(tmpFile)
+
+			// Run with native PHP to get expected behavior
+			cmd := exec.Command("php", tmpFile)
+			nativeOutput, err := cmd.Output()
+			if err == nil {
+				require.Equal(t, tc.expected, string(nativeOutput), "Native PHP test failed for: %s", tc.name)
+			}
+
+			// Capture stdout to verify our implementation output
+			old := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err = comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile property access: %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Failed to execute property access: %s", tc.name)
+
+			// Close writer and restore stdout
+			w.Close()
+			os.Stdout = old
+
+			// Read captured output
+			var buf bytes.Buffer
+			buf.ReadFrom(r)
+			output := buf.String()
+
+			require.Equal(t, tc.expected, output, "Expected '%s', got '%s' for test: %s", tc.expected, output, tc.name)
+		})
+	}
+}
+
 func TestFibonacciIterative(t *testing.T) {
 	code := `<?php
 function fibonacci_iterative($n) {

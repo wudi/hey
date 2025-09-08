@@ -1059,7 +1059,7 @@ func (c *Compiler) compilePropertyAccess(expr *ast.PropertyAccessExpression) err
 	var objectOperand uint32
 
 	if variable, ok := expr.Object.(*ast.Variable); ok && variable.Name == "$this" {
-		// Use $this directly from slot 0
+		// Use $this directly from slot 0 (when in class context)
 		objectOpType = opcodes.IS_VAR
 		objectOperand = 0 // $this is always in slot 0
 	} else {
@@ -1073,26 +1073,28 @@ func (c *Compiler) compilePropertyAccess(expr *ast.PropertyAccessExpression) err
 		objectOperand = c.nextTemp - 1
 	}
 
-	// Handle property name as string literal
-	var propConstant uint32
+	// Handle property name - can be identifier or expression
+	var propOpType opcodes.OpType
+	var propOperand uint32
+
 	if ident, ok := expr.Property.(*ast.IdentifierNode); ok {
-		// Property is a simple identifier like "value" in $this->value
-		propConstant = c.addConstant(values.NewString(ident.Name))
+		// Property is a simple identifier like "prop" in $obj->prop
+		propOperand = c.addConstant(values.NewString(ident.Name))
+		propOpType = opcodes.IS_CONST
 	} else {
-		// Property is an expression - compile it normally
+		// Property is an expression - compile it and use result
 		err := c.compileNode(expr.Property)
 		if err != nil {
 			return err
 		}
-		propResult := c.allocateTemp()
-		c.emitMove(propResult)
-		result := c.allocateTemp()
-		c.emit(opcodes.OP_FETCH_OBJ_R, objectOpType, objectOperand, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, result)
-		return nil
+		// Use the result from property compilation
+		propOperand = c.nextTemp - 1
+		propOpType = opcodes.IS_TMP_VAR
 	}
 
+	// Emit the FETCH_OBJ_R instruction
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_FETCH_OBJ_R, objectOpType, objectOperand, opcodes.IS_CONST, propConstant, opcodes.IS_TMP_VAR, result)
+	c.emit(opcodes.OP_FETCH_OBJ_R, objectOpType, objectOperand, propOpType, propOperand, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }
