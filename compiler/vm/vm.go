@@ -4138,10 +4138,23 @@ func (vm *VirtualMachine) executeAssignOp(ctx *ExecutionContext, inst *opcodes.I
 
 // executeAssignDim performs $var[key] = value
 func (vm *VirtualMachine) executeAssignDim(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	// Op1: array variable, Op2: key, Result: value to assign
+	// Op1: array variable, Op2: key
 	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
 	key := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
-	value := vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+
+	// Value can come from either Reserved field (old format) or Result field (new format)
+	var value *values.Value
+	if inst.Reserved != 0 {
+		// Old format: value is in Reserved field as temp var index
+		valueIndex := uint32(inst.Reserved)
+		value = ctx.Temporaries[valueIndex]
+		if value == nil {
+			value = values.NewNull()
+		}
+	} else {
+		// New format: value comes from Result operand
+		value = vm.getValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2))
+	}
 
 	if !array.IsArray() {
 		// Convert to array if not already
@@ -4152,6 +4165,11 @@ func (vm *VirtualMachine) executeAssignDim(ctx *ExecutionContext, inst *opcodes.
 
 	// Always store the array back to the variable to ensure modifications are persisted
 	vm.setValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1), array)
+
+	// For old format compatibility, store result in Result location if specified
+	if inst.Reserved != 0 && opcodes.DecodeResultType(inst.OpType2) != opcodes.IS_UNUSED {
+		vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), value)
+	}
 
 	ctx.IP++
 	return nil
