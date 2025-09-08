@@ -829,6 +829,60 @@ func TestIncrementDecrementSequences(t *testing.T) {
 	}
 }
 
+func TestArrayElementIncrementDecrement(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			"ArrayElementPostIncrement",
+			`<?php 
+			$sum_results = array(); 
+			$v = "key1"; 
+			$sum_results[$v]++; 
+			echo $sum_results[$v];`,
+		},
+		{
+			"ArrayElementPreIncrement",
+			`<?php 
+			$sum_results = array("key1" => 5); 
+			$v = "key1"; 
+			echo ++$sum_results[$v];`,
+		},
+		{
+			"ArrayElementPostDecrement",
+			`<?php 
+			$sum_results = array("key1" => 5); 
+			$v = "key1"; 
+			echo $sum_results[$v]--;`,
+		},
+		{
+			"ArrayElementPreDecrement",
+			`<?php 
+			$sum_results = array("key1" => 5); 
+			$v = "key1"; 
+			echo --$sum_results[$v];`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			if len(p.Errors()) > 0 {
+				t.Fatalf("parser errors: %v", p.Errors())
+			}
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
+
 func TestPostIncrementExample(t *testing.T) {
 	p := parser.New(lexer.New(`<?php
 $a=1;

@@ -361,7 +361,13 @@ func (c *Compiler) compileIncrementDecrement(expr *ast.UnaryExpression) error {
 		return c.compileStaticAccessIncDec(expr, staticAccess)
 	}
 
-	return fmt.Errorf("increment/decrement can only be applied to variables or static properties")
+	// Check if it's an array access (like $array[$key])
+	if arrayAccess, ok := expr.Operand.(*ast.ArrayAccessExpression); ok {
+		// Handle array element increment/decrement
+		return c.compileArrayIncDec(expr, arrayAccess)
+	}
+
+	return fmt.Errorf("increment/decrement can only be applied to variables, static properties, or array elements")
 }
 
 func (c *Compiler) compileSimpleIncDec(expr *ast.UnaryExpression, variable *ast.Variable) error {
@@ -477,6 +483,56 @@ func (c *Compiler) compileStaticAccessIncDec(expr *ast.UnaryExpression, staticAc
 	result := c.allocateTemp()
 	constant := c.addConstant(values.NewInt(1))
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
+
+	return nil
+}
+
+func (c *Compiler) compileArrayIncDec(expr *ast.UnaryExpression, arrayAccess *ast.ArrayAccessExpression) error {
+	// Compile array expression
+	err := c.compileNode(arrayAccess.Array)
+	if err != nil {
+		return fmt.Errorf("failed to compile array expression in array increment: %w", err)
+	}
+	arrayResult := c.allocateTemp()
+	c.emitMove(arrayResult)
+
+	// Compile index expression
+	if arrayAccess.Index == nil {
+		return fmt.Errorf("array access requires an index for increment/decrement")
+	}
+	err = c.compileNode(*arrayAccess.Index)
+	if err != nil {
+		return fmt.Errorf("failed to compile index expression in array increment: %w", err)
+	}
+	indexResult := c.allocateTemp()
+	c.emitMove(indexResult)
+
+	// Use FETCH_DIM_RW to get read-write access to the array element
+	elementResult := c.allocateTemp()
+	c.emit(opcodes.OP_FETCH_DIM_RW, opcodes.IS_TMP_VAR, arrayResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, elementResult)
+
+	// Create constant 1 for increment/decrement
+	oneConstant := c.addConstant(values.NewInt(1))
+
+	// For post-increment, save the current value before modifying
+	var currentVal uint32
+	if expr.Operator == "++" || expr.Operator == "--" {
+		if expr.Position.String() != "" { // Check if it's post-increment (this is a simplification)
+			currentVal = c.allocateTemp()
+			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, elementResult, 0, 0, opcodes.IS_TMP_VAR, currentVal)
+		}
+	}
+
+	// Calculate new value
+	newVal := c.allocateTemp()
+	if expr.Operator == "++" {
+		c.emit(opcodes.OP_ADD, opcodes.IS_TMP_VAR, elementResult, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	} else { // "--"
+		c.emit(opcodes.OP_SUB, opcodes.IS_TMP_VAR, elementResult, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	}
+
+	// Write new value back to array element
+	c.emit(opcodes.OP_ASSIGN_DIM, opcodes.IS_TMP_VAR, arrayResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, newVal)
 
 	return nil
 }
