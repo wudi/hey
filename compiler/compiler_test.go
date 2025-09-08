@@ -2832,3 +2832,218 @@ func TestIncludeOnceRequireOnce(t *testing.T) {
 	// For now, we test that the tracking mechanism works
 	t.Skip("include_once and require_once opcodes not yet implemented")
 }
+
+// TestTernaryOperator tests the ternary operator implementation
+func TestTernaryOperator(t *testing.T) {
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err)
+
+	err = runtime.InitializeVMIntegration()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name:     "Basic true ternary",
+			code:     `<?php echo true ? "yes" : "no"; ?>`,
+			expected: "yes",
+		},
+		{
+			name:     "Basic false ternary",
+			code:     `<?php echo false ? "yes" : "no"; ?>`,
+			expected: "no",
+		},
+		{
+			name:     "Integer true ternary",
+			code:     `<?php echo 1 ? "yes" : "no"; ?>`,
+			expected: "yes",
+		},
+		{
+			name:     "Integer false ternary",
+			code:     `<?php echo 0 ? "yes" : "no"; ?>`,
+			expected: "no",
+		},
+		{
+			name:     "String true ternary",
+			code:     `<?php echo "hello" ? "yes" : "no"; ?>`,
+			expected: "yes",
+		},
+		{
+			name:     "String false ternary",
+			code:     `<?php echo "" ? "yes" : "no"; ?>`,
+			expected: "no",
+		},
+		{
+			name:     "Variable true ternary",
+			code:     `<?php $a = 1; echo $a ? "yes" : "no"; ?>`,
+			expected: "yes",
+		},
+		{
+			name:     "Variable false ternary",
+			code:     `<?php $a = 0; echo $a ? "yes" : "no"; ?>`,
+			expected: "no",
+		},
+		{
+			name:     "Isset ternary (true)",
+			code:     `<?php $a = 42; echo isset($a) ? "set" : "unset"; ?>`,
+			expected: "set",
+		},
+		{
+			name:     "Isset ternary (false)",
+			code:     `<?php echo isset($nonexistent) ? "set" : "unset"; ?>`,
+			expected: "unset",
+		},
+		{
+			name:     "Array isset ternary (true)",
+			code:     `<?php $arr = [1, 2, 3]; echo isset($arr[1]) ? "set" : "unset"; ?>`,
+			expected: "set",
+		},
+		{
+			name:     "Array isset ternary (false)",
+			code:     `<?php $arr = [1, 2, 3]; echo isset($arr[5]) ? "set" : "unset"; ?>`,
+			expected: "unset",
+		},
+		{
+			name:     "Short ternary (true)",
+			code:     `<?php echo "hello" ?: "world"; ?>`,
+			expected: "hello",
+		},
+		{
+			name:     "Short ternary (false)",
+			code:     `<?php echo "" ?: "world"; ?>`,
+			expected: "world",
+		},
+		{
+			name:     "Short ternary null",
+			code:     `<?php echo null ?: "world"; ?>`,
+			expected: "world",
+		},
+		{
+			name:     "Nested ternary",
+			code:     `<?php echo true ? (false ? "a" : "b") : "c"; ?>`,
+			expected: "b",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Parse and compile
+			p := parser.New(lexer.New(test.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", test.name)
+
+			comp := NewCompiler()
+			err = comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", test.name)
+
+			// Execute with output capture
+			var buf bytes.Buffer
+			vmCtx := vm.NewExecutionContext()
+			vmCtx.SetOutputWriter(&buf)
+
+			vmachine := vm.NewVirtualMachine()
+			err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Execution failed for test: %s", test.name)
+
+			output := buf.String()
+			require.Equal(t, test.expected, output, "Output mismatch for test: %s", test.name)
+		})
+	}
+}
+
+// TestUnsetIssetIntegration tests the interaction between unset and isset
+func TestUnsetIssetIntegration(t *testing.T) {
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err)
+
+	err = runtime.InitializeVMIntegration()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "Simple variable unset/isset",
+			code: `<?php
+				$a = 42;
+				echo "Before: " . (isset($a) ? "set" : "unset") . "\n";
+				unset($a);
+				echo "After: " . (isset($a) ? "set" : "unset") . "\n";
+			?>`,
+			expected: "Before: set\nAfter: unset\n",
+		},
+		{
+			name: "Array element unset/isset",
+			code: `<?php
+				$arr = [1, 2, 3];
+				echo "Before: " . (isset($arr[1]) ? "set" : "unset") . "\n";
+				unset($arr[1]);
+				echo "After: " . (isset($arr[1]) ? "set" : "unset") . "\n";
+			?>`,
+			expected: "Before: set\nAfter: unset\n",
+		},
+		{
+			name: "Multiple variable unset/isset",
+			code: `<?php
+				$a = 1;
+				$b = 2;
+				echo "Before a: " . (isset($a) ? "set" : "unset") . ", b: " . (isset($b) ? "set" : "unset") . "\n";
+				unset($a, $b);
+				echo "After a: " . (isset($a) ? "set" : "unset") . ", b: " . (isset($b) ? "set" : "unset") . "\n";
+			?>`,
+			expected: "Before a: set, b: set\nAfter a: unset, b: unset\n",
+		},
+		{
+			name: "Array key isset after unset different key",
+			code: `<?php
+				$arr = [1, 2, 3]; 
+				unset($arr[1]);
+				echo isset($arr[0]) ? "set" : "unset";
+			?>`,
+			expected: "set",
+		},
+		{
+			name: "Complex array isset/unset",
+			code: `<?php
+				$arr = ["a" => 1, "b" => 2, "c" => 3];
+				$key = "b";
+				echo "Before: " . (isset($arr[$key]) ? "set" : "unset") . "\n";
+				unset($arr[$key]);
+				echo "After: " . (isset($arr[$key]) ? "set" : "unset") . "\n";
+			?>`,
+			expected: "Before: set\nAfter: unset\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Parse and compile
+			p := parser.New(lexer.New(test.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", test.name)
+
+			comp := NewCompiler()
+			err = comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", test.name)
+
+			// Execute with output capture
+			var buf bytes.Buffer
+			vmCtx := vm.NewExecutionContext()
+			vmCtx.SetOutputWriter(&buf)
+
+			vmachine := vm.NewVirtualMachine()
+			err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Execution failed for test: %s", test.name)
+
+			output := buf.String()
+			require.Equal(t, test.expected, output, "Output mismatch for test: %s", test.name)
+		})
+	}
+}

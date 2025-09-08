@@ -216,19 +216,13 @@ func (c *Compiler) compileIssetExpression(expr *ast.IssetExpression) error {
 		return nil
 	}
 
-	// For each argument, check if it's set
+	// For each argument, check if it's set WITHOUT evaluating it
 	for i, e := range expr.Arguments.Arguments {
-		if err := c.compileNode(e); err != nil {
-			return err
-		}
-
-		arg := c.nextTemp - 1
 		tempResult := c.allocateTemp()
 
-		c.emit(opcodes.OP_ISSET_ISEMPTY_VAR,
-			opcodes.IS_TMP_VAR, arg,
-			opcodes.IS_UNUSED, 0,
-			opcodes.IS_TMP_VAR, tempResult)
+		if err := c.compileIssetVariable(e, tempResult); err != nil {
+			return err
+		}
 
 		// If this is not the first expression, AND with previous result
 		if i > 0 {
@@ -243,7 +237,149 @@ func (c *Compiler) compileIssetExpression(expr *ast.IssetExpression) error {
 		}
 	}
 
+	// CRITICAL: Set nextTemp to point after our result so that subsequent
+	// operations see our result as the "most recent temporary"
+	c.nextTemp = result + 1
+
 	return nil
+}
+
+// compileIssetVariable handles isset() for different types of variables
+func (c *Compiler) compileIssetVariable(expr ast.Expression, result uint32) error {
+	switch v := expr.(type) {
+	case *ast.Variable:
+		// Simple variable: isset($var) - check if variable exists in symbol table
+		varSlot := c.getVariableSlot(v.Name)
+		c.emit(opcodes.OP_ISSET_ISEMPTY_VAR,
+			opcodes.IS_CV, varSlot,
+			opcodes.IS_UNUSED, 0,
+			opcodes.IS_TMP_VAR, result)
+		return nil
+
+	case *ast.ArrayAccessExpression:
+		// Array element: isset($arr[key]) - check if array element exists
+
+		// Handle the index first
+		if v.Index == nil {
+			// isset($arr[]) is invalid
+			return fmt.Errorf("cannot use [] for isset check")
+		}
+
+		// Compile the index expression
+		if err := c.compileNode(*v.Index); err != nil {
+			return err
+		}
+		indexOperand := c.nextTemp - 1
+		indexType := opcodes.IS_TMP_VAR
+
+		// Handle the array - for isset, we need to work directly with the variable, not a copy
+		var arrayOperand uint32
+		var arrayType opcodes.OpType
+
+		if variable, ok := v.Array.(*ast.Variable); ok {
+			// Direct variable access: isset($arr[key])
+			arrayOperand = c.getVariableSlot(variable.Name)
+			arrayType = opcodes.IS_CV
+		} else {
+			// Complex expression: isset($obj->arr[key]) - compile and use temporary
+			if err := c.compileNode(v.Array); err != nil {
+				return err
+			}
+			arrayOperand = c.nextTemp - 1
+			arrayType = opcodes.IS_TMP_VAR
+		}
+
+		// Emit FETCH_DIM_IS instruction for isset check
+		c.emit(opcodes.OP_FETCH_DIM_IS,
+			arrayType, arrayOperand,
+			indexType, indexOperand,
+			opcodes.IS_TMP_VAR, result)
+		return nil
+
+	case *ast.PropertyAccessExpression:
+		// Object property: isset($obj->prop) - check if object property exists
+		// Compile the object expression
+		if err := c.compileNode(v.Object); err != nil {
+			return err
+		}
+		objectOperand := c.nextTemp - 1
+
+		// Handle the property
+		var propOperand uint32
+		var propType opcodes.OpType
+
+		switch prop := v.Property.(type) {
+		case *ast.IdentifierNode:
+			// Static property name
+			propOperand = c.addConstant(values.NewString(prop.Name))
+			propType = opcodes.IS_CONST
+		default:
+			// Dynamic property name
+			if err := c.compileNode(prop); err != nil {
+				return err
+			}
+			propOperand = c.nextTemp - 1
+			propType = opcodes.IS_TMP_VAR
+		}
+
+		// Emit FETCH_OBJ_IS instruction for isset check
+		c.emit(opcodes.OP_FETCH_OBJ_IS,
+			opcodes.IS_TMP_VAR, objectOperand,
+			propType, propOperand,
+			opcodes.IS_TMP_VAR, result)
+		return nil
+
+	case *ast.StaticPropertyAccessExpression:
+		// Static property: isset(Class::$prop) - check if static property exists
+		// Compile class name
+		var classOperand uint32
+		var classType opcodes.OpType
+
+		switch class := v.Class.(type) {
+		case *ast.IdentifierNode:
+			// Static class name
+			classOperand = c.addConstant(values.NewString(class.Name))
+			classType = opcodes.IS_CONST
+		default:
+			// Dynamic class name
+			if err := c.compileNode(class); err != nil {
+				return err
+			}
+			classOperand = c.nextTemp - 1
+			classType = opcodes.IS_TMP_VAR
+		}
+
+		// Compile property name
+		var propOperand uint32
+		var propType opcodes.OpType
+
+		switch prop := v.Property.(type) {
+		case *ast.Variable:
+			// Remove the $ prefix if present
+			propName := prop.Name
+			if strings.HasPrefix(propName, "$") {
+				propName = propName[1:]
+			}
+			propOperand = c.addConstant(values.NewString(propName))
+			propType = opcodes.IS_CONST
+		default:
+			if err := c.compileNode(prop); err != nil {
+				return err
+			}
+			propOperand = c.nextTemp - 1
+			propType = opcodes.IS_TMP_VAR
+		}
+
+		// Emit FETCH_STATIC_PROP_IS instruction for isset check
+		c.emit(opcodes.OP_FETCH_STATIC_PROP_IS,
+			classType, classOperand,
+			propType, propOperand,
+			opcodes.IS_TMP_VAR, result)
+		return nil
+
+	default:
+		return fmt.Errorf("isset() can only be used with variables, array elements, or object properties")
+	}
 }
 
 // ListExpression compilation (array destructuring)
@@ -661,8 +797,175 @@ func (c *Compiler) compileStaticStatement(stmt *ast.StaticStatement) error {
 
 // UnsetStatement compilation
 func (c *Compiler) compileUnsetStatement(stmt *ast.UnsetStatement) error {
-	// Simplified unset implementation for now
-	return fmt.Errorf("unset statements not yet implemented")
+	// Unset statement can have multiple variables: unset($a, $b, $c)
+	for _, variable := range stmt.Variables {
+		if err := c.compileUnsetVariable(variable); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// compileUnsetVariable handles unsetting different types of variables
+func (c *Compiler) compileUnsetVariable(expr ast.Expression) error {
+	switch v := expr.(type) {
+	case *ast.Variable:
+		// Simple variable: unset($var)
+		if v.Name == "$this" {
+			return fmt.Errorf("cannot unset $this")
+		}
+
+		varSlot := c.getVariableSlot(v.Name)
+		c.emit(opcodes.OP_UNSET_VAR,
+			opcodes.IS_CV, varSlot,
+			opcodes.IS_UNUSED, 0,
+			opcodes.IS_UNUSED, 0)
+		return nil
+
+	case *ast.ArrayAccessExpression:
+		// Array dimension: unset($arr[key])
+		return c.compileUnsetArrayDim(v)
+
+	case *ast.PropertyAccessExpression:
+		// Object property: unset($obj->prop)
+		return c.compileUnsetObjectProp(v)
+
+	case *ast.StaticPropertyAccessExpression:
+		// Static property: unset(Class::$prop)
+		return c.compileUnsetStaticProp(v)
+
+	default:
+		return fmt.Errorf("cannot unset expression of type %T", expr)
+	}
+}
+
+// compileUnsetArrayDim handles array dimension unset: unset($arr[key])
+func (c *Compiler) compileUnsetArrayDim(expr *ast.ArrayAccessExpression) error {
+	// Handle the index
+	var indexOperand uint32
+	var indexType opcodes.OpType
+
+	if expr.Index == nil {
+		// Cannot use [] for unsetting
+		return fmt.Errorf("cannot use [] for unsetting")
+	}
+
+	// Compile the index expression
+	if err := c.compileNode(*expr.Index); err != nil {
+		return err
+	}
+	indexOperand = c.nextTemp - 1
+	indexType = opcodes.IS_TMP_VAR
+
+	// Handle the array - for unset, we need to work directly with the variable, not a copy
+	var arrayOperand uint32
+	var arrayType opcodes.OpType
+
+	if variable, ok := expr.Array.(*ast.Variable); ok {
+		// Direct variable access: unset($arr[key])
+		arrayOperand = c.getVariableSlot(variable.Name)
+		arrayType = opcodes.IS_CV
+	} else {
+		// Complex expression: unset($obj->arr[key]) - compile and use temporary
+		if err := c.compileNode(expr.Array); err != nil {
+			return err
+		}
+		arrayOperand = c.nextTemp - 1
+		arrayType = opcodes.IS_TMP_VAR
+	}
+
+	// Emit UNSET_DIM instruction
+	c.emit(opcodes.OP_FETCH_DIM_UNSET,
+		arrayType, arrayOperand,
+		indexType, indexOperand,
+		opcodes.IS_UNUSED, 0)
+
+	return nil
+}
+
+// compileUnsetObjectProp handles object property unset: unset($obj->prop)
+func (c *Compiler) compileUnsetObjectProp(expr *ast.PropertyAccessExpression) error {
+	// Compile the object expression
+	if err := c.compileNode(expr.Object); err != nil {
+		return err
+	}
+	objectOperand := c.nextTemp - 1
+
+	// Handle the property
+	var propOperand uint32
+	var propType opcodes.OpType
+
+	switch prop := expr.Property.(type) {
+	case *ast.IdentifierNode:
+		// Static property name
+		propOperand = c.addConstant(values.NewString(prop.Name))
+		propType = opcodes.IS_CONST
+	default:
+		// Dynamic property name
+		if err := c.compileNode(prop); err != nil {
+			return err
+		}
+		propOperand = c.nextTemp - 1
+		propType = opcodes.IS_TMP_VAR
+	}
+
+	// Emit UNSET_OBJ instruction
+	c.emit(opcodes.OP_FETCH_OBJ_UNSET,
+		opcodes.IS_TMP_VAR, objectOperand,
+		propType, propOperand,
+		opcodes.IS_UNUSED, 0)
+
+	return nil
+}
+
+// compileUnsetStaticProp handles static property unset: unset(Class::$prop)
+func (c *Compiler) compileUnsetStaticProp(expr *ast.StaticPropertyAccessExpression) error {
+	// Compile class name
+	var classOperand uint32
+	var classType opcodes.OpType
+
+	switch class := expr.Class.(type) {
+	case *ast.IdentifierNode:
+		// Static class name
+		classOperand = c.addConstant(values.NewString(class.Name))
+		classType = opcodes.IS_CONST
+	default:
+		// Dynamic class name
+		if err := c.compileNode(class); err != nil {
+			return err
+		}
+		classOperand = c.nextTemp - 1
+		classType = opcodes.IS_TMP_VAR
+	}
+
+	// Compile property name
+	var propOperand uint32
+	var propType opcodes.OpType
+
+	switch prop := expr.Property.(type) {
+	case *ast.Variable:
+		// Remove the $ prefix if present
+		propName := prop.Name
+		if strings.HasPrefix(propName, "$") {
+			propName = propName[1:]
+		}
+		propOperand = c.addConstant(values.NewString(propName))
+		propType = opcodes.IS_CONST
+	default:
+		if err := c.compileNode(prop); err != nil {
+			return err
+		}
+		propOperand = c.nextTemp - 1
+		propType = opcodes.IS_TMP_VAR
+	}
+
+	// Emit UNSET_STATIC_PROP instruction
+	c.emit(opcodes.OP_FETCH_STATIC_PROP_UNSET,
+		classType, classOperand,
+		propType, propOperand,
+		opcodes.IS_UNUSED, 0)
+
+	return nil
 }
 
 // DoWhileStatement compilation

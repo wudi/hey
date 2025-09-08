@@ -385,11 +385,6 @@ func TestNotYetImplementedFeatures(t *testing.T) {
 			errorMessage: "static variable declarations not yet implemented",
 		},
 		{
-			name:         "Unset statement",
-			phpCode:      `<?php $x = 1; unset($x); ?>`,
-			errorMessage: "unset statements not yet implemented",
-		},
-		{
 			name:         "Shell execution",
 			phpCode:      "<?php `ls`; ?>",
 			errorMessage: "shell execution expressions not yet implemented",

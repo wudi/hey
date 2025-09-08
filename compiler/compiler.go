@@ -1133,52 +1133,96 @@ func (c *Compiler) compileMethodCall(expr *ast.MethodCallExpression) error {
 }
 
 func (c *Compiler) compileTernary(expr *ast.TernaryExpression) error {
-	// Compile condition
+	// Handle short ternary (expr ?: alternate) separately
+	if expr.Consequent == nil {
+		return c.compileShortTernary(expr)
+	}
+
+	// Step 1: Compile condition
 	err := c.compileNode(expr.Test)
 	if err != nil {
 		return err
 	}
-	condResult := c.allocateTemp()
-	c.emitMove(condResult)
+	condResult := c.nextTemp - 1
 
-	// Jump labels
-	elseLabel := c.generateLabel()
-	endLabel := c.generateLabel()
+	// Step 2: Allocate result temporary FIRST (like PHP does)
+	result := c.allocateTemp()
 
-	// Jump to else if condition is false
-	c.emitJumpZ(opcodes.IS_TMP_VAR, condResult, elseLabel)
+	// Step 3: Create conditional jump to false branch
+	jmpzLabel := c.generateLabel()
+	c.emitJumpZ(opcodes.IS_TMP_VAR, condResult, jmpzLabel)
 
-	// Compile true branch
-	if expr.Consequent != nil {
-		err = c.compileNode(expr.Consequent)
-	} else {
-		// Short ternary - use condition result
-		err = c.compileNode(expr.Test)
-	}
+	// Step 4: Compile true branch and assign directly to result
+	err = c.compileNode(expr.Consequent)
 	if err != nil {
 		return err
 	}
-	trueResult := c.allocateTemp()
-	c.emitMove(trueResult)
+	trueBranchResult := c.nextTemp - 1
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, trueBranchResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
-	// Jump to end
-	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+	// Step 5: Jump over false branch
+	jmpLabel := c.generateLabel()
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, jmpLabel)
 
-	// Else branch
-	c.placeLabel(elseLabel)
+	// Step 6: False branch - assign to SAME result temporary
+	c.placeLabel(jmpzLabel)
 	err = c.compileNode(expr.Alternate)
 	if err != nil {
 		return err
 	}
-	falseResult := c.allocateTemp()
-	c.emitMove(falseResult)
+	falseBranchResult := c.nextTemp - 1
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, falseBranchResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
-	// End label
-	c.placeLabel(endLabel)
+	// Step 7: Both branches converge here
+	c.placeLabel(jmpLabel)
 
-	// Result assignment (this is simplified - real implementation would be more complex)
+	// CRITICAL: Set nextTemp to point after our result so that subsequent
+	// operations see our result as the "most recent temporary"
+	c.nextTemp = result + 1
+
+	return nil
+}
+
+func (c *Compiler) compileShortTernary(expr *ast.TernaryExpression) error {
+	// Short ternary: expr ?: alternate
+	// If expr is truthy, use expr; otherwise use alternate
+
+	// Step 1: Compile the test expression
+	err := c.compileNode(expr.Test)
+	if err != nil {
+		return err
+	}
+	testResult := c.nextTemp - 1
+
+	// Step 2: Allocate result temporary FIRST
 	result := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, trueResult, 0, 0)
+
+	// Step 3: Create jump to alternate if test is false
+	jmpzLabel := c.generateLabel()
+	c.emitJumpZ(opcodes.IS_TMP_VAR, testResult, jmpzLabel)
+
+	// Step 4: True case: use the test result itself, assign to result
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, testResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
+
+	// Step 5: Jump over alternate
+	jmpLabel := c.generateLabel()
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, jmpLabel)
+
+	// Step 6: False case: compile alternate and assign to SAME result
+	c.placeLabel(jmpzLabel)
+	err = c.compileNode(expr.Alternate)
+	if err != nil {
+		return err
+	}
+	alternateResult := c.nextTemp - 1
+	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, alternateResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
+
+	// Step 7: Both paths converge
+	c.placeLabel(jmpLabel)
+
+	// CRITICAL: Set nextTemp to point after our result so that subsequent
+	// operations see our result as the "most recent temporary"
+	c.nextTemp = result + 1
 
 	return nil
 }

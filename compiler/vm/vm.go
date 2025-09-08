@@ -4470,11 +4470,39 @@ func (vm *VirtualMachine) executeUnsetVar(ctx *ExecutionContext, inst *opcodes.I
 
 // executeIssetIsEmptyVar checks if variable is set or empty (isset($var) / empty($var))
 func (vm *VirtualMachine) executeIssetIsEmptyVar(ctx *ExecutionContext, inst *opcodes.Instruction) error {
-	value := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	// For isset(), we need to check if the variable exists WITHOUT fetching it
+	// because fetching a non-existent variable creates it with NULL value
 
-	// The opcode parameter determines if this is isset() or empty() check
-	// For now, implement isset() behavior
-	isset := value != nil && !value.IsNull()
+	opType := opcodes.DecodeOpType1(inst.OpType1)
+	var isset bool
+
+	switch opType {
+	case opcodes.IS_CV, opcodes.IS_VAR:
+		// Check if variable exists in the symbol table
+		if _, exists := ctx.Variables[inst.Op1]; exists {
+			// Variable exists, now check if it's not null
+			value := ctx.Variables[inst.Op1]
+			isset = value != nil && !value.IsNull()
+		} else {
+			// Variable doesn't exist
+			isset = false
+		}
+	case opcodes.IS_TMP_VAR:
+		// Temporary variables - check if it exists
+		if _, exists := ctx.Temporaries[inst.Op1]; exists {
+			value := ctx.Temporaries[inst.Op1]
+			isset = value != nil && !value.IsNull()
+		} else {
+			isset = false
+		}
+	case opcodes.IS_CONST:
+		// Constants are always set if they exist
+		isset = true
+	default:
+		// For other types, use the old behavior (shouldn't happen for simple variables)
+		value := vm.getValue(ctx, inst.Op1, opType)
+		isset = value != nil && !value.IsNull()
+	}
 
 	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), values.NewBool(isset))
 	ctx.IP++
