@@ -1575,6 +1575,52 @@ func TestArrayIndexAssignment(t *testing.T) {
 	}
 }
 
+func TestArrayElementExpression(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			name: "Array with keyed elements",
+			code: `<?php
+				$arr = [1 => "one", "two" => 2, 3 => "three"];
+			`,
+		},
+		{
+			name: "Array with mixed indexed and keyed elements",
+			code: `<?php
+				$arr = ["first", "key" => "value", "last"];
+			`,
+		},
+		{
+			name: "Nested array with keyed elements",
+			code: `<?php
+				$arr = [
+					"user" => ["name" => "John", "age" => 30],
+					"config" => ["debug" => true]
+				];
+			`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse and compile
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile ArrayElementExpression: %s", tt.name)
+
+			// Execute to ensure no runtime errors
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Failed to execute ArrayElementExpression: %s", tt.name)
+		})
+	}
+}
+
 func TestTryStatement(t *testing.T) {
 	tests := []struct {
 		name string

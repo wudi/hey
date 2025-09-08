@@ -203,6 +203,8 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileArrowFunctionExpression(n)
 	case *ast.FirstClassCallable:
 		return c.compileFirstClassCallable(n)
+	case *ast.ArrayElementExpression:
+		return c.compileArrayElement(n)
 
 	// Statements
 	case *ast.ExpressionStatement:
@@ -3262,5 +3264,33 @@ func (c *Compiler) compileIncludeOrEval(expr *ast.IncludeOrEvalExpression) error
 		opcodes.IS_UNUSED, 0,
 		opcodes.IS_TMP_VAR, result)
 
+	return nil
+}
+
+// compileArrayElement compiles array element expressions
+// Note: ArrayElementExpression is typically handled within array compilation
+func (c *Compiler) compileArrayElement(expr *ast.ArrayElementExpression) error {
+	// ArrayElementExpression represents key => value pairs in arrays
+	// In normal PHP usage, these are processed as part of array expressions
+	// However, we'll provide a standalone compilation for completeness
+
+	// If there's a key, compile it first
+	if expr.Key != nil {
+		if err := c.compileNode(expr.Key); err != nil {
+			return err
+		}
+	}
+
+	// Compile the value
+	if expr.Value != nil {
+		if err := c.compileNode(expr.Value); err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("array element must have a value")
+	}
+
+	// The result is the value expression's result
+	// (The key is not returned as a standalone value)
 	return nil
 }
