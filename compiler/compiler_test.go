@@ -1188,6 +1188,61 @@ func TestForeachStatement(t *testing.T) {
 	}
 }
 
+func TestAlternativeForeachStatementExecution(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			"Simple Alternative Foreach",
+			`<?php $arr = array(1, 2, 3); foreach ($arr as $value): echo $value; endforeach;`,
+		},
+		{
+			"Alternative Foreach with Key",
+			`<?php $arr = array("a" => 1, "b" => 2); foreach ($arr as $key => $value): echo $key . ":" . $value; endforeach;`,
+		},
+		{
+			"Empty Array Alternative Foreach",
+			`<?php $arr = array(); foreach ($arr as $value): echo $value; endforeach;`,
+		},
+		{
+			"Alternative Foreach with Break",
+			`<?php $arr = array(1, 2, 3, 4, 5); foreach ($arr as $value): if ($value > 2): break; endif; echo $value; endforeach;`,
+		},
+		{
+			"Alternative Foreach with Continue",
+			`<?php $arr = array(1, 2, 3, 4, 5); foreach ($arr as $value): if ($value == 2): continue; endif; echo $value; endforeach;`,
+		},
+		{
+			"Nested Alternative Foreach",
+			`<?php $outer = array(array(1, 2), array(3, 4)); foreach ($outer as $inner): foreach ($inner as $value): echo $value; endforeach; endforeach;`,
+		},
+		{
+			"Mixed Alternative and Regular Foreach",
+			`<?php $outer = array(array(1, 2), array(3, 4)); foreach ($outer as $inner): foreach ($inner as $value) { echo $value; } endforeach;`,
+		},
+		{
+			"Alternative Foreach with Multiple Statements",
+			`<?php $arr = array(1, 2, 3); foreach ($arr as $value): echo $value; echo " "; endforeach;`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile alternative foreach statement: %s", tt.name)
+
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Failed to execute alternative foreach statement: %s", tt.name)
+		})
+	}
+}
+
 func TestInterpolatedStringExpression(t *testing.T) {
 	tests := []struct {
 		name string

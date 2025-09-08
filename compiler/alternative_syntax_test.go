@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/lexer"
 	"github.com/wudi/php-parser/parser"
 )
@@ -245,8 +246,10 @@ endforeach;
 			err := comp.Compile(prog)
 			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
 
-			// Note: Foreach execution might not work perfectly due to simplified implementation
-			// but compilation should succeed
+			// Now test execution with the full implementation
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
 		})
 	}
 }

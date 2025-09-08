@@ -1545,53 +1545,81 @@ func (c *Compiler) compileAlternativeForStatement(stmt *ast.AlternativeForStatem
 
 func (c *Compiler) compileAlternativeForeachStatement(stmt *ast.AlternativeForeachStatement) error {
 	// Alternative foreach syntax: foreach ($array as $value): ... endforeach;
-	// This is more complex and requires iterator management like regular foreach
+	// This should work exactly like regular foreach, just with different body structure
 
-	// For now, provide a basic implementation that compiles but may not execute perfectly
-	// A full implementation would need proper iterator support in the VM
-
-	// Labels
+	// Create labels for the foreach loop
 	startLabel := c.generateLabel()
 	endLabel := c.generateLabel()
+	continueLabel := c.generateLabel()
 
 	// Set break/continue labels for this scope
 	oldBreak := c.currentScope().breakLabel
 	oldContinue := c.currentScope().continueLabel
 	c.currentScope().breakLabel = endLabel
-	c.currentScope().continueLabel = startLabel
+	c.currentScope().continueLabel = continueLabel
 
-	// Compile iterable expression
-	if err := c.compileNode(stmt.Iterable); err != nil {
+	// Compile the iterable expression
+	err := c.compileNode(stmt.Iterable)
+	if err != nil {
 		return err
 	}
+	iterableTemp := c.nextTemp - 1
 
-	// For a simplified implementation, we'll just compile the body once
-	// In a full implementation, this would set up iteration over the array
+	// Initialize foreach iterator
+	iteratorTemp := c.allocateTemp()
+	c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, iteratorTemp)
 
-	// Allocate iterator (simplified)
-	iteratorVar := c.allocateTemp()
-	c.emit(opcodes.OP_QM_ASSIGN,
-		opcodes.IS_TMP_VAR, c.nextTemp-1, // The iterable result
-		opcodes.IS_UNUSED, 0,
-		opcodes.IS_TMP_VAR, iteratorVar)
-
-	// Start iteration label
+	// Start of loop
 	c.placeLabel(startLabel)
 
-	// For now, just execute the body once (simplified)
-	// TODO: Implement proper iteration logic
+	// Fetch next element - this will set values or null if no more elements
+	valueTemp := c.allocateTemp()
+	var keyTemp uint32 = 0
+	if stmt.Key != nil {
+		keyTemp = c.allocateTemp()
+		c.emit(opcodes.OP_FE_FETCH, opcodes.IS_TMP_VAR, iteratorTemp, opcodes.IS_TMP_VAR, keyTemp, opcodes.IS_TMP_VAR, valueTemp)
+	} else {
+		c.emit(opcodes.OP_FE_FETCH, opcodes.IS_TMP_VAR, iteratorTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueTemp)
+	}
 
-	// Compile foreach body
+	// Check if value is null (end of iteration)
+	nullCheckTemp := c.allocateTemp()
+	nullConstant := c.addConstant(values.NewNull())
+	c.emit(opcodes.OP_IS_IDENTICAL, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_CONST, nullConstant, opcodes.IS_TMP_VAR, nullCheckTemp)
+	c.emitJumpNZ(opcodes.IS_TMP_VAR, nullCheckTemp, endLabel)
+
+	// Assign key to key variable if present
+	if stmt.Key != nil {
+		if keyVar, ok := stmt.Key.(*ast.Variable); ok {
+			keySlot := c.getOrCreateVariable(keyVar.Name)
+			c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, keyTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, keySlot)
+		}
+	}
+
+	// Assign value to value variable
+	if valueVar, ok := stmt.Value.(*ast.Variable); ok {
+		valueSlot := c.getOrCreateVariable(valueVar.Name)
+		c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+	}
+
+	// Compile body statements (this is the main difference from regular foreach)
 	for _, bodyStmt := range stmt.Body {
-		if err := c.compileNode(bodyStmt); err != nil {
+		err = c.compileNode(bodyStmt)
+		if err != nil {
 			return err
 		}
 	}
 
-	// End iteration (simplified - no actual iteration)
+	// Continue label (where continue jumps to)
+	c.placeLabel(continueLabel)
+
+	// Jump back to start for next iteration
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, startLabel)
+
+	// End label
 	c.placeLabel(endLabel)
 
-	// Restore labels
+	// Restore old break/continue labels
 	c.currentScope().breakLabel = oldBreak
 	c.currentScope().continueLabel = oldContinue
 
