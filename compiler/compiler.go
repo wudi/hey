@@ -154,12 +154,58 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileAnonymousFunction(n)
 	case *ast.IncludeOrEvalExpression:
 		return c.compileIncludeOrEval(n)
+	case *ast.PrintExpression:
+		return c.compilePrintExpression(n)
+	case *ast.CloneExpression:
+		return c.compileCloneExpression(n)
+	case *ast.InstanceofExpression:
+		return c.compileInstanceofExpression(n)
+	case *ast.CastExpression:
+		return c.compileCastExpression(n)
+	case *ast.ErrorSuppressionExpression:
+		return c.compileErrorSuppressionExpression(n)
+	case *ast.EmptyExpression:
+		return c.compileEmptyExpression(n)
+	case *ast.ExitExpression:
+		return c.compileExitExpression(n)
+	case *ast.IssetExpression:
+		return c.compileIssetExpression(n)
+	case *ast.ListExpression:
+		return c.compileListExpression(n)
+	case *ast.EvalExpression:
+		return c.compileEvalExpression(n)
+	case *ast.YieldExpression:
+		return c.compileYieldExpression(n)
+	case *ast.YieldFromExpression:
+		return c.compileYieldFromExpression(n)
+	case *ast.ThrowExpression:
+		return c.compileThrowExpression(n)
+	case *ast.MagicConstantExpression:
+		return c.compileMagicConstantExpression(n)
+	case *ast.NamespaceNameExpression:
+		return c.compileNamespaceNameExpression(n)
+	case *ast.NullsafePropertyAccessExpression:
+		return c.compileNullsafePropertyAccessExpression(n)
+	case *ast.NullsafeMethodCallExpression:
+		return c.compileNullsafeMethodCallExpression(n)
+	case *ast.ShellExecExpression:
+		return c.compileShellExecExpression(n)
+	case *ast.CommaExpression:
+		return c.compileCommaExpression(n)
+	case *ast.SpreadExpression:
+		return c.compileSpreadExpression(n)
+	case *ast.ArrowFunctionExpression:
+		return c.compileArrowFunctionExpression(n)
+	case *ast.FirstClassCallable:
+		return c.compileFirstClassCallable(n)
 
 	// Statements
 	case *ast.ExpressionStatement:
 		return c.compileExpressionStatement(n)
 	case *ast.EchoStatement:
 		return c.compileEcho(n)
+	case *ast.PrintStatement:
+		return c.compilePrintStatement(n)
 	case *ast.ReturnStatement:
 		return c.compileReturn(n)
 	case *ast.IfStatement:
@@ -182,6 +228,34 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileThrow(n)
 	case *ast.BlockStatement:
 		return c.compileBlock(n)
+	case *ast.GlobalStatement:
+		return c.compileGlobalStatement(n)
+	case *ast.StaticStatement:
+		return c.compileStaticStatement(n)
+	case *ast.UnsetStatement:
+		return c.compileUnsetStatement(n)
+	case *ast.DoWhileStatement:
+		return c.compileDoWhileStatement(n)
+	case *ast.GotoStatement:
+		return c.compileGotoStatement(n)
+	case *ast.LabelStatement:
+		return c.compileLabelStatement(n)
+	case *ast.HaltCompilerStatement:
+		return c.compileHaltCompilerStatement(n)
+	case *ast.DeclareStatement:
+		return c.compileDeclareStatement(n)
+	case *ast.NamespaceStatement:
+		return c.compileNamespaceStatement(n)
+	case *ast.UseStatement:
+		return c.compileUseStatement(n)
+	case *ast.AlternativeIfStatement:
+		return c.compileAlternativeIfStatement(n)
+	case *ast.AlternativeWhileStatement:
+		return c.compileAlternativeWhileStatement(n)
+	case *ast.AlternativeForStatement:
+		return c.compileAlternativeForStatement(n)
+	case *ast.AlternativeForeachStatement:
+		return c.compileAlternativeForeachStatement(n)
 
 	// Declarations
 	case *ast.FunctionDeclaration:
@@ -194,6 +268,16 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compilePropertyDeclaration(n)
 	case *ast.ClassConstantDeclaration:
 		return c.compileClassConstant(n)
+	case *ast.InterfaceDeclaration:
+		return c.compileInterfaceDeclaration(n)
+	case *ast.TraitDeclaration:
+		return c.compileTraitDeclaration(n)
+	case *ast.EnumDeclaration:
+		return c.compileEnumDeclaration(n)
+	case *ast.UseTraitStatement:
+		return c.compileUseTraitStatement(n)
+	case *ast.HookedPropertyDeclaration:
+		return c.compileHookedPropertyDeclaration(n)
 
 	// Program node
 	case *ast.Program:
