@@ -98,6 +98,9 @@ type ExecutionContext struct {
 func (ctx *ExecutionContext) WriteOutput(output string) {
 	if ctx.OutputWriter != nil {
 		ctx.OutputWriter.Write([]byte(output))
+	} else {
+		// Fallback to stdout if no writer is set (should not happen with default initialization)
+		os.Stdout.WriteString(output)
 	}
 }
 
@@ -219,6 +222,7 @@ func NewExecutionContext() *ExecutionContext {
 		ExceptionHandlers: make([]ExceptionHandler, 0),
 		CurrentException:  nil,
 		RopeBuffers:       make(map[uint32][]string),
+		OutputWriter:      os.Stdout, // Default to stdout for backward compatibility
 		IncludedFiles:     make(map[string]bool),
 		CurrentGenerator:  nil,
 		Generators:        make(map[uint32]*Generator),

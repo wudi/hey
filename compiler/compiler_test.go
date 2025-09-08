@@ -301,20 +301,22 @@ echo "done";`
 		t.Logf("Function %s: %d instructions, %d constants", name, len(fn.Instructions), len(fn.Constants))
 	}
 
-	// Capture output
-	var buf bytes.Buffer
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
+	// Execute with runtime and capture output
 	vmCtx := vm.NewExecutionContext()
+	var buf bytes.Buffer
+	vmCtx.SetOutputWriter(&buf)
+	// Initialize runtime if not already done
+	if runtime.GlobalRegistry == nil {
+		err := runtime.Bootstrap()
+		require.NoError(t, err, "Failed to bootstrap runtime")
+	}
+	// Initialize VM integration
+	if runtime.GlobalVMIntegration == nil {
+		err := runtime.InitializeVMIntegration()
+		require.NoError(t, err, "Failed to initialize VM integration")
+	}
 	err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 	require.NoError(t, err, "VM execution failed")
-
-	// Restore stdout and capture output
-	w.Close()
-	os.Stdout = oldStdout
-	buf.ReadFrom(r)
 
 	output := buf.String()
 	t.Logf("Function call VM Output: %q", output)
