@@ -2,7 +2,6 @@ package compiler
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
@@ -825,17 +824,11 @@ func (c *Compiler) compileNumberLiteral(expr *ast.NumberLiteral) error {
 	var constant uint32
 
 	if expr.Kind == "integer" {
-		value, err := strconv.ParseInt(expr.Value, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid integer literal: %s", expr.Value)
-		}
-		constant = c.addConstant(values.NewInt(value))
+		// 使用预转换的整数值
+		constant = c.addConstant(values.NewInt(expr.IntValue))
 	} else if expr.Kind == "float" {
-		value, err := strconv.ParseFloat(expr.Value, 64)
-		if err != nil {
-			return fmt.Errorf("invalid float literal: %s", expr.Value)
-		}
-		constant = c.addConstant(values.NewFloat(value))
+		// 使用预转换的浮点值
+		constant = c.addConstant(values.NewFloat(expr.FloatValue))
 	} else {
 		return fmt.Errorf("unsupported number kind: %s", expr.Kind)
 	}
@@ -2771,18 +2764,12 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 		// For simple literals, we can evaluate them directly
 		switch defVal := decl.DefaultValue.(type) {
 		case *ast.NumberLiteral:
-			if defVal.Kind == "int" {
-				value, err := strconv.ParseInt(defVal.Value, 10, 64)
-				if err != nil {
-					return fmt.Errorf("invalid integer literal for property default: %s", defVal.Value)
-				}
-				defaultValue = values.NewInt(value)
+			if defVal.Kind == "integer" {
+				// 使用预转换的整数值
+				defaultValue = values.NewInt(defVal.IntValue)
 			} else if defVal.Kind == "float" {
-				value, err := strconv.ParseFloat(defVal.Value, 64)
-				if err != nil {
-					return fmt.Errorf("invalid float literal for property default: %s", defVal.Value)
-				}
-				defaultValue = values.NewFloat(value)
+				// 使用预转换的浮点值
+				defaultValue = values.NewFloat(defVal.FloatValue)
 			}
 		case *ast.StringLiteral:
 			defaultValue = values.NewString(defVal.Value)
@@ -2905,27 +2892,14 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 func (c *Compiler) evaluateClassConstantExpression(expr ast.Expression) (*values.Value, error) {
 	switch val := expr.(type) {
 	case *ast.NumberLiteral:
-		if val.Kind == "int" {
-			intValue, err := strconv.ParseInt(val.Value, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid integer literal: %s", val.Value)
-			}
-			return values.NewInt(intValue), nil
+		if val.Kind == "integer" {
+			// 使用预转换的整数值
+			return values.NewInt(val.IntValue), nil
 		} else if val.Kind == "float" {
-			floatValue, err := strconv.ParseFloat(val.Value, 64)
-			if err != nil {
-				return nil, fmt.Errorf("invalid float literal: %s", val.Value)
-			}
-			return values.NewFloat(floatValue), nil
+			// 使用预转换的浮点值
+			return values.NewFloat(val.FloatValue), nil
 		} else {
-			// Handle other numeric types
-			if intValue, err := strconv.ParseInt(val.Value, 10, 64); err == nil {
-				return values.NewInt(intValue), nil
-			} else if floatValue, err := strconv.ParseFloat(val.Value, 64); err == nil {
-				return values.NewFloat(floatValue), nil
-			} else {
-				return nil, fmt.Errorf("invalid number literal: %s", val.Value)
-			}
+			return nil, fmt.Errorf("unsupported number kind: %s", val.Kind)
 		}
 	case *ast.StringLiteral:
 		return values.NewString(val.Value), nil

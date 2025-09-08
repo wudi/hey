@@ -17,9 +17,11 @@ type Position struct {
 
 // Token 表示一个词法单元
 type Token struct {
-	Type     TokenType // Token 类型
-	Value    string    // Token 字符串值
-	Position Position  // Token 位置
+	Type       TokenType // Token 类型
+	Value      string    // Token 字符串值
+	IntValue   int64     // 预解析的整数值 (仅用于 T_LNUMBER)
+	FloatValue float64   // 预解析的浮点值 (仅用于 T_DNUMBER)
+	Position   Position  // Token 位置
 }
 
 // String 返回 Token 的字符串表示

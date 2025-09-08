@@ -1602,8 +1602,10 @@ func (se *ShellExecExpression) String() string {
 // NumberLiteral 数字字面量
 type NumberLiteral struct {
 	BaseNode
-	Value string `json:"value"`
-	Kind  string `json:"kind"` // "integer" or "float"
+	Value      string  `json:"value"`
+	Kind       string  `json:"kind"`        // "integer" or "float"
+	IntValue   int64   `json:"int_value"`   // 预转换的整数值
+	FloatValue float64 `json:"float_value"` // 预转换的浮点值
 }
 
 func NewNumberLiteral(pos lexer.Position, value, kind string) *NumberLiteral {
@@ -1615,6 +1617,21 @@ func NewNumberLiteral(pos lexer.Position, value, kind string) *NumberLiteral {
 		},
 		Value: value,
 		Kind:  kind,
+	}
+}
+
+// NewNumberLiteralWithValues 创建带有预转换值的数字字面量
+func NewNumberLiteralWithValues(pos lexer.Position, value, kind string, intVal int64, floatVal float64) *NumberLiteral {
+	return &NumberLiteral{
+		BaseNode: BaseNode{
+			Kind:     ASTZval,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Value:      value,
+		Kind:       kind,
+		IntValue:   intVal,
+		FloatValue: floatVal,
 	}
 }
 
