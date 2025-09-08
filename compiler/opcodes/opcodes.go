@@ -124,6 +124,10 @@ const (
 	OP_FETCH_OBJ_RW    // $obj->prop read-write
 	OP_FETCH_OBJ_IS    // isset($obj->prop)
 	OP_FETCH_OBJ_UNSET // unset($obj->prop)
+
+	// List operations (for list() destructuring)
+	OP_FETCH_LIST_R // Fetch from list/array for reading (list assignment)
+	OP_FETCH_LIST_W // Fetch from list/array for writing
 )
 
 // Function Operations (92-111)
@@ -276,6 +280,7 @@ const (
 	OP_GOTO    // Unconditional jump to label
 	OP_LABEL   // Label definition
 	OP_DECLARE // Declare statement
+	OP_TICKS   // Ticks directive (declare(ticks=N))
 )
 
 // Closure Operations (220-239)
@@ -454,6 +459,10 @@ var opcodeNames = map[Opcode]string{
 	OP_FETCH_OBJ_IS:    "FETCH_OBJ_IS",
 	OP_FETCH_OBJ_UNSET: "FETCH_OBJ_UNSET",
 
+	// List operations
+	OP_FETCH_LIST_R: "FETCH_LIST_R",
+	OP_FETCH_LIST_W: "FETCH_LIST_W",
+
 	// Functions
 	OP_INIT_FCALL:              "INIT_FCALL",
 	OP_INIT_FCALL_BY_NAME:      "INIT_FCALL_BY_NAME",
@@ -585,6 +594,7 @@ var opcodeNames = map[Opcode]string{
 	OP_GOTO:    "GOTO",
 	OP_LABEL:   "LABEL",
 	OP_DECLARE: "DECLARE",
+	OP_TICKS:   "TICKS",
 
 	// Closure operations
 	OP_CREATE_CLOSURE: "CREATE_CLOSURE",

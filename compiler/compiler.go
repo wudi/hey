@@ -517,6 +517,9 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 	} else if arrayAccess, ok := expr.Left.(*ast.ArrayAccessExpression); ok {
 		// Handle array assignment: $arr[index] = value or nested assignments like $arr[key1][key2] = value
 		return c.compileArrayAssignment(arrayAccess, valueResult)
+	} else if listExpr, ok := expr.Left.(*ast.ListExpression); ok {
+		// Handle list assignment: list($a, $b, $c) = $array
+		return c.compileListAssignmentFromValue(listExpr, valueResult)
 	}
 	return nil
 }

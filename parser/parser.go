@@ -4544,9 +4544,7 @@ func parseListExpression(p *Parser) ast.Expression {
 	// Handle empty list: list()
 	if p.peekToken.Type == lexer.TOKEN_RPAREN {
 		p.nextToken()
-		listExpr := ast.NewArrayExpression(pos)
-		listExpr.Elements = elements
-		return listExpr
+		return ast.NewListExpression(pos, elements)
 	}
 
 	// Parse list elements with support for empty elements (consecutive commas)
@@ -4591,10 +4589,8 @@ func parseListExpression(p *Parser) ast.Expression {
 		return nil
 	}
 
-	// Create ArrayExpression for list() - PHP uses same AST structure
-	listExpr := ast.NewArrayExpression(pos)
-	listExpr.Elements = elements
-	return listExpr
+	// Create ListExpression for list()
+	return ast.NewListExpression(pos, elements)
 }
 
 // parseAnonymousFunctionExpression 解析匿名函数表达式

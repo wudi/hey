@@ -414,10 +414,171 @@ func (c *Compiler) compileIssetVariable(expr ast.Expression, result uint32) erro
 
 // ListExpression compilation (array destructuring)
 func (c *Compiler) compileListExpression(expr *ast.ListExpression) error {
-	// list() is typically used in assignment context
-	// For now, we'll handle it as a pass-through
-	// Full implementation would involve FETCH_LIST_R opcodes
-	return fmt.Errorf("list expressions not yet fully implemented")
+	// list() expressions are used for array destructuring
+	// This function is called when list() appears on the left side of an assignment
+	// The actual list assignment logic is handled in assignment compilation
+
+	// For a standalone list expression (which is unusual), we create an empty array
+	// Most commonly, this would be called from assignment compilation
+	result := c.allocateTemp()
+
+	// Create an empty array to represent the list structure
+	c.emit(opcodes.OP_INIT_ARRAY,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
+
+	// Add each element of the list as array elements (for structural representation)
+	for i, element := range expr.Elements {
+		if element != nil {
+			// Compile the element (usually a variable)
+			if err := c.compileNode(element); err != nil {
+				return err
+			}
+
+			elementTemp := c.nextTemp - 1
+			indexConst := c.addConstant(values.NewInt(int64(i)))
+
+			// Add to array
+			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT,
+				opcodes.IS_TMP_VAR, elementTemp,
+				opcodes.IS_CONST, indexConst,
+				opcodes.IS_TMP_VAR, result)
+		} else {
+			// Handle empty elements in list (like list($a, , $c))
+			indexConst := c.addConstant(values.NewInt(int64(i)))
+			nullConst := c.addConstant(values.NewNull())
+
+			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT,
+				opcodes.IS_CONST, nullConst,
+				opcodes.IS_CONST, indexConst,
+				opcodes.IS_TMP_VAR, result)
+		}
+	}
+
+	return nil
+}
+
+// compileListAssignmentFromValue handles list assignment from a temporary value: list($a, $b, $c) = $array
+func (c *Compiler) compileListAssignmentFromValue(listExpr *ast.ListExpression, sourceTemp uint32) error {
+	// For each element in the list, fetch from the source array and assign
+	for i, element := range listExpr.Elements {
+		if element == nil {
+			// Skip empty elements
+			continue
+		}
+
+		// Create index constant
+		indexConst := c.addConstant(values.NewInt(int64(i)))
+
+		// Check if this is a nested list
+		if nestedList, ok := element.(*ast.ListExpression); ok {
+			// Handle nested list assignment recursively
+			// First fetch the sub-array
+			fetchTemp := c.allocateTemp()
+			c.emit(opcodes.OP_FETCH_LIST_R,
+				opcodes.IS_TMP_VAR, sourceTemp,
+				opcodes.IS_CONST, indexConst,
+				opcodes.IS_TMP_VAR, fetchTemp)
+
+			// Recursively handle nested list
+			if err := c.compileListAssignmentFromValue(nestedList, fetchTemp); err != nil {
+				return err
+			}
+		} else {
+			// Regular variable assignment
+			fetchTemp := c.allocateTemp()
+
+			// Fetch the element from the source array
+			c.emit(opcodes.OP_FETCH_LIST_R,
+				opcodes.IS_TMP_VAR, sourceTemp,
+				opcodes.IS_CONST, indexConst,
+				opcodes.IS_TMP_VAR, fetchTemp)
+
+			// Assign to the variable
+			if variable, ok := element.(*ast.Variable); ok {
+				varSlot := c.getVariableSlot(variable.Name)
+				c.emit(opcodes.OP_ASSIGN,
+					opcodes.IS_TMP_VAR, fetchTemp,
+					opcodes.IS_UNUSED, 0,
+					opcodes.IS_CV, varSlot)
+			} else {
+				// Handle more complex left-hand side expressions
+				return fmt.Errorf("complex list assignment targets not fully implemented")
+			}
+		}
+	}
+
+	return nil
+}
+
+// compileListAssignment handles list assignment: list($a, $b, $c) = $array
+func (c *Compiler) compileListAssignment(listExpr *ast.ListExpression, sourceNode *ast.Variable) error {
+	// This is the main logic for list assignment
+	// Get the source array
+	if err := c.compileNode(sourceNode); err != nil {
+		return err
+	}
+
+	sourceTemp := c.nextTemp - 1
+
+	// For each element in the list, fetch from the source array and assign
+	for i, element := range listExpr.Elements {
+		if element == nil {
+			// Skip empty elements
+			continue
+		}
+
+		// Create index constant
+		indexConst := c.addConstant(values.NewInt(int64(i)))
+
+		// Check if this is a nested list
+		if nestedList, ok := element.(*ast.ListExpression); ok {
+			// Handle nested list assignment recursively
+			// First fetch the sub-array
+			fetchTemp := c.allocateTemp()
+			c.emit(opcodes.OP_FETCH_LIST_R,
+				opcodes.IS_TMP_VAR, sourceTemp,
+				opcodes.IS_CONST, indexConst,
+				opcodes.IS_TMP_VAR, fetchTemp)
+
+			// Create a temporary variable node for the fetched value
+			tempVarNode := &ast.Variable{
+				BaseNode: ast.BaseNode{
+					Kind: ast.ASTVar,
+				},
+				Name: fmt.Sprintf("__list_temp_%d", fetchTemp),
+			}
+
+			// Recursively handle nested list
+			if err := c.compileListAssignment(nestedList, tempVarNode); err != nil {
+				return err
+			}
+		} else {
+			// Regular variable assignment
+			fetchTemp := c.allocateTemp()
+
+			// Fetch the element from the source array
+			c.emit(opcodes.OP_FETCH_LIST_R,
+				opcodes.IS_TMP_VAR, sourceTemp,
+				opcodes.IS_CONST, indexConst,
+				opcodes.IS_TMP_VAR, fetchTemp)
+
+			// Assign to the variable
+			if variable, ok := element.(*ast.Variable); ok {
+				varSlot := c.getVariableSlot(variable.Name)
+				c.emit(opcodes.OP_ASSIGN,
+					opcodes.IS_TMP_VAR, fetchTemp,
+					opcodes.IS_UNUSED, 0,
+					opcodes.IS_CV, varSlot)
+			} else {
+				// Handle more complex left-hand side expressions
+				return fmt.Errorf("complex list assignment targets not fully implemented")
+			}
+		}
+	}
+
+	return nil
 }
 
 // EvalExpression compilation
@@ -1083,27 +1244,69 @@ func (c *Compiler) compileHaltCompilerStatement(stmt *ast.HaltCompilerStatement)
 }
 
 func (c *Compiler) compileDeclareStatement(stmt *ast.DeclareStatement) error {
-	// Compile declare statement: declare(directive=value);
+	// Compile declare statement: declare(directive=value) or declare(directive=value) { ... }
 	// Common directives: strict_types, ticks, encoding
 
-	// Process each declaration
+	// Process each declaration and handle specific directives
 	for _, decl := range stmt.Declarations {
-		// For now, handle as assignment expressions
-		// In a full implementation, these would set compiler/runtime flags
-		if err := c.compileNode(decl); err != nil {
-			return err
+		if assignment, ok := decl.(*ast.AssignmentExpression); ok {
+			// Extract directive name and value
+			var directiveName string
+
+			// Get directive name (left side)
+			if variable, ok := assignment.Left.(*ast.Variable); ok {
+				directiveName = strings.TrimPrefix(variable.Name, "$")
+			} else if identifier, ok := assignment.Left.(*ast.IdentifierNode); ok {
+				directiveName = identifier.Name
+			} else {
+				return fmt.Errorf("invalid declare directive format")
+			}
+
+			// Compile directive value (right side)
+			if err := c.compileNode(assignment.Right); err != nil {
+				return err
+			}
+			valueTemp := c.nextTemp - 1
+
+			// Handle specific directives
+			switch directiveName {
+			case "strict_types":
+				// strict_types=1 enables strict type checking for the current file
+				// This affects how type declarations are enforced
+				c.emitDeclareDirective("strict_types", valueTemp)
+
+			case "ticks":
+				// ticks=N causes tick events to be emitted every N statements
+				// Used for debugging and profiling
+				c.emitDeclareDirective("ticks", valueTemp)
+
+			case "encoding":
+				// encoding="UTF-8" declares the encoding of the source file
+				// Affects string handling in some cases
+				c.emitDeclareDirective("encoding", valueTemp)
+
+			default:
+				// Unknown directive - emit generic declare
+				directiveNameConst := c.addConstant(values.NewString(directiveName))
+				c.emit(opcodes.OP_DECLARE,
+					opcodes.IS_CONST, directiveNameConst,
+					opcodes.IS_TMP_VAR, valueTemp,
+					opcodes.IS_UNUSED, 0)
+			}
+		} else {
+			// Handle other declaration types
+			if err := c.compileNode(decl); err != nil {
+				return err
+			}
 		}
 	}
 
-	// Emit DECLARE opcode with declarations count
-	declCount := c.addConstant(values.NewInt(int64(len(stmt.Declarations))))
-	c.emit(opcodes.OP_DECLARE,
-		opcodes.IS_CONST, declCount,
-		opcodes.IS_UNUSED, 0,
-		opcodes.IS_UNUSED, 0)
-
-	// Compile body if present (for declare blocks)
+	// Compile body if present (for declare blocks: declare() { ... })
 	if stmt.Body != nil {
+		// Create new scope for declare block
+		c.pushScope(false) // false = not a function scope
+		defer c.popScope()
+
 		for _, bodyStmt := range stmt.Body {
 			if err := c.compileNode(bodyStmt); err != nil {
 				return err
@@ -1112,6 +1315,27 @@ func (c *Compiler) compileDeclareStatement(stmt *ast.DeclareStatement) error {
 	}
 
 	return nil
+}
+
+// emitDeclareDirective emits a declare directive with proper opcode
+func (c *Compiler) emitDeclareDirective(directive string, valueTemp uint32) {
+	directiveNameConst := c.addConstant(values.NewString(directive))
+
+	switch directive {
+	case "ticks":
+		// For ticks, we need special handling to set up tick callbacks
+		c.emit(opcodes.OP_TICKS,
+			opcodes.IS_TMP_VAR, valueTemp,
+			opcodes.IS_UNUSED, 0,
+			opcodes.IS_UNUSED, 0)
+
+	default:
+		// Generic declare opcode
+		c.emit(opcodes.OP_DECLARE,
+			opcodes.IS_CONST, directiveNameConst,
+			opcodes.IS_TMP_VAR, valueTemp,
+			opcodes.IS_UNUSED, 0)
+	}
 }
 
 func (c *Compiler) compileNamespaceStatement(stmt *ast.NamespaceStatement) error {

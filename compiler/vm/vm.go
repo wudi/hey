@@ -93,6 +93,10 @@ type ExecutionContext struct {
 	// Execution control
 	Halted   bool
 	ExitCode int
+
+	// Tick handling for declare(ticks=N)
+	TickCount   int // Number of statements per tick (0 = disabled)
+	CurrentTick int // Current tick counter
 }
 
 // WriteOutput implements the ExecutionContext interface for runtime functions
@@ -504,6 +508,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 	case opcodes.OP_FETCH_OBJ_UNSET:
 		return vm.executeFetchObjUnset(ctx, inst)
 
+	// List operations
+	case opcodes.OP_FETCH_LIST_R:
+		return vm.executeFetchListRead(ctx, inst)
+	case opcodes.OP_FETCH_LIST_W:
+		return vm.executeFetchListWrite(ctx, inst)
+
 	// Function operations
 	case opcodes.OP_INIT_FCALL:
 		return vm.executeInitFunctionCall(ctx, inst)
@@ -774,6 +784,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeVerifyAbstractClass(ctx, inst)
 	case opcodes.OP_DECLARE:
 		return vm.executeDeclare(ctx, inst)
+	case opcodes.OP_TICKS:
+		return vm.executeTicks(ctx, inst)
 
 	default:
 		return fmt.Errorf("unsupported opcode: %s", inst.Opcode.String())
@@ -5766,6 +5778,33 @@ func (vm *VirtualMachine) executeDeclare(ctx *ExecutionContext, inst *opcodes.In
 	return nil
 }
 
+func (vm *VirtualMachine) executeTicks(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	// TICKS opcode for declare(ticks=N) statements
+	// This sets up tick handling for profiling and debugging
+
+	// Get the tick count value
+	ticksValue := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	if ticksValue == nil || !ticksValue.IsNumeric() {
+		return fmt.Errorf("ticks value must be numeric")
+	}
+
+	tickCount := int(ticksValue.ToInt())
+
+	// Set tick configuration in execution context
+	if ctx.TickCount == 0 && tickCount > 0 {
+		ctx.TickCount = tickCount
+		ctx.CurrentTick = 0
+	}
+
+	// In a full implementation, this would:
+	// - Set up tick handlers
+	// - Configure profiling to emit tick events every N statements
+	// - Allow user-defined tick functions to be called
+
+	ctx.IP++
+	return nil
+}
+
 // Enhanced VM utility methods
 
 // GetPerformanceReport returns a comprehensive performance report
@@ -5811,6 +5850,51 @@ func (vm *VirtualMachine) GetHotSpots(limit int) []HotSpot {
 		return nil
 	}
 	return vm.Optimizer.GetHotSpots(limit)
+}
+
+// executeFetchListRead fetches an element from an array for list assignment (reading)
+func (vm *VirtualMachine) executeFetchListRead(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	index := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	var result *values.Value
+	if array != nil && array.IsArray() {
+		result = array.ArrayGet(index)
+		if result == nil {
+			result = values.NewNull()
+		}
+	} else {
+		result = values.NewNull()
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
+}
+
+// executeFetchListWrite fetches an element from an array for list assignment (writing)
+func (vm *VirtualMachine) executeFetchListWrite(ctx *ExecutionContext, inst *opcodes.Instruction) error {
+	array := vm.getValue(ctx, inst.Op1, opcodes.DecodeOpType1(inst.OpType1))
+	index := vm.getValue(ctx, inst.Op2, opcodes.DecodeOpType2(inst.OpType1))
+
+	// For list write operations, we need to create a reference to the array element
+	// that can be assigned to later
+	var result *values.Value
+
+	if array != nil && array.IsArray() {
+		result = array.ArrayGet(index)
+		if result == nil {
+			result = values.NewNull()
+		}
+	} else {
+		result = values.NewNull()
+	}
+
+	vm.setValue(ctx, inst.Result, opcodes.DecodeResultType(inst.OpType2), result)
+
+	ctx.IP++
+	return nil
 }
 
 // GetMemoryStats returns memory pool statistics

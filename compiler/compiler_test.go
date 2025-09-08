@@ -3243,3 +3243,91 @@ func TestErrorSuppressionExpression(t *testing.T) {
 		})
 	}
 }
+
+// TestListExpression tests list() expressions for array destructuring
+func TestListExpression(t *testing.T) {
+	tests := []struct {
+		name     string
+		phpCode  string
+		expected string
+	}{
+		{
+			name: "Simple list assignment",
+			phpCode: `<?php
+$array = array(1, 2, 3);
+list($a, $b, $c) = $array;
+echo $a . " " . $b . " " . $c . "\n";
+?>`,
+			expected: "1 2 3\n",
+		},
+		{
+			name: "List with skip elements",
+			phpCode: `<?php
+$array = array(10, 20, 30, 40);
+list($first, , $third) = $array;
+echo $first . " " . $third . "\n";
+?>`,
+			expected: "10 30\n",
+		},
+		{
+			name: "Nested list assignment",
+			phpCode: `<?php
+$nested = array(array(1, 2), array(3, 4));
+list(list($a, $b), list($c, $d)) = $nested;
+echo $a . " " . $b . " " . $c . " " . $d . "\n";
+?>`,
+			expected: "1 2 3 4\n",
+		},
+		{
+			name: "List with insufficient elements",
+			phpCode: `<?php
+$array = array(1, 2);
+list($a, $b, $c) = $array;
+echo $a . " " . $b . " ";
+var_dump($c);
+?>`,
+			expected: "1 2 NULL\n",
+		},
+		{
+			name: "List with strings",
+			phpCode: `<?php
+$array = array("hello", "world", "test");
+list($first, $second, $third) = $array;
+echo $first . " " . $second . " " . $third . "\n";
+?>`,
+			expected: "hello world test\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse the PHP code
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			// Compile the program
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Capture output for verification
+			var buf bytes.Buffer
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Execute with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+
+			// Restore stdout and get output
+			w.Close()
+			os.Stdout = oldStdout
+			buf.ReadFrom(r)
+
+			output := buf.String()
+			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
+		})
+	}
+}
