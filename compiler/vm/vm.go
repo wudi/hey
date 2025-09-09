@@ -110,6 +110,17 @@ func (ctx *ExecutionContext) WriteOutput(output string) {
 	}
 }
 
+// HasFunction implements the ExecutionContext interface for runtime functions
+func (ctx *ExecutionContext) HasFunction(name string) bool {
+	// Check both runtime registered functions and VM functions
+	if runtimeRegistry.HasBuiltinFunction(name) {
+		return true
+	}
+	// Check VM functions (user-defined functions)
+	_, exists := ctx.Functions[name]
+	return exists
+}
+
 // SetOutputWriter sets the output writer for the execution context
 func (ctx *ExecutionContext) SetOutputWriter(writer io.Writer) {
 	ctx.OutputWriter = writer

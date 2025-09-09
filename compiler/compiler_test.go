@@ -2381,6 +2381,86 @@ func TestPropertyDeclaration(t *testing.T) {
 	}
 }
 
+func TestFunctionExists(t *testing.T) {
+	testCases := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			"Function exists for built-in function",
+			`<?php 
+			echo function_exists("strlen") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Function exists for non-existent function",
+			`<?php 
+			echo function_exists("nonexistent_function") ? "true" : "false";`,
+			"false",
+		},
+		{
+			"Function exists for function_exists itself",
+			`<?php 
+			echo function_exists("function_exists") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Function exists for user-defined function",
+			`<?php 
+			function my_custom_function() {
+				return "hello";
+			}
+			echo function_exists("my_custom_function") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Function exists before and after function definition",
+			`<?php 
+			echo function_exists("test_func") ? "true" : "false";
+			echo ",";
+			function test_func() {}
+			echo function_exists("test_func") ? "true" : "false";`,
+			"true,true",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test with our implementation
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile function_exists test: %s", tc.name)
+
+			// Initialize runtime for built-in functions
+			runtimeErr := runtime.Bootstrap()
+			require.NoError(t, runtimeErr, "Failed to bootstrap runtime")
+
+			// Initialize VM integration
+			if runtime.GlobalVMIntegration == nil {
+				err := runtime.InitializeVMIntegration()
+				require.NoError(t, err, "Failed to initialize VM integration")
+			}
+
+			vmCtx := vm.NewExecutionContext()
+
+			// Capture output
+			var buf bytes.Buffer
+			vmCtx.SetOutputWriter(&buf)
+
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Failed to execute function_exists test: %s", tc.name)
+
+			output := strings.TrimSpace(buf.String())
+			require.Equal(t, tc.expected, output, "Function_exists test failed for: %s", tc.name)
+		})
+	}
+}
+
 func TestClassConstantDeclaration(t *testing.T) {
 	testCases := []struct {
 		name     string

@@ -347,6 +347,17 @@ func registerBuiltinFunctions() error {
 			MinArgs: 2,
 			MaxArgs: 2,
 		},
+
+		// Introspection functions
+		{
+			Name:    "function_exists",
+			Handler: functionExistsHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "function_name", Type: "string"},
+			},
+			MinArgs: 1,
+			MaxArgs: 1,
+		},
 	}
 
 	for _, desc := range functions {
@@ -653,4 +664,18 @@ func strRepeatHandler(ctx ExecutionContext, args []*values.Value) (*values.Value
 
 	result := strings.Repeat(input, multiplier)
 	return values.NewString(result), nil
+}
+
+// functionExistsHandler implements the function_exists function
+func functionExistsHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	if len(args) != 1 {
+		return values.NewNull(), fmt.Errorf("function_exists() expects exactly 1 parameter, %d given", len(args))
+	}
+
+	functionName := args[0].ToString()
+
+	// Check if the function exists (both built-in and user-defined)
+	exists := ctx.HasFunction(functionName)
+
+	return values.NewBool(exists), nil
 }

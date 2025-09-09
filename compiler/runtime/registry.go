@@ -95,6 +95,8 @@ type ExtensionDescriptor struct {
 type ExecutionContext interface {
 	// Add methods as needed for function handlers
 	WriteOutput(output string)
+	// Check if a function exists (for introspection functions like function_exists)
+	HasFunction(name string) bool
 }
 
 // FunctionHandler is the type for runtime function handlers
