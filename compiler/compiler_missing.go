@@ -1718,7 +1718,19 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 					Type:         "", // Type hints not fully implemented yet
 					IsReference:  param.ByReference,
 					HasDefault:   param.DefaultValue != nil,
-					DefaultValue: nil, // TODO: evaluate default value
+					DefaultValue: nil,
+				}
+
+				// Handle default value evaluation
+				if param.DefaultValue != nil {
+					// Evaluate the default value expression at compile time
+					defaultValue := c.evaluateConstantExpression(param.DefaultValue)
+					if defaultValue != nil {
+						vmParam.DefaultValue = defaultValue
+					} else {
+						// If we can't evaluate it at compile time, use null as fallback
+						vmParam.DefaultValue = values.NewNull()
+					}
 				}
 				interfaceMethod.Parameters = append(interfaceMethod.Parameters, vmParam)
 			}

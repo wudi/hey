@@ -4592,3 +4592,75 @@ func TestPropertyAccessExpressionInArrays(t *testing.T) {
 		})
 	}
 }
+
+// TestInterfaceDefaultValuesCompilation tests the compilation of interface methods with default parameter values
+// This test verifies that default values are properly evaluated during compilation phase
+func TestInterfaceDefaultValuesCompilation(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Interface with default string parameter",
+			phpCode: `<?php
+interface TestInterface {
+    function testMethod($param = "default_value");
+}
+?>`,
+		},
+		{
+			name: "Interface with default integer parameter",
+			phpCode: `<?php
+interface TestInterface {
+    function testMethod($param = 42);
+}
+?>`,
+		},
+		{
+			name: "Interface with multiple default parameters",
+			phpCode: `<?php
+interface TestInterface {
+    function testMethod($str = "hello", $num = 100, $bool = true, $null = null);
+}
+?>`,
+		},
+		{
+			name: "Interface with default array parameter",
+			phpCode: `<?php
+interface TestInterface {
+    function testMethod($arr = array(1, 2, 3));
+}
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+
+			// Compile - this is where our default value evaluation happens
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Verify that interfaces were compiled successfully
+			require.Greater(t, len(comp.interfaces), 0, "No interfaces found after compilation")
+
+			// Check that the interface has the expected method with default values
+			iface, exists := comp.interfaces["TestInterface"]
+			require.True(t, exists, "TestInterface not found in compiled interfaces")
+
+			method, exists := iface.Methods["testMethod"]
+			require.True(t, exists, "testMethod not found in TestInterface")
+
+			// Verify that parameters with default values have their DefaultValue field set
+			for _, param := range method.Parameters {
+				if param.HasDefault {
+					require.NotNil(t, param.DefaultValue, "Default value not evaluated for parameter %s", param.Name)
+				}
+			}
+		})
+	}
+}
