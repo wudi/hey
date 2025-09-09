@@ -2672,10 +2672,10 @@ func TestClassConstantErrors(t *testing.T) {
 			"private constant cannot be final",
 		},
 		{
-			"Complex expression not supported",
+			"Function call expression not supported",
 			`<?php 
 			class Test { 
-				public const COMPLEX = 1 + 2; 
+				public const FUNC_CALL = strlen("test"); 
 			}`,
 			"unsupported constant expression",
 		},
@@ -2694,6 +2694,212 @@ func TestClassConstantErrors(t *testing.T) {
 			} else {
 				require.NoError(t, err, "Should not have compilation error for: %s", tc.name)
 			}
+		})
+	}
+}
+
+func TestClassConstantExpressions(t *testing.T) {
+	testCases := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			"Arithmetic expressions",
+			`<?php 
+			class Test { 
+				public const MATH_ADD = 10 + 5;
+				public const MATH_SUB = 20 - 8;
+				public const MATH_MUL = 6 * 7;
+				public const MATH_DIV = 100 / 4;
+				public const MATH_MOD = 17 % 3;
+				public const MATH_POW = 2 ** 3;
+			} 
+			echo Test::MATH_ADD . "|"; 
+			echo Test::MATH_SUB . "|"; 
+			echo Test::MATH_MUL . "|"; 
+			echo Test::MATH_DIV . "|"; 
+			echo Test::MATH_MOD . "|"; 
+			echo Test::MATH_POW;`,
+			"15|12|42|25|2|8",
+		},
+		{
+			"String concatenation",
+			`<?php 
+			class Test { 
+				public const STRING_CONCAT = 'hello' . ' world';
+				public const STRING_CONCAT2 = 'prefix_' . 'suffix';
+			} 
+			echo Test::STRING_CONCAT . "|"; 
+			echo Test::STRING_CONCAT2;`,
+			"hello world|prefix_suffix",
+		},
+		{
+			"Boolean operations",
+			`<?php 
+			class Test { 
+				public const BOOL_AND = true && false;
+				public const BOOL_OR = false || true;
+				public const BOOL_NOT = !true;
+			} 
+			echo (Test::BOOL_AND ? "1" : "0"); 
+			echo (Test::BOOL_OR ? "1" : "0"); 
+			echo (Test::BOOL_NOT ? "1" : "0");`,
+			"010",
+		},
+		{
+			"Comparison operations",
+			`<?php 
+			class Test { 
+				public const COMP_EQ = 5 == 5;
+				public const COMP_NEQ = 5 != 3;
+				public const COMP_LT = 3 < 5;
+				public const COMP_GT = 5 > 3;
+				public const COMP_LTE = 5 <= 5;
+				public const COMP_GTE = 5 >= 5;
+				public const COMP_SPACESHIP = 5 <=> 3;
+			} 
+			echo (Test::COMP_EQ ? "1" : "0");
+			echo (Test::COMP_NEQ ? "1" : "0");
+			echo (Test::COMP_LT ? "1" : "0");
+			echo (Test::COMP_GT ? "1" : "0");
+			echo (Test::COMP_LTE ? "1" : "0");
+			echo (Test::COMP_GTE ? "1" : "0");
+			echo Test::COMP_SPACESHIP;`,
+			"1111111",
+		},
+		{
+			"Bitwise operations",
+			`<?php 
+			class Test { 
+				public const BITWISE_AND = 7 & 3;
+				public const BITWISE_OR = 4 | 2;
+				public const BITWISE_XOR = 5 ^ 3;
+				public const BITWISE_NOT = ~5;
+				public const SHIFT_LEFT = 2 << 3;
+				public const SHIFT_RIGHT = 16 >> 2;
+			} 
+			echo Test::BITWISE_AND . "|"; 
+			echo Test::BITWISE_OR . "|"; 
+			echo Test::BITWISE_XOR . "|"; 
+			echo Test::BITWISE_NOT . "|"; 
+			echo Test::SHIFT_LEFT . "|"; 
+			echo Test::SHIFT_RIGHT;`,
+			"3|6|6|-6|16|4",
+		},
+		{
+			"Complex nested expressions",
+			`<?php 
+			class Test { 
+				public const NESTED = (10 + 5) * 2;
+				public const COMPLEX = 1 + 2 * 3 - 4;
+				public const COMPLEX_NESTED = ((10 + 5) * 2 - 3) / 3;
+			} 
+			echo Test::NESTED . "|"; 
+			echo Test::COMPLEX . "|"; 
+			echo Test::COMPLEX_NESTED;`,
+			"30|3|9",
+		},
+		{
+			"Array expressions",
+			`<?php 
+			class Test { 
+				public const SIMPLE_ARRAY = [1, 2, 3];
+				public const COMPLEX_ARRAY = [1 + 2, 'hello' . 'world', true && false];
+			} 
+			echo count(Test::SIMPLE_ARRAY) . "|"; 
+			echo count(Test::COMPLEX_ARRAY);`,
+			"3|3",
+		},
+		{
+			"Self constant references",
+			`<?php 
+			class Test { 
+				public const BASE_VALUE = 100;
+				public const DERIVED = self::BASE_VALUE * 2;
+				public const CHAINED = self::DERIVED + self::BASE_VALUE;
+			} 
+			echo Test::BASE_VALUE . "|"; 
+			echo Test::DERIVED . "|"; 
+			echo Test::CHAINED;`,
+			"100|200|300",
+		},
+		{
+			"Ternary expressions",
+			`<?php 
+			class Test { 
+				public const TERNARY = true ? 'yes' : 'no';
+				public const TERNARY_COMPLEX = 5 > 3 ? 'greater' : 'lesser';
+				public const TERNARY_NULL = false ? 'yes' : null;
+			} 
+			echo Test::TERNARY . "|"; 
+			echo Test::TERNARY_COMPLEX . "|"; 
+			echo (Test::TERNARY_NULL === null ? "null" : Test::TERNARY_NULL);`,
+			"yes|greater|null",
+		},
+		{
+			"Null coalescing",
+			`<?php 
+			class Test { 
+				public const COALESCE = null ?? 'default';
+				public const COALESCE2 = 'value' ?? 'default';
+			} 
+			echo Test::COALESCE . "|"; 
+			echo Test::COALESCE2;`,
+			"default|value",
+		},
+		{
+			"Unary operations",
+			`<?php 
+			class Test { 
+				public const UNARY_MINUS = -42;
+				public const UNARY_PLUS = +42;
+				public const UNARY_NOT = !false;
+				public const UNARY_BITWISE = ~0;
+			} 
+			echo Test::UNARY_MINUS . "|"; 
+			echo Test::UNARY_PLUS . "|"; 
+			echo (Test::UNARY_NOT ? "1" : "0") . "|"; 
+			echo Test::UNARY_BITWISE;`,
+			"-42|42|1|-1",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create lexer and parser
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+
+			// Create compiler and compile
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile: %s", tc.name)
+
+			// Initialize runtime if not already done
+			if runtime.GlobalRegistry == nil {
+				err := runtime.Bootstrap()
+				require.NoError(t, err, "Failed to bootstrap runtime")
+			}
+
+			// Initialize VM integration
+			if runtime.GlobalVMIntegration == nil {
+				err := runtime.InitializeVMIntegration()
+				require.NoError(t, err, "Failed to initialize VM integration")
+			}
+
+			// Execute and capture output
+			var buf bytes.Buffer
+			vmCtx := vm.NewExecutionContext()
+			vmCtx.SetOutputWriter(&buf)
+
+			vmachine := vm.NewVirtualMachine()
+			err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Failed to execute: %s", tc.name)
+
+			// Check expected output
+			result := strings.TrimSpace(buf.String())
+			require.Equal(t, tc.expected, result, "Unexpected output for: %s", tc.name)
 		})
 	}
 }

@@ -2,6 +2,8 @@ package compiler
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
@@ -3161,14 +3163,439 @@ func (c *Compiler) evaluateClassConstantExpression(expr ast.Expression) (*values
 		default:
 			return nil, fmt.Errorf("undefined constant reference: %s", val.Name)
 		}
-	// TODO: Add support for more complex constant expressions:
-	// - Mathematical expressions with constants
-	// - String concatenation
-	// - Array expressions with constant values
-	// - Class constant references
+
+	case *ast.BinaryExpression:
+		// Evaluate both operands
+		left, err := c.evaluateClassConstantExpression(val.Left)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate left operand: %w", err)
+		}
+		right, err := c.evaluateClassConstantExpression(val.Right)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate right operand: %w", err)
+		}
+
+		// Perform the binary operation based on the operator
+		return c.evaluateBinaryOperation(val.Operator, left, right)
+
+	case *ast.UnaryExpression:
+		// Evaluate the operand
+		operand, err := c.evaluateClassConstantExpression(val.Operand)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate unary operand: %w", err)
+		}
+
+		// Perform the unary operation
+		return c.evaluateUnaryOperation(val.Operator, operand)
+
+	case *ast.TernaryExpression:
+		// Evaluate the condition
+		condition, err := c.evaluateClassConstantExpression(val.Test)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate ternary condition: %w", err)
+		}
+
+		// Choose branch based on condition truth value
+		if c.isTruthy(condition) {
+			if val.Consequent != nil {
+				return c.evaluateClassConstantExpression(val.Consequent)
+			}
+			// If no true expression, return condition (PHP behavior)
+			return condition, nil
+		} else {
+			return c.evaluateClassConstantExpression(val.Alternate)
+		}
+
+	case *ast.CoalesceExpression:
+		// Evaluate the left operand
+		left, err := c.evaluateClassConstantExpression(val.Left)
+		if err != nil {
+			return nil, fmt.Errorf("failed to evaluate coalesce left operand: %w", err)
+		}
+
+		// If left is not null, return it
+		if !left.IsNull() {
+			return left, nil
+		}
+
+		// Otherwise evaluate and return the right operand
+		return c.evaluateClassConstantExpression(val.Right)
+
+	case *ast.ClassConstantAccessExpression:
+		// Handle class constant access like ClassName::CONSTANT_NAME, self::CONSTANT, parent::CONSTANT
+		return c.evaluateClassConstantAccess(val)
+
 	default:
 		return nil, fmt.Errorf("unsupported constant expression type: %T", expr)
 	}
+}
+
+// evaluateBinaryOperation performs binary operations on constant values
+func (c *Compiler) evaluateBinaryOperation(operator string, left, right *values.Value) (*values.Value, error) {
+	switch operator {
+	// Arithmetic operations
+	case "+":
+		return c.performArithmetic(left, right, func(a, b int64) int64 { return a + b }, func(a, b float64) float64 { return a + b })
+	case "-":
+		return c.performArithmetic(left, right, func(a, b int64) int64 { return a - b }, func(a, b float64) float64 { return a - b })
+	case "*":
+		return c.performArithmetic(left, right, func(a, b int64) int64 { return a * b }, func(a, b float64) float64 { return a * b })
+	case "/":
+		if (right.IsInt() && right.Data.(int64) == 0) || (right.IsFloat() && right.Data.(float64) == 0) {
+			return nil, fmt.Errorf("division by zero")
+		}
+		return c.performArithmetic(left, right, func(a, b int64) int64 { return a / b }, func(a, b float64) float64 { return a / b })
+	case "%":
+		if !left.IsInt() || !right.IsInt() {
+			return nil, fmt.Errorf("modulo operation requires integers")
+		}
+		if right.Data.(int64) == 0 {
+			return nil, fmt.Errorf("modulo by zero")
+		}
+		return values.NewInt(left.Data.(int64) % right.Data.(int64)), nil
+	case "**":
+		if left.IsInt() && right.IsInt() {
+			leftVal := left.Data.(int64)
+			rightVal := right.Data.(int64)
+			if rightVal < 0 {
+				return values.NewFloat(math.Pow(float64(leftVal), float64(rightVal))), nil
+			}
+			result := int64(1)
+			for i := int64(0); i < rightVal; i++ {
+				result *= leftVal
+			}
+			return values.NewInt(result), nil
+		}
+		leftFloat := c.toFloat(left)
+		rightFloat := c.toFloat(right)
+		return values.NewFloat(math.Pow(leftFloat, rightFloat)), nil
+
+	// String concatenation
+	case ".":
+		leftStr := c.toString(left)
+		rightStr := c.toString(right)
+		return values.NewString(leftStr + rightStr), nil
+
+	// Comparison operations
+	case "==":
+		return values.NewBool(c.isEqual(left, right)), nil
+	case "!=":
+		return values.NewBool(!c.isEqual(left, right)), nil
+	case "<":
+		cmp, err := c.compare(left, right)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewBool(cmp < 0), nil
+	case "<=":
+		cmp, err := c.compare(left, right)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewBool(cmp <= 0), nil
+	case ">":
+		cmp, err := c.compare(left, right)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewBool(cmp > 0), nil
+	case ">=":
+		cmp, err := c.compare(left, right)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewBool(cmp >= 0), nil
+	case "<=>":
+		cmp, err := c.compare(left, right)
+		if err != nil {
+			return nil, err
+		}
+		return values.NewInt(int64(cmp)), nil
+
+	// Logical operations
+	case "&&":
+		return values.NewBool(c.isTruthy(left) && c.isTruthy(right)), nil
+	case "||":
+		return values.NewBool(c.isTruthy(left) || c.isTruthy(right)), nil
+
+	// Bitwise operations
+	case "&":
+		if !left.IsInt() || !right.IsInt() {
+			return nil, fmt.Errorf("bitwise AND requires integers")
+		}
+		return values.NewInt(left.Data.(int64) & right.Data.(int64)), nil
+	case "|":
+		if !left.IsInt() || !right.IsInt() {
+			return nil, fmt.Errorf("bitwise OR requires integers")
+		}
+		return values.NewInt(left.Data.(int64) | right.Data.(int64)), nil
+	case "^":
+		if !left.IsInt() || !right.IsInt() {
+			return nil, fmt.Errorf("bitwise XOR requires integers")
+		}
+		return values.NewInt(left.Data.(int64) ^ right.Data.(int64)), nil
+	case "<<":
+		if !left.IsInt() || !right.IsInt() {
+			return nil, fmt.Errorf("left shift requires integers")
+		}
+		return values.NewInt(left.Data.(int64) << uint(right.Data.(int64))), nil
+	case ">>":
+		if !left.IsInt() || !right.IsInt() {
+			return nil, fmt.Errorf("right shift requires integers")
+		}
+		return values.NewInt(left.Data.(int64) >> uint(right.Data.(int64))), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported binary operator: %s", operator)
+	}
+}
+
+// evaluateUnaryOperation performs unary operations on constant values
+func (c *Compiler) evaluateUnaryOperation(operator string, operand *values.Value) (*values.Value, error) {
+	switch operator {
+	case "+":
+		if operand.IsInt() {
+			return values.NewInt(operand.Data.(int64)), nil
+		}
+		if operand.IsFloat() {
+			return values.NewFloat(operand.Data.(float64)), nil
+		}
+		return nil, fmt.Errorf("unary plus requires numeric operand")
+	case "-":
+		if operand.IsInt() {
+			return values.NewInt(-operand.Data.(int64)), nil
+		}
+		if operand.IsFloat() {
+			return values.NewFloat(-operand.Data.(float64)), nil
+		}
+		return nil, fmt.Errorf("unary minus requires numeric operand")
+	case "!":
+		return values.NewBool(!c.isTruthy(operand)), nil
+	case "~":
+		if !operand.IsInt() {
+			return nil, fmt.Errorf("bitwise NOT requires integer operand")
+		}
+		return values.NewInt(^operand.Data.(int64)), nil
+	default:
+		return nil, fmt.Errorf("unsupported unary operator: %s", operator)
+	}
+}
+
+// isTruthy determines the truth value of a constant expression (PHP truthiness rules)
+func (c *Compiler) isTruthy(value *values.Value) bool {
+	switch value.Type {
+	case values.TypeBool:
+		return value.Data.(bool)
+	case values.TypeInt:
+		return value.Data.(int64) != 0
+	case values.TypeFloat:
+		return value.Data.(float64) != 0.0
+	case values.TypeString:
+		str := value.Data.(string)
+		return str != "" && str != "0"
+	case values.TypeNull:
+		return false
+	case values.TypeArray:
+		arr := value.Data.(*values.Array)
+		return len(arr.Elements) > 0
+	default:
+		return true // Objects and other types are truthy
+	}
+}
+
+// evaluateClassConstantAccess handles self::CONST, parent::CONST, ClassName::CONST
+func (c *Compiler) evaluateClassConstantAccess(expr *ast.ClassConstantAccessExpression) (*values.Value, error) {
+	// Get the constant name
+	constName, ok := expr.Constant.(*ast.IdentifierNode)
+	if !ok {
+		return nil, fmt.Errorf("constant name must be an identifier")
+	}
+
+	// Determine which class to look in
+	var targetClass *vm.Class
+
+	if classExpr, ok := expr.Class.(*ast.IdentifierNode); ok {
+		switch classExpr.Name {
+		case "self":
+			if c.currentClass == nil {
+				return nil, fmt.Errorf("cannot use self:: outside of class context")
+			}
+			targetClass = c.currentClass
+		case "parent":
+			if c.currentClass == nil {
+				return nil, fmt.Errorf("cannot use parent:: outside of class context")
+			}
+			// For now, we'll return an error if trying to access parent constants
+			// In a full implementation, we'd need to resolve the parent class
+			return nil, fmt.Errorf("parent:: constant access not yet implemented in constant expressions")
+		default:
+			// Named class constant access
+			className := classExpr.Name
+			// Look up the class - for now we'll only support constants from the current class
+			if c.currentClass != nil && c.currentClass.Name == className {
+				targetClass = c.currentClass
+			} else {
+				return nil, fmt.Errorf("class constant access to external class %s not yet implemented in constant expressions", className)
+			}
+		}
+	} else {
+		return nil, fmt.Errorf("unsupported class expression in constant access: %T", expr.Class)
+	}
+
+	// Look up the constant in the target class
+	if constant, found := targetClass.Constants[constName.Name]; found {
+		return constant.Value, nil
+	}
+
+	return nil, fmt.Errorf("undefined class constant %s::%s", targetClass.Name, constName.Name)
+}
+
+// Helper functions for arithmetic operations and type conversions
+
+// performArithmetic performs arithmetic operations with automatic type promotion
+func (c *Compiler) performArithmetic(left, right *values.Value, intOp func(int64, int64) int64, floatOp func(float64, float64) float64) (*values.Value, error) {
+	if left.IsInt() && right.IsInt() {
+		return values.NewInt(intOp(left.Data.(int64), right.Data.(int64))), nil
+	}
+	// At least one operand is float, promote both to float
+	leftFloat := c.toFloat(left)
+	rightFloat := c.toFloat(right)
+	return values.NewFloat(floatOp(leftFloat, rightFloat)), nil
+}
+
+// toFloat converts a value to float64
+func (c *Compiler) toFloat(value *values.Value) float64 {
+	if value.IsInt() {
+		return float64(value.Data.(int64))
+	}
+	if value.IsFloat() {
+		return value.Data.(float64)
+	}
+	if value.IsString() {
+		if f, err := strconv.ParseFloat(value.Data.(string), 64); err == nil {
+			return f
+		}
+	}
+	return 0.0
+}
+
+// toString converts a value to string
+func (c *Compiler) toString(value *values.Value) string {
+	switch value.Type {
+	case values.TypeString:
+		return value.Data.(string)
+	case values.TypeInt:
+		return strconv.FormatInt(value.Data.(int64), 10)
+	case values.TypeFloat:
+		return strconv.FormatFloat(value.Data.(float64), 'G', -1, 64)
+	case values.TypeBool:
+		if value.Data.(bool) {
+			return "1"
+		}
+		return ""
+	case values.TypeNull:
+		return ""
+	default:
+		return ""
+	}
+}
+
+// isEqual checks if two values are equal using PHP comparison rules
+func (c *Compiler) isEqual(left, right *values.Value) bool {
+	if left.Type == right.Type {
+		switch left.Type {
+		case values.TypeBool:
+			return left.Data.(bool) == right.Data.(bool)
+		case values.TypeInt:
+			return left.Data.(int64) == right.Data.(int64)
+		case values.TypeFloat:
+			return left.Data.(float64) == right.Data.(float64)
+		case values.TypeString:
+			return left.Data.(string) == right.Data.(string)
+		case values.TypeNull:
+			return true // null == null
+		}
+	}
+
+	// Type juggling for mixed comparisons
+	if (left.IsInt() || left.IsFloat()) && (right.IsInt() || right.IsFloat()) {
+		return c.toFloat(left) == c.toFloat(right)
+	}
+
+	// String to number comparisons
+	if left.IsString() && (right.IsInt() || right.IsFloat()) {
+		if f, err := strconv.ParseFloat(left.Data.(string), 64); err == nil {
+			return f == c.toFloat(right)
+		}
+	}
+	if right.IsString() && (left.IsInt() || left.IsFloat()) {
+		if f, err := strconv.ParseFloat(right.Data.(string), 64); err == nil {
+			return c.toFloat(left) == f
+		}
+	}
+
+	return false
+}
+
+// compare compares two values and returns -1, 0, or 1
+func (c *Compiler) compare(left, right *values.Value) (int, error) {
+	// Same type comparisons
+	if left.Type == right.Type {
+		switch left.Type {
+		case values.TypeInt:
+			leftVal := left.Data.(int64)
+			rightVal := right.Data.(int64)
+			if leftVal < rightVal {
+				return -1, nil
+			} else if leftVal > rightVal {
+				return 1, nil
+			}
+			return 0, nil
+		case values.TypeFloat:
+			leftVal := left.Data.(float64)
+			rightVal := right.Data.(float64)
+			if leftVal < rightVal {
+				return -1, nil
+			} else if leftVal > rightVal {
+				return 1, nil
+			}
+			return 0, nil
+		case values.TypeString:
+			leftVal := left.Data.(string)
+			rightVal := right.Data.(string)
+			if leftVal < rightVal {
+				return -1, nil
+			} else if leftVal > rightVal {
+				return 1, nil
+			}
+			return 0, nil
+		case values.TypeBool:
+			leftVal := left.Data.(bool)
+			rightVal := right.Data.(bool)
+			if !leftVal && rightVal {
+				return -1, nil
+			} else if leftVal && !rightVal {
+				return 1, nil
+			}
+			return 0, nil
+		}
+	}
+
+	// Numeric comparisons with type promotion
+	if (left.IsInt() || left.IsFloat()) && (right.IsInt() || right.IsFloat()) {
+		leftFloat := c.toFloat(left)
+		rightFloat := c.toFloat(right)
+		if leftFloat < rightFloat {
+			return -1, nil
+		} else if leftFloat > rightFloat {
+			return 1, nil
+		}
+		return 0, nil
+	}
+
+	// For other mixed type comparisons, we could implement more PHP rules
+	// but for now, we'll just return equal
+	return 0, nil
 }
 
 // validateConstantType validates that a constant value matches its declared type
