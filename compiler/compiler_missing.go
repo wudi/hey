@@ -1951,11 +1951,17 @@ func (c *Compiler) evaluateConstantExpression(expr ast.Node) *values.Value {
 	case *ast.StringLiteral:
 		return values.NewString(e.Value)
 	case *ast.NumberLiteral:
-		// Try integer first
+		if e.Kind == "integer" {
+			// Use pre-converted integer value
+			return values.NewInt(e.IntValue)
+		} else if e.Kind == "float" {
+			// Use pre-converted float value
+			return values.NewFloat(e.FloatValue)
+		}
+		// Fallback to parsing the string value
 		if intVal, err := strconv.ParseInt(e.Value, 10, 64); err == nil {
 			return values.NewInt(intVal)
 		}
-		// Fall back to float
 		if floatVal, err := strconv.ParseFloat(e.Value, 64); err == nil {
 			return values.NewFloat(floatVal)
 		}
@@ -1969,6 +1975,120 @@ func (c *Compiler) evaluateConstantExpression(expr ast.Node) *values.Value {
 		// For complex expressions, we can't evaluate at compile time
 		return nil
 	}
+}
+
+// evaluateConstantArrayExpression evaluates a constant array expression at compile time
+// This function only accepts literal values, no expressions or function calls
+func (c *Compiler) evaluateConstantArrayExpression(arrExpr *ast.ArrayExpression) (*values.Value, error) {
+	// Create a new array value
+	arrayValue := values.NewArray()
+	arrayData := arrayValue.Data.(*values.Array)
+
+	// Process each element
+	for _, element := range arrExpr.Elements {
+		switch elem := element.(type) {
+		case *ast.ArrayElementExpression:
+			// Handle key => value pairs and simple values
+			var keyValue interface{}
+			var valueValue *values.Value
+
+			// Handle the key if present
+			if elem.Key != nil {
+				keyConst := c.evaluateConstantExpression(elem.Key)
+				if keyConst == nil {
+					return nil, fmt.Errorf("array keys must be constant expressions")
+				}
+				// Convert to appropriate Go type for map key
+				switch keyConst.Type {
+				case values.TypeString:
+					keyValue = keyConst.Data.(string)
+				case values.TypeInt:
+					keyValue = keyConst.Data.(int64)
+				case values.TypeFloat:
+					// PHP converts float keys to integers
+					keyValue = int64(keyConst.Data.(float64))
+				case values.TypeBool:
+					// PHP converts bool keys to integers
+					if keyConst.Data.(bool) {
+						keyValue = int64(1)
+					} else {
+						keyValue = int64(0)
+					}
+				default:
+					return nil, fmt.Errorf("invalid array key type: %v", keyConst.Type)
+				}
+			}
+
+			// Handle the value
+			if elem.Value == nil {
+				return nil, fmt.Errorf("array element must have a value")
+			}
+
+			// Check if the value is another array (nested array)
+			if nestedArrayExpr, ok := elem.Value.(*ast.ArrayExpression); ok {
+				// Recursively evaluate nested array
+				nestedArrayValue, err := c.evaluateConstantArrayExpression(nestedArrayExpr)
+				if err != nil {
+					return nil, fmt.Errorf("error in nested array: %v", err)
+				}
+				valueValue = nestedArrayValue
+			} else {
+				// Evaluate as constant expression
+				valueValue = c.evaluateConstantExpression(elem.Value)
+				if valueValue == nil {
+					return nil, fmt.Errorf("array values must be constant expressions")
+				}
+			}
+
+			// Add to array
+			if keyValue != nil {
+				// Keyed element
+				arrayData.Elements[keyValue] = valueValue
+			} else {
+				// Auto-indexed element - find next integer key
+				nextIndex := int64(len(arrayData.Elements))
+				for {
+					if _, exists := arrayData.Elements[nextIndex]; !exists {
+						break
+					}
+					nextIndex++
+				}
+				arrayData.Elements[nextIndex] = valueValue
+			}
+
+		default:
+			// Direct element (not wrapped in ArrayElementExpression)
+			var valueValue *values.Value
+
+			// Check if it's a nested array
+			if nestedArrayExpr, ok := elem.(*ast.ArrayExpression); ok {
+				// Recursively evaluate nested array
+				nestedArrayValue, err := c.evaluateConstantArrayExpression(nestedArrayExpr)
+				if err != nil {
+					return nil, fmt.Errorf("error in nested array: %v", err)
+				}
+				valueValue = nestedArrayValue
+			} else {
+				// Evaluate as constant expression
+				valueValue = c.evaluateConstantExpression(elem)
+				if valueValue == nil {
+					return nil, fmt.Errorf("array values must be constant expressions")
+				}
+			}
+
+			// Auto-indexed element
+			nextIndex := int64(len(arrayData.Elements))
+			for {
+				if _, exists := arrayData.Elements[nextIndex]; !exists {
+					break
+				}
+				nextIndex++
+			}
+			arrayData.Elements[nextIndex] = valueValue
+		}
+	}
+
+	return arrayValue, nil
 }
 
 // Helper methods for trait compilation

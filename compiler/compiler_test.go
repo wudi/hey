@@ -2298,6 +2298,70 @@ func TestPropertyDeclaration(t *testing.T) {
 			$obj = new TestClass("test123"); 
 			echo $obj->getId();`,
 		},
+		{
+			"Array default values - simple array",
+			`<?php 
+			class TestClass { 
+				public $simpleArray = [1, 2, 3]; 
+				public function getFirstElement() { 
+					return $this->simpleArray[0]; 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->getFirstElement();`,
+		},
+		{
+			"Array default values - mixed types",
+			`<?php 
+			class TestClass { 
+				public $mixedArray = [1, "hello"]; 
+				public function getElements() { 
+					return $this->mixedArray[0] . "," . $this->mixedArray[1]; 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->getElements();`,
+		},
+		{
+			"Array default values - associative array",
+			`<?php 
+			class TestClass { 
+				public $assocArray = ["name" => "John", "age" => 30]; 
+				public function getName() { 
+					return $this->assocArray["name"]; 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->getName();`,
+		},
+		{
+			"Array default values - nested array",
+			`<?php 
+			class TestClass { 
+				public $nestedArray = [
+					"users" => [
+						["name" => "Alice"]
+					]
+				]; 
+				public function getUserName() { 
+					return $this->nestedArray["users"][0]["name"]; 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->getUserName();`,
+		},
+		{
+			"Array default values - empty array",
+			`<?php 
+			class TestClass { 
+				public $emptyArray = []; 
+				public function hasArray() { 
+					return isset($this->emptyArray); 
+				} 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->hasArray() ? "true" : "false";`,
+		},
 	}
 
 	for _, tc := range testCases {

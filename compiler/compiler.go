@@ -2968,12 +2968,12 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 		case *ast.NullLiteral:
 			defaultValue = values.NewNull()
 		case *ast.ArrayExpression:
-			// For now, empty arrays only
-			if len(defVal.Elements) == 0 {
-				defaultValue = values.NewArray()
-			} else {
-				return fmt.Errorf("complex array default values not supported yet for property %s", propName)
+			// Try to evaluate the array expression as a constant array
+			arrayValue, err := c.evaluateConstantArrayExpression(defVal)
+			if err != nil {
+				return fmt.Errorf("invalid array default value for property %s: %v", propName, err)
 			}
+			defaultValue = arrayValue
 		case *ast.Variable:
 			// Variables in default values (like static properties) are not allowed in most contexts
 			// But we can handle some special cases
