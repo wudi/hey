@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/wudi/php-parser/compiler/values"
@@ -168,7 +169,7 @@ func (r *RuntimeRegistry) RegisterFunction(descriptor *FunctionDescriptor) error
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	name := descriptor.Name
+	name := strings.ToLower(descriptor.Name) // Function names are case-insensitive
 
 	// Check for conflicts with built-ins
 	if r.builtinFunctions[name] && !descriptor.IsBuiltin {
@@ -193,7 +194,7 @@ func (r *RuntimeRegistry) RegisterClass(descriptor *ClassDescriptor) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	name := descriptor.Name
+	name := strings.ToLower(descriptor.Name) // Class names are case-insensitive
 
 	// Check for conflicts with built-ins
 	if r.builtinClasses[name] && !descriptor.IsBuiltin {
@@ -250,7 +251,7 @@ func (r *RuntimeRegistry) GetFunction(name string) (*FunctionDescriptor, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	descriptor, exists := r.functions[name]
+	descriptor, exists := r.functions[strings.ToLower(name)]
 	return descriptor, exists
 }
 
@@ -258,7 +259,7 @@ func (r *RuntimeRegistry) GetClass(name string) (*ClassDescriptor, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	descriptor, exists := r.classes[name]
+	descriptor, exists := r.classes[strings.ToLower(name)]
 	return descriptor, exists
 }
 
@@ -282,21 +283,21 @@ func (r *RuntimeRegistry) IsBuiltinFunction(name string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.builtinFunctions[name]
+	return r.builtinFunctions[strings.ToLower(name)]
 }
 
 func (r *RuntimeRegistry) IsBuiltinClass(name string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.builtinClasses[name]
+	return r.builtinClasses[strings.ToLower(name)]
 }
 
 func (r *RuntimeRegistry) HasFunction(name string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	_, exists := r.functions[name]
+	_, exists := r.functions[strings.ToLower(name)]
 	return exists
 }
 
@@ -304,7 +305,7 @@ func (r *RuntimeRegistry) HasClass(name string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	_, exists := r.classes[name]
+	_, exists := r.classes[strings.ToLower(name)]
 	return exists
 }
 
@@ -374,6 +375,7 @@ func (r *RuntimeRegistry) ValidateFunctionCall(name string, argCount int) error 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	name = strings.ToLower(name)
 	descriptor, exists := r.functions[name]
 	if !exists {
 		return fmt.Errorf("undefined function: %s", name)
@@ -392,6 +394,7 @@ func (r *RuntimeRegistry) ValidateFunctionCall(name string, argCount int) error 
 
 // Function execution
 func (r *RuntimeRegistry) CallFunction(ctx ExecutionContext, name string, args []*values.Value) (*values.Value, error) {
+	name = strings.ToLower(name)
 	r.mu.RLock()
 	descriptor, exists := r.functions[name]
 	r.mu.RUnlock()
