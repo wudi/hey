@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -4040,6 +4041,103 @@ echo $calc->sum(10, 20) . "\n";
 			buf.ReadFrom(r)
 
 			output := buf.String()
+			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
+		})
+	}
+}
+
+func TestPropertyAccessExpressionInArrays(t *testing.T) {
+	tests := []struct {
+		name     string
+		phpCode  string
+		expected string
+	}{
+		{
+			"Simple property array read",
+			`<?php 
+			$obj = new stdClass(); 
+			$obj->arr = [1, 2, 3]; 
+			echo $obj->arr[1];`,
+			"2",
+		},
+		{
+			"Property array write",
+			`<?php 
+			$obj = new stdClass(); 
+			$obj->arr = [1, 2, 3]; 
+			$obj->arr[1] = 42; 
+			echo $obj->arr[1];`,
+			"42",
+		},
+		{
+			"Property array append",
+			`<?php 
+			$obj = new stdClass(); 
+			$obj->arr = [1, 2]; 
+			$obj->arr[] = 3; 
+			echo $obj->arr[2];`,
+			"3",
+		},
+		{
+			"Nested property array access",
+			`<?php 
+			$obj = new stdClass(); 
+			$obj->arr = ['nested' => ['inner' => 'value']]; 
+			$obj->arr['nested']['inner2'] = 'value2'; 
+			echo $obj->arr['nested']['inner2'];`,
+			"value2",
+		},
+		{
+			"Property access with string keys",
+			`<?php 
+			$obj = new stdClass(); 
+			$obj->data = ['key1' => 'value1']; 
+			$obj->data['key2'] = 'value2'; 
+			echo $obj->data['key1'] . ',' . $obj->data['key2'];`,
+			"value1,value2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// First test with native PHP to make sure expected behavior is correct
+			tempFile := "/tmp/test_property_array_" + strings.ReplaceAll(tt.name, " ", "_") + ".php"
+			err := os.WriteFile(tempFile, []byte(tt.phpCode), 0644)
+			require.NoError(t, err, "Failed to write temp file")
+			defer os.Remove(tempFile)
+
+			cmd := exec.Command("/usr/bin/php", tempFile)
+			nativeOutput, err := cmd.Output()
+			require.NoError(t, err, "Native PHP execution failed for test: %s", tt.name)
+			require.Equal(t, tt.expected, strings.TrimSpace(string(nativeOutput)), "Expected output doesn't match native PHP for test: %s", tt.name)
+
+			// Parse the PHP code
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+			require.Empty(t, p.Errors(), "Parser should not have errors for test: %s", tt.name)
+
+			// Compile the program
+			comp := NewCompiler()
+			err = comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Capture output for verification
+			var buf bytes.Buffer
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Execute with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+
+			// Restore stdout and get output
+			w.Close()
+			os.Stdout = oldStdout
+			buf.ReadFrom(r)
+
+			output := strings.TrimSpace(buf.String())
 			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
 		})
 	}

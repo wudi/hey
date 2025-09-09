@@ -672,6 +672,29 @@ func (c *Compiler) compileArrayAssignment(arrayAccess *ast.ArrayAccessExpression
 			// Emit ASSIGN_DIM instruction with the nested array
 			c.emit(opcodes.OP_ASSIGN_DIM, opcodes.IS_TMP_VAR, nestedArrayResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, valueResult)
 		}
+	} else if propAccess, ok := arrayAccess.Array.(*ast.PropertyAccessExpression); ok {
+		// Property access case: $obj->property[index] = value
+		// First compile the property access to get the array
+		err := c.compilePropertyAccess(propAccess)
+		if err != nil {
+			return err
+		}
+		propResult := c.nextTemp - 1
+
+		if arrayAccess.Index == nil {
+			// Property array append: $obj->property[] = value
+			c.emit(opcodes.OP_ADD_ARRAY_ELEMENT, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, valueResult, opcodes.IS_TMP_VAR, propResult)
+		} else {
+			// Property array index assignment: $obj->property[index] = value
+			err := c.compileNode(*arrayAccess.Index)
+			if err != nil {
+				return err
+			}
+			indexResult := c.nextTemp - 1
+
+			// Emit ASSIGN_DIM instruction with the property access result
+			c.emit(opcodes.OP_ASSIGN_DIM, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, valueResult)
+		}
 	} else {
 		return fmt.Errorf("unsupported array expression type in assignment: %T", arrayAccess.Array)
 	}
@@ -721,6 +744,30 @@ func (c *Compiler) compileFetchDimWrite(arrayAccess *ast.ArrayAccessExpression) 
 
 		// Fetch from the nested array result
 		c.emit(opcodes.OP_FETCH_DIM_W, opcodes.IS_TMP_VAR, nestedResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, resultTemp)
+
+		return nil
+	} else if propAccess, ok := arrayAccess.Array.(*ast.PropertyAccessExpression); ok {
+		// Property access case: $obj->property[index] for writing
+		// First compile the property access to get the array
+		err := c.compilePropertyAccess(propAccess)
+		if err != nil {
+			return err
+		}
+		propResult := c.nextTemp - 1
+
+		if arrayAccess.Index == nil {
+			return fmt.Errorf("cannot fetch array with empty index for writing")
+		}
+
+		err = c.compileNode(*arrayAccess.Index)
+		if err != nil {
+			return err
+		}
+		indexResult := c.nextTemp - 1
+		resultTemp := c.allocateTemp()
+
+		// Fetch from the property access result for writing
+		c.emit(opcodes.OP_FETCH_DIM_W, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, indexResult, opcodes.IS_TMP_VAR, resultTemp)
 
 		return nil
 	} else {
