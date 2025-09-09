@@ -20,9 +20,9 @@ func (b *ASTBuilder) CreateZval(pos lexer.Position, value interface{}) Node {
 	case string:
 		return NewStringLiteral(pos, v, "\""+v+"\"")
 	case int, int32, int64:
-		return NewNumberLiteral(pos, "integer", "integer")
+		return NewNumberLiteral(pos, "integer", IntegerKind)
 	case float32, float64:
-		return NewNumberLiteral(pos, "float", "float")
+		return NewNumberLiteral(pos, "float", FloatKind)
 	case bool:
 		return NewBooleanLiteral(pos, v)
 	case nil:

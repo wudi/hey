@@ -3027,12 +3027,12 @@ func isSemiReserved(tokenType lexer.TokenType) bool {
 
 // parseIntegerLiteral 解析整数字面量
 func parseIntegerLiteral(p *Parser) ast.Expression {
-	return ast.NewNumberLiteralWithValues(p.currentToken.Position, p.currentToken.Value, "integer", p.currentToken.IntValue, 0)
+	return ast.NewNumberLiteralWithValues(p.currentToken.Position, p.currentToken.Value, ast.IntegerKind, p.currentToken.IntValue, 0)
 }
 
 // parseFloatLiteral 解析浮点数字面量
 func parseFloatLiteral(p *Parser) ast.Expression {
-	return ast.NewNumberLiteralWithValues(p.currentToken.Position, p.currentToken.Value, "float", 0, p.currentToken.FloatValue)
+	return ast.NewNumberLiteralWithValues(p.currentToken.Position, p.currentToken.Value, ast.FloatKind, 0, p.currentToken.FloatValue)
 }
 
 // parseStringLiteral 解析字符串字面量
@@ -6396,7 +6396,7 @@ func parseInterpolatedString(p *Parser) ast.Expression {
 				if p.currentToken.Type == lexer.T_VARIABLE {
 					indexExpr = ast.NewVariable(p.currentToken.Position, p.currentToken.Value)
 				} else if p.currentToken.Type == lexer.T_LNUMBER {
-					indexExpr = ast.NewNumberLiteralWithValues(p.currentToken.Position, p.currentToken.Value, "integer", p.currentToken.IntValue, 0)
+					indexExpr = ast.NewNumberLiteralWithValues(p.currentToken.Position, p.currentToken.Value, ast.IntegerKind, p.currentToken.IntValue, 0)
 				} else if p.currentToken.Type == lexer.T_STRING {
 					indexExpr = ast.NewStringLiteral(p.currentToken.Position, p.currentToken.Value, p.currentToken.Value)
 				} else {

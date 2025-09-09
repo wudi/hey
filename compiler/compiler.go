@@ -1011,10 +1011,10 @@ func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
 func (c *Compiler) compileNumberLiteral(expr *ast.NumberLiteral) error {
 	var constant uint32
 
-	if expr.Kind == "integer" {
+	if expr.Kind == ast.IntegerKind {
 		// 使用预转换的整数值
 		constant = c.addConstant(values.NewInt(expr.IntValue))
-	} else if expr.Kind == "float" {
+	} else if expr.Kind == ast.FloatKind {
 		// 使用预转换的浮点值
 		constant = c.addConstant(values.NewFloat(expr.FloatValue))
 	} else {
@@ -2954,10 +2954,10 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 		// For simple literals, we can evaluate them directly
 		switch defVal := decl.DefaultValue.(type) {
 		case *ast.NumberLiteral:
-			if defVal.Kind == "integer" {
+			if defVal.Kind == ast.IntegerKind {
 				// 使用预转换的整数值
 				defaultValue = values.NewInt(defVal.IntValue)
-			} else if defVal.Kind == "float" {
+			} else if defVal.Kind == ast.FloatKind {
 				// 使用预转换的浮点值
 				defaultValue = values.NewFloat(defVal.FloatValue)
 			}
@@ -3082,10 +3082,10 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 func (c *Compiler) evaluateClassConstantExpression(expr ast.Expression) (*values.Value, error) {
 	switch val := expr.(type) {
 	case *ast.NumberLiteral:
-		if val.Kind == "integer" {
+		if val.Kind == ast.IntegerKind {
 			// 使用预转换的整数值
 			return values.NewInt(val.IntValue), nil
-		} else if val.Kind == "float" {
+		} else if val.Kind == ast.FloatKind {
 			// 使用预转换的浮点值
 			return values.NewFloat(val.FloatValue), nil
 		} else {

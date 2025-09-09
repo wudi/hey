@@ -47,8 +47,8 @@ func TestAssignmentExpression_String(t *testing.T) {
 func TestBinaryExpression_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 
-	left := NewNumberLiteral(pos, "5", "integer")
-	right := NewNumberLiteral(pos, "3", "integer")
+	left := NewNumberLiteral(pos, "5", IntegerKind)
+	right := NewNumberLiteral(pos, "3", IntegerKind)
 	expr := NewBinaryExpression(pos, left, "+", right)
 
 	expected := "(5 + 3)"
@@ -88,12 +88,12 @@ func TestNumberLiteral_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 
 	// 整数
-	intNum := NewNumberLiteral(pos, "123", "integer")
+	intNum := NewNumberLiteral(pos, "123", IntegerKind)
 	assert.Equal(t, "123", intNum.String())
 	assert.Equal(t, ASTZval, intNum.GetKind())
 
 	// 浮点数
-	floatNum := NewNumberLiteral(pos, "3.14", "float")
+	floatNum := NewNumberLiteral(pos, "3.14", FloatKind)
 	assert.Equal(t, "3.14", floatNum.String())
 }
 
@@ -123,9 +123,9 @@ func TestArrayExpression_String(t *testing.T) {
 	assert.Equal(t, "[]", arr.String())
 
 	// 有元素的数组
-	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "1", "integer"))
-	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "2", "integer"))
-	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "3", "integer"))
+	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "1", IntegerKind))
+	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "2", IntegerKind))
+	arr.Elements = append(arr.Elements, NewNumberLiteral(pos, "3", IntegerKind))
 
 	assert.Equal(t, "[1, 2, 3]", arr.String())
 }
@@ -135,7 +135,7 @@ func TestIfStatement_String(t *testing.T) {
 
 	// 创建条件表达式
 	variable := NewVariable(pos, "$x")
-	value := NewNumberLiteral(pos, "5", "integer")
+	value := NewNumberLiteral(pos, "5", IntegerKind)
 	condition := NewBinaryExpression(pos, variable, ">", value)
 
 	ifStmt := NewIfStatement(pos, condition)
@@ -156,7 +156,7 @@ func TestWhileStatement_String(t *testing.T) {
 
 	// 创建条件表达式
 	variable := NewVariable(pos, "$i")
-	value := NewNumberLiteral(pos, "10", "integer")
+	value := NewNumberLiteral(pos, "10", IntegerKind)
 	condition := NewBinaryExpression(pos, variable, "<", value)
 
 	whileStmt := NewWhileStatement(pos, condition)
@@ -198,7 +198,7 @@ func TestReturnStatement_String(t *testing.T) {
 	pos := lexer.Position{Line: 1, Column: 0, Offset: 0}
 
 	// 有返回值的 return
-	value := NewNumberLiteral(pos, "42", "integer")
+	value := NewNumberLiteral(pos, "42", IntegerKind)
 	returnStmt := NewReturnStatement(pos, value)
 	assert.Equal(t, "return 42;", returnStmt.String())
 

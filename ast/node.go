@@ -1599,16 +1599,33 @@ func (se *ShellExecExpression) String() string {
 	return "`" + strings.Join(parts, "") + "`"
 }
 
+type NumberKind int8
+
+const (
+	IntegerKind NumberKind = iota + 1
+	FloatKind
+)
+
+func (k NumberKind) String() string {
+	if k == IntegerKind {
+		return "integer"
+	} else if k == FloatKind {
+		return "float"
+	} else {
+		return "unknown"
+	}
+}
+
 // NumberLiteral 数字字面量
 type NumberLiteral struct {
 	BaseNode
-	Value      string  `json:"value"`
-	Kind       string  `json:"kind"`        // "integer" or "float"
-	IntValue   int64   `json:"int_value"`   // 预转换的整数值
-	FloatValue float64 `json:"float_value"` // 预转换的浮点值
+	Value      string     `json:"value"`
+	Kind       NumberKind `json:"kind"`        // "integer" or "float"
+	IntValue   int64      `json:"int_value"`   // 预转换的整数值
+	FloatValue float64    `json:"float_value"` // 预转换的浮点值
 }
 
-func NewNumberLiteral(pos lexer.Position, value, kind string) *NumberLiteral {
+func NewNumberLiteral(pos lexer.Position, value string, kind NumberKind) *NumberLiteral {
 	return &NumberLiteral{
 		BaseNode: BaseNode{
 			Kind:     ASTZval,
@@ -1621,7 +1638,7 @@ func NewNumberLiteral(pos lexer.Position, value, kind string) *NumberLiteral {
 }
 
 // NewNumberLiteralWithValues 创建带有预转换值的数字字面量
-func NewNumberLiteralWithValues(pos lexer.Position, value, kind string, intVal int64, floatVal float64) *NumberLiteral {
+func NewNumberLiteralWithValues(pos lexer.Position, value string, kind NumberKind, intVal int64, floatVal float64) *NumberLiteral {
 	return &NumberLiteral{
 		BaseNode: BaseNode{
 			Kind:     ASTZval,

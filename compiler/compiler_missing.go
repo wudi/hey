@@ -1951,10 +1951,10 @@ func (c *Compiler) evaluateConstantExpression(expr ast.Node) *values.Value {
 	case *ast.StringLiteral:
 		return values.NewString(e.Value)
 	case *ast.NumberLiteral:
-		if e.Kind == "integer" {
+		if e.Kind == ast.IntegerKind {
 			// Use pre-converted integer value
 			return values.NewInt(e.IntValue)
-		} else if e.Kind == "float" {
+		} else if e.Kind == ast.FloatKind {
 			// Use pre-converted float value
 			return values.NewFloat(e.FloatValue)
 		}
