@@ -884,6 +884,106 @@ func TestArrayElementIncrementDecrement(t *testing.T) {
 	}
 }
 
+func TestPropertyIncrementDecrement(t *testing.T) {
+	tests := []struct {
+		name string
+		code string
+	}{
+		{
+			"SimplePropertyPostIncrement",
+			`<?php 
+			class TestClass { 
+				public $count = 5; 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->count++;`,
+		},
+		{
+			"SimplePropertyPreIncrement",
+			`<?php 
+			class TestClass { 
+				public $count = 5; 
+			} 
+			$obj = new TestClass(); 
+			echo ++$obj->count;`,
+		},
+		{
+			"SimplePropertyPostDecrement",
+			`<?php 
+			class TestClass { 
+				public $count = 5; 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->count--;`,
+		},
+		{
+			"SimplePropertyPreDecrement",
+			`<?php 
+			class TestClass { 
+				public $count = 5; 
+			} 
+			$obj = new TestClass(); 
+			echo --$obj->count;`,
+		},
+		{
+			"PropertyIncrementAfterOperation",
+			`<?php 
+			class TestClass { 
+				public $value = 10; 
+			} 
+			$obj = new TestClass(); 
+			$obj->value++;
+			echo $obj->value;`,
+		},
+		{
+			"PropertyDecrementAfterOperation",
+			`<?php 
+			class TestClass { 
+				public $value = 10; 
+			} 
+			$obj = new TestClass(); 
+			$obj->value--;
+			echo $obj->value;`,
+		},
+		{
+			"PropertyIncrementZeroValue",
+			`<?php 
+			class TestClass { 
+				public $count = 0; 
+			} 
+			$obj = new TestClass(); 
+			echo ++$obj->count;`,
+		},
+		{
+			"PropertyIncrementFloatValue",
+			`<?php 
+			class TestClass { 
+				public $value = 3.5; 
+			} 
+			$obj = new TestClass(); 
+			echo $obj->value++;`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Parse the code
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for %s", tc.name)
+
+			// Compile the program
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			// Execute and verify it doesn't crash
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+		})
+	}
+}
+
 func TestNestedArrayIncrementDecrement(t *testing.T) {
 	tests := []struct {
 		name string

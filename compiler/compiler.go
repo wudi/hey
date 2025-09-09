@@ -361,13 +361,19 @@ func (c *Compiler) compileIncrementDecrement(expr *ast.UnaryExpression) error {
 		return c.compileStaticAccessIncDec(expr, staticAccess)
 	}
 
+	// Check if it's a property access (like $obj->property)
+	if propAccess, ok := expr.Operand.(*ast.PropertyAccessExpression); ok {
+		// Handle object property increment/decrement
+		return c.compilePropertyIncDec(expr, propAccess)
+	}
+
 	// Check if it's an array access (like $array[$key])
 	if arrayAccess, ok := expr.Operand.(*ast.ArrayAccessExpression); ok {
 		// Handle array element increment/decrement
 		return c.compileArrayIncDec(expr, arrayAccess)
 	}
 
-	return fmt.Errorf("increment/decrement can only be applied to variables, static properties, or array elements")
+	return fmt.Errorf("increment/decrement can only be applied to variables, static properties, object properties, or array elements")
 }
 
 func (c *Compiler) compileSimpleIncDec(expr *ast.UnaryExpression, variable *ast.Variable) error {
@@ -483,6 +489,83 @@ func (c *Compiler) compileStaticAccessIncDec(expr *ast.UnaryExpression, staticAc
 	result := c.allocateTemp()
 	constant := c.addConstant(values.NewInt(1))
 	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
+
+	return nil
+}
+
+func (c *Compiler) compilePropertyIncDec(expr *ast.UnaryExpression, propAccess *ast.PropertyAccessExpression) error {
+	// Special handling for $this
+	var objectOpType opcodes.OpType
+	var objectOperand uint32
+
+	if variable, ok := propAccess.Object.(*ast.Variable); ok && variable.Name == "$this" {
+		// Use $this directly from slot 0 (when in class context)
+		objectOpType = opcodes.IS_VAR
+		objectOperand = 0 // $this is always in slot 0
+	} else {
+		// Compile object expression normally
+		err := c.compileNode(propAccess.Object)
+		if err != nil {
+			return fmt.Errorf("failed to compile object expression in property increment: %w", err)
+		}
+		// Get the result from the previous compilation - it's in nextTemp-1
+		objectOpType = opcodes.IS_TMP_VAR
+		objectOperand = c.nextTemp - 1
+	}
+
+	// Handle property name - can be identifier or expression
+	var propOpType opcodes.OpType
+	var propOperand uint32
+
+	if ident, ok := propAccess.Property.(*ast.IdentifierNode); ok {
+		// Property is a simple identifier like "prop" in $obj->prop
+		propOperand = c.addConstant(values.NewString(ident.Name))
+		propOpType = opcodes.IS_CONST
+	} else {
+		// Property is an expression - compile it and use result
+		err := c.compileNode(propAccess.Property)
+		if err != nil {
+			return fmt.Errorf("failed to compile property expression in property increment: %w", err)
+		}
+		// Use the result from property compilation
+		propOperand = c.nextTemp - 1
+		propOpType = opcodes.IS_TMP_VAR
+	}
+
+	// Use FETCH_OBJ_RW to get read-write access to the property
+	propertyResult := c.allocateTemp()
+	c.emit(opcodes.OP_FETCH_OBJ_RW, objectOpType, objectOperand, propOpType, propOperand, opcodes.IS_TMP_VAR, propertyResult)
+
+	// Create constant 1 for increment/decrement
+	oneConstant := c.addConstant(values.NewInt(1))
+
+	// For post-increment, save the current value before modifying
+	var currentVal uint32
+	if expr.Operator == "++" || expr.Operator == "--" {
+		if expr.Position.String() != "" { // Check if it's post-increment (this is a simplification)
+			currentVal = c.allocateTemp()
+			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, propertyResult, 0, 0, opcodes.IS_TMP_VAR, currentVal)
+		}
+	}
+
+	// Calculate new value
+	newVal := c.allocateTemp()
+	if expr.Operator == "++" {
+		c.emit(opcodes.OP_ADD, opcodes.IS_TMP_VAR, propertyResult, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	} else { // "--"
+		c.emit(opcodes.OP_SUB, opcodes.IS_TMP_VAR, propertyResult, opcodes.IS_CONST, oneConstant, opcodes.IS_TMP_VAR, newVal)
+	}
+
+	// Write the new value back to the property
+	c.emit(opcodes.OP_ASSIGN_OBJ, objectOpType, objectOperand, propOpType, propOperand, opcodes.IS_TMP_VAR, newVal)
+
+	// For pre-increment, the result is the new value; for post-increment, it's the old value
+	result := c.allocateTemp()
+	if expr.Position.String() != "" { // Post-increment/decrement
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, currentVal, 0, 0, opcodes.IS_TMP_VAR, result)
+	} else { // Pre-increment/decrement
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, newVal, 0, 0, opcodes.IS_TMP_VAR, result)
+	}
 
 	return nil
 }
