@@ -3,6 +3,7 @@ package stdlib
 import (
 	"fmt"
 
+	"github.com/wudi/php-parser/compiler/registry"
 	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/compiler/vm"
 )
@@ -56,15 +57,14 @@ func (si *StdlibIntegration) InitializeExecutionContext(ctx *vm.ExecutionContext
 		ctx.Functions[name] = vmFunc
 	}
 
-	// Initialize built-in classes
-	if ctx.Classes == nil {
-		ctx.Classes = make(map[string]*vm.Class)
-	}
-
-	for name, stdlibClass := range si.stdlib.Classes {
-		// Convert stdlib class to VM class
-		vmClass := si.convertClassToVM(stdlibClass)
-		ctx.Classes[name] = vmClass
+	// Initialize built-in classes using unified registry
+	for _, stdlibClass := range si.stdlib.Classes {
+		// Convert stdlib class to registry class descriptor
+		classDesc := si.convertClassToRegistry(stdlibClass)
+		// Register in unified registry
+		if registry.GlobalRegistry != nil {
+			registry.GlobalRegistry.RegisterClass(classDesc)
+		}
 	}
 
 	return nil
@@ -97,21 +97,26 @@ func (si *StdlibIntegration) convertParametersToVM(params []Parameter) []vm.Para
 	return vmParams
 }
 
-// convertClassToVM converts stdlib class to VM class
-func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
-	vmClass := &vm.Class{
-		Name:        stdlibClass.Name,
-		ParentClass: stdlibClass.Parent,
-		Properties:  make(map[string]*vm.Property),
-		Methods:     make(map[string]*vm.Function),
-		Constants:   make(map[string]*vm.ClassConstant),
-		IsAbstract:  stdlibClass.IsAbstract,
-		IsFinal:     stdlibClass.IsFinal,
+// convertClassToRegistry converts stdlib class to registry class descriptor
+func (si *StdlibIntegration) convertClassToRegistry(stdlibClass *Class) *registry.ClassDescriptor {
+	classDesc := &registry.ClassDescriptor{
+		Name:       stdlibClass.Name,
+		Parent:     stdlibClass.Parent,
+		IsAbstract: stdlibClass.IsAbstract,
+		IsFinal:    stdlibClass.IsFinal,
+		Properties: make(map[string]*registry.PropertyDescriptor),
+		Methods:    make(map[string]*registry.MethodDescriptor),
+		Constants:  make(map[string]*registry.ConstantDescriptor),
+		Metadata: &registry.ClassMetadata{
+			IsBuiltin:     true,
+			ExtensionName: "stdlib",
+			LoadOrder:     0,
+		},
 	}
 
 	// Convert properties
 	for name, prop := range stdlibClass.Properties {
-		vmClass.Properties[name] = &vm.Property{
+		classDesc.Properties[name] = &registry.PropertyDescriptor{
 			Name:         prop.Name,
 			Type:         prop.Type,
 			Visibility:   prop.Visibility,
@@ -122,11 +127,11 @@ func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
 
 	// Convert constants
 	for name, value := range stdlibClass.Constants {
-		vmClass.Constants[name] = &vm.ClassConstant{
+		classDesc.Constants[name] = &registry.ConstantDescriptor{
 			Name:       name,
 			Value:      value,
-			Visibility: "public", // Default visibility for stdlib constants
-			Type:       "",       // No type hint
+			Visibility: "public",
+			Type:       "",
 			IsFinal:    false,
 			IsAbstract: false,
 		}
@@ -134,17 +139,44 @@ func (si *StdlibIntegration) convertClassToVM(stdlibClass *Class) *vm.Class {
 
 	// Convert methods
 	for name, method := range stdlibClass.Methods {
-		vmClass.Methods[name] = &vm.Function{
-			Name:         method.Name,
-			Instructions: nil, // Built-in methods don't have bytecode
-			Constants:    nil,
-			Parameters:   si.convertParametersToVM(method.Parameters),
-			IsVariadic:   method.IsVariadic,
-			IsGenerator:  false,
+		params := make([]registry.ParameterDescriptor, len(method.Parameters))
+		for i, param := range method.Parameters {
+			params[i] = registry.ParameterDescriptor{
+				Name:         param.Name,
+				Type:         param.Type,
+				IsReference:  param.IsReference,
+				HasDefault:   param.HasDefault,
+				DefaultValue: param.DefaultValue,
+			}
+		}
+
+		var implementation registry.MethodImplementation
+		if method.Handler != nil {
+			implementation = &registry.RuntimeHandlerImpl{
+				Handler: func(ctx registry.ExecutionContext, args []*values.Value) (*values.Value, error) {
+					// Bridge to stdlib handler
+					vmCtx, ok := ctx.(*vm.ExecutionContext)
+					if !ok {
+						return values.NewNull(), fmt.Errorf("invalid execution context")
+					}
+					return method.Handler(vmCtx, args)
+				},
+			}
+		}
+
+		classDesc.Methods[name] = &registry.MethodDescriptor{
+			Name:           method.Name,
+			Visibility:     method.Visibility,
+			IsStatic:       method.IsStatic,
+			IsAbstract:     method.IsAbstract,
+			IsFinal:        method.IsFinal,
+			Parameters:     params,
+			Implementation: implementation,
+			IsVariadic:     method.IsVariadic,
 		}
 	}
 
-	return vmClass
+	return classDesc
 }
 
 // HandleBuiltinFunctionCall handles calls to built-in functions

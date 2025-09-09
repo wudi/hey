@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/wudi/php-parser/compiler/opcodes"
+	"github.com/wudi/php-parser/compiler/registry"
 	"github.com/wudi/php-parser/compiler/values"
 )
 
@@ -104,6 +105,9 @@ func TestGeneratorReturnOpcode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Initialize registry for each test
+			registry.Initialize()
+
 			vm := NewVirtualMachine()
 			ctx := NewExecutionContext()
 
@@ -229,34 +233,41 @@ func TestVerifyAbstractClassOpcode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Initialize registry for each test
+			registry.Initialize()
+
 			vm := NewVirtualMachine()
 			ctx := NewExecutionContext()
 
 			// Setup class if needed
 			if tt.setupClass {
-				class := &Class{
+				classDesc := &registry.ClassDescriptor{
 					Name:       tt.className,
-					Properties: make(map[string]*Property),
-					Methods:    make(map[string]*Function),
-					Constants:  make(map[string]*ClassConstant),
+					Properties: make(map[string]*registry.PropertyDescriptor),
+					Methods:    make(map[string]*registry.MethodDescriptor),
+					Constants:  make(map[string]*registry.ConstantDescriptor),
+					IsAbstract: tt.isAbstract,
 				}
 
 				if tt.isAbstract {
 					// Add abstract method to make class abstract
 					if tt.className == "MyClass" {
-						// Add an abstract method (no implementation)
-						class.Methods["abstractMethod"] = &Function{
-							Name:         "abstractMethod",
-							Instructions: []opcodes.Instruction{}, // Empty = abstract
-							Parameters:   []Parameter{},
-							Constants:    []*values.Value{},
-							IsVariadic:   false,
-							IsGenerator:  false,
+						// Add an abstract method
+						methodDesc := &registry.MethodDescriptor{
+							Name:           "abstractMethod",
+							Parameters:     []registry.ParameterDescriptor{},
+							Visibility:     "public",
+							IsStatic:       false,
+							IsAbstract:     true,
+							IsFinal:        false,
+							Implementation: nil, // Abstract method has no implementation
 						}
+						classDesc.Methods["abstractMethod"] = methodDesc
 					}
 				}
 
-				ctx.Classes[tt.className] = class
+				// Register class in unified registry
+				registry.GlobalRegistry.RegisterClass(classDesc)
 			}
 
 			// Setup instruction operands

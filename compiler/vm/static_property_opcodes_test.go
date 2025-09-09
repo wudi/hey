@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/wudi/php-parser/compiler/opcodes"
+	"github.com/wudi/php-parser/compiler/registry"
 	"github.com/wudi/php-parser/compiler/values"
 )
 
@@ -62,26 +63,19 @@ func TestFetchStaticPropertyIssetOpcode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Initialize registry for each test
+			registry.Initialize()
+
 			vm := NewVirtualMachine()
 			ctx := NewExecutionContext()
 
-			// Setup class if needed
+			// Setup class if needed using registry
 			if tt.setupClass {
-				ctx.Classes[tt.className] = &Class{
-					Name:       tt.className,
-					Properties: make(map[string]*Property),
-					Methods:    make(map[string]*Function),
-					Constants:  make(map[string]*ClassConstant),
-				}
+				vm.setStaticPropertyInRegistry(tt.className, tt.propName+"_dummy", values.NewNull())
 
 				// Setup property if needed
 				if tt.setupProp {
-					ctx.Classes[tt.className].Properties[tt.propName] = &Property{
-						Name:         tt.propName,
-						DefaultValue: tt.propValue,
-						Visibility:   "public",
-						IsStatic:     true,
-					}
+					vm.setStaticPropertyInRegistry(tt.className, tt.propName, tt.propValue)
 				}
 			}
 
@@ -169,26 +163,19 @@ func TestFetchStaticPropertyReadWriteOpcode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Initialize registry for each test
+			registry.Initialize()
+
 			vm := NewVirtualMachine()
 			ctx := NewExecutionContext()
 
 			// Setup class if needed
 			if tt.setupClass {
-				ctx.Classes[tt.className] = &Class{
-					Name:       tt.className,
-					Properties: make(map[string]*Property),
-					Methods:    make(map[string]*Function),
-					Constants:  make(map[string]*ClassConstant),
-				}
+				vm.setStaticPropertyInRegistry(tt.className, tt.propName+"_dummy", values.NewNull())
 
 				// Setup property if needed
 				if tt.setupProp {
-					ctx.Classes[tt.className].Properties[tt.propName] = &Property{
-						Name:         tt.propName,
-						DefaultValue: tt.initialValue,
-						Visibility:   "public",
-						IsStatic:     true,
-					}
+					vm.setStaticPropertyInRegistry(tt.className, tt.propName, tt.initialValue)
 				}
 			}
 
@@ -225,18 +212,22 @@ func TestFetchStaticPropertyReadWriteOpcode(t *testing.T) {
 			}
 
 			// Check that class and property were created if needed
-			if ctx.Classes[tt.className] == nil {
+			// Verify class exists in registry
+			if _, err := registry.GlobalRegistry.GetClass(tt.className); err != nil {
 				t.Errorf("Class %s should exist", tt.className)
 			}
 
-			if ctx.Classes[tt.className].Properties[tt.propName] == nil {
+			if _, exists := vm.getStaticPropertyFromRegistry(tt.className, tt.propName); !exists {
 				t.Errorf("Property %s should exist", tt.propName)
 			}
 
 			// Check that the property is marked as static
-			prop := ctx.Classes[tt.className].Properties[tt.propName]
-			if !prop.IsStatic {
-				t.Error("Property should be marked as static")
+			if classDesc, err := registry.GlobalRegistry.GetClass(tt.className); err == nil {
+				if prop, exists := classDesc.Properties[tt.propName]; exists {
+					if !prop.IsStatic {
+						t.Error("Property should be marked as static")
+					}
+				}
 			}
 
 			// Check that result matches expected value
@@ -255,24 +246,18 @@ func TestFetchStaticPropertyReadWriteOpcode(t *testing.T) {
 }
 
 func TestFetchStaticPropertyUnsetOpcode(t *testing.T) {
+	// Initialize registry for test
+	registry.Initialize()
+
 	vm := NewVirtualMachine()
 	ctx := NewExecutionContext()
 
 	// Setup class with property
 	className := "TestClass"
 	propName := "testProp"
-	ctx.Classes[className] = &Class{
-		Name:       className,
-		Properties: make(map[string]*Property),
-		Methods:    make(map[string]*Function),
-		Constants:  make(map[string]*ClassConstant),
-	}
-	ctx.Classes[className].Properties[propName] = &Property{
-		Name:         propName,
-		DefaultValue: values.NewString("test_value"),
-		Visibility:   "public",
-		IsStatic:     true,
-	}
+	// Setup class with property using compatibility layer
+	vm.setStaticPropertyInRegistry(className, propName+"_dummy", values.NewNull())
+	vm.setStaticPropertyInRegistry(className, propName, values.NewString("test_value"))
 
 	// Setup instruction operands
 	ctx.Temporaries[1] = values.NewString(className)
@@ -293,12 +278,15 @@ func TestFetchStaticPropertyUnsetOpcode(t *testing.T) {
 	}
 
 	// Check that property was removed
-	if _, exists := ctx.Classes[className].Properties[propName]; exists {
+	if _, exists := vm.getStaticPropertyFromRegistry(className, propName); exists {
 		t.Error("Property should have been removed")
 	}
 }
 
 func TestStaticPropertyOpcodeErrors(t *testing.T) {
+	// Initialize registry for test
+	registry.Initialize()
+
 	vm := NewVirtualMachine()
 	ctx := NewExecutionContext()
 

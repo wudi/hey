@@ -226,7 +226,7 @@ func NewMemoryPool() *MemoryPool {
 					Variables:   make(map[uint32]*values.Value),
 					Temporaries: make(map[uint32]*values.Value),
 					GlobalVars:  make(map[string]*values.Value),
-					Classes:     make(map[string]*Class),
+					// Classes now handled by unified registry
 				}
 			},
 		},

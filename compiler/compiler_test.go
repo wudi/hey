@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
+	"github.com/wudi/php-parser/compiler/registry"
 	"github.com/wudi/php-parser/compiler/runtime"
 	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/compiler/vm"
@@ -21,6 +22,11 @@ import (
 
 // Helper function to execute compiled bytecode with runtime initialization
 func executeWithRuntime(t *testing.T, comp *Compiler) error {
+	// Initialize unified registry only if not already initialized
+	if registry.GlobalRegistry == nil {
+		registry.Initialize()
+	}
+
 	// Initialize runtime if not already done
 	if runtime.GlobalRegistry == nil {
 		err := runtime.Bootstrap()

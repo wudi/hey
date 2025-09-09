@@ -7,6 +7,7 @@ import (
 
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
+	"github.com/wudi/php-parser/compiler/registry"
 	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/lexer"
@@ -48,6 +49,9 @@ type Scope struct {
 
 // NewCompiler creates a new bytecode compiler
 func NewCompiler() *Compiler {
+	// Initialize the unified registry for compilation
+	registry.Initialize()
+
 	return &Compiler{
 		instructions:     make([]opcodes.Instruction, 0),
 		constants:        make([]*values.Value, 0),
@@ -484,13 +488,71 @@ func (c *Compiler) compileStaticPropIncDec(expr *ast.UnaryExpression, staticProp
 }
 
 func (c *Compiler) compileStaticAccessIncDec(expr *ast.UnaryExpression, staticAccess *ast.StaticAccessExpression) error {
-	// For static access increment/decrement, we'll create a simplified implementation
-	// This handles cases like self::$counter++
+	// For static access increment/decrement like self::$counter++
 
-	// For now, just create a temp result to avoid errors
+	// Compile the class name (self, static, parent, or class name)
+	var classOperandType opcodes.OpType
+	var classOperand uint32
+
+	switch class := staticAccess.Class.(type) {
+	case *ast.IdentifierNode:
+		className := class.Name
+		classOperand = c.addConstant(values.NewString(className))
+		classOperandType = opcodes.IS_CONST
+	case *ast.Variable:
+		className := class.Name
+		if className == "self" || className == "static" || className == "parent" {
+			classOperand = c.addConstant(values.NewString(className))
+			classOperandType = opcodes.IS_CONST
+		} else {
+			return fmt.Errorf("unsupported variable in static access: %s", className)
+		}
+	default:
+		return fmt.Errorf("unsupported class expression in static access increment")
+	}
+
+	// Get property name
+	propName, ok := staticAccess.Property.(*ast.Variable)
+	if !ok {
+		return fmt.Errorf("expected variable property in static access increment")
+	}
+	propOperand := c.addConstant(values.NewString(propName.Name))
+
+	// Allocate result for the post-increment operation
 	result := c.allocateTemp()
-	constant := c.addConstant(values.NewInt(1))
-	c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, constant, 0, 0, opcodes.IS_TMP_VAR, result)
+
+	// For post-increment: first read the current value, then increment
+	if expr.Operator == "++" {
+		if expr.Prefix {
+			// Pre-increment: ++self::$counter
+			c.emit(opcodes.OP_PRE_INC,
+				classOperandType, classOperand,
+				opcodes.IS_CONST, propOperand,
+				opcodes.IS_TMP_VAR, result)
+		} else {
+			// Post-increment: self::$counter++
+			c.emit(opcodes.OP_POST_INC,
+				classOperandType, classOperand,
+				opcodes.IS_CONST, propOperand,
+				opcodes.IS_TMP_VAR, result)
+		}
+	} else if expr.Operator == "--" {
+		if expr.Prefix {
+			// Pre-decrement: --self::$counter
+			c.emit(opcodes.OP_PRE_DEC,
+				classOperandType, classOperand,
+				opcodes.IS_CONST, propOperand,
+				opcodes.IS_TMP_VAR, result)
+		} else {
+			// Post-decrement: self::$counter--
+			c.emit(opcodes.OP_POST_DEC,
+				classOperandType, classOperand,
+				opcodes.IS_CONST, propOperand,
+				opcodes.IS_TMP_VAR, result)
+		}
+	} else {
+		return fmt.Errorf("unsupported operator in static access increment: %s", expr.Operator)
+	}
 
 	return nil
 }
@@ -2642,6 +2704,56 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	if c.currentClass != nil {
 		// Store as a class method
 		c.currentClass.Methods[funcName] = function
+
+		// Also register in unified registry if available
+		if registry.GlobalRegistry != nil {
+			// Get or create class in registry
+			classDesc, err := registry.GlobalRegistry.GetClass(c.currentClass.Name)
+			if err != nil {
+				// Class doesn't exist in registry, create it
+				classDesc = &registry.ClassDescriptor{
+					Name:       c.currentClass.Name,
+					Parent:     c.currentClass.Parent,
+					IsAbstract: c.currentClass.IsAbstract,
+					IsFinal:    c.currentClass.IsFinal,
+					Properties: make(map[string]*registry.PropertyDescriptor),
+					Methods:    make(map[string]*registry.MethodDescriptor),
+					Constants:  make(map[string]*registry.ConstantDescriptor),
+				}
+				registry.GlobalRegistry.RegisterClass(classDesc)
+			}
+
+			// Convert VM parameters to registry parameters
+			registryParams := make([]registry.ParameterDescriptor, len(function.Parameters))
+			for i, param := range function.Parameters {
+				registryParams[i] = registry.ParameterDescriptor{
+					Name:         param.Name,
+					Type:         param.Type,
+					IsReference:  param.IsReference,
+					HasDefault:   param.HasDefault,
+					DefaultValue: param.DefaultValue,
+				}
+			}
+
+			// Create method implementation using bytecode
+			methodImpl := &registry.BytecodeMethodImpl{
+				Instructions: function.Instructions,
+				Constants:    function.Constants,
+				LocalVars:    len(function.Parameters),
+			}
+
+			// Register method in class
+			classDesc.Methods[funcName] = &registry.MethodDescriptor{
+				Name:           funcName,
+				Visibility:     "public", // TODO: Parse actual visibility from decl
+				IsStatic:       false,    // TODO: Parse actual static modifier from decl
+				IsAbstract:     false,
+				IsFinal:        false,
+				Parameters:     registryParams,
+				Implementation: methodImpl,
+				IsVariadic:     function.IsVariadic,
+			}
+		}
 	} else {
 		// Store as a global function
 		c.functions[funcName] = function
@@ -2823,13 +2935,13 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 
 	// Create new class
 	class := &vm.Class{
-		Name:        className,
-		ParentClass: "",
-		Properties:  make(map[string]*vm.Property),
-		Methods:     make(map[string]*vm.Function),
-		Constants:   make(map[string]*vm.ClassConstant),
-		IsAbstract:  false,
-		IsFinal:     false,
+		Name:       className,
+		Parent:     "",
+		Properties: make(map[string]*vm.Property),
+		Methods:    make(map[string]*vm.Function),
+		Constants:  make(map[string]*vm.ClassConstant),
+		IsAbstract: false,
+		IsFinal:    false,
 	}
 
 	// Handle modifiers
@@ -2845,7 +2957,7 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
-			class.ParentClass = parent.Name
+			class.Parent = parent.Name
 		} else {
 			return fmt.Errorf("complex parent class expressions not supported yet")
 		}
@@ -2863,8 +2975,8 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	c.emit(opcodes.OP_SET_CURRENT_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 
 	// Set parent class if exists
-	if class.ParentClass != "" {
-		parentConstant := c.addConstant(values.NewString(class.ParentClass))
+	if class.Parent != "" {
+		parentConstant := c.addConstant(values.NewString(class.Parent))
 		c.emit(opcodes.OP_SET_CLASS_PARENT, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, parentConstant, 0, 0)
 	}
 
@@ -2994,13 +3106,24 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 	// Emit property declaration instruction
 	classNameConstant := c.addConstant(values.NewString(c.currentClass.Name))
 	propNameConstant := c.addConstant(values.NewString(propName))
-	visibilityConstant := c.addConstant(values.NewString(decl.Visibility))
 
-	// Emit property declaration with metadata
+	// Create metadata as a serialized object with visibility, static flag, and default value
+	metadata := values.NewArray()
+	metadata.ArraySet(values.NewString("visibility"), values.NewString(decl.Visibility))
+	metadata.ArraySet(values.NewString("static"), values.NewBool(decl.Static))
+	if defaultValue != nil {
+		metadata.ArraySet(values.NewString("defaultValue"), defaultValue)
+	} else {
+		metadata.ArraySet(values.NewString("defaultValue"), values.NewNull())
+	}
+
+	metadataConstant := c.addConstant(metadata)
+
+	// Emit property declaration with complete metadata
 	c.emit(opcodes.OP_DECLARE_PROPERTY,
 		opcodes.IS_CONST, classNameConstant,
 		opcodes.IS_CONST, propNameConstant,
-		opcodes.IS_CONST, visibilityConstant)
+		opcodes.IS_CONST, metadataConstant)
 
 	// If there's a default value, emit it
 	if defaultValue != nil {
@@ -3073,8 +3196,15 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 			IsAbstract: decl.IsAbstract,
 		}
 
-		// Add constant to current class (no opcode emission needed)
+		// Add constant to current class
 		c.currentClass.Constants[constName] = classConstant
+
+		// Emit opcode to register the class constant in the runtime registry
+		classNameConst := c.addConstant(values.NewString(c.currentClass.Name))
+		constNameConst := c.addConstant(values.NewString(constName))
+		constValueConst := c.addConstant(constValue)
+
+		c.emit(opcodes.OP_DECLARE_CLASS_CONST, opcodes.IS_CONST, classNameConst, opcodes.IS_CONST, constNameConst, opcodes.IS_CONST, constValueConst)
 	}
 
 	return nil
@@ -3653,19 +3783,19 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 
 	// Create new class
 	class := &vm.Class{
-		Name:        className,
-		ParentClass: "",
-		Properties:  make(map[string]*vm.Property),
-		Methods:     make(map[string]*vm.Function),
-		Constants:   make(map[string]*vm.ClassConstant),
-		IsAbstract:  decl.Abstract,
-		IsFinal:     decl.Final,
+		Name:       className,
+		Parent:     "",
+		Properties: make(map[string]*vm.Property),
+		Methods:    make(map[string]*vm.Function),
+		Constants:  make(map[string]*vm.ClassConstant),
+		IsAbstract: decl.Abstract,
+		IsFinal:    decl.Final,
 	}
 
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
-			class.ParentClass = parent.Name
+			class.Parent = parent.Name
 		} else {
 			return fmt.Errorf("complex parent class expressions not supported yet")
 		}
@@ -3683,8 +3813,8 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	c.emit(opcodes.OP_SET_CURRENT_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 
 	// Set parent class if exists
-	if class.ParentClass != "" {
-		parentConstant := c.addConstant(values.NewString(class.ParentClass))
+	if class.Parent != "" {
+		parentConstant := c.addConstant(values.NewString(class.Parent))
 		c.emit(opcodes.OP_SET_CLASS_PARENT, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, parentConstant, 0, 0)
 	}
 
@@ -3839,9 +3969,20 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 		classOperandType = opcodes.IS_CONST
 	case *ast.Variable:
 		// Handle self::, static::, parent:: etc - these are also treated as constants
+		// But regular variables like $obj should be compiled dynamically
 		className := class.Name
-		classOperand = c.addConstant(values.NewString(className))
-		classOperandType = opcodes.IS_CONST
+		if className == "self" || className == "static" || className == "parent" {
+			classOperand = c.addConstant(values.NewString(className))
+			classOperandType = opcodes.IS_CONST
+		} else {
+			// Regular variable - compile it dynamically
+			err := c.compileNode(class)
+			if err != nil {
+				return fmt.Errorf("failed to compile class expression: %w", err)
+			}
+			classOperand = c.nextTemp - 1 // Last allocated temp contains the class name
+			classOperandType = opcodes.IS_TMP_VAR
+		}
 	default:
 		// Dynamic class expression like $className::
 		err := c.compileNode(class)

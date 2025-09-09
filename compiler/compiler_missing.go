@@ -7,6 +7,7 @@ import (
 
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
+	"github.com/wudi/php-parser/compiler/registry"
 	"github.com/wudi/php-parser/compiler/values"
 	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/lexer"
@@ -1812,13 +1813,13 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 
 	// Create enum as a special class
 	enumClass := &vm.Class{
-		Name:        enumName,
-		ParentClass: "",
-		Properties:  make(map[string]*vm.Property),
-		Methods:     make(map[string]*vm.Function),
-		Constants:   make(map[string]*vm.ClassConstant),
-		IsAbstract:  false,
-		IsFinal:     true, // Enums are final by default
+		Name:       enumName,
+		Parent:     "",
+		Properties: make(map[string]*vm.Property),
+		Methods:    make(map[string]*vm.Function),
+		Constants:  make(map[string]*vm.ClassConstant),
+		IsAbstract: false,
+		IsFinal:    true, // Enums are final by default
 	}
 
 	// Add enum cases as constants
@@ -1916,6 +1917,76 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 
 			// Add the method to the current class
 			c.currentClass.Methods[methodName] = classMethod
+
+			// Also register in unified registry if available
+			if registry.GlobalRegistry != nil {
+				// Get or create class in registry
+				classDesc, err := registry.GlobalRegistry.GetClass(c.currentClass.Name)
+				if err != nil {
+					// Class doesn't exist in registry, create it
+					classDesc = &registry.ClassDescriptor{
+						Name:       c.currentClass.Name,
+						Parent:     c.currentClass.Parent,
+						IsAbstract: c.currentClass.IsAbstract,
+						IsFinal:    c.currentClass.IsFinal,
+						Properties: make(map[string]*registry.PropertyDescriptor),
+						Methods:    make(map[string]*registry.MethodDescriptor),
+						Constants:  make(map[string]*registry.ConstantDescriptor),
+					}
+					registry.GlobalRegistry.RegisterClass(classDesc)
+				}
+
+				// Convert VM parameters to registry parameters
+				registryParams := make([]registry.ParameterDescriptor, len(classMethod.Parameters))
+				for i, param := range classMethod.Parameters {
+					registryParams[i] = registry.ParameterDescriptor{
+						Name:         param.Name,
+						Type:         param.Type,
+						IsReference:  param.IsReference,
+						HasDefault:   param.HasDefault,
+						DefaultValue: param.DefaultValue,
+					}
+				}
+
+				// Convert VM parameters to registry parameter info for default value support
+				paramInfo := make([]registry.ParameterInfo, len(classMethod.Parameters))
+				for i, param := range classMethod.Parameters {
+					paramInfo[i] = registry.ParameterInfo{
+						Name:         param.Name,
+						HasDefault:   param.HasDefault,
+						DefaultValue: param.DefaultValue,
+						IsVariadic:   false, // Individual parameter is not variadic
+					}
+				}
+
+				// Mark the last parameter as variadic if the method is variadic
+				if len(paramInfo) > 0 && classMethod.IsVariadic {
+					paramInfo[len(paramInfo)-1].IsVariadic = true
+				}
+
+				// Use the actual trait method bytecode instead of hardcoded implementations
+				methodImpl := &registry.BytecodeMethodImpl{
+					Instructions: classMethod.Instructions,
+					Constants:    classMethod.Constants,
+					LocalVars:    len(classMethod.Parameters), // Approximate local variable count
+					Parameters:   paramInfo,
+				}
+
+				// Create method descriptor
+				methodDesc := &registry.MethodDescriptor{
+					Name:           methodName,
+					Visibility:     "public", // Traits methods are typically public
+					IsStatic:       false,    // Trait methods are typically not static
+					IsAbstract:     false,
+					IsFinal:        false,
+					Parameters:     registryParams,
+					Implementation: methodImpl,
+					IsVariadic:     classMethod.IsVariadic,
+				}
+
+				// Register the trait method in the registry
+				classDesc.Methods[methodName] = methodDesc
+			}
 		}
 
 		// Copy trait properties into current class
