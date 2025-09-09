@@ -27,7 +27,8 @@ func TestGoFunction(t *testing.T) {
 	assert.NotNil(t, goFunc, "go() function should not be nil")
 	assert.Equal(t, "go", goFunc.Name)
 	assert.Equal(t, 1, goFunc.MinArgs)
-	assert.Equal(t, 1, goFunc.MaxArgs)
+	assert.Equal(t, -1, goFunc.MaxArgs) // Variadic function
+	assert.True(t, goFunc.IsVariadic, "go() should be variadic")
 }
 
 // Test WaitGroup class functionality
@@ -122,14 +123,59 @@ func TestGoroutineValue(t *testing.T) {
 	assert.NotNil(t, gorData.Done)
 }
 
+// Test go() function with variable arguments
+func TestGoFunctionVariadic(t *testing.T) {
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Create a closure and test variables
+	closure := values.NewClosure(nil, nil, "test_closure")
+	var1 := values.NewString("test_value")
+	var2 := values.NewInt(42)
+
+	// Test go() function handler directly with multiple arguments
+	functions := runtime.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	// Create a mock execution context
+	ctx := &mockExecutionContext{}
+
+	// Test with just closure
+	args1 := []*values.Value{closure}
+	result1, err := goFunc.Handler(ctx, args1)
+	assert.NoError(t, err)
+	assert.True(t, result1.IsGoroutine())
+
+	// Test with closure and variables
+	args2 := []*values.Value{closure, var1, var2}
+	result2, err := goFunc.Handler(ctx, args2)
+	assert.NoError(t, err)
+	assert.True(t, result2.IsGoroutine())
+
+	// Check that variables were captured
+	gor := result2.Data.(*values.Goroutine)
+	assert.Equal(t, 2, len(gor.UseVars))
+	assert.Equal(t, "test_value", gor.UseVars["var_0"].ToString())
+	assert.Equal(t, int64(42), gor.UseVars["var_1"].ToInt())
+}
+
+// Mock execution context for testing
+type mockExecutionContext struct{}
+
+func (m *mockExecutionContext) WriteOutput(output string)    {}
+func (m *mockExecutionContext) HasFunction(name string) bool { return false }
+
 // Test go() function integration with parsing
 func TestGoFunctionIntegration(t *testing.T) {
-	// PHP code that uses go() function
+	// PHP code that uses go() function with variables
 	phpCode := `<?php
 $closure = function() {
     return "Hello from goroutine";
 };
-$g = go($closure);
+$var1 = "test";
+$var2 = 42;
+$g = go($closure, $var1, $var2);
 `
 
 	// Parse PHP code

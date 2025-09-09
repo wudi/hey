@@ -366,8 +366,9 @@ func registerBuiltinFunctions() error {
 			Parameters: []ParameterDescriptor{
 				{Name: "closure", Type: "callable"},
 			},
-			MinArgs: 1,
-			MaxArgs: 1,
+			IsVariadic: true,
+			MinArgs:    1,
+			MaxArgs:    -1,
 		},
 	}
 
@@ -727,17 +728,35 @@ func functionExistsHandler(ctx ExecutionContext, args []*values.Value) (*values.
 }
 
 // goHandler implements the go() function for running closures in goroutines
+// Signature: go($closure, $var1, $var2, ...) - variables are passed as additional arguments
 func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
-	if len(args) != 1 {
-		return values.NewNull(), fmt.Errorf("go() expects exactly 1 parameter, %d given", len(args))
+	if len(args) < 1 {
+		return values.NewNull(), fmt.Errorf("go() expects at least 1 parameter, %d given", len(args))
 	}
 
 	if !args[0].IsCallable() {
-		return values.NewNull(), fmt.Errorf("go() expects a callable argument")
+		return values.NewNull(), fmt.Errorf("go() expects a callable as first argument")
 	}
 
 	closure := args[0].Data.(*values.Closure)
-	goroutine := values.NewGoroutine(closure, closure.BoundVars)
+
+	// Create a map of captured variables from the additional arguments
+	capturedVars := make(map[string]*values.Value)
+
+	// If additional arguments are provided, store them as captured variables
+	// The variables will be accessible in the goroutine context
+	for i := 1; i < len(args); i++ {
+		// Use generic names for the captured variables: var_0, var_1, etc.
+		varName := fmt.Sprintf("var_%d", i-1)
+		capturedVars[varName] = args[i]
+	}
+
+	// Also include any existing bound variables from the closure
+	for name, value := range closure.BoundVars {
+		capturedVars[name] = value
+	}
+
+	goroutine := values.NewGoroutine(closure, capturedVars)
 
 	// Start the goroutine
 	go func() {
@@ -759,6 +778,7 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 
 		// For now, we simulate execution by setting status to completed
 		// In a full implementation, this would call the VM to execute the closure
+		// The captured variables would be available in the execution context
 		gor.Status = "completed"
 		gor.Result = values.NewNull()
 		close(gor.Done)
