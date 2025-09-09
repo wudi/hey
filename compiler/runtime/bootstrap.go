@@ -358,6 +358,17 @@ func registerBuiltinFunctions() error {
 			MinArgs: 1,
 			MaxArgs: 1,
 		},
+
+		// Concurrency functions
+		{
+			Name:    "go",
+			Handler: goHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "closure", Type: "callable"},
+			},
+			MinArgs: 1,
+			MaxArgs: 1,
+		},
 	}
 
 	for _, desc := range functions {
@@ -430,6 +441,41 @@ func registerBuiltinClasses() error {
 	}
 
 	if err := GlobalRegistry.RegisterClass(stdClass); err != nil {
+		return err
+	}
+
+	// WaitGroup class for concurrency
+	waitGroupClass := &ClassDescriptor{
+		Name:       "WaitGroup",
+		Properties: make(map[string]*PropertyDescriptor),
+		Methods: map[string]*MethodDescriptor{
+			"__construct": {
+				Name:       "__construct",
+				Visibility: "public",
+				Handler:    waitGroupConstructHandler,
+			},
+			"Add": {
+				Name:       "Add",
+				Visibility: "public",
+				Parameters: []ParameterDescriptor{
+					{Name: "delta", Type: "int"},
+				},
+				Handler: waitGroupAddHandler,
+			},
+			"Done": {
+				Name:       "Done",
+				Visibility: "public",
+				Handler:    waitGroupDoneHandler,
+			},
+			"Wait": {
+				Name:       "Wait",
+				Visibility: "public",
+				Handler:    waitGroupWaitHandler,
+			},
+		},
+	}
+
+	if err := GlobalRegistry.RegisterClass(waitGroupClass); err != nil {
 		return err
 	}
 
@@ -678,4 +724,66 @@ func functionExistsHandler(ctx ExecutionContext, args []*values.Value) (*values.
 	exists := ctx.HasFunction(functionName)
 
 	return values.NewBool(exists), nil
+}
+
+// goHandler implements the go() function for running closures in goroutines
+func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	if len(args) != 1 {
+		return values.NewNull(), fmt.Errorf("go() expects exactly 1 parameter, %d given", len(args))
+	}
+
+	if !args[0].IsCallable() {
+		return values.NewNull(), fmt.Errorf("go() expects a callable argument")
+	}
+
+	closure := args[0].Data.(*values.Closure)
+	goroutine := values.NewGoroutine(closure, closure.BoundVars)
+
+	// Start the goroutine
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				gor := goroutine.Data.(*values.Goroutine)
+				gor.Status = "error"
+				if err, ok := r.(error); ok {
+					gor.Error = err
+				} else {
+					gor.Error = fmt.Errorf("panic: %v", r)
+				}
+				close(gor.Done)
+			}
+		}()
+
+		// Execute the closure
+		gor := goroutine.Data.(*values.Goroutine)
+
+		// For now, we simulate execution by setting status to completed
+		// In a full implementation, this would call the VM to execute the closure
+		gor.Status = "completed"
+		gor.Result = values.NewNull()
+		close(gor.Done)
+	}()
+
+	return goroutine, nil
+}
+
+// WaitGroup method handlers
+func waitGroupConstructHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	return values.NewWaitGroup(), nil
+}
+
+func waitGroupAddHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	// This should be called on a WaitGroup instance
+	// For now, return error - proper implementation would need object context
+	return values.NewNull(), fmt.Errorf("WaitGroup.Add() method handler not fully implemented")
+}
+
+func waitGroupDoneHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	// This should be called on a WaitGroup instance
+	return values.NewNull(), fmt.Errorf("WaitGroup.Done() method handler not fully implemented")
+}
+
+func waitGroupWaitHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	// This should be called on a WaitGroup instance
+	return values.NewNull(), fmt.Errorf("WaitGroup.Wait() method handler not fully implemented")
 }

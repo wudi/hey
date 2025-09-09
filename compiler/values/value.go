@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 // ValueType represents the type of a PHP value
@@ -20,6 +22,8 @@ const (
 	TypeResource
 	TypeReference
 	TypeCallable
+	TypeGoroutine
+	TypeWaitGroup
 )
 
 // Value represents a PHP runtime value
@@ -52,6 +56,25 @@ type Closure struct {
 	Function  interface{}       // Pointer to VM function or compiled function
 	BoundVars map[string]*Value // Variables captured via 'use' clause
 	Name      string            // Optional name for debugging
+}
+
+// Goroutine represents a running goroutine
+type Goroutine struct {
+	ID       int64             // Unique goroutine identifier
+	Function *Closure          // The closure to execute
+	UseVars  map[string]*Value // Variables captured with use()
+	Status   string            // running, completed, error
+	Result   *Value            // Return value when completed
+	Error    error             // Error if execution failed
+	Done     chan struct{}     // Channel to signal completion
+}
+
+// WaitGroup represents a wait group for synchronizing goroutines
+type WaitGroup struct {
+	counter  int64
+	waitChan chan struct{}
+	mu       sync.Mutex
+	done     bool
 }
 
 // Constructors for different value types
@@ -126,6 +149,39 @@ func NewCallable(closure *Closure) *Value {
 	}
 }
 
+// Global goroutine ID counter
+var goroutineIDCounter int64
+
+func NewGoroutine(closure *Closure, useVars map[string]*Value) *Value {
+	if useVars == nil {
+		useVars = make(map[string]*Value)
+	}
+	return &Value{
+		Type: TypeGoroutine,
+		Data: &Goroutine{
+			ID:       atomic.AddInt64(&goroutineIDCounter, 1),
+			Function: closure,
+			UseVars:  useVars,
+			Status:   "running",
+			Result:   NewNull(),
+			Error:    nil,
+			Done:     make(chan struct{}),
+		},
+	}
+}
+
+func NewWaitGroup() *Value {
+	return &Value{
+		Type: TypeWaitGroup,
+		Data: &WaitGroup{
+			counter:  0,
+			waitChan: make(chan struct{}),
+			mu:       sync.Mutex{},
+			done:     false,
+		},
+	}
+}
+
 // Type checking methods
 
 func (v *Value) IsNull() bool {
@@ -182,6 +238,14 @@ func (v *Value) IsClosure() bool {
 
 func (v *Value) IsCallable() bool {
 	return v.Type == TypeCallable
+}
+
+func (v *Value) IsGoroutine() bool {
+	return v.Type == TypeGoroutine
+}
+
+func (v *Value) IsWaitGroup() bool {
+	return v.Type == TypeWaitGroup
 }
 
 // Dereferencing for references
@@ -311,6 +375,11 @@ func (v *Value) ToString() string {
 		return fmt.Sprintf("Object(%s)", obj.ClassName)
 	case TypeReference:
 		return v.Deref().ToString()
+	case TypeGoroutine:
+		gor := v.Data.(*Goroutine)
+		return fmt.Sprintf("Goroutine(#%d, %s)", gor.ID, gor.Status)
+	case TypeWaitGroup:
+		return "WaitGroup"
 	default:
 		return ""
 	}
@@ -789,7 +858,75 @@ func (vt ValueType) String() string {
 		return "reference"
 	case TypeCallable:
 		return "callable"
+	case TypeGoroutine:
+		return "goroutine"
+	case TypeWaitGroup:
+		return "waitgroup"
 	default:
 		return "unknown"
 	}
+}
+
+func (v *Value) TypeName() string {
+	return v.Type.String()
+}
+
+// WaitGroup methods
+func (v *Value) WaitGroupAdd(delta int64) error {
+	if v.Type != TypeWaitGroup {
+		return fmt.Errorf("WaitGroup.Add() called on non-WaitGroup value")
+	}
+
+	wg := v.Data.(*WaitGroup)
+	wg.mu.Lock()
+	defer wg.mu.Unlock()
+
+	if wg.done {
+		return fmt.Errorf("WaitGroup is already done")
+	}
+
+	wg.counter += delta
+	if wg.counter < 0 {
+		return fmt.Errorf("WaitGroup counter cannot be negative")
+	}
+
+	if wg.counter == 0 && wg.waitChan != nil {
+		close(wg.waitChan)
+		wg.waitChan = nil
+		wg.done = true
+	}
+
+	return nil
+}
+
+func (v *Value) WaitGroupDone() error {
+	return v.WaitGroupAdd(-1)
+}
+
+func (v *Value) WaitGroupWait() error {
+	if v.Type != TypeWaitGroup {
+		return fmt.Errorf("WaitGroup.Wait() called on non-WaitGroup value")
+	}
+
+	wg := v.Data.(*WaitGroup)
+	wg.mu.Lock()
+
+	if wg.done {
+		wg.mu.Unlock()
+		return nil
+	}
+
+	if wg.counter == 0 {
+		wg.mu.Unlock()
+		return nil
+	}
+
+	waitChan := wg.waitChan
+	wg.mu.Unlock()
+
+	if waitChan != nil {
+		<-waitChan
+	}
+
+	return nil
 }
