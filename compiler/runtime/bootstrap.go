@@ -838,10 +838,8 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 
 	goroutine := values.NewGoroutine(closure, capturedVars)
 
-	fmt.Sprintln("before go")
 	// Start the goroutine
 	go func() {
-		fmt.Println("inside go")
 		defer func() {
 			if r := recover(); r != nil {
 				gor := goroutine.Data.(*values.Goroutine)
@@ -863,12 +861,8 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 		// The captured variables would be available in the execution context
 		gor.Status = "completed"
 		gor.Result = values.NewNull()
-		fmt.Println("after go func")
 		close(gor.Done)
-		fmt.Println("end go func")
 	}()
-
-	fmt.Println("after go")
 
 	return goroutine, nil
 }
