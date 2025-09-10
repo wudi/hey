@@ -399,6 +399,23 @@ func registerBuiltinFunctions() error {
 			MinArgs:    1,
 			MaxArgs:    -1,
 		},
+		{
+			Name:       "time",
+			Handler:    timeHandler,
+			IsVariadic: false,
+			MinArgs:    0,
+			MaxArgs:    -1,
+		},
+		{
+			Name:    "microtime",
+			Handler: microtimeHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "as_float", Type: "bool"},
+			},
+			IsVariadic: false,
+			MinArgs:    0,
+			MaxArgs:    -1,
+		},
 	}
 
 	for _, desc := range functions {
@@ -998,4 +1015,27 @@ func sleepHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, er
 
 	time.Sleep(time.Duration(seconds) * time.Second)
 	return values.NewInt(0), nil
+}
+
+func timeHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	now := time.Now()
+	return values.NewInt(now.Unix()), nil
+}
+
+func microtimeHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	asFloat := false
+	if len(args) == 1 {
+		asFloat = args[0].ToBool()
+	} else if len(args) > 1 {
+		return values.NewNull(), fmt.Errorf("microtime() expects at most 1 parameter, %d given", len(args))
+	}
+
+	now := time.Now()
+	if asFloat {
+		return values.NewFloat(float64(now.UnixNano()) / 1e9), nil
+	}
+
+	sec := now.Unix()
+	usec := now.Nanosecond() / 1000
+	return values.NewString(fmt.Sprintf("%d %d", usec, sec)), nil
 }
