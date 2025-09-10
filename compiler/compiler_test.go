@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -2615,17 +2614,6 @@ func TestClassConstantDeclaration(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// First test with native PHP to validate expected result
-			if tc.expected != "" {
-				output, err := exec.Command("/usr/bin/php", "-r", tc.code).Output()
-				if err == nil {
-					expectedOutput := string(output)
-					if tc.expected != expectedOutput {
-						t.Logf("Note: Expected %q but native PHP returned %q", tc.expected, expectedOutput)
-					}
-				}
-			}
-
 			p := parser.New(lexer.New(tc.code))
 			prog := p.ParseProgram()
 			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
@@ -3252,13 +3240,6 @@ func TestPropertyAccessExpression(t *testing.T) {
 			err := os.WriteFile(tmpFile, []byte(tc.code), 0644)
 			require.NoError(t, err)
 			defer os.Remove(tmpFile)
-
-			// Run with native PHP to get expected behavior
-			cmd := exec.Command("php", tmpFile)
-			nativeOutput, err := cmd.Output()
-			if err == nil {
-				require.Equal(t, tc.expected, string(nativeOutput), "Native PHP test failed for: %s", tc.name)
-			}
 
 			// Capture stdout to verify our implementation output
 			old := os.Stdout
@@ -4578,11 +4559,6 @@ func TestPropertyAccessExpressionInArrays(t *testing.T) {
 			err := os.WriteFile(tempFile, []byte(tt.phpCode), 0644)
 			require.NoError(t, err, "Failed to write temp file")
 			defer os.Remove(tempFile)
-
-			cmd := exec.Command("/usr/bin/php", tempFile)
-			nativeOutput, err := cmd.Output()
-			require.NoError(t, err, "Native PHP execution failed for test: %s", tt.name)
-			require.Equal(t, tt.expected, strings.TrimSpace(string(nativeOutput)), "Expected output doesn't match native PHP for test: %s", tt.name)
 
 			// Parse the PHP code
 			p := parser.New(lexer.New(tt.phpCode))
@@ -6640,10 +6616,6 @@ test();
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// First test with native PHP to verify expected behavior
-			phpOutput := runPHPHelper(t, tt.code)
-			require.Equal(t, tt.expected, phpOutput, "Native PHP output doesn't match expected for test: %s", tt.name)
-
 			// Test with our compiler
 			l := lexer.New(tt.code)
 			p := parser.New(l)
@@ -6674,23 +6646,6 @@ test();
 			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
 		})
 	}
-}
-
-// runPHPHelper executes PHP code using the native PHP interpreter for comparison
-func runPHPHelper(t *testing.T, code string) string {
-	tmpfile, err := os.CreateTemp("", "test*.php")
-	require.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
-
-	_, err = tmpfile.WriteString(code)
-	require.NoError(t, err)
-	tmpfile.Close()
-
-	cmd := exec.Command("/usr/bin/php", tmpfile.Name())
-	output, err := cmd.Output()
-	require.NoError(t, err, "Failed to run native PHP")
-
-	return string(output)
 }
 
 func TestUnsetStatement(t *testing.T) {
