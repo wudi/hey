@@ -1830,3 +1830,459 @@ func TestLexer_MagicConstantsCaseInsensitive(t *testing.T) {
 		})
 	}
 }
+
+// TestLexer_StringInterpolationArrayAccess tests that array access in double-quoted strings
+// is tokenized correctly according to PHP's behavior
+func TestLexer_StringInterpolationArrayAccess(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "simple array access in double quotes",
+			input: `<?php echo "$arr[0]";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_VARIABLE, "$arr"},
+				{TOKEN_LBRACKET, "["},
+				{T_LNUMBER, "0"},
+				{TOKEN_RBRACKET, "]"},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "variable index array access in double quotes",
+			input: `<?php echo "$arr[$i]";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_VARIABLE, "$arr"},
+				{TOKEN_LBRACKET, "["},
+				{T_VARIABLE, "$i"},
+				{TOKEN_RBRACKET, "]"},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "array access with text prefix and suffix",
+			input: `<?php echo "Value: $arr[$key] found";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_ENCAPSED_AND_WHITESPACE, "Value: "},
+				{T_VARIABLE, "$arr"},
+				{TOKEN_LBRACKET, "["},
+				{T_VARIABLE, "$key"},
+				{TOKEN_RBRACKET, "]"},
+				{T_ENCAPSED_AND_WHITESPACE, " found"},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "multiple array accesses in one string",
+			input: `<?php echo "$arr[0] and $brr[1]";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_VARIABLE, "$arr"},
+				{TOKEN_LBRACKET, "["},
+				{T_LNUMBER, "0"},
+				{TOKEN_RBRACKET, "]"},
+				{T_ENCAPSED_AND_WHITESPACE, " and "},
+				{T_VARIABLE, "$brr"},
+				{TOKEN_LBRACKET, "["},
+				{T_LNUMBER, "1"},
+				{TOKEN_RBRACKET, "]"},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "array access with string index",
+			input: `<?php echo "$arr[key]";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_VARIABLE, "$arr"},
+				{TOKEN_LBRACKET, "["},
+				{T_STRING, "key"},
+				{TOKEN_RBRACKET, "]"},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "array access with newline",
+			input: `<?php echo "$arr[$i]\n";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_VARIABLE, "$arr"},
+				{TOKEN_LBRACKET, "["},
+				{T_VARIABLE, "$i"},
+				{TOKEN_RBRACKET, "]"},
+				{T_ENCAPSED_AND_WHITESPACE, "\n"},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - token type wrong. expected=%s, got=%s",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
+
+// TestLexer_StringInterpolationEdgeCases tests edge cases for string interpolation
+func TestLexer_StringInterpolationEdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []struct {
+			expectedType  TokenType
+			expectedValue string
+		}
+	}{
+		{
+			name:  "variable without array access should not enter ST_VAR_OFFSET",
+			input: `<?php echo "$arr and more text";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_VARIABLE, "$arr"},
+				{T_ENCAPSED_AND_WHITESPACE, " and more text"},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+		{
+			name:  "escaped bracket should not trigger array access",
+			input: `<?php echo "$arr\\[0\\]";`,
+			expected: []struct {
+				expectedType  TokenType
+				expectedValue string
+			}{
+				{T_OPEN_TAG, "<?php "},
+				{T_ECHO, "echo"},
+				{TOKEN_QUOTE, "\""},
+				{T_VARIABLE, "$arr"},
+				{T_ENCAPSED_AND_WHITESPACE, `\[0\]`},
+				{TOKEN_QUOTE, "\""},
+				{TOKEN_SEMICOLON, ";"},
+				{T_EOF, ""},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lexer := New(tt.input)
+
+			for i, expected := range tt.expected {
+				tok := lexer.NextToken()
+				assert.Equal(t, expected.expectedType, tok.Type,
+					"test[%d] - token type wrong. expected=%s, got=%s",
+					i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+				assert.Equal(t, expected.expectedValue, tok.Value,
+					"test[%d] - value wrong. expected=%q, got=%q",
+					i, expected.expectedValue, tok.Value)
+			}
+		})
+	}
+}
+
+// TestLexer_OriginalBugCase tests the specific bug case that was reported:
+// Array access in string interpolation should work the same as PHP
+func TestLexer_OriginalBugCase(t *testing.T) {
+	input := `<?php
+$arr = [1,2,3];
+
+for($i=0; $i<3; $i++) {
+    echo "$arr[$i]\n";
+}`
+
+	expected := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		// <?php
+		{T_OPEN_TAG, "<?php\n"},
+
+		// $arr = [1,2,3];
+		{T_VARIABLE, "$arr"},
+		{TOKEN_EQUAL, "="},
+		{TOKEN_LBRACKET, "["},
+		{T_LNUMBER, "1"},
+		{TOKEN_COMMA, ","},
+		{T_LNUMBER, "2"},
+		{TOKEN_COMMA, ","},
+		{T_LNUMBER, "3"},
+		{TOKEN_RBRACKET, "]"},
+		{TOKEN_SEMICOLON, ";"},
+
+		// for($i=0; $i<3; $i++) {
+		{T_FOR, "for"},
+		{TOKEN_LPAREN, "("},
+		{T_VARIABLE, "$i"},
+		{TOKEN_EQUAL, "="},
+		{T_LNUMBER, "0"},
+		{TOKEN_SEMICOLON, ";"},
+		{T_VARIABLE, "$i"},
+		{TOKEN_LT, "<"},
+		{T_LNUMBER, "3"},
+		{TOKEN_SEMICOLON, ";"},
+		{T_VARIABLE, "$i"},
+		{T_INC, "++"},
+		{TOKEN_RPAREN, ")"},
+		{TOKEN_LBRACE, "{"},
+
+		// echo "$arr[$i]\n";
+		{T_ECHO, "echo"},
+		{TOKEN_QUOTE, "\""},
+		{T_VARIABLE, "$arr"},
+		{TOKEN_LBRACKET, "["},
+		{T_VARIABLE, "$i"},
+		{TOKEN_RBRACKET, "]"},
+		{T_ENCAPSED_AND_WHITESPACE, "\n"},
+		{TOKEN_QUOTE, "\""},
+		{TOKEN_SEMICOLON, ";"},
+
+		// }
+		{TOKEN_RBRACE, "}"},
+		{T_EOF, ""},
+	}
+
+	lexer := New(input)
+
+	for i, expected := range expected {
+		tok := lexer.NextToken()
+		assert.Equal(t, expected.expectedType, tok.Type,
+			"test[%d] - token type wrong. expected=%s, got=%s",
+			i, TokenNames[expected.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, expected.expectedValue, tok.Value,
+			"test[%d] - value wrong. expected=%q, got=%q",
+			i, expected.expectedValue, tok.Value)
+	}
+}
+
+func TestShebangSkipping(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []TokenType
+	}{
+		{
+			name:     "Simple shebang with PHP code",
+			input:    "#!/usr/bin/php\n<?php echo 'hello';",
+			expected: []TokenType{T_OPEN_TAG, T_ECHO, T_CONSTANT_ENCAPSED_STRING, TOKEN_SEMICOLON, T_EOF},
+		},
+		{
+			name:     "Shebang with different path",
+			input:    "#!/bin/php\n<?php $name = 'test';",
+			expected: []TokenType{T_OPEN_TAG, T_VARIABLE, TOKEN_EQUAL, T_CONSTANT_ENCAPSED_STRING, TOKEN_SEMICOLON, T_EOF},
+		},
+		{
+			name:     "No shebang",
+			input:    "<?php echo 'hello';",
+			expected: []TokenType{T_OPEN_TAG, T_ECHO, T_CONSTANT_ENCAPSED_STRING, TOKEN_SEMICOLON, T_EOF},
+		},
+		{
+			name:     "Hash comment (not shebang)",
+			input:    "# This is a comment\n<?php echo 'hello';",
+			expected: []TokenType{T_INLINE_HTML, T_OPEN_TAG, T_ECHO, T_CONSTANT_ENCAPSED_STRING, TOKEN_SEMICOLON, T_EOF},
+		},
+		{
+			name:     "Empty shebang line",
+			input:    "#!/usr/bin/php\n",
+			expected: []TokenType{T_EOF},
+		},
+		{
+			name:     "Shebang without newline",
+			input:    "#!/usr/bin/php",
+			expected: []TokenType{T_EOF},
+		},
+		{
+			name:     "Shebang with simple function",
+			input:    "#!/usr/local/bin/php -f\n<?php function test() { return; }",
+			expected: []TokenType{T_OPEN_TAG, T_FUNCTION, T_STRING, TOKEN_LPAREN, TOKEN_RPAREN, TOKEN_LBRACE, T_RETURN, TOKEN_SEMICOLON, TOKEN_RBRACE, T_EOF},
+		},
+		{
+			name:     "Shebang with CRLF line ending",
+			input:    "#!/usr/bin/php\r\n<?php echo 'test';",
+			expected: []TokenType{T_OPEN_TAG, T_ECHO, T_CONSTANT_ENCAPSED_STRING, TOKEN_SEMICOLON, T_EOF},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lexer := New(test.input)
+
+			for i, expectedType := range test.expected {
+				token := lexer.NextToken()
+				if token.Type != expectedType {
+					t.Errorf("Test %s: token %d - expected %d, got %d (value: %q)",
+						test.name, i, expectedType, token.Type, token.Value)
+					break
+				}
+			}
+		})
+	}
+}
+
+func TestShebangContent(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedInput string // 预期处理后的输入
+	}{
+		{
+			name:          "Basic shebang",
+			input:         "#!/usr/bin/php\n<?php echo 'hello';",
+			expectedInput: "<?php echo 'hello';",
+		},
+		{
+			name:          "Shebang with arguments",
+			input:         "#!/usr/bin/php -f\n<?php $x = 1;",
+			expectedInput: "<?php $x = 1;",
+		},
+		{
+			name:          "No shebang",
+			input:         "<?php echo 'hello';",
+			expectedInput: "<?php echo 'hello';",
+		},
+		{
+			name:          "Just hash, not shebang",
+			input:         "# comment\n<?php echo 'hello';",
+			expectedInput: "# comment\n<?php echo 'hello';",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			lexer := New(test.input)
+			if lexer.input != test.expectedInput {
+				t.Errorf("Test %s: expected input %q, got %q",
+					test.name, test.expectedInput, lexer.input)
+			}
+		})
+	}
+}
+
+func TestShebangEdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "Empty input",
+			input: "",
+		},
+		{
+			name:  "Single character",
+			input: "#",
+		},
+		{
+			name:  "Only shebang",
+			input: "#!/usr/bin/php",
+		},
+		{
+			name:  "Shebang with only newline",
+			input: "#!/usr/bin/php\n",
+		},
+		{
+			name:  "Very long shebang",
+			input: "#!/very/long/path/to/php/with/many/arguments/and/flags/that/might/be/used/in/some/systems\n<?php echo 'test';",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// 这个测试主要确保不会崩溃
+			lexer := New(test.input)
+
+			// 尝试获取一些 token，确保不会 panic
+			for i := 0; i < 5; i++ {
+				token := lexer.NextToken()
+				if token.Type == T_EOF {
+					break
+				}
+			}
+		})
+	}
+}
+
+// TestShebangPositions 测试跳过shebang后位置信息是否正确
+func TestShebangPositions(t *testing.T) {
+	input := "#!/usr/bin/php\n<?php echo 'hello';"
+	lexer := New(input)
+
+	// 第一个token应该是T_OPEN_TAG，位置应该从第2行开始
+	token := lexer.NextToken()
+	if token.Type != T_OPEN_TAG {
+		t.Errorf("Expected T_OPEN_TAG, got %d", token.Type)
+	}
+
+	// 位置信息应该正确（注意：行号从1开始，但跳过shebang后实际从第2行开始）
+	if token.Position.Line != 1 {
+		t.Errorf("Expected line 1 after skipping shebang, got %d", token.Position.Line)
+	}
+
+	if token.Position.Column != 0 {
+		t.Errorf("Expected column 0, got %d", token.Position.Column)
+	}
+}

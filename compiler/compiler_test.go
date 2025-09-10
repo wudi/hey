@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler/opcodes"
@@ -3736,6 +3738,21 @@ echo "Hello from no_return.php\n";
 // no return statement`,
 		"return_string.php": `<?php
 return "Hello from string return";`,
+		"test_include1.php": `<?php
+$included_var = "Hello from included file";
+echo "This is from included file 1\n";
+$number = 42;`,
+		"test_include2.php": `<?php
+// This file has a parse error to test error handling
+echo "Before error"
+syntax error here!`,
+		"test_include3.php": `<?php
+function included_function($param) {
+    return "Function called with: " . $param;
+}
+
+$global_from_include = "Global variable";
+echo "Include 3 executed\n";`,
 	}
 
 	for filename, content := range testFiles {
@@ -3806,16 +3823,16 @@ return "Hello from string return";`,
 	}{
 		{
 			name: "Basic include success",
-			phpCode: `<?php
+			phpCode: fmt.Sprintf(`<?php
 echo "Before include\n";
-include "test_include1.php";`,
+include "%s";`, filepath.Join(tmpDir, "test_include1.php")),
 			expectedOutput: "Before include\nThis is from included file 1\n",
 			expectError:    false,
 		},
 		{
 			name: "Include with function definition",
-			phpCode: `<?php
-include "test_include3.php";`,
+			phpCode: fmt.Sprintf(`<?php
+include "%s";`, filepath.Join(tmpDir, "test_include3.php")),
 			expectedOutput: "Include 3 executed\n",
 			expectError:    false,
 		},
@@ -4669,4 +4686,2317 @@ interface TestInterface {
 			}
 		})
 	}
+}
+
+// TestGotoStatement tests goto statement compilation
+func TestGotoStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple goto forward",
+			phpCode: `<?php
+echo "Before goto\n";
+goto target;
+echo "This will be skipped\n";
+target:
+echo "After goto\n";
+?>`,
+		},
+		{
+			name: "Goto backward",
+			phpCode: `<?php
+$i = 0;
+loop:
+echo $i . "\n";
+$i++;
+if ($i < 3) goto loop;
+echo "Done\n";
+?>`,
+		},
+		{
+			name: "Goto with conditional",
+			phpCode: `<?php
+$x = 5;
+if ($x > 0) goto positive;
+echo "Not positive\n";
+goto end;
+positive:
+echo "Is positive\n";
+end:
+echo "Finished\n";
+?>`,
+		},
+		{
+			name: "Multiple labels",
+			phpCode: `<?php
+$choice = 2;
+if ($choice == 1) goto first;
+if ($choice == 2) goto second;
+goto third;
+
+first:
+echo "First\n";
+goto end;
+
+second:
+echo "Second\n";
+goto end;
+
+third:
+echo "Third\n";
+
+end:
+echo "End\n";
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test execution with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestLabelStatement tests label statement compilation
+func TestLabelStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Label without goto (no effect)",
+			phpCode: `<?php
+echo "Before label\n";
+my_label:
+echo "After label\n";
+?>`,
+		},
+		{
+			name: "Multiple labels in sequence",
+			phpCode: `<?php
+echo "Start\n";
+label1:
+label2:
+label3:
+echo "All labels defined\n";
+?>`,
+		},
+		{
+			name: "Label in conditional block",
+			phpCode: `<?php
+$x = true;
+if ($x) {
+    inner_label:
+    echo "Inside conditional\n";
+}
+echo "Outside\n";
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test execution with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestDeclareStatement tests declare statement compilation
+func TestDeclareStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple declare strict_types",
+			phpCode: `<?php
+declare(strict_types=1);
+echo "Strict types enabled\n";
+?>`,
+		},
+		{
+			name: "Declare with ticks",
+			phpCode: `<?php
+declare(ticks=1);
+echo "Ticks enabled\n";
+?>`,
+		},
+		{
+			name: "Declare with encoding",
+			phpCode: `<?php
+declare(encoding='UTF-8');
+echo "Encoding set\n";
+?>`,
+		},
+		{
+			name: "Multiple declare directives",
+			phpCode: `<?php
+declare(strict_types=1, ticks=1);
+echo "Multiple directives\n";
+?>`,
+		},
+		{
+			name: "Declare block syntax",
+			phpCode: `<?php
+declare(ticks=1) {
+    echo "Inside declare block\n";
+    echo "Still inside\n";
+}
+echo "Outside block\n";
+?>`,
+		},
+		{
+			name: "Declare alternative syntax",
+			phpCode: `<?php
+declare(ticks=1):
+    echo "Alternative declare syntax\n";
+enddeclare;
+echo "After declare\n";
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Declare statements mostly affect compile-time behavior
+			// For now, just test that they compile successfully
+		})
+	}
+}
+
+// TestAdvancedControlFlow tests complex combinations of advanced features
+func TestAdvancedControlFlow(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Goto with loops",
+			phpCode: `<?php
+$i = 0;
+start_loop:
+if ($i >= 3) goto end_loop;
+echo "Iteration: $i\n";
+$i++;
+goto start_loop;
+end_loop:
+echo "Loop finished\n";
+?>`,
+		},
+		{
+			name: "Nested goto and labels",
+			phpCode: `<?php
+$outer = 2;
+$inner = 1;
+
+outer_loop:
+if ($outer <= 0) goto done;
+echo "Outer: $outer\n";
+
+inner_check:
+if ($inner > 3) {
+    $inner = 1;
+    $outer--;
+    goto outer_loop;
+}
+echo "  Inner: $inner\n";
+$inner++;
+goto inner_check;
+
+done:
+echo "All done\n";
+?>`,
+		},
+		{
+			name: "Declare with goto",
+			phpCode: `<?php
+declare(strict_types=1);
+$x = 10;
+if ($x > 5) goto skip_message;
+echo "x is small\n";
+skip_message:
+echo "x is: $x\n";
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test execution with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestAlternativeIfStatement tests alternative if syntax (if/endif)
+func TestAlternativeIfStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple alternative if",
+			phpCode: `<?php
+$x = 5;
+if ($x > 0):
+    echo "positive";
+endif;
+?>`,
+		},
+		{
+			name: "Alternative if with else",
+			phpCode: `<?php
+$x = -1;
+if ($x > 0):
+    echo "positive";
+else:
+    echo "not positive";
+endif;
+?>`,
+		},
+		{
+			name: "Alternative if with elseif",
+			phpCode: `<?php
+$x = 0;
+if ($x > 0):
+    echo "positive";
+elseif ($x == 0):
+    echo "zero";
+else:
+    echo "negative";
+endif;
+?>`,
+		},
+		{
+			name: "Nested alternative if",
+			phpCode: `<?php
+$x = 5;
+$y = 10;
+if ($x > 0):
+    if ($y > 5):
+        echo "both positive and y > 5";
+    endif;
+endif;
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test execution with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestAlternativeWhileStatement tests alternative while syntax (while/endwhile)
+func TestAlternativeWhileStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple alternative while",
+			phpCode: `<?php
+$i = 0;
+while ($i < 3):
+    echo $i;
+    $i++;
+endwhile;
+?>`,
+		},
+		{
+			name: "Alternative while with break",
+			phpCode: `<?php
+$i = 0;
+while (true):
+    if ($i >= 2) break;
+    echo $i;
+    $i++;
+endwhile;
+?>`,
+		},
+		{
+			name: "Nested alternative while",
+			phpCode: `<?php
+$i = 0;
+while ($i < 2):
+    $j = 0;
+    while ($j < 2):
+        echo "$i,$j ";
+        $j++;
+    endwhile;
+    $i++;
+endwhile;
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test execution with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestAlternativeForStatement tests alternative for syntax (for/endfor)
+func TestAlternativeForStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple alternative for",
+			phpCode: `<?php
+for ($i = 0; $i < 3; $i++):
+    echo $i;
+endfor;
+?>`,
+		},
+		{
+			name: "Alternative for with multiple init",
+			phpCode: `<?php
+for ($i = 0, $j = 0; $i < 2; $i++, $j += 2):
+    echo "$i,$j ";
+endfor;
+?>`,
+		},
+		{
+			name: "Alternative for with break",
+			phpCode: `<?php
+for ($i = 0; $i < 10; $i++):
+    if ($i >= 2) break;
+    echo $i;
+endfor;
+?>`,
+		},
+		{
+			name: "Nested alternative for",
+			phpCode: `<?php
+for ($i = 0; $i < 2; $i++):
+    for ($j = 0; $j < 2; $j++):
+        echo "$i,$j ";
+    endfor;
+endfor;
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test execution with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestAlternativeForeachStatement tests alternative foreach syntax (foreach/endforeach)
+func TestAlternativeForeachStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple alternative foreach",
+			phpCode: `<?php
+$arr = array(1, 2, 3);
+foreach ($arr as $value):
+    echo $value;
+endforeach;
+?>`,
+		},
+		{
+			name: "Alternative foreach with key",
+			phpCode: `<?php
+$arr = array("a" => 1, "b" => 2);
+foreach ($arr as $key => $value):
+    echo "$key:$value ";
+endforeach;
+?>`,
+		},
+		{
+			name: "Nested alternative foreach",
+			phpCode: `<?php
+$matrix = array(array(1, 2), array(3, 4));
+foreach ($matrix as $row):
+    foreach ($row as $value):
+        echo "$value ";
+    endforeach;
+endforeach;
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Now test execution with the full implementation
+			vmCtx := vm.NewExecutionContext()
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestMixedAlternativeSyntax tests mixing alternative and regular syntax
+func TestMixedAlternativeSyntax(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Alternative if with regular for",
+			phpCode: `<?php
+$x = 5;
+if ($x > 0):
+    for ($i = 0; $i < 2; $i++) {
+        echo $i;
+    }
+endif;
+?>`,
+		},
+		{
+			name: "Regular if with alternative while",
+			phpCode: `<?php
+$x = 5;
+if ($x > 0) {
+    $i = 0;
+    while ($i < 2):
+        echo $i;
+        $i++;
+    endwhile;
+}
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test execution with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestPrintStatement tests the compilation of print statements
+func TestPrintStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Simple print statement",
+			phpCode: `<?php print "Hello World"; ?>`,
+		},
+		{
+			name:    "Print with variable",
+			phpCode: `<?php $msg = "test"; print $msg; ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestPrintExpression tests the compilation of print expressions
+func TestPrintExpression(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Print expression returns 1",
+			phpCode: `<?php $x = print "test"; ?>`,
+		},
+		{
+			name:    "Print in assignment",
+			phpCode: `<?php $result = print "output"; ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestCloneExpression tests the compilation of clone expressions
+func TestCloneExpression(t *testing.T) {
+	tests := []struct {
+		name        string
+		phpCode     string
+		expectError bool
+	}{
+		{
+			name:        "Clone non-object should fail",
+			phpCode:     `<?php $obj = "dummy"; $cloned = clone $obj; ?>`,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			if tt.expectError {
+				require.Error(t, err, "Expected execution to fail for test: %s", tt.name)
+				require.Contains(t, err.Error(), "__clone method called on non-object", "Expected specific error message")
+			} else {
+				require.NoError(t, err, "Execution failed for test: %s", tt.name)
+			}
+		})
+	}
+}
+
+// TestInstanceofExpression tests the compilation of instanceof expressions
+func TestInstanceofExpression(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Object instanceof class",
+			phpCode: `<?php $obj = new stdClass(); $result = $obj instanceof stdClass; ?>`,
+		},
+		{
+			name:    "String not instanceof class",
+			phpCode: `<?php $result = "test" instanceof stdClass; ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestCastExpression tests the compilation of cast expressions
+func TestCastExpression(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Cast string to int",
+			phpCode: `<?php $result = (int)"123"; ?>`,
+		},
+		{
+			name:    "Cast int to string",
+			phpCode: `<?php $result = (string)456; ?>`,
+		},
+		{
+			name:    "Cast to bool",
+			phpCode: `<?php $result = (bool)0; ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestEmptyExpression tests the compilation of empty expressions
+func TestEmptyExpression(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Empty string is empty",
+			phpCode: `<?php $result = empty(""); ?>`,
+		},
+		{
+			name:    "Non-empty string is not empty",
+			phpCode: `<?php $result = empty("test"); ?>`,
+		},
+		{
+			name:    "Zero is empty",
+			phpCode: `<?php $result = empty(0); ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestIssetExpression tests the compilation of isset expressions
+func TestIssetExpression(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Isset on defined variable",
+			phpCode: `<?php $var = "test"; $result = isset($var); ?>`,
+		},
+		{
+			name:    "Isset on undefined variable",
+			phpCode: `<?php $result = isset($undefined); ?>`,
+		},
+		{
+			name:    "Isset with multiple variables",
+			phpCode: `<?php $a = 1; $b = 2; $result = isset($a, $b); ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestGlobalStatement tests the compilation of global statements
+func TestGlobalStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Global variable declaration",
+			phpCode: `<?php function test() { global $x; } ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestDoWhileStatement tests the compilation of do-while statements
+func TestDoWhileStatement(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Simple do-while loop",
+			phpCode: `<?php $i = 0; do { $i++; } while($i < 3); ?>`,
+		},
+		{
+			name:    "Do-while executes at least once",
+			phpCode: `<?php $i = 10; do { $i++; } while($i < 5); ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestMagicConstantExpression tests the compilation of magic constant expressions
+func TestMagicConstantExpression(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Magic constant __LINE__",
+			phpCode: `<?php $line = __LINE__; ?>`,
+		},
+		{
+			name:    "Magic constant __FILE__",
+			phpCode: `<?php $file = __FILE__; ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// TestCommaExpression tests the compilation of comma expressions
+func TestCommaExpression(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name:    "Comma expression returns last value",
+			phpCode: `<?php $result = (1, 2, 3); ?>`,
+		},
+		{
+			name:    "Comma with side effects",
+			phpCode: `<?php $a = 1; $b = ($a++, $a * 2); ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+		})
+	}
+}
+
+// Test for error cases - features not yet implemented
+func TestNotYetImplementedFeatures(t *testing.T) {
+	tests := []struct {
+		name         string
+		phpCode      string
+		errorMessage string
+	}{
+		{
+			name:         "Shell execution",
+			phpCode:      "<?php `ls`; ?>",
+			errorMessage: "shell execution expressions not yet implemented",
+		},
+		{
+			name:         "First class callable",
+			phpCode:      `<?php $fn = strlen(...); ?>`,
+			errorMessage: "first-class callables not yet implemented",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			if err == nil {
+				t.Errorf("Expected compilation to fail with not implemented error for test: %s", tt.name)
+			} else if !strings.Contains(err.Error(), tt.errorMessage) {
+				t.Errorf("Expected error to contain %q, got %q for test: %s", tt.errorMessage, err.Error(), tt.name)
+			}
+		})
+	}
+}
+
+// Benchmark tests for new implementations
+func BenchmarkPrintExpression(b *testing.B) {
+	phpCode := `<?php print "test"; ?>`
+
+	// Parse once
+	p := parser.New(lexer.New(phpCode))
+	prog := p.ParseProgram()
+
+	if prog == nil {
+		b.Fatalf("Failed to parse program")
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		compiler := NewCompiler()
+		err := compiler.Compile(prog)
+		if err != nil {
+			b.Fatalf("Compilation failed: %v", err)
+		}
+	}
+}
+
+func BenchmarkCastExpression(b *testing.B) {
+	phpCode := `<?php (int)"123"; ?>`
+
+	p := parser.New(lexer.New(phpCode))
+	prog := p.ParseProgram()
+
+	if prog == nil {
+		b.Fatalf("Failed to parse program")
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		compiler := NewCompiler()
+		err := compiler.Compile(prog)
+		if err != nil {
+			b.Fatalf("Compilation failed: %v", err)
+		}
+	}
+}
+
+// Integration test - complex expressions using multiple new features
+func TestComplexExpressionIntegration(t *testing.T) {
+	phpCode := `<?php 
+		$x = print "hello"; 
+		$result = "test" instanceof stdClass;
+		$cast = (string)$result;
+	?>`
+
+	p := parser.New(lexer.New(phpCode))
+	prog := p.ParseProgram()
+	require.NotNil(t, prog, "Failed to parse complex integration program")
+
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Compilation failed for complex integration test")
+
+	err = executeWithRuntime(t, comp)
+	require.NoError(t, err, "Execution failed for complex integration test")
+}
+
+// Test basic go() function functionality
+func TestGoFunction(t *testing.T) {
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Test go() function exists
+	functions := runtime.GlobalRegistry.GetAllFunctions()
+	assert.Contains(t, functions, "go", "go() function should be registered")
+
+	// Test go() function call
+	goFunc := functions["go"]
+	assert.NotNil(t, goFunc, "go() function should not be nil")
+	assert.Equal(t, "go", goFunc.Name)
+	assert.Equal(t, 1, goFunc.MinArgs)
+	assert.Equal(t, -1, goFunc.MaxArgs) // Variadic function
+	assert.True(t, goFunc.IsVariadic, "go() should be variadic")
+}
+
+// Test WaitGroup class functionality
+func TestWaitGroupClass(t *testing.T) {
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Test WaitGroup class exists
+	classes := runtime.GlobalRegistry.GetAllClasses()
+	assert.Contains(t, classes, "waitgroup", "WaitGroup class should be registered")
+
+	waitGroupClass := classes["waitgroup"]
+	assert.NotNil(t, waitGroupClass, "WaitGroup class should not be nil")
+	assert.Equal(t, "WaitGroup", waitGroupClass.Name)
+
+	// Check methods exist
+	assert.Contains(t, waitGroupClass.Methods, "__construct")
+	assert.Contains(t, waitGroupClass.Methods, "Add")
+	assert.Contains(t, waitGroupClass.Methods, "Done")
+	assert.Contains(t, waitGroupClass.Methods, "Wait")
+}
+
+// Test WaitGroup value operations
+func TestWaitGroupValue(t *testing.T) {
+	wg := values.NewWaitGroup()
+
+	// Test type checking
+	assert.True(t, wg.IsWaitGroup())
+	assert.False(t, wg.IsNull())
+	assert.Equal(t, "WaitGroup", wg.ToString())
+	assert.Equal(t, "waitgroup", wg.TypeName())
+
+	// Test Add operation
+	err := wg.WaitGroupAdd(2)
+	assert.NoError(t, err)
+
+	// Test Done operation
+	err = wg.WaitGroupDone()
+	assert.NoError(t, err)
+
+	// Test another Done operation
+	err = wg.WaitGroupDone()
+	assert.NoError(t, err)
+
+	// Test Wait operation (should not block since counter is 0)
+	done := make(chan bool, 1)
+	go func() {
+		err := wg.WaitGroupWait()
+		assert.NoError(t, err)
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// Wait completed as expected
+	case <-time.After(100 * time.Millisecond):
+		t.Error("WaitGroup.Wait() should have completed immediately")
+	}
+}
+
+// Test WaitGroup error conditions
+func TestWaitGroupErrors(t *testing.T) {
+	wg := values.NewWaitGroup()
+
+	// Test negative counter
+	err := wg.WaitGroupAdd(-1)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "negative")
+
+	// Test Done on zero counter
+	err = wg.WaitGroupDone()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "negative")
+}
+
+// Test Goroutine value operations
+func TestGoroutineValue(t *testing.T) {
+	closure := values.NewClosure(nil, nil, "test")
+	gor := values.NewGoroutine(closure.Data.(*values.Closure), nil)
+
+	// Test type checking
+	assert.True(t, gor.IsGoroutine())
+	assert.False(t, gor.IsNull())
+	assert.Contains(t, gor.ToString(), "Goroutine")
+	assert.Equal(t, "goroutine", gor.TypeName())
+
+	// Test goroutine data
+	gorData := gor.Data.(*values.Goroutine)
+	assert.NotZero(t, gorData.ID)
+	assert.Equal(t, "running", gorData.Status)
+	assert.NotNil(t, gorData.Done)
+}
+
+// Test go() function with variable arguments
+func TestGoFunctionVariadic(t *testing.T) {
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Create a closure and test variables
+	closure := values.NewClosure(nil, nil, "test_closure")
+	var1 := values.NewString("test_value")
+	var2 := values.NewInt(42)
+
+	// Test go() function handler directly with multiple arguments
+	functions := runtime.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	// Create a mock execution context
+	ctx := &mockExecutionContext{}
+
+	// Test with just closure
+	args1 := []*values.Value{closure}
+	result1, err := goFunc.Handler(ctx, args1)
+	assert.NoError(t, err)
+	assert.True(t, result1.IsGoroutine())
+
+	// Test with closure and variables
+	args2 := []*values.Value{closure, var1, var2}
+	result2, err := goFunc.Handler(ctx, args2)
+	assert.NoError(t, err)
+	assert.True(t, result2.IsGoroutine())
+
+	// Check that variables were captured
+	gor := result2.Data.(*values.Goroutine)
+	assert.Equal(t, 2, len(gor.UseVars))
+	assert.Equal(t, "test_value", gor.UseVars["var_0"].ToString())
+	assert.Equal(t, int64(42), gor.UseVars["var_1"].ToInt())
+}
+
+// Mock execution context for testing
+type mockExecutionContext struct{}
+
+func (m *mockExecutionContext) WriteOutput(output string)    {}
+func (m *mockExecutionContext) HasFunction(name string) bool { return false }
+
+// Test go() function integration with parsing
+func TestGoFunctionIntegration(t *testing.T) {
+	// PHP code that uses go() function with variables
+	phpCode := `<?php
+$closure = function() {
+    return "Hello from goroutine";
+};
+$var1 = "test";
+$var2 = 42;
+$g = go($closure, $var1, $var2);
+`
+
+	// Parse PHP code
+	l := lexer.New(phpCode)
+	p := parser.New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) > 0 {
+		t.Logf("Parser errors: %v", p.Errors())
+		return
+	}
+
+	// Initialize compiler
+	comp := NewCompiler()
+
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	err = runtime.InitializeVMIntegration()
+	require.NoError(t, err, "Failed to initialize VM integration")
+
+	// Compile the program
+	err = comp.Compile(program)
+	if err != nil {
+		t.Logf("Compilation failed (expected): %v", err)
+		// This might fail if the parser doesn't support function call syntax yet
+		// But the go() function itself should be registered
+		return
+	}
+
+	// Test execution would require full VM integration
+}
+
+// Test WaitGroup class integration with parsing
+func TestWaitGroupIntegration(t *testing.T) {
+	// PHP code that uses WaitGroup class
+	phpCode := `<?php
+$wg = new WaitGroup();
+$wg->Add(1);
+$wg->Done();
+$wg->Wait();
+`
+
+	// Parse PHP code
+	l := lexer.New(phpCode)
+	p := parser.New(l)
+	program := p.ParseProgram()
+	if len(p.Errors()) > 0 {
+		t.Logf("Parser errors: %v", p.Errors())
+		return
+	}
+
+	// Initialize compiler
+	comp := NewCompiler()
+
+	// Initialize runtime
+	err := runtime.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	err = runtime.InitializeVMIntegration()
+	require.NoError(t, err, "Failed to initialize VM integration")
+
+	// Compile the program
+	err = comp.Compile(program)
+	if err != nil {
+		t.Logf("Compilation failed (expected): %v", err)
+		// This might fail if class instantiation isn't fully supported
+		// But the WaitGroup class itself should be registered
+		return
+	}
+
+	// Test execution would require full VM integration
+}
+
+// Test concurrent WaitGroup usage
+func TestConcurrentWaitGroup(t *testing.T) {
+	wg := values.NewWaitGroup()
+
+	// Add work items
+	err := wg.WaitGroupAdd(3)
+	require.NoError(t, err)
+
+	// Start goroutines that will call Done
+	for i := 0; i < 3; i++ {
+		go func() {
+			time.Sleep(10 * time.Millisecond) // Simulate work
+			err := wg.WaitGroupDone()
+			assert.NoError(t, err)
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	done := make(chan bool, 1)
+	go func() {
+		err := wg.WaitGroupWait()
+		assert.NoError(t, err)
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// All goroutines completed
+	case <-time.After(1 * time.Second):
+		t.Error("WaitGroup.Wait() timed out")
+	}
+}
+
+// Benchmark WaitGroup operations
+func BenchmarkWaitGroupOperations(b *testing.B) {
+	b.Run("Add", func(b *testing.B) {
+		wg := values.NewWaitGroup()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			wg.WaitGroupAdd(1)
+			wg.WaitGroupDone()
+		}
+	})
+
+	b.Run("Concurrent", func(b *testing.B) {
+		b.RunParallel(func(pb *testing.PB) {
+			for pb.Next() {
+				wg := values.NewWaitGroup()
+				wg.WaitGroupAdd(1)
+				go func() {
+					wg.WaitGroupDone()
+				}()
+				wg.WaitGroupWait()
+			}
+		})
+	})
+}
+
+func TestFinalStaticImplementation(t *testing.T) {
+	code := `<?php
+// Test 1: Basic static counter
+function counter() {
+    static $count = 0;
+    $count++;
+    return $count;
+}
+
+echo "Counter test: ";
+echo counter() . " ";
+echo counter() . " ";
+echo counter() . "\n";
+
+// Test 2: Multiple static variables
+function multi_static() {
+    static $name = "PHP", $version = 8.4;
+    echo "Language: $name $version\n";
+}
+
+multi_static();
+multi_static();
+
+// Test 3: Static without default
+function uninitialized_static() {
+    static $unset;
+    if (is_null($unset)) {
+        $unset = "now_set";
+        echo "Was null, now set\n";
+    } else {
+        echo "Still set: $unset\n";
+    }
+}
+
+uninitialized_static();
+uninitialized_static();
+
+echo "All tests completed!\n";
+?>`
+
+	expected := `Counter test: 1 2 3
+Language: PHP 8.4
+Language: PHP 8.4
+Was null, now set
+Still set: now_set
+All tests completed!
+`
+
+	// Compile the AST
+	l := lexer.New(code)
+	p := parser.New(l)
+	program := p.ParseProgram()
+	require.NotNil(t, program)
+
+	comp := NewCompiler()
+	err := comp.Compile(program)
+	require.NoError(t, err, "Compilation failed")
+
+	// Capture output
+	buf := &bytes.Buffer{}
+	r, w, _ := os.Pipe()
+	oldStdout := os.Stdout
+	os.Stdout = w
+
+	// Execute with runtime
+	err = executeWithRuntime(t, comp)
+	require.NoError(t, err, "Execution failed")
+
+	// Restore stdout and get output
+	w.Close()
+	os.Stdout = oldStdout
+	buf.ReadFrom(r)
+
+	output := buf.String()
+	require.Equal(t, expected, output, "Output mismatch - static statements not working correctly")
+}
+
+// TestArrowFunctions tests arrow function compilation and execution
+func TestArrowFunctions(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple arrow function",
+			phpCode: `<?php
+$add = fn($a, $b) => $a + $b;
+echo $add(1, 2);
+?>`,
+		},
+		{
+			name: "Arrow function with single parameter",
+			phpCode: `<?php
+$double = fn($x) => $x * 2;
+echo $double(5);
+?>`,
+		},
+		{
+			name: "Arrow function with no parameters",
+			phpCode: `<?php
+$getValue = fn() => 42;
+echo $getValue();
+?>`,
+		},
+		{
+			name: "Arrow function with type hints",
+			phpCode: `<?php
+$calculate = fn(int $a, int $b): int => $a * $b + 1;
+echo $calculate(3, 4);
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// For now, just test that compilation succeeds
+			// TODO: Add execution testing when runtime supports closures better
+		})
+	}
+}
+
+// TestSpreadExpressions tests spread expression compilation
+func TestSpreadExpressions(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Spread in array literal",
+			phpCode: `<?php
+$arr1 = [1, 2];
+$arr2 = [...$arr1, 3, 4];
+print_r($arr2);
+?>`,
+		},
+		{
+			name: "Multiple spreads in array",
+			phpCode: `<?php
+$first = [1, 2];
+$second = [3, 4];
+$combined = [...$first, 5, ...$second, 6];
+print_r($combined);
+?>`,
+		},
+		{
+			name: "Spread with empty array",
+			phpCode: `<?php
+$empty = [];
+$result = [...$empty, 1, 2, 3];
+print_r($result);
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// For now, just test that compilation succeeds
+			// TODO: Add execution testing when VM supports spreads better
+		})
+	}
+}
+
+// TestModernPHPFeaturesCombined tests combining modern features
+func TestModernPHPFeaturesCombined(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Arrow function with spread",
+			phpCode: `<?php
+$numbers = [1, 2, 3];
+$process = fn($arr) => [...$arr, 4, 5];
+$result = $process($numbers);
+print_r($result);
+?>`,
+		},
+		{
+			name: "Complex arrow function",
+			phpCode: `<?php
+$data = [10, 20, 30];
+$transform = fn($values) => array_sum([...$values, 40]);
+echo $transform($data);
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Test that compilation succeeds for combined features
+		})
+	}
+}
+
+// TestNumberLiterals tests compilation and execution of various number literal formats
+func TestNumberLiterals(t *testing.T) {
+	tests := []struct {
+		name     string
+		phpCode  string
+		expected string
+	}{
+		{
+			name:     "Binary literals",
+			phpCode:  `<?php echo 0b1111 . "\n"; echo 0B1010 . "\n"; echo 0b0 . "\n"; ?>`,
+			expected: "15\n10\n0\n",
+		},
+		{
+			name:     "Hexadecimal literals",
+			phpCode:  `<?php echo 0x1F . "\n"; echo 0X1f . "\n"; echo 0xff . "\n"; ?>`,
+			expected: "31\n31\n255\n",
+		},
+		{
+			name:     "Octal literals",
+			phpCode:  `<?php echo 0123 . "\n"; echo 0o123 . "\n"; echo 0O777 . "\n"; ?>`,
+			expected: "83\n83\n511\n",
+		},
+		{
+			name:     "Decimal integers",
+			phpCode:  `<?php echo 123 . "\n"; echo 0 . "\n"; echo 999 . "\n"; ?>`,
+			expected: "123\n0\n999\n",
+		},
+		{
+			name:     "Numbers with underscores",
+			phpCode:  `<?php echo 1_000_000 . "\n"; echo 0xFF_AA . "\n"; echo 0b1010_1010 . "\n"; ?>`,
+			expected: "1000000\n65450\n170\n",
+		},
+		{
+			name:     "Float literals",
+			phpCode:  `<?php echo 1.23 . "\n"; echo 3.14159 . "\n"; echo 1.0 . "\n"; ?>`,
+			expected: "1.23\n3.14159\n1\n",
+		},
+		{
+			name:     "Scientific notation",
+			phpCode:  `<?php echo 1.23e4 . "\n"; echo 1.23E-4 . "\n"; echo 5e2 . "\n"; ?>`,
+			expected: "12300\n0.000123\n500\n",
+		},
+		{
+			name:     "Mixed number types in expressions",
+			phpCode:  `<?php echo (0b1111 + 0x10) . "\n"; echo (123 + 1.5) . "\n"; ?>`,
+			expected: "31\n124.5\n",
+		},
+		{
+			name:     "Integer boundary values",
+			phpCode:  `<?php echo 9223372036854775807 . "\n"; echo var_dump(9223372036854775807); ?>`,
+			expected: "9223372036854775807\nint(9223372036854775807)\n",
+		},
+		{
+			name:     "Integer overflow to float conversion",
+			phpCode:  `<?php echo 9223372036854775808 . "\n"; echo var_dump(9223372036854775808); ?>`,
+			expected: "9.223372036854776e+18\nfloat(9.223372036854776e+18)\n",
+		},
+		{
+			name:     "Large integer overflow cases",
+			phpCode:  `<?php echo 18446744073709551615 . "\n"; echo var_dump(18446744073709551615); ?>`,
+			expected: "1.8446744073709552e+19\nfloat(1.8446744073709552e+19)\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse the PHP code
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			// Compile the program
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Capture output for verification
+			var buf bytes.Buffer
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Execute with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+
+			// Restore stdout and get output
+			w.Close()
+			os.Stdout = oldStdout
+			buf.ReadFrom(r)
+
+			output := buf.String()
+			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
+		})
+	}
+}
+
+// TestInterfaceDeclaration tests the compilation of interface declarations
+func TestInterfaceDeclaration(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple interface declaration",
+			phpCode: `<?php
+interface Drawable {
+    public function draw();
+}
+?>`,
+		},
+		{
+			name: "Interface with multiple methods",
+			phpCode: `<?php
+interface Shape {
+    public function area();
+    public function perimeter();
+}
+?>`,
+		},
+		{
+			name: "Interface with extends",
+			phpCode: `<?php
+interface ColoredShape extends Drawable {
+    public function setColor($color);
+}
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Verify interface was stored
+			require.Greater(t, len(comp.interfaces), 0, "No interfaces were compiled")
+		})
+	}
+}
+
+// TestTraitDeclaration tests the compilation of trait declarations
+func TestTraitDeclaration(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple trait declaration",
+			phpCode: `<?php
+trait Loggable {
+    public function log($message) {
+        echo "LOG: " . $message . "\n";
+    }
+}
+?>`,
+		},
+		{
+			name: "Trait with property",
+			phpCode: `<?php
+trait Timestampable {
+    private $timestamp;
+    
+    public function setTimestamp($time) {
+        $this->timestamp = $time;
+    }
+}
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Verify trait was stored
+			require.Greater(t, len(comp.traits), 0, "No traits were compiled")
+		})
+	}
+}
+
+// TestTraitUsage tests the compilation of trait usage in classes
+func TestTraitUsage(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Class using trait",
+			phpCode: `<?php
+trait Loggable {
+    public function log($message) {
+        echo "LOG: " . $message;
+    }
+}
+
+class User {
+    use Loggable;
+    
+    public function getName() {
+        return "user";
+    }
+}
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Verify both trait and class were compiled
+			require.Greater(t, len(comp.traits), 0, "No traits were compiled")
+			require.Greater(t, len(comp.classes), 0, "No classes were compiled")
+		})
+	}
+}
+
+// TestInterfaceImplementation tests classes implementing interfaces
+func TestInterfaceImplementation(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Class implementing interface",
+			phpCode: `<?php
+interface Drawable {
+    public function draw();
+}
+
+class Circle implements Drawable {
+    public function draw() {
+        echo "Drawing circle";
+    }
+}
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Verify both interface and class were compiled
+			require.Greater(t, len(comp.interfaces), 0, "No interfaces were compiled")
+			require.Greater(t, len(comp.classes), 0, "No classes were compiled")
+		})
+	}
+}
+
+// TestEnumDeclaration tests the compilation of enum declarations
+func TestEnumDeclaration(t *testing.T) {
+	tests := []struct {
+		name    string
+		phpCode string
+	}{
+		{
+			name: "Simple enum declaration",
+			phpCode: `<?php
+enum Status {
+    case PENDING;
+    case APPROVED;
+    case REJECTED;
+}
+?>`,
+		},
+		{
+			name: "Backed enum with string values",
+			phpCode: `<?php
+enum Color: string {
+    case RED = 'red';
+    case GREEN = 'green';
+    case BLUE = 'blue';
+}
+?>`,
+		},
+		{
+			name: "Enum with method",
+			phpCode: `<?php
+enum Size {
+    case SMALL;
+    case MEDIUM;
+    case LARGE;
+    
+    public function getLabel() {
+        return match($this) {
+            Size::SMALL => 'Small',
+            Size::MEDIUM => 'Medium', 
+            Size::LARGE => 'Large',
+        };
+    }
+}
+?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tt.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Verify enum was compiled as class
+			require.Greater(t, len(comp.classes), 0, "No enums were compiled")
+		})
+	}
+}
+
+func TestStaticStatements(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "basic static variable",
+			code: `<?php
+function test() {
+    static $count = 0;
+    $count++;
+    echo $count;
+}
+test();
+test();
+test();
+?>`,
+			expected: "123",
+		},
+		{
+			name: "static variable with string default",
+			code: `<?php
+function test() {
+    static $name = "hello";
+    echo $name;
+}
+test();
+?>`,
+			expected: "hello",
+		},
+		{
+			name: "multiple static variables",
+			code: `<?php
+function test() {
+    static $count = 0, $name = "test";
+    $count++;
+    echo $count . ":" . $name . "\n";
+}
+test();
+test();
+?>`,
+			expected: "1:test\n2:test\n",
+		},
+		{
+			name: "static variable without default value",
+			code: `<?php
+function test() {
+    static $uninit;
+    if (is_null($uninit)) {
+        echo "null\n";
+        $uninit = "initialized";
+    } else {
+        echo $uninit . "\n";
+    }
+}
+test();
+test();
+?>`,
+			expected: "null\ninitialized\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// First test with native PHP to verify expected behavior
+			phpOutput := runPHPHelper(t, tt.code)
+			require.Equal(t, tt.expected, phpOutput, "Native PHP output doesn't match expected for test: %s", tt.name)
+
+			// Test with our compiler
+			l := lexer.New(tt.code)
+			p := parser.New(l)
+			program := p.ParseProgram()
+			require.NotNil(t, program)
+
+			// Compile the AST
+			comp := NewCompiler()
+			err := comp.Compile(program)
+			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
+
+			// Capture output
+			buf := &bytes.Buffer{}
+			r, w, _ := os.Pipe()
+			oldStdout := os.Stdout
+			os.Stdout = w
+
+			// Execute with runtime
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+
+			// Restore stdout and get output
+			w.Close()
+			os.Stdout = oldStdout
+			buf.ReadFrom(r)
+
+			output := buf.String()
+			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
+		})
+	}
+}
+
+// runPHPHelper executes PHP code using the native PHP interpreter for comparison
+func runPHPHelper(t *testing.T, code string) string {
+	tmpfile, err := os.CreateTemp("", "test*.php")
+	require.NoError(t, err)
+	defer os.Remove(tmpfile.Name())
+
+	_, err = tmpfile.WriteString(code)
+	require.NoError(t, err)
+	tmpfile.Close()
+
+	cmd := exec.Command("/usr/bin/php", tmpfile.Name())
+	output, err := cmd.Output()
+	require.NoError(t, err, "Failed to run native PHP")
+
+	return string(output)
+}
+
+func TestUnsetStatement(t *testing.T) {
+	// Initialize runtime for tests
+	err := runtime.Bootstrap()
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		{
+			name: "Simple variable unset",
+			code: `<?php
+				$a = 42;
+				echo "Before: " . (isset($a) ? "set" : "unset") . "\n";
+				unset($a);
+				echo "After: " . (isset($a) ? "set" : "unset") . "\n";
+			`,
+			expectedOutput: "Before: set\nAfter: unset\n",
+		},
+		{
+			name: "Array element unset",
+			code: `<?php
+				$arr = [1, 2, 3];
+				echo "Before: " . (isset($arr[1]) ? "set" : "unset") . "\n";
+				unset($arr[1]);
+				echo "After: " . (isset($arr[1]) ? "set" : "unset") . "\n";
+			`,
+			expectedOutput: "Before: set\nAfter: unset\n",
+		},
+		{
+			name: "Multiple variable unset",
+			code: `<?php
+				$a = 1;
+				$b = 2;
+				echo "Before a: " . (isset($a) ? "set" : "unset") . ", b: " . (isset($b) ? "set" : "unset") . "\n";
+				unset($a, $b);
+				echo "After a: " . (isset($a) ? "set" : "unset") . ", b: " . (isset($b) ? "set" : "unset") . "\n";
+			`,
+			expectedOutput: "Before a: set, b: set\nAfter a: unset, b: unset\n",
+		},
+		{
+			name: "Unset nonexistent variable (no error)",
+			code: `<?php
+				unset($nonexistent);
+				echo "Done\n";
+			`,
+			expectedOutput: "Done\n",
+		},
+		{
+			name: "Array append after unset",
+			code: `<?php
+				$arr = [1, 2, 3];
+				unset($arr[1]);
+				$arr[] = 4;
+				echo count($arr) . "\n";
+			`,
+			expectedOutput: "3\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tt.code)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedOutput, output, "Output mismatch for test case: %s", tt.name)
+		})
+	}
+}
+
+func TestUnsetStatementErrors(t *testing.T) {
+	// Initialize runtime for tests
+	err := runtime.Bootstrap()
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		code        string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "Cannot unset $this",
+			code: `<?php
+				class Test {
+					public function test() {
+						unset($this);
+					}
+				}
+			`,
+			expectError: true,
+			errorMsg:    "cannot unset $this",
+		},
+		{
+			name: "Cannot use [] for unsetting",
+			code: `<?php
+				$arr = [1, 2, 3];
+				unset($arr[]);
+			`,
+			expectError: true,
+			errorMsg:    "cannot use [] for unsetting",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := parseAndCompileOnly(t, tt.code)
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorMsg != "" {
+					assert.Contains(t, err.Error(), tt.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestUnsetComplexExpressions(t *testing.T) {
+	// Initialize runtime for tests
+	err := runtime.Bootstrap()
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+		skip           bool
+		skipReason     string
+	}{
+		{
+			name: "Nested array unset",
+			code: `<?php
+				$arr = [[1, 2], [3, 4]];
+				echo "Before: " . (isset($arr[0][1]) ? "set" : "unset") . "\n";
+				unset($arr[0][1]);  
+				echo "After: " . (isset($arr[0][1]) ? "set" : "unset") . "\n";
+			`,
+			expectedOutput: "Before: set\nAfter: unset\n",
+		},
+		{
+			name: "Dynamic array key unset",
+			code: `<?php
+				$arr = ["a" => 1, "b" => 2, "c" => 3];
+				$key = "b";
+				echo "Before: " . (isset($arr[$key]) ? "set" : "unset") . "\n";
+				unset($arr[$key]);
+				echo "After: " . (isset($arr[$key]) ? "set" : "unset") . "\n";
+			`,
+			expectedOutput: "Before: set\nAfter: unset\n",
+		},
+		{
+			name: "Object property unset",
+			code: `<?php
+				$obj = new stdClass();
+				$obj->prop = "value";
+				echo "Before: " . (isset($obj->prop) ? "set" : "unset") . "\n"; 
+				unset($obj->prop);
+				echo "After: " . (isset($obj->prop) ? "set" : "unset") . "\n";
+			`,
+			expectedOutput: "Before: set\nAfter: unset\n",
+			skip:           true,
+			skipReason:     "Object property support requires full object system",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.skip {
+				t.Skip(tt.skipReason)
+				return
+			}
+
+			output, err := compileAndExecute(t, tt.code)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedOutput, output, "Output mismatch for test case: %s", tt.name)
+		})
+	}
+}
+
+func TestUnsetWithVariableVariable(t *testing.T) {
+	// Initialize runtime for tests
+	err := runtime.Bootstrap()
+	assert.NoError(t, err)
+
+	// Skip for now as variable variables in unset require more complex handling
+	t.Skip("Variable variables in unset context need additional implementation")
+
+	code := `<?php
+		$var = "test";
+		$test = "value";
+		echo "Before: " . (isset($$var) ? "set" : "unset") . "\n";
+		unset($$var);
+		echo "After: " . (isset($$var) ? "set" : "unset") . "\n";
+	`
+	expectedOutput := "Before: set\nAfter: unset\n"
+
+	output, err := compileAndExecute(t, code)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedOutput, output)
+}
+
+// Helper function to test unset compilation without execution
+func TestUnsetCompilationOnly(t *testing.T) {
+	tests := []struct {
+		name        string
+		code        string
+		expectError bool
+	}{
+		{
+			name: "Simple unset compiles successfully",
+			code: `<?php unset($a); ?>`,
+		},
+		{
+			name: "Array unset compiles successfully",
+			code: `<?php unset($arr[0]); ?>`,
+		},
+		{
+			name: "Multiple unset compiles successfully",
+			code: `<?php unset($a, $b, $c); ?>`,
+		},
+		{
+			name: "Object property unset compiles successfully",
+			code: `<?php unset($obj->prop); ?>`,
+		},
+		{
+			name: "Static property unset compiles successfully",
+			code: `<?php unset(MyClass::$prop); ?>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp, err := parseAndCompileOnly(t, tt.code)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, comp)
+
+				// Check that we have some instructions generated
+				assert.Greater(t, len(comp.GetBytecode()), 0, "Should generate at least one instruction")
+
+				// Look for unset-related opcodes
+				hasUnsetOpcode := false
+				for _, inst := range comp.GetBytecode() {
+					if strings.Contains(inst.Opcode.String(), "UNSET") {
+						hasUnsetOpcode = true
+						break
+					}
+				}
+				assert.True(t, hasUnsetOpcode, "Should contain unset-related opcode")
+			}
+		})
+	}
+}
+
+// Helper function to compile and execute PHP code with output capture
+func compileAndExecute(t *testing.T, code string) (string, error) {
+	// Parse the code
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.NotNil(t, prog, "Failed to parse program")
+
+	// Compile the code
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+	require.NoError(t, err, "Failed to compile program")
+
+	// Execute with output capture
+	var buf bytes.Buffer
+	vmCtx := vm.NewExecutionContext()
+	vmCtx.SetOutputWriter(&buf)
+
+	// Initialize runtime if not already done
+	if runtime.GlobalRegistry == nil {
+		err := runtime.Bootstrap()
+		require.NoError(t, err, "Failed to bootstrap runtime")
+	}
+
+	// Initialize VM integration
+	if runtime.GlobalVMIntegration == nil {
+		err := runtime.InitializeVMIntegration()
+		require.NoError(t, err, "Failed to initialize VM integration")
+	}
+
+	// Execute
+	vmachine := vm.NewVirtualMachine()
+	err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+
+	return buf.String(), err
+}
+
+// Helper function to parse and compile PHP code without execution
+func parseAndCompileOnly(t *testing.T, code string) (*Compiler, error) {
+	// Parse the code
+	p := parser.New(lexer.New(code))
+	prog := p.ParseProgram()
+	require.NotNil(t, prog, "Failed to parse program")
+
+	// Compile the code
+	comp := NewCompiler()
+	err := comp.Compile(prog)
+
+	return comp, err
 }
