@@ -21,6 +21,9 @@ func main() {
 	app := &cli.Command{
 		Name:  "hey",
 		Usage: "A PHP interpreter written in Go",
+		Commands: []*cli.Command{
+			composerCommand,
+		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "code",
