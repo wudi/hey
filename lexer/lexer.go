@@ -309,13 +309,13 @@ func (l *Lexer) readNumber() (string, TokenType) {
 }
 
 // convertNumberString 将数字字符串转换为实际数值
-func (l *Lexer) convertNumberString(value string, tokenType TokenType) (int64, float64, error) {
+func (l *Lexer) convertNumberString(value string, tokenType TokenType) (TokenType, int64, float64, error) {
 	if tokenType == T_DNUMBER {
 		// 处理浮点数
 		// 移除下划线
 		cleaned := strings.ReplaceAll(value, "_", "")
 		floatVal, err := strconv.ParseFloat(cleaned, 64)
-		return 0, floatVal, err
+		return T_DNUMBER, 0, floatVal, err
 	}
 
 	// 处理整数
@@ -341,7 +341,21 @@ func (l *Lexer) convertNumberString(value string, tokenType TokenType) (int64, f
 		intVal, err = strconv.ParseInt(cleaned, 10, 64)
 	}
 
-	return intVal, 0, err
+	// PHP behavior: if integer parsing fails due to overflow, convert to float
+	if err != nil {
+		if numError, ok := err.(*strconv.NumError); ok && numError.Err == strconv.ErrRange {
+			// Integer overflow - convert to float like PHP does
+			floatVal, floatErr := strconv.ParseFloat(cleaned, 64)
+			if floatErr == nil {
+				// Signal that this should be treated as a float token
+				return T_DNUMBER, 0, floatVal, nil
+			}
+		}
+		// Return original error if not an overflow or float conversion also failed
+		return tokenType, intVal, 0, err
+	}
+
+	return tokenType, intVal, 0, err
 }
 
 // readString 读取字符串
@@ -770,12 +784,12 @@ func (l *Lexer) nextTokenInScripting() Token {
 		} else if isDigit(l.peekChar()) {
 			// 浮点数
 			number, tokenType := l.readNumber()
-			intVal, floatVal, err := l.convertNumberString(number, tokenType)
+			finalTokenType, intVal, floatVal, err := l.convertNumberString(number, tokenType)
 			if err != nil {
 				// 如果转换失败，添加错误但继续返回token
 				l.errors = append(l.errors, fmt.Sprintf("failed to convert number %s: %v", number, err))
 			}
-			return Token{Type: tokenType, Value: number, IntValue: intVal, FloatValue: floatVal, Position: pos}
+			return Token{Type: finalTokenType, Value: number, IntValue: intVal, FloatValue: floatVal, Position: pos}
 		}
 		l.readChar()
 		return Token{Type: TOKEN_DOT, Value: ".", Position: pos}
@@ -959,12 +973,12 @@ func (l *Lexer) nextTokenInScripting() Token {
 		} else if isDigit(l.ch) {
 			// 数字
 			number, tokenType := l.readNumber()
-			intVal, floatVal, err := l.convertNumberString(number, tokenType)
+			finalTokenType, intVal, floatVal, err := l.convertNumberString(number, tokenType)
 			if err != nil {
 				// 如果转换失败，添加错误但继续返回token
 				l.errors = append(l.errors, fmt.Sprintf("failed to convert number %s: %v", number, err))
 			}
-			return Token{Type: tokenType, Value: number, IntValue: intVal, FloatValue: floatVal, Position: pos}
+			return Token{Type: finalTokenType, Value: number, IntValue: intVal, FloatValue: floatVal, Position: pos}
 		} else {
 			// 未知字符
 			ch := l.ch
@@ -1638,12 +1652,12 @@ func (l *Lexer) nextTokenInVarOffset() Token {
 		// 数字或其他标识符
 		if isDigit(l.ch) {
 			number, tokenType := l.readNumber()
-			intVal, floatVal, err := l.convertNumberString(number, tokenType)
+			finalTokenType, intVal, floatVal, err := l.convertNumberString(number, tokenType)
 			if err != nil {
 				// 如果转换失败，添加错误但继续返回token
 				l.errors = append(l.errors, fmt.Sprintf("failed to convert number %s: %v", number, err))
 			}
-			return Token{Type: tokenType, Value: number, IntValue: intVal, FloatValue: floatVal, Position: pos}
+			return Token{Type: finalTokenType, Value: number, IntValue: intVal, FloatValue: floatVal, Position: pos}
 		} else if isLabelStart(l.ch) {
 			identifier := l.readIdentifier()
 			return Token{Type: T_STRING, Value: identifier, Position: pos}

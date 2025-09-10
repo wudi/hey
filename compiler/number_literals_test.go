@@ -57,6 +57,21 @@ func TestNumberLiterals(t *testing.T) {
 			phpCode:  `<?php echo (0b1111 + 0x10) . "\n"; echo (123 + 1.5) . "\n"; ?>`,
 			expected: "31\n124.5\n",
 		},
+		{
+			name:     "Integer boundary values",
+			phpCode:  `<?php echo 9223372036854775807 . "\n"; echo var_dump(9223372036854775807); ?>`,
+			expected: "9223372036854775807\nint(9223372036854775807)\n",
+		},
+		{
+			name:     "Integer overflow to float conversion",
+			phpCode:  `<?php echo 9223372036854775808 . "\n"; echo var_dump(9223372036854775808); ?>`,
+			expected: "9.223372036854776e+18\nfloat(9.223372036854776e+18)\n",
+		},
+		{
+			name:     "Large integer overflow cases",
+			phpCode:  `<?php echo 18446744073709551615 . "\n"; echo var_dump(18446744073709551615); ?>`,
+			expected: "1.8446744073709552e+19\nfloat(1.8446744073709552e+19)\n",
+		},
 	}
 
 	for _, tt := range tests {
