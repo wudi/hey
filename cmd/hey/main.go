@@ -1,10 +1,12 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
+	"io"
 	"os"
 
+	"github.com/urfave/cli/v3"
 	"github.com/wudi/php-parser/ast"
 	"github.com/wudi/php-parser/compiler"
 	"github.com/wudi/php-parser/compiler/runtime"
@@ -12,26 +14,83 @@ import (
 	"github.com/wudi/php-parser/compiler/vm"
 	"github.com/wudi/php-parser/lexer"
 	"github.com/wudi/php-parser/parser"
+	"github.com/wudi/php-parser/version"
 )
 
-var input string
-
 func main() {
-	flag.StringVar(&input, "i", "", "Input file")
-	flag.Parse()
+	app := &cli.Command{
+		Name:  "hey",
+		Usage: "A PHP interpreter written in Go",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "code",
+				Aliases: []string{"r"},
+				Usage:   "Run PHP <code> without using script tags <?..?>",
+				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
+					return parseAndExecuteCode(s, true)
+				},
+			},
+			&cli.StringFlag{
+				Name:        "version",
+				Aliases:     []string{"v"},
+				Usage:       "Show version",
+				Destination: nil,
+				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
+					fmt.Printf("Hey %s (built: %s)\n", version.VERSION, version.BUILT)
+					return nil
+				},
+			},
+			&cli.StringFlag{
+				Name:    "file",
+				Aliases: []string{"f"},
+				Usage:   "Parse and execute <file>.",
+				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
+					return parseAndExecuteFile(s)
+				},
+			},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			// if flowed file input is provided, use it
+			if len(os.Args) > 1 {
+				return parseAndExecuteFile(os.Args[1])
+			}
 
-	if input == "" {
-		fmt.Println("Input file is required")
-		os.Exit(1)
+			// read from stdin if no file or code is provided
+			code, err := io.ReadAll(os.Stdin)
+			if err != nil {
+				return err
+			}
+
+			fmt.Println(string(code))
+
+			return parseAndExecuteCode(string(code), false)
+		},
 	}
 
-	code, err := os.ReadFile(input)
+	err := app.Run(context.Background(), os.Args)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
 
-	p := parser.New(lexer.New(string(code)))
+func parseAndExecuteFile(filename string) error {
+	code, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	return parseAndExecuteCode(string(code), false)
+}
+
+func parseAndExecuteCode(code string, inScript bool) error {
+	var l *lexer.Lexer
+	if inScript {
+		l = lexer.NewInScripting(code)
+	} else {
+		l = lexer.New(code)
+	}
+
+	p := parser.New(l)
 	prog := p.ParseProgram()
 	if len(p.Errors()) != 0 {
 		for _, msg := range p.Errors() {
@@ -41,20 +100,19 @@ func main() {
 	}
 
 	comp := compiler.NewCompiler()
-	err = comp.Compile(prog)
-	if err != nil {
+	if err := comp.Compile(prog); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
 	// Initialize runtime if not already done
-	if err = runtime.Bootstrap(); err != nil {
+	if err := runtime.Bootstrap(); err != nil {
 		fmt.Println("Failed to bootstrap runtime:", err)
 		os.Exit(1)
 	}
 
 	// Initialize VM integration
-	if err = runtime.InitializeVMIntegration(); err != nil {
+	if err := runtime.InitializeVMIntegration(); err != nil {
 		fmt.Println("Failed to initialize VM integration:", err)
 		os.Exit(1)
 	}
@@ -124,9 +182,5 @@ func main() {
 	}
 
 	// Execute the program
-	err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
+	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
 }
