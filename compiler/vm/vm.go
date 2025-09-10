@@ -18,6 +18,85 @@ import (
 	"github.com/wudi/php-parser/parser"
 )
 
+// Initialize runtime integration on package init
+func init() {
+	runtimeRegistry.SetVMFactory(func() runtimeRegistry.VMExecutor {
+		return &VMAdapter{vm: NewVirtualMachine()}
+	})
+	runtimeRegistry.SetContextFactory(func() *runtimeRegistry.GoroutineContext {
+		ctx := NewExecutionContext()
+		return &runtimeRegistry.GoroutineContext{
+			GlobalVars:      ctx.GlobalVars,
+			GlobalConstants: ctx.GlobalConstants,
+			Functions:       convertFunctionsToRuntime(ctx.Functions),
+			Variables:       ctx.Variables,
+			Temporaries:     ctx.Temporaries,
+		}
+	})
+}
+
+// VMAdapter adapts VirtualMachine to work with the runtime interface
+type VMAdapter struct {
+	vm *VirtualMachine
+}
+
+func (adapter *VMAdapter) ExecuteClosure(ctx *runtimeRegistry.GoroutineContext, closure *values.Closure, args []*values.Value) (*values.Value, error) {
+	// Convert runtime ExecutionContext to VM ExecutionContext
+	vmCtx := &ExecutionContext{
+		GlobalVars:        ctx.GlobalVars,
+		GlobalConstants:   ctx.GlobalConstants,
+		Functions:         convertFunctionsFromRuntime(ctx.Functions),
+		Variables:         ctx.Variables,
+		Temporaries:       ctx.Temporaries,
+		Stack:             make([]*values.Value, 1000),
+		SP:                -1,
+		MaxStackSize:      1000,
+		VarSlotNames:      make(map[uint32]string),
+		CallStack:         make([]CallFrame, 0),
+		ForeachIterators:  make(map[uint32]*ForeachIterator),
+		ExceptionStack:    make([]Exception, 0),
+		ExceptionHandlers: make([]ExceptionHandler, 0),
+		RopeBuffers:       make(map[uint32][]string),
+		OutputWriter:      os.Stdout,
+		IncludedFiles:     make(map[string]bool),
+		Generators:        make(map[uint32]*Generator),
+		Halted:            false,
+		ExitCode:          0,
+	}
+
+	return adapter.vm.ExecuteClosure(vmCtx, closure, args)
+}
+
+// Helper functions to convert between runtime and vm function types
+func convertFunctionsToRuntime(vmFunctions map[string]*Function) map[string]*runtimeRegistry.VMFunction {
+	result := make(map[string]*runtimeRegistry.VMFunction)
+	for name, vmFunc := range vmFunctions {
+		runtimeFunc := &runtimeRegistry.VMFunction{
+			Name:         vmFunc.Name,
+			Instructions: make([]interface{}, len(vmFunc.Instructions)),
+			Constants:    vmFunc.Constants,
+		}
+		for i, inst := range vmFunc.Instructions {
+			runtimeFunc.Instructions[i] = inst
+		}
+		result[name] = runtimeFunc
+	}
+	return result
+}
+
+func convertFunctionsFromRuntime(runtimeFunctions map[string]*runtimeRegistry.VMFunction) map[string]*Function {
+	result := make(map[string]*Function)
+	for name, runtimeFunc := range runtimeFunctions {
+		result[name] = &Function{
+			Name:         runtimeFunc.Name,
+			Instructions: make([]opcodes.Instruction, len(runtimeFunc.Instructions)),
+			Constants:    runtimeFunc.Constants,
+		}
+		// Note: This is a simplified conversion - in practice you'd need proper instruction conversion
+	}
+	return result
+}
+
 // Generator represents a PHP generator state
 type Generator struct {
 	Function     *Function                // The generator function

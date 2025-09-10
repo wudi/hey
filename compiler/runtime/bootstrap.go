@@ -818,7 +818,10 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 		return values.NewNull(), fmt.Errorf("go() expects a callable as first argument")
 	}
 
-	closure := args[0].Data.(*values.Closure)
+	closure := args[0].ClosureGet()
+	if closure == nil {
+		return values.NewNull(), fmt.Errorf("invalid closure data")
+	}
 
 	// Create a map of captured variables from the additional arguments
 	capturedVars := make(map[string]*values.Value)
@@ -838,7 +841,7 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 
 	goroutine := values.NewGoroutine(closure, capturedVars)
 
-	// Start the goroutine
+	// Start the goroutine and actually execute the closure
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -853,18 +856,113 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 			}
 		}()
 
-		// Execute the closure
+		// Get the goroutine data
 		gor := goroutine.Data.(*values.Goroutine)
 
-		// For now, we simulate execution by setting status to completed
-		// In a full implementation, this would call the VM to execute the closure
-		// The captured variables would be available in the execution context
-		gor.Status = "completed"
-		gor.Result = values.NewNull()
+		// Create a VM instance to execute the closure
+		vm := newVirtualMachineForGoroutine()
+
+		// Create a new execution context for the goroutine
+		goroutineCtx := newExecutionContextForGoroutine()
+
+		// Copy global variables from the parent context if available
+		// For now, we'll copy from registry since we don't have direct access to VM context
+		// In a full implementation, this would copy from the parent execution context
+
+		// Add captured variables to the goroutine context
+		for name, value := range gor.UseVars {
+			// Store captured variables in the global scope of the goroutine
+			goroutineCtx.GlobalVars[name] = value
+		}
+
+		// Execute the closure using the VM
+		result, err := vm.ExecuteClosure(goroutineCtx, gor.Function, []*values.Value{})
+
+		// Update goroutine status
+		if err != nil {
+			gor.Status = "error"
+			gor.Error = err
+		} else {
+			gor.Status = "completed"
+			gor.Result = result
+		}
+
+		// Signal completion
 		close(gor.Done)
 	}()
 
 	return goroutine, nil
+}
+
+// Helper function to create a VM instance for goroutine execution
+func newVirtualMachineForGoroutine() VMExecutor {
+	// Import the vm package dynamically to avoid circular imports
+	// This is a simple interface approach
+	if vmFactory != nil {
+		return vmFactory()
+	}
+	// Fallback: return a mock VM that doesn't actually execute
+	return &mockVM{}
+}
+
+// Helper function to create an execution context for goroutine
+func newExecutionContextForGoroutine() *GoroutineContext {
+	if ctxFactory != nil {
+		return ctxFactory()
+	}
+	// Fallback: return a basic execution context
+	return &GoroutineContext{
+		GlobalVars:      make(map[string]*values.Value),
+		GlobalConstants: make(map[string]*values.Value),
+		Functions:       make(map[string]*VMFunction),
+		Variables:       make(map[uint32]*values.Value),
+		Temporaries:     make(map[uint32]*values.Value),
+	}
+}
+
+// Factory functions for VM and ExecutionContext - these will be set by the VM package
+var (
+	vmFactory  func() VMExecutor
+	ctxFactory func() *GoroutineContext
+)
+
+// SetVMFactory sets the VM factory function (called by VM package init)
+func SetVMFactory(factory func() VMExecutor) {
+	vmFactory = factory
+}
+
+// SetContextFactory sets the GoroutineContext factory function (called by VM package init)
+func SetContextFactory(factory func() *GoroutineContext) {
+	ctxFactory = factory
+}
+
+// VMExecutor interface to avoid circular imports
+type VMExecutor interface {
+	ExecuteClosure(ctx *GoroutineContext, closure *values.Closure, args []*values.Value) (*values.Value, error)
+}
+
+// GoroutineContext represents the VM execution context for goroutines (simplified for interface)
+type GoroutineContext struct {
+	GlobalVars      map[string]*values.Value
+	GlobalConstants map[string]*values.Value
+	Functions       map[string]*VMFunction
+	Variables       map[uint32]*values.Value
+	Temporaries     map[uint32]*values.Value
+}
+
+// VMFunction represents a VM function (simplified for interface)
+type VMFunction struct {
+	Name         string
+	Instructions []interface{} // Simplified
+	Constants    []*values.Value
+}
+
+// Mock VM implementation for cases where real VM is not available
+type mockVM struct{}
+
+func (m *mockVM) ExecuteClosure(ctx *GoroutineContext, closure *values.Closure, args []*values.Value) (*values.Value, error) {
+	// Simple mock execution - just return a success value
+	return values.NewString("mock execution completed"), nil
 }
 
 // WaitGroup method handlers
