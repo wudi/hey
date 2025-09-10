@@ -55,6 +55,22 @@ func New(input string) *Lexer {
 	return l
 }
 
+// NewInScripting 创建新的词法分析器，直接进入脚本模式
+func NewInScripting(input string) *Lexer {
+	l := &Lexer{
+		input:         input,
+		line:          1,
+		column:        0, // 从 0 开始计数
+		state:         ST_IN_SCRIPTING,
+		stateStack:    NewStateStack(),
+		heredocLabels: make([]string, 0),
+		errors:        make([]string, 0),
+	}
+
+	l.readChar() // 读取第一个字符
+	return l
+}
+
 // skipShebang 跳过文件开头的 shebang 行
 func (l *Lexer) skipShebang() {
 	// 检查是否以 #! 开头
