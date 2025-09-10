@@ -22,11 +22,17 @@ func main() {
 		Name:  "hey",
 		Usage: "A PHP interpreter written in Go",
 		Commands: []*cli.Command{
-			composerCommand,
+			initCommand,     // hey init
+			requireCommand,  // hey require
+			installCommand,  // hey install
+			updateCommand,   // hey update
+			validateCommand, // hey validate
+			fpmCommand,      // hey fpm
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "code",
+				Local:   true,
 				Aliases: []string{"r"},
 				Usage:   "Run PHP <code> without using script tags <?..?>",
 				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
@@ -35,20 +41,30 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:        "version",
+				Local:       true,
 				Aliases:     []string{"v"},
 				Usage:       "Show version",
 				Destination: nil,
 				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
-					fmt.Printf("Hey %s (built: %s)\n", version.VERSION, version.BUILT)
+					fmt.Println(version.Version())
 					return nil
 				},
 			},
 			&cli.StringFlag{
 				Name:    "file",
+				Local:   true,
 				Aliases: []string{"f"},
 				Usage:   "Parse and execute <file>.",
 				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
 					return parseAndExecuteFile(s)
+				},
+			},
+			&cli.StringFlag{
+				Name:  "S",
+				Local: true,
+				Usage: "<addr>:<port> Run with built-in web server.",
+				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
+					return runWebServer(s)
 				},
 			},
 		},
@@ -186,4 +202,10 @@ func parseAndExecuteCode(code string, inScript bool) error {
 
 	// Execute the program
 	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+}
+
+func runWebServer(addr string) error {
+	// Placeholder for built-in web server functionality
+	fmt.Printf("Starting built-in web server at %s (not yet implemented)\n", addr)
+	return nil
 }
