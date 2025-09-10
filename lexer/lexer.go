@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -343,7 +344,7 @@ func (l *Lexer) convertNumberString(value string, tokenType TokenType) (TokenTyp
 
 	// PHP behavior: if integer parsing fails due to overflow, convert to float
 	if err != nil {
-		if numError, ok := err.(*strconv.NumError); ok && numError.Err == strconv.ErrRange {
+		if errors.Is(err, strconv.ErrRange) {
 			// Integer overflow - convert to float like PHP does
 			floatVal, floatErr := strconv.ParseFloat(cleaned, 64)
 			if floatErr == nil {
