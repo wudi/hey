@@ -370,6 +370,16 @@ func registerBuiltinFunctions() error {
 			MinArgs:    1,
 			MaxArgs:    -1,
 		},
+		{
+			Name:    "sleep",
+			Handler: sleepHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "seconds", Type: "int"},
+			},
+			IsVariadic: false,
+			MinArgs:    1,
+			MaxArgs:    -1,
+		},
 	}
 
 	for _, desc := range functions {
@@ -758,8 +768,10 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 
 	goroutine := values.NewGoroutine(closure, capturedVars)
 
+	fmt.Sprintln("before go")
 	// Start the goroutine
 	go func() {
+		fmt.Println("inside go")
 		defer func() {
 			if r := recover(); r != nil {
 				gor := goroutine.Data.(*values.Goroutine)
@@ -781,8 +793,12 @@ func goHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error
 		// The captured variables would be available in the execution context
 		gor.Status = "completed"
 		gor.Result = values.NewNull()
+		fmt.Println("after go func")
 		close(gor.Done)
+		fmt.Println("end go func")
 	}()
+
+	fmt.Println("after go")
 
 	return goroutine, nil
 }
@@ -806,4 +822,18 @@ func waitGroupDoneHandler(ctx ExecutionContext, args []*values.Value) (*values.V
 func waitGroupWaitHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
 	// This should be called on a WaitGroup instance
 	return values.NewNull(), fmt.Errorf("WaitGroup.Wait() method handler not fully implemented")
+}
+
+func sleepHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	if len(args) != 1 {
+		return values.NewNull(), fmt.Errorf("sleep() expects exactly 1 parameter, %d given", len(args))
+	}
+
+	seconds := int(args[0].ToInt())
+	if seconds < 0 {
+		return values.NewNull(), fmt.Errorf("sleep() expects a non-negative integer")
+	}
+
+	time.Sleep(time.Duration(seconds) * time.Second)
+	return values.NewInt(0), nil
 }
