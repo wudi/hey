@@ -98,6 +98,10 @@ type ExecutionContext interface {
 	WriteOutput(output string)
 	// Check if a function exists (for introspection functions like function_exists)
 	HasFunction(name string) bool
+	// Check if a class exists (for introspection functions like class_exists)
+	HasClass(name string) bool
+	// Check if a method exists on a class (for introspection functions like method_exists)
+	HasMethod(className, methodName string) bool
 }
 
 // FunctionHandler is the type for runtime function handlers

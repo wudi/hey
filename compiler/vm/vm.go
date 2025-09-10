@@ -122,6 +122,48 @@ func (ctx *ExecutionContext) HasFunction(name string) bool {
 	return exists
 }
 
+// HasClass implements the ExecutionContext interface for runtime classes
+func (ctx *ExecutionContext) HasClass(name string) bool {
+	// Check runtime registered classes (built-in classes)
+	if runtimeRegistry.GlobalRegistry.HasClass(name) {
+		return true
+	}
+	// Check legacy registry for user-defined classes
+	if registry.GlobalRegistry.HasClass(name) {
+		return true
+	}
+	return false
+}
+
+// HasMethod implements the ExecutionContext interface for method introspection
+func (ctx *ExecutionContext) HasMethod(className, methodName string) bool {
+	// Check runtime registry first (built-in classes)
+	if classDesc, exists := runtimeRegistry.GlobalRegistry.GetClass(className); exists {
+		// Check for case-insensitive match
+		targetMethod := strings.ToLower(methodName)
+		for methodKey := range classDesc.Methods {
+			if strings.ToLower(methodKey) == targetMethod {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Check legacy registry for user-defined classes
+	if classDesc, err := registry.GlobalRegistry.GetClass(className); err == nil {
+		// Check for case-insensitive match
+		targetMethod := strings.ToLower(methodName)
+		for methodKey := range classDesc.Methods {
+			if strings.ToLower(methodKey) == targetMethod {
+				return true
+			}
+		}
+		return false
+	}
+
+	return false
+}
+
 // ExecuteBytecodeMethod implements the registry.ExecutionContext interface
 func (ctx *ExecutionContext) ExecuteBytecodeMethod(instructions []opcodes.Instruction, constants []*values.Value, args []*values.Value) (*values.Value, error) {
 	// Create a new execution context for method execution to avoid conflicts

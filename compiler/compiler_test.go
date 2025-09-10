@@ -2468,6 +2468,172 @@ func TestFunctionExists(t *testing.T) {
 	}
 }
 
+func TestClassExists(t *testing.T) {
+	testCases := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			"Class exists for built-in class stdClass",
+			`<?php 
+			echo class_exists("stdClass") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Class exists for built-in class Exception",
+			`<?php 
+			echo class_exists("Exception") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Class exists for non-existent class",
+			`<?php 
+			echo class_exists("NonExistentClass") ? "true" : "false";`,
+			"false",
+		},
+		{
+			"Class exists for user-defined class",
+			`<?php 
+			class TestClass {}
+			echo class_exists("TestClass") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Class exists case insensitive",
+			`<?php 
+			class MyClass {}
+			echo class_exists("myclass") ? "true" : "false";`,
+			"true",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test with our implementation
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile class_exists test: %s", tc.name)
+
+			// Initialize runtime for built-in functions
+			runtimeErr := runtime.Bootstrap()
+			require.NoError(t, runtimeErr, "Failed to bootstrap runtime")
+
+			// Initialize VM integration
+			if runtime.GlobalVMIntegration == nil {
+				err := runtime.InitializeVMIntegration()
+				require.NoError(t, err, "Failed to initialize VM integration")
+			}
+
+			vmCtx := vm.NewExecutionContext()
+
+			// Capture output
+			var buf bytes.Buffer
+			vmCtx.SetOutputWriter(&buf)
+
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Failed to execute class_exists test: %s", tc.name)
+
+			output := strings.TrimSpace(buf.String())
+			require.Equal(t, tc.expected, output, "Class_exists test failed for: %s", tc.name)
+		})
+	}
+}
+
+func TestMethodExists(t *testing.T) {
+	testCases := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			"Method exists for built-in class Exception method",
+			`<?php 
+			echo method_exists("Exception", "getMessage") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Method exists for non-existent method on built-in class",
+			`<?php 
+			echo method_exists("stdClass", "nonExistentMethod") ? "true" : "false";`,
+			"false",
+		},
+		{
+			"Method exists for non-existent class",
+			`<?php 
+			echo method_exists("NonExistentClass", "someMethod") ? "true" : "false";`,
+			"false",
+		},
+		{
+			"Method exists for user-defined class method",
+			`<?php 
+			class TestClass {
+				public function testMethod() {}
+			}
+			echo method_exists("TestClass", "testMethod") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Method exists for user-defined class with object instance",
+			`<?php 
+			class TestClass {
+				public function testMethod() {}
+			}
+			$obj = new TestClass();
+			echo method_exists($obj, "testMethod") ? "true" : "false";`,
+			"true",
+		},
+		{
+			"Method exists case insensitive",
+			`<?php 
+			class TestClass {
+				public function MyMethod() {}
+			}
+			echo method_exists("TestClass", "mymethod") ? "true" : "false";`,
+			"true",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Test with our implementation
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.Empty(t, p.Errors(), "Parser should not have errors for: %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile method_exists test: %s", tc.name)
+
+			// Initialize runtime for built-in functions
+			runtimeErr := runtime.Bootstrap()
+			require.NoError(t, runtimeErr, "Failed to bootstrap runtime")
+
+			// Initialize VM integration
+			if runtime.GlobalVMIntegration == nil {
+				err := runtime.InitializeVMIntegration()
+				require.NoError(t, err, "Failed to initialize VM integration")
+			}
+
+			vmCtx := vm.NewExecutionContext()
+
+			// Capture output
+			var buf bytes.Buffer
+			vmCtx.SetOutputWriter(&buf)
+
+			err = vm.NewVirtualMachine().Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+			require.NoError(t, err, "Failed to execute method_exists test: %s", tc.name)
+
+			output := strings.TrimSpace(buf.String())
+			require.Equal(t, tc.expected, output, "Method_exists test failed for: %s", tc.name)
+		})
+	}
+}
+
 func TestClassConstantDeclaration(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -5852,8 +6018,10 @@ func TestGoFunctionVariadic(t *testing.T) {
 // Mock execution context for testing
 type mockExecutionContext struct{}
 
-func (m *mockExecutionContext) WriteOutput(output string)    {}
-func (m *mockExecutionContext) HasFunction(name string) bool { return false }
+func (m *mockExecutionContext) WriteOutput(output string)                   {}
+func (m *mockExecutionContext) HasFunction(name string) bool                { return false }
+func (m *mockExecutionContext) HasClass(name string) bool                   { return false }
+func (m *mockExecutionContext) HasMethod(className, methodName string) bool { return false }
 
 // Test go() function integration with parsing
 func TestGoFunctionIntegration(t *testing.T) {

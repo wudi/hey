@@ -358,6 +358,25 @@ func registerBuiltinFunctions() error {
 			MinArgs: 1,
 			MaxArgs: 1,
 		},
+		{
+			Name:    "class_exists",
+			Handler: classExistsHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "class_name", Type: "string"},
+			},
+			MinArgs: 1,
+			MaxArgs: 1,
+		},
+		{
+			Name:    "method_exists",
+			Handler: methodExistsHandler,
+			Parameters: []ParameterDescriptor{
+				{Name: "object_or_class", Type: "string|object"},
+				{Name: "method", Type: "string"},
+			},
+			MinArgs: 2,
+			MaxArgs: 2,
+		},
 
 		// Concurrency functions
 		{
@@ -735,6 +754,57 @@ func functionExistsHandler(ctx ExecutionContext, args []*values.Value) (*values.
 	exists := ctx.HasFunction(functionName)
 
 	return values.NewBool(exists), nil
+}
+
+// classExistsHandler implements the class_exists function
+func classExistsHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	if len(args) != 1 {
+		return values.NewNull(), fmt.Errorf("class_exists() expects exactly 1 parameter, %d given", len(args))
+	}
+
+	className := args[0].ToString()
+
+	// Check if the class exists (both built-in and user-defined)
+	exists := ctx.HasClass(className)
+
+	return values.NewBool(exists), nil
+}
+
+// methodExistsHandler implements the method_exists function
+func methodExistsHandler(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
+	if len(args) != 2 {
+		return values.NewNull(), fmt.Errorf("method_exists() expects exactly 2 parameters, %d given", len(args))
+	}
+
+	objectOrClass := args[0]
+	methodName := args[1].ToString()
+
+	var className string
+
+	// Determine the class name based on the first argument
+	if objectOrClass.IsString() {
+		// First argument is a class name string
+		className = objectOrClass.ToString()
+	} else if objectOrClass.IsObject() {
+		// First argument is an object - get its class name
+		if obj, ok := objectOrClass.Data.(*values.Object); ok {
+			className = obj.ClassName
+		} else {
+			return values.NewBool(false), nil
+		}
+	} else {
+		// Invalid argument type
+		return values.NewBool(false), nil
+	}
+
+	// Check if the class exists
+	if !ctx.HasClass(className) {
+		return values.NewBool(false), nil
+	}
+
+	// Use the execution context to check for the method across both registries
+	methodExists := ctx.HasMethod(className, methodName)
+	return values.NewBool(methodExists), nil
 }
 
 // goHandler implements the go() function for running closures in goroutines
