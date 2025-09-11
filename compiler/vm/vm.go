@@ -951,7 +951,7 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, inst *opcode
 		return vm.executeUseTrait(ctx, inst)
 	case opcodes.OP_DECLARE_PROPERTY:
 		return vm.executeDeclareProperty(ctx, inst)
-	case opcodes.OP_DECLARE_CLASS_CONST:
+	case opcodes.OP_DECLARE_CONSTANT:
 		return vm.executeDeclareClassConstant(ctx, inst)
 	case opcodes.OP_INIT_CLASS_TABLE:
 		return vm.executeInitClassTable(ctx, inst)

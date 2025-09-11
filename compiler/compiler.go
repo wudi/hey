@@ -11,7 +11,6 @@ import (
 	"github.com/wudi/hey/compiler/opcodes"
 	"github.com/wudi/hey/compiler/registry"
 	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
 )
 
 // ForwardJump represents a jump that needs to be resolved later
@@ -31,11 +30,11 @@ type Compiler struct {
 	nextTemp         uint32
 	nextLabel        int
 	nextAnonFunction int // Counter for anonymous functions
-	functions        map[string]*vm.Function
-	classes          map[string]*vm.Class
-	interfaces       map[string]*vm.Interface
-	traits           map[string]*vm.Trait
-	currentClass     *vm.Class // Current class being compiled
+	functions        map[string]*CompilerFunction
+	classes          map[string]*CompilerClass
+	interfaces       map[string]*CompilerInterface
+	traits           map[string]*CompilerTrait
+	currentClass     *CompilerClass // Current class being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -62,10 +61,10 @@ func NewCompiler() *Compiler {
 		nextTemp:         1000, // Start temp vars at 1000 to avoid conflicts
 		nextLabel:        0,
 		nextAnonFunction: 0, // Start anonymous function counter at 0
-		functions:        make(map[string]*vm.Function),
-		classes:          make(map[string]*vm.Class),
-		interfaces:       make(map[string]*vm.Interface),
-		traits:           make(map[string]*vm.Trait),
+		functions:        make(map[string]*CompilerFunction),
+		classes:          make(map[string]*CompilerClass),
+		interfaces:       make(map[string]*CompilerInterface),
+		traits:           make(map[string]*CompilerTrait),
 		currentClass:     nil,
 	}
 }
@@ -100,11 +99,11 @@ func (c *Compiler) GetConstants() []*values.Value {
 }
 
 // GetFunctions returns the compiled functions
-func (c *Compiler) GetFunctions() map[string]*vm.Function {
+func (c *Compiler) GetFunctions() map[string]*CompilerFunction {
 	return c.functions
 }
 
-func (c *Compiler) GetClasses() map[string]*vm.Class {
+func (c *Compiler) GetClasses() map[string]*CompilerClass {
 	return c.classes
 }
 
@@ -2613,11 +2612,11 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	}
 
 	// Create new function
-	function := &vm.Function{
+	function := &CompilerFunction{
 		Name:         funcName,
 		Instructions: make([]opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]vm.Parameter, 0),
+		Parameters:   make([]CompilerParameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -2633,7 +2632,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 				return fmt.Errorf("invalid parameter name type")
 			}
 
-			vmParam := vm.Parameter{
+			compilerParam := CompilerParameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -2641,14 +2640,14 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 
 			// Handle parameter type
 			if param.Type != nil {
-				vmParam.Type = param.Type.String()
+				compilerParam.Type = param.Type.String()
 			}
 
 			// Handle default value
 			if param.DefaultValue != nil {
 				// For now, we'll compile the default value later
 				// This requires more complex evaluation
-				vmParam.HasDefault = true
+				compilerParam.HasDefault = true
 			}
 
 			// Check for variadic
@@ -2656,7 +2655,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 				function.IsVariadic = true
 			}
 
-			function.Parameters = append(function.Parameters, vmParam)
+			function.Parameters = append(function.Parameters, compilerParam)
 		}
 	}
 
@@ -2778,11 +2777,11 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	c.nextAnonFunction++
 
 	// Create new function
-	function := &vm.Function{
+	function := &CompilerFunction{
 		Name:         anonName,
 		Instructions: make([]opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]vm.Parameter, 0),
+		Parameters:   make([]CompilerParameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -2798,7 +2797,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 				return fmt.Errorf("invalid parameter name type")
 			}
 
-			vmParam := vm.Parameter{
+			compilerParam := CompilerParameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -2806,12 +2805,12 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 
 			// Handle parameter type
 			if param.Type != nil {
-				vmParam.Type = param.Type.String()
+				compilerParam.Type = param.Type.String()
 			}
 
 			// Handle default value
 			if param.DefaultValue != nil {
-				vmParam.HasDefault = true
+				compilerParam.HasDefault = true
 			}
 
 			// Check for variadic
@@ -2819,7 +2818,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 				function.IsVariadic = true
 			}
 
-			function.Parameters = append(function.Parameters, vmParam)
+			function.Parameters = append(function.Parameters, compilerParam)
 		}
 	}
 
@@ -2935,12 +2934,12 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	}
 
 	// Create new class
-	class := &vm.Class{
+	class := &CompilerClass{
 		Name:       className,
 		Parent:     "",
-		Properties: make(map[string]*vm.Property),
-		Methods:    make(map[string]*vm.Function),
-		Constants:  make(map[string]*vm.ClassConstant),
+		Properties: make(map[string]*CompilerProperty),
+		Methods:    make(map[string]*CompilerFunction),
+		Constants:  make(map[string]*CompilerClassConstant),
 		IsAbstract: false,
 		IsFinal:    false,
 	}
@@ -3052,7 +3051,7 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 	}
 
 	// Create new property
-	property := &vm.Property{
+	property := &CompilerProperty{
 		Name:       propName,
 		Visibility: decl.Visibility, // public, private, protected
 		IsStatic:   decl.Static,
@@ -3188,7 +3187,7 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 		}
 
 		// Create class constant with full metadata
-		classConstant := &vm.ClassConstant{
+		classConstant := &CompilerClassConstant{
 			Name:       constName,
 			Value:      constValue,
 			Visibility: visibility,
@@ -3205,7 +3204,7 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 		constNameConst := c.addConstant(values.NewString(constName))
 		constValueConst := c.addConstant(constValue)
 
-		c.emit(opcodes.OP_DECLARE_CLASS_CONST, opcodes.IS_CONST, classNameConst, opcodes.IS_CONST, constNameConst, opcodes.IS_CONST, constValueConst)
+		c.emit(opcodes.OP_DECLARE_CONSTANT, opcodes.IS_CONST, classNameConst, opcodes.IS_CONST, constNameConst, opcodes.IS_CONST, constValueConst)
 	}
 
 	return nil
@@ -3543,7 +3542,7 @@ func (c *Compiler) evaluateClassConstantAccess(expr *ast.ClassConstantAccessExpr
 	}
 
 	// Determine which class to look in
-	var targetClass *vm.Class
+	var targetClass *CompilerClass
 
 	if classExpr, ok := expr.Class.(*ast.IdentifierNode); ok {
 		switch classExpr.Name {
@@ -3783,12 +3782,12 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	}
 
 	// Create new class
-	class := &vm.Class{
+	class := &CompilerClass{
 		Name:       className,
 		Parent:     "",
-		Properties: make(map[string]*vm.Property),
-		Methods:    make(map[string]*vm.Function),
-		Constants:  make(map[string]*vm.ClassConstant),
+		Properties: make(map[string]*CompilerProperty),
+		Methods:    make(map[string]*CompilerFunction),
+		Constants:  make(map[string]*CompilerClassConstant),
 		IsAbstract: decl.Abstract,
 		IsFinal:    decl.Final,
 	}
@@ -4931,11 +4930,11 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 	arrowName := fmt.Sprintf("__arrow_%d", len(c.functions))
 
 	// Create new function
-	function := &vm.Function{
+	function := &CompilerFunction{
 		Name:         arrowName,
 		Instructions: make([]opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]vm.Parameter, 0),
+		Parameters:   make([]CompilerParameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -4950,7 +4949,7 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 				return fmt.Errorf("invalid parameter name type")
 			}
 
-			vmParam := vm.Parameter{
+			compilerParam := CompilerParameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -4958,12 +4957,12 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 
 			// Handle parameter type
 			if param.Type != nil {
-				vmParam.Type = param.Type.String()
+				compilerParam.Type = param.Type.String()
 			}
 
 			// Handle default value
 			if param.DefaultValue != nil {
-				vmParam.HasDefault = true
+				compilerParam.HasDefault = true
 			}
 
 			// Check for variadic
@@ -4971,7 +4970,7 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 				function.IsVariadic = true
 			}
 
-			function.Parameters = append(function.Parameters, vmParam)
+			function.Parameters = append(function.Parameters, compilerParam)
 		}
 	}
 
@@ -5026,7 +5025,7 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 
 	// Add function to functions map
 	if c.functions == nil {
-		c.functions = make(map[string]*vm.Function)
+		c.functions = make(map[string]*CompilerFunction)
 	}
 	c.functions[arrowName] = function
 
@@ -5760,9 +5759,9 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 	}
 
 	// Create new interface
-	iface := &vm.Interface{
+	iface := &CompilerInterface{
 		Name:    interfaceName,
-		Methods: make(map[string]*vm.InterfaceMethod),
+		Methods: make(map[string]*CompilerInterfaceMethod),
 		Extends: make([]string, 0),
 	}
 
@@ -5778,10 +5777,10 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 		}
 
 		methodName := method.Name.Name
-		interfaceMethod := &vm.InterfaceMethod{
+		interfaceMethod := &CompilerInterfaceMethod{
 			Name:       methodName,
 			Visibility: method.Visibility,
-			Parameters: make([]*vm.Parameter, 0),
+			Parameters: make([]*CompilerParameter, 0),
 		}
 
 		// Add parameters if present
@@ -5798,7 +5797,7 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 					continue
 				}
 
-				vmParam := &vm.Parameter{
+				compilerParam := &CompilerParameter{
 					Name:         paramName,
 					Type:         "", // Type hints not fully implemented yet
 					IsReference:  param.ByReference,
@@ -5811,13 +5810,13 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 					// Evaluate the default value expression at compile time
 					defaultValue := c.evaluateConstantExpression(param.DefaultValue)
 					if defaultValue != nil {
-						vmParam.DefaultValue = defaultValue
+						compilerParam.DefaultValue = defaultValue
 					} else {
 						// If we can't evaluate it at compile time, use null as fallback
-						vmParam.DefaultValue = values.NewNull()
+						compilerParam.DefaultValue = values.NewNull()
 					}
 				}
-				interfaceMethod.Parameters = append(interfaceMethod.Parameters, vmParam)
+				interfaceMethod.Parameters = append(interfaceMethod.Parameters, compilerParam)
 			}
 		}
 
@@ -5850,10 +5849,10 @@ func (c *Compiler) compileTraitDeclaration(decl *ast.TraitDeclaration) error {
 	}
 
 	// Create new trait
-	trait := &vm.Trait{
+	trait := &CompilerTrait{
 		Name:       traitName,
-		Properties: make(map[string]*vm.Property),
-		Methods:    make(map[string]*vm.Function),
+		Properties: make(map[string]*CompilerProperty),
+		Methods:    make(map[string]*CompilerFunction),
 	}
 
 	// Compile trait properties
@@ -5896,12 +5895,12 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 	}
 
 	// Create enum as a special class
-	enumClass := &vm.Class{
+	enumClass := &CompilerClass{
 		Name:       enumName,
 		Parent:     "",
-		Properties: make(map[string]*vm.Property),
-		Methods:    make(map[string]*vm.Function),
-		Constants:  make(map[string]*vm.ClassConstant),
+		Properties: make(map[string]*CompilerProperty),
+		Methods:    make(map[string]*CompilerFunction),
+		Constants:  make(map[string]*CompilerClassConstant),
 		IsAbstract: false,
 		IsFinal:    true, // Enums are final by default
 	}
@@ -5924,7 +5923,7 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 			caseValue = values.NewString(caseName)
 		}
 
-		enumClass.Constants[caseName] = &vm.ClassConstant{
+		enumClass.Constants[caseName] = &CompilerClassConstant{
 			Name:       caseName,
 			Value:      caseValue,
 			Visibility: "public",
@@ -5981,11 +5980,11 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 			}
 
 			// Create a copy of the trait method for the class
-			classMethod := &vm.Function{
+			classMethod := &CompilerFunction{
 				Name:         traitMethod.Name,
 				Instructions: make([]opcodes.Instruction, len(traitMethod.Instructions)),
 				Constants:    make([]*values.Value, len(traitMethod.Constants)),
-				Parameters:   make([]vm.Parameter, len(traitMethod.Parameters)),
+				Parameters:   make([]CompilerParameter, len(traitMethod.Parameters)),
 				IsVariadic:   traitMethod.IsVariadic,
 				IsGenerator:  traitMethod.IsGenerator,
 			}
@@ -6082,7 +6081,7 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 			}
 
 			// Create a copy of the trait property for the class
-			classProp := &vm.Property{
+			classProp := &CompilerProperty{
 				Name:       traitProp.Name,
 				Visibility: traitProp.Visibility,
 				IsStatic:   traitProp.IsStatic,
@@ -6259,9 +6258,9 @@ func (c *Compiler) evaluateConstantArrayExpression(arrExpr *ast.ArrayExpression)
 }
 
 // Helper methods for trait compilation
-func (c *Compiler) compileTraitProperty(trait *vm.Trait, prop *ast.PropertyDeclaration) error {
+func (c *Compiler) compileTraitProperty(trait *CompilerTrait, prop *ast.PropertyDeclaration) error {
 	// PropertyDeclaration contains a single property
-	property := &vm.Property{
+	property := &CompilerProperty{
 		Name:       prop.Name,
 		Type:       "", // Type hints not fully implemented yet
 		Visibility: prop.Visibility,
@@ -6272,7 +6271,7 @@ func (c *Compiler) compileTraitProperty(trait *vm.Trait, prop *ast.PropertyDecla
 	return nil
 }
 
-func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDeclaration) error {
+func (c *Compiler) compileTraitMethod(trait *CompilerTrait, method *ast.FunctionDeclaration) error {
 	// Validate method name
 	if method.Name == nil {
 		return fmt.Errorf("trait method missing name")
@@ -6290,11 +6289,11 @@ func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDecla
 	}
 
 	// Create new function for the trait method
-	function := &vm.Function{
+	function := &CompilerFunction{
 		Name:         methodName,
 		Instructions: make([]opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]vm.Parameter, 0),
+		Parameters:   make([]CompilerParameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -6309,7 +6308,7 @@ func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDecla
 				return fmt.Errorf("invalid parameter name type in trait method %s", methodName)
 			}
 
-			vmParam := vm.Parameter{
+			compilerParam := CompilerParameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -6317,20 +6316,20 @@ func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDecla
 
 			// Handle parameter type
 			if param.Type != nil {
-				vmParam.Type = param.Type.String()
+				compilerParam.Type = param.Type.String()
 			}
 
 			// Handle default value
 			if param.DefaultValue != nil {
-				vmParam.HasDefault = true
+				compilerParam.HasDefault = true
 				// Compile the default value expression
 				// For now, we'll evaluate simple default values at compile time
 				defaultValue := c.evaluateConstantExpression(param.DefaultValue)
 				if defaultValue != nil {
-					vmParam.DefaultValue = defaultValue
+					compilerParam.DefaultValue = defaultValue
 				} else {
 					// If we can't evaluate it at compile time, use null as fallback
-					vmParam.DefaultValue = values.NewNull()
+					compilerParam.DefaultValue = values.NewNull()
 				}
 			}
 
@@ -6339,7 +6338,7 @@ func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDecla
 				function.IsVariadic = true
 			}
 
-			function.Parameters = append(function.Parameters, vmParam)
+			function.Parameters = append(function.Parameters, compilerParam)
 		}
 	}
 
@@ -6405,7 +6404,7 @@ func (c *Compiler) compileTraitMethod(trait *vm.Trait, method *ast.FunctionDecla
 }
 
 // Helper method for enum compilation
-func (c *Compiler) compileEnumMethod(enumClass *vm.Class, method *ast.FunctionDeclaration) error {
+func (c *Compiler) compileEnumMethod(enumClass *CompilerClass, method *ast.FunctionDeclaration) error {
 	// Similar to trait method compilation but store in enum class
 	if method.Name == nil {
 		return nil
@@ -6419,9 +6418,9 @@ func (c *Compiler) compileEnumMethod(enumClass *vm.Class, method *ast.FunctionDe
 	}
 
 	// Create a simplified function for the enum
-	function := &vm.Function{
+	function := &CompilerFunction{
 		Name:         methodName,
-		Parameters:   make([]vm.Parameter, 0),
+		Parameters:   make([]CompilerParameter, 0),
 		Instructions: make([]opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
 	}

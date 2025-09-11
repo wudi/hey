@@ -167,7 +167,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 		includeCtx.OutputWriter = ctx.OutputWriter   // Share output writer
 
 		// Execute the compiled bytecode in the separate context
-		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetVMFunctions(), comp.GetVMClasses())
 		if err != nil {
 			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
 		}
@@ -201,7 +201,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 	}
 
 	// Execute the program
-	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetFunctions(), comp.GetClasses())
+	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetVMFunctions(), comp.GetVMClasses())
 }
 
 func runWebServer(addr string) error {

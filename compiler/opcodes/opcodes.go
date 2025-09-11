@@ -229,9 +229,37 @@ const (
 	OP_VERIFY_RETURN_TYPE
 )
 
-// Special Operations (180-199)
+// Declaration Operations (180-199) - PHP-compliant compilation
 const (
-	OP_EXIT Opcode = iota + 180
+	// Function declarations
+	OP_DECLARE_FUNCTION Opcode = iota + 180
+	OP_BEGIN_FUNCTION_DECL
+	OP_END_FUNCTION_DECL
+	OP_BIND_FUNCTION
+	
+	// Class declarations
+	OP_DECLARE_CLASS
+	OP_BEGIN_CLASS_DECL
+	OP_END_CLASS_DECL
+	OP_BIND_CLASS
+	
+	// Property declarations
+	OP_DECLARE_PROPERTY
+	OP_INIT_PROPERTY
+	
+	// Constant declarations
+	OP_DECLARE_CONSTANT
+	OP_INIT_CONSTANT
+	
+	// Interface/Trait declarations
+	OP_DECLARE_INTERFACE
+	OP_DECLARE_TRAIT
+	OP_DECLARE_ENUM
+)
+
+// Special Operations (200-229)
+const (
+	OP_EXIT Opcode = iota + 200
 	OP_ECHO
 	OP_PRINT
 	OP_INCLUDE
@@ -258,35 +286,23 @@ const (
 	// Special values
 	OP_COALESCE // ?? null coalescing
 	OP_MATCH    // match expression
-)
-
-// Declaration Operations (200-219)
-const (
-	OP_DECLARE_FUNCTION Opcode = iota + 200
-	OP_DECLARE_CLASS
-	OP_DECLARE_PROPERTY
-	OP_DECLARE_CLASS_CONST
+	
+	// Additional operations  
 	OP_INIT_CLASS_TABLE
 	OP_ADD_INTERFACE
 	OP_SET_CLASS_PARENT
 	OP_SET_CURRENT_CLASS
 	OP_CLEAR_CURRENT_CLASS
-
-	// Interface and trait operations
-	OP_DECLARE_INTERFACE // Declare an interface
-	OP_DECLARE_TRAIT     // Declare a trait
 	OP_USE_TRAIT         // Use trait in a class
-
-	// Advanced control flow
-	OP_GOTO    // Unconditional jump to label
-	OP_LABEL   // Label definition
-	OP_DECLARE // Declare statement
-	OP_TICKS   // Ticks directive (declare(ticks=N))
+	OP_GOTO              // Unconditional jump to label
+	OP_LABEL             // Label definition
+	OP_DECLARE           // Declare statement
+	OP_TICKS             // Ticks directive (declare(ticks=N))
 )
 
-// Closure Operations (220-239)
+// Closure Operations (240-249)
 const (
-	OP_CREATE_CLOSURE Opcode = iota + 220 // Create a closure
+	OP_CREATE_CLOSURE Opcode = iota + 240 // Create a closure
 	OP_BIND_USE_VAR                       // Bind a use variable to closure
 	OP_INVOKE_CLOSURE                     // Invoke a closure
 )
@@ -580,7 +596,7 @@ var opcodeNames = map[Opcode]string{
 	OP_DECLARE_FUNCTION:    "DECLARE_FUNCTION",
 	OP_DECLARE_CLASS:       "DECLARE_CLASS",
 	OP_DECLARE_PROPERTY:    "DECLARE_PROPERTY",
-	OP_DECLARE_CLASS_CONST: "DECLARE_CLASS_CONST",
+	OP_DECLARE_CONSTANT:    "DECLARE_CONSTANT",
 	OP_INIT_CLASS_TABLE:    "INIT_CLASS_TABLE",
 	OP_ADD_INTERFACE:       "ADD_INTERFACE",
 	OP_SET_CLASS_PARENT:    "SET_CLASS_PARENT",
