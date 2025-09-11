@@ -1,11 +1,10 @@
 .idea
 .vscode
-php-parser
 vendor
 node_modules
 .DS_Store
 website
 CLAUDE.md
-bytecode-demovm-demo
-bytecode-demo
-hey
+./bytecode-demo
+./php-parser
+./hey
