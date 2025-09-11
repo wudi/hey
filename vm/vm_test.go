@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/hey/compiler/opcodes"
-	"github.com/wudi/hey/compiler/registry"
-	"github.com/wudi/hey/compiler/runtime"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/runtime"
+	"github.com/wudi/hey/values"
 )
 
 func TestSendReferenceOpcode(t *testing.T) {
@@ -3085,7 +3085,7 @@ func TestProfileDataAnalysis(t *testing.T) {
 // BenchmarkVMPerformance benchmarks VM execution with and without profiling
 func BenchmarkVMPerformance(b *testing.B) {
 	// Create a simple instruction sequence
-	instructions := []opcodes.Instruction{
+	instructions := []*opcodes.Instruction{
 		{Opcode: opcodes.OP_QM_ASSIGN, Op1: 0, Op2: 0, Result: 100},
 		{Opcode: opcodes.OP_QM_ASSIGN, Op1: 1, Op2: 0, Result: 101},
 		{Opcode: opcodes.OP_ADD, Op1: 100, Op2: 101, Result: 102},
@@ -3777,7 +3777,7 @@ func TestReturnByRefOpcode(t *testing.T) {
 
 			// Setup call stack if needed
 			if tt.hasCallStack {
-				ctx.CallStack = append(ctx.CallStack, CallFrame{
+				ctx.CallStack = append(ctx.CallStack, &CallFrame{
 					Function:    nil, // Mock function
 					ReturnIP:    100,
 					Variables:   make(map[uint32]*values.Value),
@@ -3895,7 +3895,7 @@ func TestFunctionCallSequence(t *testing.T) {
 	// Step 3: Execute the actual function call (this would normally be DO_FCALL)
 	// We'll just simulate a successful call that pushes a call frame
 
-	callFrame := CallFrame{
+	callFrame := &CallFrame{
 		Function:    nil, // Mock function
 		ReturnIP:    ctx.IP + 1,
 		Variables:   make(map[uint32]*values.Value),
@@ -4436,11 +4436,11 @@ func TestInitFunctionCallWithClosures(t *testing.T) {
 
 	// Create a mock callable object (closure)
 	closureValue := values.NewCallable(&values.Closure{
-		Function: &Function{
+		Function: &registry.Function{
 			Name:         "__closure__",
-			Instructions: []opcodes.Instruction{},
+			Instructions: []*opcodes.Instruction{},
 			Constants:    []*values.Value{},
-			Parameters:   []Parameter{},
+			Parameters:   []*registry.Parameter{},
 		},
 	})
 
@@ -5684,7 +5684,7 @@ func TestGeneratorReturnOpcode(t *testing.T) {
 				}
 			} else {
 				// Setup call stack for regular function return
-				ctx.CallStack = append(ctx.CallStack, CallFrame{
+				ctx.CallStack = append(ctx.CallStack, &CallFrame{
 					Function:    nil,
 					ReturnIP:    100,
 					Variables:   make(map[uint32]*values.Value),
@@ -5809,7 +5809,7 @@ func TestVerifyAbstractClassOpcode(t *testing.T) {
 						// Add an abstract method
 						methodDesc := &registry.MethodDescriptor{
 							Name:           "abstractMethod",
-							Parameters:     []registry.ParameterDescriptor{},
+							Parameters:     []*registry.ParameterDescriptor{},
 							Visibility:     "public",
 							IsStatic:       false,
 							IsAbstract:     true,

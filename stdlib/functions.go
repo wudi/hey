@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/values"
+	"github.com/wudi/hey/vm"
 )
 
 // initFunctions initializes built-in PHP functions
@@ -17,7 +17,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["strlen"] = BuiltinFunction{
 		Name:    "strlen",
 		Handler: strlenHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "string", Type: "string", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -28,7 +28,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["substr"] = BuiltinFunction{
 		Name:    "substr",
 		Handler: substrHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "string", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "start", Type: "int", IsReference: false, HasDefault: false},
 			{Name: "length", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewNull()},
@@ -41,7 +41,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["strpos"] = BuiltinFunction{
 		Name:    "strpos",
 		Handler: strposHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "haystack", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "needle", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "offset", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(0)},
@@ -54,7 +54,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["str_replace"] = BuiltinFunction{
 		Name:    "str_replace",
 		Handler: strReplaceHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "search", Type: "mixed", IsReference: false, HasDefault: false},
 			{Name: "replace", Type: "mixed", IsReference: false, HasDefault: false},
 			{Name: "subject", Type: "mixed", IsReference: false, HasDefault: false},
@@ -67,7 +67,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["strtolower"] = BuiltinFunction{
 		Name:    "strtolower",
 		Handler: strtolowerHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "string", Type: "string", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -78,7 +78,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["strtoupper"] = BuiltinFunction{
 		Name:    "strtoupper",
 		Handler: strtoupperHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "string", Type: "string", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -89,7 +89,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["trim"] = BuiltinFunction{
 		Name:    "trim",
 		Handler: trimHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "string", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "characters", Type: "string", IsReference: false, HasDefault: true, DefaultValue: values.NewString(" \t\n\r\x00\x0B")},
 		},
@@ -101,7 +101,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["explode"] = BuiltinFunction{
 		Name:    "explode",
 		Handler: explodeHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "delimiter", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "string", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "limit", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(math.MaxInt32)},
@@ -114,7 +114,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["implode"] = BuiltinFunction{
 		Name:    "implode",
 		Handler: implodeHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "separator", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "array", Type: "array", IsReference: false, HasDefault: false},
 		},
@@ -127,7 +127,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["count"] = BuiltinFunction{
 		Name:    "count",
 		Handler: countHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 			{Name: "mode", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(0)},
 		},
@@ -139,7 +139,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["array_push"] = BuiltinFunction{
 		Name:    "array_push",
 		Handler: arrayPushHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "array", Type: "array", IsReference: true, HasDefault: false},
 		},
 		IsVariadic: true,
@@ -150,7 +150,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["array_pop"] = BuiltinFunction{
 		Name:    "array_pop",
 		Handler: arrayPopHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "array", Type: "array", IsReference: true, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -161,7 +161,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["array_keys"] = BuiltinFunction{
 		Name:    "array_keys",
 		Handler: arrayKeysHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "array", Type: "array", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -172,7 +172,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["array_values"] = BuiltinFunction{
 		Name:    "array_values",
 		Handler: arrayValuesHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "array", Type: "array", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -183,7 +183,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["in_array"] = BuiltinFunction{
 		Name:    "in_array",
 		Handler: inArrayHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "needle", Type: "mixed", IsReference: false, HasDefault: false},
 			{Name: "haystack", Type: "array", IsReference: false, HasDefault: false},
 			{Name: "strict", Type: "bool", IsReference: false, HasDefault: true, DefaultValue: values.NewBool(false)},
@@ -197,7 +197,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["abs"] = BuiltinFunction{
 		Name:    "abs",
 		Handler: absHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "number", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -208,7 +208,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["max"] = BuiltinFunction{
 		Name:    "max",
 		Handler: maxHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: true,
@@ -219,7 +219,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["min"] = BuiltinFunction{
 		Name:    "min",
 		Handler: minHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: true,
@@ -230,7 +230,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["round"] = BuiltinFunction{
 		Name:    "round",
 		Handler: roundHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "val", Type: "float", IsReference: false, HasDefault: false},
 			{Name: "precision", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(0)},
 			{Name: "mode", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(1)},
@@ -243,7 +243,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["floor"] = BuiltinFunction{
 		Name:    "floor",
 		Handler: floorHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "float", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -254,7 +254,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["ceil"] = BuiltinFunction{
 		Name:    "ceil",
 		Handler: ceilHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "float", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -265,7 +265,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["pow"] = BuiltinFunction{
 		Name:    "pow",
 		Handler: powHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "base", Type: "mixed", IsReference: false, HasDefault: false},
 			{Name: "exp", Type: "mixed", IsReference: false, HasDefault: false},
 		},
@@ -277,7 +277,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["sqrt"] = BuiltinFunction{
 		Name:    "sqrt",
 		Handler: sqrtHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "arg", Type: "float", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -289,7 +289,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["is_string"] = BuiltinFunction{
 		Name:    "is_string",
 		Handler: isStringHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -300,7 +300,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["is_int"] = BuiltinFunction{
 		Name:    "is_int",
 		Handler: isIntHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -311,7 +311,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["is_float"] = BuiltinFunction{
 		Name:    "is_float",
 		Handler: isFloatHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -322,7 +322,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["is_bool"] = BuiltinFunction{
 		Name:    "is_bool",
 		Handler: isBoolHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -333,7 +333,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["is_array"] = BuiltinFunction{
 		Name:    "is_array",
 		Handler: isArrayHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -344,7 +344,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["is_null"] = BuiltinFunction{
 		Name:    "is_null",
 		Handler: isNullHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -355,7 +355,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["is_numeric"] = BuiltinFunction{
 		Name:    "is_numeric",
 		Handler: isNumericHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -366,7 +366,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["isset"] = BuiltinFunction{
 		Name:    "isset",
 		Handler: issetHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "var", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: true,
@@ -377,7 +377,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["empty"] = BuiltinFunction{
 		Name:    "empty",
 		Handler: emptyHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "var", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -389,7 +389,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["intval"] = BuiltinFunction{
 		Name:    "intval",
 		Handler: intvalHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 			{Name: "base", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(10)},
 		},
@@ -401,7 +401,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["floatval"] = BuiltinFunction{
 		Name:    "floatval",
 		Handler: floatvalHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -412,7 +412,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["strval"] = BuiltinFunction{
 		Name:    "strval",
 		Handler: strvalHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -423,7 +423,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["boolval"] = BuiltinFunction{
 		Name:    "boolval",
 		Handler: boolvalHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: false,
@@ -435,7 +435,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["var_dump"] = BuiltinFunction{
 		Name:    "var_dump",
 		Handler: varDumpHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		},
 		IsVariadic: true,
@@ -446,7 +446,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["print_r"] = BuiltinFunction{
 		Name:    "print_r",
 		Handler: printRHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 			{Name: "return", Type: "bool", IsReference: false, HasDefault: true, DefaultValue: values.NewBool(false)},
 		},
@@ -459,7 +459,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["time"] = BuiltinFunction{
 		Name:       "time",
 		Handler:    timeHandler,
-		Parameters: []Parameter{},
+		Parameters: []*Parameter{},
 		IsVariadic: false,
 		MinArgs:    0,
 		MaxArgs:    0,
@@ -468,7 +468,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["microtime"] = BuiltinFunction{
 		Name:    "microtime",
 		Handler: microtimeHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "as_float", Type: "bool", IsReference: false, HasDefault: true, DefaultValue: values.NewBool(false)},
 		},
 		IsVariadic: false,
@@ -479,7 +479,7 @@ func (stdlib *StandardLibrary) initFunctions() {
 	stdlib.Functions["date"] = BuiltinFunction{
 		Name:    "date",
 		Handler: dateHandler,
-		Parameters: []Parameter{
+		Parameters: []*Parameter{
 			{Name: "format", Type: "string", IsReference: false, HasDefault: false},
 			{Name: "timestamp", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewNull()},
 		},

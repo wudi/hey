@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/values"
 )
 
 // RuntimeRegistry is the unified registration system for all runtime entities

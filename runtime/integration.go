@@ -3,7 +3,7 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/values"
 )
 
 // VMIntegration provides integration between the runtime registry and VM

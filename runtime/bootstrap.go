@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/values"
 )
 
 // Bootstrap initializes the runtime with all built-in entities

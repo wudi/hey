@@ -3,8 +3,8 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/wudi/hey/compiler/registry"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/values"
 )
 
 // UnifiedBootstrap initializes the runtime with the unified class system

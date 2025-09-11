@@ -11,21 +11,21 @@ import (
 
 	"github.com/wudi/hey/compiler/ast"
 	"github.com/wudi/hey/compiler/lexer"
-	"github.com/wudi/hey/compiler/opcodes"
 	"github.com/wudi/hey/compiler/parser"
-	"github.com/wudi/hey/compiler/registry"
-	runtime3 "github.com/wudi/hey/compiler/runtime"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/registry"
+	runtime2 "github.com/wudi/hey/runtime"
+	"github.com/wudi/hey/values"
 )
 
 // Initialize runtime integration on package init
 func init() {
-	runtime3.SetVMFactory(func() runtime3.VMExecutor {
+	runtime2.SetVMFactory(func() runtime2.VMExecutor {
 		return &VMAdapter{vm: NewVirtualMachine()}
 	})
-	runtime3.SetContextFactory(func() *runtime3.GoroutineContext {
+	runtime2.SetContextFactory(func() *runtime2.GoroutineContext {
 		ctx := NewExecutionContext()
-		return &runtime3.GoroutineContext{
+		return &runtime2.GoroutineContext{
 			GlobalVars:      ctx.GlobalVars,
 			GlobalConstants: ctx.GlobalConstants,
 			Functions:       convertFunctionsToRuntime(ctx.Functions),
@@ -40,7 +40,7 @@ type VMAdapter struct {
 	vm *VirtualMachine
 }
 
-func (adapter *VMAdapter) ExecuteClosure(ctx *runtime3.GoroutineContext, closure *values.Closure, args []*values.Value) (*values.Value, error) {
+func (adapter *VMAdapter) ExecuteClosure(ctx *runtime2.GoroutineContext, closure *values.Closure, args []*values.Value) (*values.Value, error) {
 	// Convert runtime ExecutionContext to VM ExecutionContext
 	vmCtx := &ExecutionContext{
 		GlobalVars:        ctx.GlobalVars,
@@ -52,10 +52,10 @@ func (adapter *VMAdapter) ExecuteClosure(ctx *runtime3.GoroutineContext, closure
 		SP:                -1,
 		MaxStackSize:      1000,
 		VarSlotNames:      make(map[uint32]string),
-		CallStack:         make([]CallFrame, 0),
+		CallStack:         make([]*CallFrame, 0),
 		ForeachIterators:  make(map[uint32]*ForeachIterator),
-		ExceptionStack:    make([]Exception, 0),
-		ExceptionHandlers: make([]ExceptionHandler, 0),
+		ExceptionStack:    make([]*Exception, 0),
+		ExceptionHandlers: make([]*ExceptionHandler, 0),
 		RopeBuffers:       make(map[uint32][]string),
 		OutputWriter:      os.Stdout,
 		IncludedFiles:     make(map[string]bool),
@@ -68,10 +68,10 @@ func (adapter *VMAdapter) ExecuteClosure(ctx *runtime3.GoroutineContext, closure
 }
 
 // Helper functions to convert between runtime and vm function types
-func convertFunctionsToRuntime(vmFunctions map[string]*Function) map[string]*runtime3.VMFunction {
-	result := make(map[string]*runtime3.VMFunction)
+func convertFunctionsToRuntime(vmFunctions map[string]*registry.Function) map[string]*runtime2.VMFunction {
+	result := make(map[string]*runtime2.VMFunction)
 	for name, vmFunc := range vmFunctions {
-		runtimeFunc := &runtime3.VMFunction{
+		runtimeFunc := &runtime2.VMFunction{
 			Name:         vmFunc.Name,
 			Instructions: make([]interface{}, len(vmFunc.Instructions)),
 			Constants:    vmFunc.Constants,
@@ -84,12 +84,12 @@ func convertFunctionsToRuntime(vmFunctions map[string]*Function) map[string]*run
 	return result
 }
 
-func convertFunctionsFromRuntime(runtimeFunctions map[string]*runtime3.VMFunction) map[string]*Function {
-	result := make(map[string]*Function)
+func convertFunctionsFromRuntime(runtimeFunctions map[string]*runtime2.VMFunction) map[string]*registry.Function {
+	result := make(map[string]*registry.Function)
 	for name, runtimeFunc := range runtimeFunctions {
-		result[name] = &Function{
+		result[name] = &registry.Function{
 			Name:         runtimeFunc.Name,
-			Instructions: make([]opcodes.Instruction, len(runtimeFunc.Instructions)),
+			Instructions: make([]*opcodes.Instruction, len(runtimeFunc.Instructions)),
 			Constants:    runtimeFunc.Constants,
 		}
 		// Note: This is a simplified conversion - in practice you'd need proper instruction conversion
@@ -99,7 +99,7 @@ func convertFunctionsFromRuntime(runtimeFunctions map[string]*runtime3.VMFunctio
 
 // Generator represents a PHP generator state
 type Generator struct {
-	Function     *Function                // The generator function
+	Function     *registry.Function       // The generator function
 	Context      *ExecutionContext        // Saved execution context
 	Variables    map[uint32]*values.Value // Generator local variables
 	IP           int                      // Current instruction pointer in generator
@@ -112,7 +112,7 @@ type Generator struct {
 // ExecutionContext represents the runtime execution state
 type ExecutionContext struct {
 	// Bytecode execution
-	Instructions []opcodes.Instruction
+	Instructions []*opcodes.Instruction
 	IP           int // Instruction pointer
 
 	// Runtime stacks
@@ -128,12 +128,12 @@ type ExecutionContext struct {
 	StaticVarSlots map[uint32]string        // Mapping from variable slots to static storage keys
 
 	// Function call stack
-	CallStack []CallFrame
+	CallStack []*CallFrame
 
 	// Global state
 	GlobalVars      map[string]*values.Value
 	GlobalConstants map[string]*values.Value // Global named constants
-	Functions       map[string]*Function
+	Functions       map[string]*registry.Function
 
 	// Loop state
 	ForeachIterators map[uint32]*ForeachIterator // Foreach iterator state
@@ -149,8 +149,8 @@ type ExecutionContext struct {
 	CurrentClass  string        // Current class name being executed in
 
 	// Error handling
-	ExceptionStack    []Exception
-	ExceptionHandlers []ExceptionHandler
+	ExceptionStack    []*Exception
+	ExceptionHandlers []*ExceptionHandler
 	CurrentException  *Exception
 	SilenceStack      []bool // Stack for nested @ operators
 
@@ -193,7 +193,7 @@ func (ctx *ExecutionContext) WriteOutput(output string) {
 // HasFunction implements the ExecutionContext interface for runtime functions
 func (ctx *ExecutionContext) HasFunction(name string) bool {
 	// Check both runtime registered functions and VM functions
-	if runtime3.HasBuiltinFunction(name) {
+	if runtime2.HasBuiltinFunction(name) {
 		return true
 	}
 	// Check VM functions (user-defined functions)
@@ -204,7 +204,7 @@ func (ctx *ExecutionContext) HasFunction(name string) bool {
 // HasClass implements the ExecutionContext interface for runtime classes
 func (ctx *ExecutionContext) HasClass(name string) bool {
 	// Check runtime registered classes (built-in classes)
-	if runtime3.GlobalRegistry.HasClass(name) {
+	if runtime2.GlobalRegistry.HasClass(name) {
 		return true
 	}
 	// Check legacy registry for user-defined classes
@@ -217,7 +217,7 @@ func (ctx *ExecutionContext) HasClass(name string) bool {
 // HasMethod implements the ExecutionContext interface for method introspection
 func (ctx *ExecutionContext) HasMethod(className, methodName string) bool {
 	// Check runtime registry first (built-in classes)
-	if classDesc, exists := runtime3.GlobalRegistry.GetClass(className); exists {
+	if classDesc, exists := runtime2.GlobalRegistry.GetClass(className); exists {
 		// Check for case-insensitive match
 		targetMethod := strings.ToLower(methodName)
 		for methodKey := range classDesc.Methods {
@@ -244,7 +244,7 @@ func (ctx *ExecutionContext) HasMethod(className, methodName string) bool {
 }
 
 // ExecuteBytecodeMethod implements the registry.ExecutionContext interface
-func (ctx *ExecutionContext) ExecuteBytecodeMethod(instructions []opcodes.Instruction, constants []*values.Value, args []*values.Value) (*values.Value, error) {
+func (ctx *ExecutionContext) ExecuteBytecodeMethod(instructions []*opcodes.Instruction, constants []*values.Value, args []*values.Value) (*values.Value, error) {
 	// Create a new execution context for method execution to avoid conflicts
 	methodCtx := &ExecutionContext{
 		Instructions:     instructions,
@@ -257,7 +257,7 @@ func (ctx *ExecutionContext) ExecuteBytecodeMethod(instructions []opcodes.Instru
 		Temporaries:      make(map[uint32]*values.Value),
 		VarSlotNames:     make(map[uint32]string),
 		StaticVarSlots:   make(map[uint32]string),
-		CallStack:        []CallFrame{},
+		CallStack:        []*CallFrame{},
 		GlobalVars:       ctx.GlobalVars,      // Share global state
 		GlobalConstants:  ctx.GlobalConstants, // Share global constants
 		Functions:        ctx.Functions,       // Share function registry
@@ -297,7 +297,7 @@ func (ctx *ExecutionContext) ExecuteBytecodeMethod(instructions []opcodes.Instru
 
 	// Execute the method instructions with proper opcode handling
 	for methodCtx.IP < len(methodCtx.Instructions) {
-		inst := &methodCtx.Instructions[methodCtx.IP]
+		inst := methodCtx.Instructions[methodCtx.IP]
 
 		// Use the full VM opcode execution
 		err := vm.executeInstruction(methodCtx, inst)
@@ -327,7 +327,7 @@ func (ctx *ExecutionContext) ExecuteBytecodeMethod(instructions []opcodes.Instru
 }
 
 // ExecuteBytecodeMethodWithParams implements the registry.ExecutionContext interface with parameter support
-func (ctx *ExecutionContext) ExecuteBytecodeMethodWithParams(instructions []opcodes.Instruction, constants []*values.Value, parameters []registry.ParameterInfo, args []*values.Value) (*values.Value, error) {
+func (ctx *ExecutionContext) ExecuteBytecodeMethodWithParams(instructions []*opcodes.Instruction, constants []*values.Value, parameters []*registry.ParameterInfo, args []*values.Value) (*values.Value, error) {
 	// Create a new execution context for method execution to avoid conflicts
 	methodCtx := &ExecutionContext{
 		Instructions:     instructions,
@@ -340,7 +340,7 @@ func (ctx *ExecutionContext) ExecuteBytecodeMethodWithParams(instructions []opco
 		Temporaries:      make(map[uint32]*values.Value),
 		VarSlotNames:     make(map[uint32]string),
 		StaticVarSlots:   make(map[uint32]string),
-		CallStack:        []CallFrame{},
+		CallStack:        []*CallFrame{},
 		GlobalVars:       ctx.GlobalVars,      // Share global state
 		GlobalConstants:  ctx.GlobalConstants, // Share global constants
 		Functions:        ctx.Functions,       // Share function registry
@@ -402,7 +402,7 @@ func (ctx *ExecutionContext) ExecuteBytecodeMethodWithParams(instructions []opco
 	vm := NewVirtualMachine()
 
 	for methodCtx.IP < len(methodCtx.Instructions) {
-		inst := &methodCtx.Instructions[methodCtx.IP]
+		inst := methodCtx.Instructions[methodCtx.IP]
 
 		err := vm.executeInstruction(methodCtx, inst)
 		if err != nil {
@@ -437,83 +437,13 @@ func (ctx *ExecutionContext) SetOutputWriter(writer io.Writer) {
 
 // CallFrame represents a function call frame
 type CallFrame struct {
-	Function    *Function
+	Function    *registry.Function
 	ReturnIP    int
 	Variables   map[uint32]*values.Value
 	ThisObject  *values.Value
 	Arguments   []*values.Value
 	ReturnValue *values.Value // Return value from function
 	ReturnByRef bool          // Whether the return is by reference
-}
-
-// Function represents a compiled PHP function
-type Function struct {
-	Name         string
-	Instructions []opcodes.Instruction
-	Constants    []*values.Value
-	Parameters   []Parameter
-	IsVariadic   bool
-	IsGenerator  bool
-}
-
-// Parameter represents a function parameter
-type Parameter struct {
-	Name         string
-	Type         string
-	IsReference  bool
-	HasDefault   bool
-	DefaultValue *values.Value
-}
-
-// Class represents a compiled PHP class
-type Class struct {
-	Name       string
-	Parent     string
-	Properties map[string]*Property
-	Methods    map[string]*Function
-	Constants  map[string]*ClassConstant
-	IsAbstract bool
-	IsFinal    bool
-}
-
-// ClassConstant represents a class constant with metadata
-type ClassConstant struct {
-	Name       string
-	Value      *values.Value
-	Visibility string // public, private, protected
-	Type       string // Type hint for PHP 8.3+
-	IsFinal    bool   // final const
-	IsAbstract bool   // abstract const (interfaces/abstract classes)
-}
-
-// Property represents a class property
-type Property struct {
-	Name         string
-	Type         string
-	Visibility   string // public, private, protected
-	IsStatic     bool
-	DefaultValue *values.Value
-}
-
-// Interface represents a PHP interface
-type Interface struct {
-	Name    string
-	Methods map[string]*InterfaceMethod
-	Extends []string // Parent interfaces
-}
-
-// InterfaceMethod represents a method in an interface
-type InterfaceMethod struct {
-	Name       string
-	Visibility string
-	Parameters []*Parameter
-}
-
-// Trait represents a PHP trait
-type Trait struct {
-	Name       string
-	Properties map[string]*Property
-	Methods    map[string]*Function
 }
 
 // Exception represents a runtime exception
@@ -593,14 +523,14 @@ func NewExecutionContext() *ExecutionContext {
 		Variables:        make(map[uint32]*values.Value),
 		Temporaries:      make(map[uint32]*values.Value),
 		VarSlotNames:     make(map[uint32]string),
-		CallStack:        make([]CallFrame, 0),
+		CallStack:        make([]*CallFrame, 0),
 		GlobalVars:       make(map[string]*values.Value),
 		GlobalConstants:  make(map[string]*values.Value),
-		Functions:        make(map[string]*Function),
+		Functions:        make(map[string]*registry.Function),
 		ForeachIterators: make(map[uint32]*ForeachIterator),
 		// Classes now handled by unified registry
-		ExceptionStack:    make([]Exception, 0),
-		ExceptionHandlers: make([]ExceptionHandler, 0),
+		ExceptionStack:    make([]*Exception, 0),
+		ExceptionHandlers: make([]*ExceptionHandler, 0),
 		CurrentException:  nil,
 		RopeBuffers:       make(map[uint32][]string),
 		OutputWriter:      os.Stdout, // Default to stdout for backward compatibility
@@ -613,11 +543,11 @@ func NewExecutionContext() *ExecutionContext {
 }
 
 // Execute runs bytecode instructions in the given context
-func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []opcodes.Instruction, constants []*values.Value, functions map[string]*Function, classes map[string]*Class) error {
+func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []*opcodes.Instruction, constants []*values.Value, functions map[string]*registry.Function, classes map[string]*registry.Class) error {
 	ctx.Instructions = instructions
 	ctx.Constants = constants
 	if ctx.Functions == nil {
-		ctx.Functions = make(map[string]*Function)
+		ctx.Functions = make(map[string]*registry.Function)
 	}
 	// Copy compiler functions to the execution context
 	for name, fn := range functions {
@@ -651,7 +581,7 @@ func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []opcodes.
 
 		// Record instruction execution with timing
 		instStartTime := time.Now()
-		err := vm.executeInstruction(ctx, &inst)
+		err := vm.executeInstruction(ctx, inst)
 		instDuration := time.Since(instStartTime)
 
 		if err != nil {
@@ -661,7 +591,7 @@ func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []opcodes.
 		// Record performance metrics
 		if vm.EnableProfiling {
 			vm.Metrics.RecordInstruction(inst.Opcode.String())
-			vm.Debugger.TraceInstruction(ctx.IP, &inst, ctx, instDuration)
+			vm.Debugger.TraceInstruction(ctx.IP, inst, ctx, instDuration)
 		}
 
 		// Prevent infinite loops
@@ -2100,7 +2030,7 @@ func (vm *VirtualMachine) executeCatch(ctx *ExecutionContext, inst *opcodes.Inst
 	finallyStart := int(inst.Op2)
 
 	// Create exception handler with addresses from compiler
-	handler := ExceptionHandler{
+	handler := &ExceptionHandler{
 		TryStart:      ctx.IP + 1, // Try block starts after this instruction
 		TryEnd:        0,          // Will be determined when exception occurs
 		CatchStart:    catchStart,
@@ -2127,7 +2057,7 @@ func (vm *VirtualMachine) executeFinally(ctx *ExecutionContext, inst *opcodes.In
 func (vm *VirtualMachine) findExceptionHandler(ctx *ExecutionContext, ip int) *ExceptionHandler {
 	// Find the innermost handler that contains this IP
 	for i := len(ctx.ExceptionHandlers) - 1; i >= 0; i-- {
-		handler := &ctx.ExceptionHandlers[i]
+		handler := ctx.ExceptionHandlers[i]
 		if ip >= handler.TryStart && (handler.TryEnd == 0 || ip <= handler.TryEnd) {
 			return handler
 		}
@@ -2489,8 +2419,8 @@ func (vm *VirtualMachine) executeInitFunctionCall(ctx *ExecutionContext, inst *o
 
 	// In PHP, INIT_FCALL validates function existence at this point
 	// For built-in functions, we can check the runtime registry
-	if runtime3.GlobalRegistry != nil {
-		if fn, exists := runtime3.GlobalRegistry.GetFunction(functionName); exists && fn != nil {
+	if runtime2.GlobalRegistry != nil {
+		if fn, exists := runtime2.GlobalRegistry.GetFunction(functionName); exists && fn != nil {
 			// Function exists in runtime registry - this is good
 		} else {
 			// Check if it's a user-defined function (would be in vm.functions)
@@ -2589,8 +2519,8 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 	}
 
 	// Check for runtime registered functions
-	if runtime3.GlobalVMIntegration != nil && runtime3.GlobalVMIntegration.HasFunction(functionName) {
-		result, err := runtime3.GlobalVMIntegration.CallFunction(ctx, functionName, ctx.CallContext.Arguments)
+	if runtime2.GlobalVMIntegration != nil && runtime2.GlobalVMIntegration.HasFunction(functionName) {
+		result, err := runtime2.GlobalVMIntegration.CallFunction(ctx, functionName, ctx.CallContext.Arguments)
 		if err != nil {
 			return err
 		}
@@ -2678,11 +2608,11 @@ func (vm *VirtualMachine) ExecuteClosure(ctx *ExecutionContext, closure *values.
 
 	// Handle different closure function types
 	switch fn := closure.Function.(type) {
-	case runtime3.FunctionHandler:
+	case runtime2.FunctionHandler:
 		// Runtime function handler with execution context
 		return fn(ctx, args)
 
-	case func(runtime3.ExecutionContext, []*values.Value) (*values.Value, error):
+	case func(runtime2.ExecutionContext, []*values.Value) (*values.Value, error):
 		// Direct runtime function handler
 		return fn(ctx, args)
 
@@ -2690,7 +2620,7 @@ func (vm *VirtualMachine) ExecuteClosure(ctx *ExecutionContext, closure *values.
 		// Legacy function handler without context
 		return fn(args)
 
-	case *Function:
+	case *registry.Function:
 		// VM compiled function - execute with full VM context
 		return vm.executeVMFunction(ctx, fn, args, closure.BoundVars)
 
@@ -2704,7 +2634,7 @@ func (vm *VirtualMachine) ExecuteClosure(ctx *ExecutionContext, closure *values.
 }
 
 // executeVMFunction executes a VM-compiled function with bound variables
-func (vm *VirtualMachine) executeVMFunction(ctx *ExecutionContext, function *Function, args []*values.Value, boundVars map[string]*values.Value) (*values.Value, error) {
+func (vm *VirtualMachine) executeVMFunction(ctx *ExecutionContext, function *registry.Function, args []*values.Value, boundVars map[string]*values.Value) (*values.Value, error) {
 	// Create a new execution context for the function
 	functionCtx := &ExecutionContext{
 		Instructions:     function.Instructions,
@@ -2716,7 +2646,7 @@ func (vm *VirtualMachine) executeVMFunction(ctx *ExecutionContext, function *Fun
 		Constants:        function.Constants,
 		Temporaries:      make(map[uint32]*values.Value),
 		VarSlotNames:     make(map[uint32]string),
-		CallStack:        make([]CallFrame, 0),
+		CallStack:        make([]*CallFrame, 0),
 		GlobalVars:       ctx.GlobalVars,
 		Functions:        ctx.Functions,
 		ForeachIterators: make(map[uint32]*ForeachIterator),
@@ -2785,8 +2715,8 @@ func (vm *VirtualMachine) executeVMFunction(ctx *ExecutionContext, function *Fun
 // executeNamedFunction looks up and executes a function by name
 func (vm *VirtualMachine) executeNamedFunction(ctx *ExecutionContext, functionName string, args []*values.Value) (*values.Value, error) {
 	// Check runtime registered functions first
-	if runtime3.GlobalVMIntegration != nil && runtime3.GlobalVMIntegration.HasFunction(functionName) {
-		return runtime3.GlobalVMIntegration.CallFunction(ctx, functionName, args)
+	if runtime2.GlobalVMIntegration != nil && runtime2.GlobalVMIntegration.HasFunction(functionName) {
+		return runtime2.GlobalVMIntegration.CallFunction(ctx, functionName, args)
 	}
 
 	// Check VM functions
@@ -3834,7 +3764,7 @@ func (vm *VirtualMachine) executeStaticMethodCall(ctx *ExecutionContext, inst *o
 	return nil
 }
 
-func (vm *VirtualMachine) executeMethod(ctx *ExecutionContext, instructions []opcodes.Instruction) (*values.Value, error) {
+func (vm *VirtualMachine) executeMethod(ctx *ExecutionContext, instructions []*opcodes.Instruction) (*values.Value, error) {
 	// Save current execution state
 	originalInstructions := ctx.Instructions
 	originalIP := ctx.IP
@@ -3845,7 +3775,7 @@ func (vm *VirtualMachine) executeMethod(ctx *ExecutionContext, instructions []op
 
 	// Execute instructions
 	for ctx.IP < len(ctx.Instructions) && !ctx.Halted {
-		inst := &ctx.Instructions[ctx.IP]
+		inst := ctx.Instructions[ctx.IP]
 		err := vm.executeInstruction(ctx, inst)
 		if err != nil {
 			// Restore original context

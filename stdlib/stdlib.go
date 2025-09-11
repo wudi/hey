@@ -1,8 +1,8 @@
 package stdlib
 
 import (
-	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/values"
+	"github.com/wudi/hey/vm"
 )
 
 // StandardLibrary represents the PHP standard library
@@ -17,7 +17,7 @@ type StandardLibrary struct {
 type BuiltinFunction struct {
 	Name       string
 	Handler    FunctionHandler
-	Parameters []Parameter
+	Parameters []*Parameter
 	IsVariadic bool
 	MinArgs    int
 	MaxArgs    int

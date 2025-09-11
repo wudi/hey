@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/wudi/hey/compiler/runtime"
-	"github.com/wudi/hey/compiler/values"
+	runtime2 "github.com/wudi/hey/runtime"
+	"github.com/wudi/hey/values"
 )
 
 // MockExecutionContext for the demo
@@ -20,7 +20,7 @@ func main() {
 	fmt.Println("=== PHP-Interpreter Goroutine Demo ===")
 
 	// Initialize the runtime system
-	err := runtime.Bootstrap()
+	err := runtime2.Bootstrap()
 	if err != nil {
 		panic(fmt.Sprintf("Failed to bootstrap runtime: %v", err))
 	}
@@ -28,7 +28,7 @@ func main() {
 	fmt.Println("✓ Runtime system initialized")
 
 	// Get the go function from the registry
-	functions := runtime.GlobalRegistry.GetAllFunctions()
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
 	goFunc, exists := functions["go"]
 	if !exists {
 		panic("go() function not found in registry")
@@ -38,7 +38,7 @@ func main() {
 		goFunc.MinArgs, goFunc.MaxArgs, goFunc.IsVariadic)
 
 	// Create a sample closure that simulates work
-	sampleClosure := values.NewClosure(func(ctx runtime.ExecutionContext, args []*values.Value) (*values.Value, error) {
+	sampleClosure := values.NewClosure(func(ctx runtime2.ExecutionContext, args []*values.Value) (*values.Value, error) {
 		return values.NewString("Hello from goroutine!"), nil
 	}, nil, "demo_closure")
 
@@ -74,7 +74,7 @@ func main() {
 	fmt.Println("\n--- Test 2: Goroutine with Variables ---")
 
 	// Create a closure that uses captured variables
-	varClosure := values.NewClosure(func(ctx runtime.ExecutionContext, args []*values.Value) (*values.Value, error) {
+	varClosure := values.NewClosure(func(ctx runtime2.ExecutionContext, args []*values.Value) (*values.Value, error) {
 		return values.NewString("Processed variables successfully"), nil
 	}, nil, "var_closure")
 
@@ -118,7 +118,7 @@ func main() {
 		boundVars := make(map[string]*values.Value)
 		boundVars[fmt.Sprintf("index_%d", i)] = values.NewInt(int64(i))
 
-		concurrentClosure := values.NewClosure(func(ctx runtime.ExecutionContext, args []*values.Value) (*values.Value, error) {
+		concurrentClosure := values.NewClosure(func(ctx runtime2.ExecutionContext, args []*values.Value) (*values.Value, error) {
 			// Simulate work with different durations
 			time.Sleep(time.Duration(50+i*50) * time.Millisecond)
 			return values.NewString(fmt.Sprintf("Concurrent result %d", i)), nil

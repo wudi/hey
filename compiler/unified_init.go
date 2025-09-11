@@ -3,8 +3,8 @@ package compiler
 import (
 	"fmt"
 
-	"github.com/wudi/hey/compiler/registry"
-	"github.com/wudi/hey/compiler/runtime"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/runtime"
 	"github.com/wudi/hey/stdlib"
 )
 

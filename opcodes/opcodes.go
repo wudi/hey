@@ -236,21 +236,21 @@ const (
 	OP_BEGIN_FUNCTION_DECL
 	OP_END_FUNCTION_DECL
 	OP_BIND_FUNCTION
-	
+
 	// Class declarations
 	OP_DECLARE_CLASS
 	OP_BEGIN_CLASS_DECL
 	OP_END_CLASS_DECL
 	OP_BIND_CLASS
-	
+
 	// Property declarations
 	OP_DECLARE_PROPERTY
 	OP_INIT_PROPERTY
-	
+
 	// Constant declarations
 	OP_DECLARE_CONSTANT
 	OP_INIT_CONSTANT
-	
+
 	// Interface/Trait declarations
 	OP_DECLARE_INTERFACE
 	OP_DECLARE_TRAIT
@@ -286,18 +286,18 @@ const (
 	// Special values
 	OP_COALESCE // ?? null coalescing
 	OP_MATCH    // match expression
-	
-	// Additional operations  
+
+	// Additional operations
 	OP_INIT_CLASS_TABLE
 	OP_ADD_INTERFACE
 	OP_SET_CLASS_PARENT
 	OP_SET_CURRENT_CLASS
 	OP_CLEAR_CURRENT_CLASS
-	OP_USE_TRAIT         // Use trait in a class
-	OP_GOTO              // Unconditional jump to label
-	OP_LABEL             // Label definition
-	OP_DECLARE           // Declare statement
-	OP_TICKS             // Ticks directive (declare(ticks=N))
+	OP_USE_TRAIT // Use trait in a class
+	OP_GOTO      // Unconditional jump to label
+	OP_LABEL     // Label definition
+	OP_DECLARE   // Declare statement
+	OP_TICKS     // Ticks directive (declare(ticks=N))
 )
 
 // Closure Operations (240-249)

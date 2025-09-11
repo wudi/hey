@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/wudi/hey/compiler/opcodes"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/values"
 )
 
 // MethodType defines the type of method implementation
@@ -22,8 +22,8 @@ const (
 type ExecutionContext interface {
 	WriteOutput(output string)
 	HasFunction(name string) bool
-	ExecuteBytecodeMethod(instructions []opcodes.Instruction, constants []*values.Value, args []*values.Value) (*values.Value, error)
-	ExecuteBytecodeMethodWithParams(instructions []opcodes.Instruction, constants []*values.Value, parameters []ParameterInfo, args []*values.Value) (*values.Value, error)
+	ExecuteBytecodeMethod(instructions []*opcodes.Instruction, constants []*values.Value, args []*values.Value) (*values.Value, error)
+	ExecuteBytecodeMethodWithParams(instructions []*opcodes.Instruction, constants []*values.Value, parameters []*ParameterInfo, args []*values.Value) (*values.Value, error)
 }
 
 // MethodImplementation is the unified interface for method implementations
@@ -42,10 +42,10 @@ type ParameterInfo struct {
 
 // BytecodeMethodImpl implements method via bytecode execution
 type BytecodeMethodImpl struct {
-	Instructions []opcodes.Instruction
+	Instructions []*opcodes.Instruction
 	Constants    []*values.Value
 	LocalVars    int
-	Parameters   []ParameterInfo
+	Parameters   []*ParameterInfo
 }
 
 func (b *BytecodeMethodImpl) Execute(ctx ExecutionContext, args []*values.Value) (*values.Value, error) {
@@ -117,7 +117,7 @@ type MethodDescriptor struct {
 	IsStatic   bool
 	IsAbstract bool
 	IsFinal    bool
-	Parameters []ParameterDescriptor
+	Parameters []*ParameterDescriptor
 
 	// Unified method implementation
 	Implementation MethodImplementation
@@ -312,7 +312,7 @@ func (r *ClassRegistry) copyClassDescriptor(original *ClassDescriptor) *ClassDes
 			IsStatic:       v.IsStatic,
 			IsAbstract:     v.IsAbstract,
 			IsFinal:        v.IsFinal,
-			Parameters:     make([]ParameterDescriptor, len(v.Parameters)),
+			Parameters:     make([]*ParameterDescriptor, len(v.Parameters)),
 			Implementation: v.Implementation, // Interface is immutable
 			IsVariadic:     v.IsVariadic,
 		}

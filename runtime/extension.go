@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/values"
 )
 
 // Extension interface for external extensions

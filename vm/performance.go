@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/values"
 )
 
 // PerformanceMetrics tracks VM execution statistics

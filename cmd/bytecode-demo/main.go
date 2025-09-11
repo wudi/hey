@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/wudi/hey/compiler/opcodes"
-	"github.com/wudi/hey/compiler/passes"
-	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/optimizer"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/values"
+	vm2 "github.com/wudi/hey/vm"
 )
 
 func main() {
@@ -28,7 +29,7 @@ func demo1() {
 
 	// Create a simple bytecode program manually
 	// This represents: echo "Hello World";
-	instructions := []opcodes.Instruction{
+	instructions := []*opcodes.Instruction{
 		{
 			Opcode: opcodes.OP_ECHO,
 			OpType1: func() byte {
@@ -55,9 +56,9 @@ func demo1() {
 
 	// Execute the bytecode
 	fmt.Println("\nExecution Output:")
-	virtualMachine := vm.NewVirtualMachine()
-	ctx := vm.NewExecutionContext()
-	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function), make(map[string]*vm.Class))
+	virtualMachine := vm2.NewVirtualMachine()
+	ctx := vm2.NewExecutionContext()
+	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*registry.Function), make(map[string]*registry.Class))
 	if err != nil {
 		fmt.Printf("Execution error: %v\n", err)
 	}
@@ -108,7 +109,7 @@ func demo2() {
 	}
 
 	// Apply optimizations
-	optimizer := passes.NewOptimizer()
+	optimizer := optimizer.NewOptimizer()
 	optimizedInstructions, _, stats := optimizer.OptimizeWithStats(originalInstructions, originalConstants)
 
 	fmt.Printf("\nOptimized bytecode (%d instructions):\n", len(optimizedInstructions))
@@ -137,7 +138,7 @@ func demo3() {
 	fmt.Println("--------------------------------")
 
 	// Demonstrate different instruction types
-	instructions := []opcodes.Instruction{
+	instructions := []*opcodes.Instruction{
 		// Load constants
 		{
 			Opcode: opcodes.OP_QM_ASSIGN,
@@ -210,11 +211,11 @@ func demo3() {
 
 	// Execute with VM
 	fmt.Println("\nVM Execution:")
-	virtualMachine := vm.NewVirtualMachine()
+	virtualMachine := vm2.NewVirtualMachine()
 	virtualMachine.DebugMode = false // Set to true to see instruction-level debugging
-	ctx := vm.NewExecutionContext()
+	ctx := vm2.NewExecutionContext()
 
-	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*vm.Function), make(map[string]*vm.Class))
+	err := virtualMachine.Execute(ctx, instructions, constants, make(map[string]*registry.Function), make(map[string]*registry.Class))
 	if err != nil {
 		fmt.Printf("Execution error: %v\n", err)
 	} else {

@@ -1,8 +1,8 @@
-package passes
+package optimizer
 
 import (
-	"github.com/wudi/hey/compiler/opcodes"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/values"
 )
 
 // OptimizationPass represents a single optimization pass

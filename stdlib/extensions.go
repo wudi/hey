@@ -3,8 +3,8 @@ package stdlib
 import (
 	"fmt"
 
-	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/values"
+	"github.com/wudi/hey/vm"
 )
 
 // ExtensionManager manages external PHP extensions
@@ -202,7 +202,7 @@ func (be *BaseExtension) AddVariable(name string, value *values.Value) {
 }
 
 // AddFunction adds a function to the extension
-func (be *BaseExtension) AddFunction(name string, handler FunctionHandler, params []Parameter, isVariadic bool, minArgs, maxArgs int) {
+func (be *BaseExtension) AddFunction(name string, handler FunctionHandler, params []*Parameter, isVariadic bool, minArgs, maxArgs int) {
 	be.functions[name] = BuiltinFunction{
 		Name:       name,
 		Handler:    handler,
@@ -241,15 +241,15 @@ func (me *MathExtension) initMathExtension() {
 	me.AddConstant("MATH_E", values.NewFloat(2.71828182845904523536))
 
 	// Add math functions
-	me.AddFunction("deg2rad", deg2radHandler, []Parameter{
+	me.AddFunction("deg2rad", deg2radHandler, []*Parameter{
 		{Name: "number", Type: "float", IsReference: false, HasDefault: false},
 	}, false, 1, 1)
 
-	me.AddFunction("rad2deg", rad2degHandler, []Parameter{
+	me.AddFunction("rad2deg", rad2degHandler, []*Parameter{
 		{Name: "number", Type: "float", IsReference: false, HasDefault: false},
 	}, false, 1, 1)
 
-	me.AddFunction("hypot", hypotHandler, []Parameter{
+	me.AddFunction("hypot", hypotHandler, []*Parameter{
 		{Name: "x", Type: "float", IsReference: false, HasDefault: false},
 		{Name: "y", Type: "float", IsReference: false, HasDefault: false},
 	}, false, 2, 2)
@@ -283,13 +283,13 @@ func (je *JsonExtension) initJsonExtension() {
 	je.AddConstant("JSON_UNESCAPED_UNICODE", values.NewInt(256))
 
 	// Add JSON functions
-	je.AddFunction("json_encode", jsonEncodeHandler, []Parameter{
+	je.AddFunction("json_encode", jsonEncodeHandler, []*Parameter{
 		{Name: "value", Type: "mixed", IsReference: false, HasDefault: false},
 		{Name: "flags", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(0)},
 		{Name: "depth", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(512)},
 	}, false, 1, 3)
 
-	je.AddFunction("json_decode", jsonDecodeHandler, []Parameter{
+	je.AddFunction("json_decode", jsonDecodeHandler, []*Parameter{
 		{Name: "json", Type: "string", IsReference: false, HasDefault: false},
 		{Name: "associative", Type: "bool", IsReference: false, HasDefault: true, DefaultValue: values.NewBool(false)},
 		{Name: "depth", Type: "int", IsReference: false, HasDefault: true, DefaultValue: values.NewInt(512)},

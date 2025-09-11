@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wudi/hey/compiler/registry"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/values"
 )
 
 // InitializeUnifiedClasses initializes all built-in classes using the unified registry

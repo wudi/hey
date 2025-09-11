@@ -8,8 +8,8 @@ import (
 	"github.com/wudi/hey/compiler"
 	"github.com/wudi/hey/compiler/lexer"
 	"github.com/wudi/hey/compiler/parser"
-	"github.com/wudi/hey/compiler/runtime"
-	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/runtime"
+	"github.com/wudi/hey/vm"
 )
 
 func main() {
@@ -179,7 +179,7 @@ func executeCode(vmachine *vm.VirtualMachine, phpCode, description string) {
 	var output strings.Builder
 	ctx.SetOutputWriter(&output)
 
-	err = vmachine.Execute(ctx, comp.GetBytecode(), comp.GetConstants(), comp.GetVMFunctions(), comp.GetVMClasses())
+	err = vmachine.Execute(ctx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes())
 	if err != nil {
 		fmt.Printf("❌ Execution failed for %s: %v\n", description, err)
 		return

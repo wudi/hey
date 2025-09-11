@@ -3,9 +3,9 @@ package stdlib
 import (
 	"fmt"
 
-	"github.com/wudi/hey/compiler/registry"
-	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/values"
+	"github.com/wudi/hey/vm"
 )
 
 // StdlibIntegration provides integration between the standard library and VM
@@ -48,7 +48,7 @@ func (si *StdlibIntegration) InitializeExecutionContext(ctx *vm.ExecutionContext
 
 	// Initialize built-in functions
 	if ctx.Functions == nil {
-		ctx.Functions = make(map[string]*vm.Function)
+		ctx.Functions = make(map[string]*registry.Function)
 	}
 
 	for name, builtinFunc := range si.stdlib.Functions {
@@ -71,8 +71,8 @@ func (si *StdlibIntegration) InitializeExecutionContext(ctx *vm.ExecutionContext
 }
 
 // createVMFunctionWrapper creates a VM function wrapper for builtin functions
-func (si *StdlibIntegration) createVMFunctionWrapper(name string, builtinFunc BuiltinFunction) *vm.Function {
-	return &vm.Function{
+func (si *StdlibIntegration) createVMFunctionWrapper(name string, builtinFunc BuiltinFunction) *registry.Function {
+	return &registry.Function{
 		Name:         name,
 		Instructions: nil, // Built-in functions don't have bytecode
 		Constants:    nil,
@@ -83,10 +83,10 @@ func (si *StdlibIntegration) createVMFunctionWrapper(name string, builtinFunc Bu
 }
 
 // convertParametersToVM converts stdlib parameters to VM parameters
-func (si *StdlibIntegration) convertParametersToVM(params []Parameter) []vm.Parameter {
-	vmParams := make([]vm.Parameter, len(params))
+func (si *StdlibIntegration) convertParametersToVM(params []*Parameter) []*registry.Parameter {
+	vmParams := make([]*registry.Parameter, len(params))
 	for i, param := range params {
-		vmParams[i] = vm.Parameter{
+		vmParams[i] = &registry.Parameter{
 			Name:         param.Name,
 			Type:         param.Type,
 			IsReference:  param.IsReference,
@@ -139,9 +139,9 @@ func (si *StdlibIntegration) convertClassToRegistry(stdlibClass *Class) *registr
 
 	// Convert methods
 	for name, method := range stdlibClass.Methods {
-		params := make([]registry.ParameterDescriptor, len(method.Parameters))
+		params := make([]*registry.ParameterDescriptor, len(method.Parameters))
 		for i, param := range method.Parameters {
-			params[i] = registry.ParameterDescriptor{
+			params[i] = &registry.ParameterDescriptor{
 				Name:         param.Name,
 				Type:         param.Type,
 				IsReference:  param.IsReference,

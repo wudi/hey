@@ -3,8 +3,8 @@ package registry
 import (
 	"strings"
 
-	"github.com/wudi/hey/compiler/opcodes"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/values"
 )
 
 // ClassBuilder provides a fluent API for building class descriptors
@@ -82,7 +82,7 @@ func (b *ClassBuilder) AddMethod(name, visibility string) *MethodBuilder {
 		method: &MethodDescriptor{
 			Name:       name,
 			Visibility: visibility,
-			Parameters: []ParameterDescriptor{},
+			Parameters: []*ParameterDescriptor{},
 		},
 	}
 }
@@ -124,7 +124,7 @@ func (mb *MethodBuilder) Variadic() *MethodBuilder {
 
 // WithParameter adds a parameter to the method
 func (mb *MethodBuilder) WithParameter(name, phpType string) *MethodBuilder {
-	mb.method.Parameters = append(mb.method.Parameters, ParameterDescriptor{
+	mb.method.Parameters = append(mb.method.Parameters, &ParameterDescriptor{
 		Name: name,
 		Type: phpType,
 	})
@@ -133,7 +133,7 @@ func (mb *MethodBuilder) WithParameter(name, phpType string) *MethodBuilder {
 
 // WithOptionalParameter adds an optional parameter with default value
 func (mb *MethodBuilder) WithOptionalParameter(name, phpType string, defaultValue *values.Value) *MethodBuilder {
-	mb.method.Parameters = append(mb.method.Parameters, ParameterDescriptor{
+	mb.method.Parameters = append(mb.method.Parameters, &ParameterDescriptor{
 		Name:         name,
 		Type:         phpType,
 		HasDefault:   true,
@@ -144,7 +144,7 @@ func (mb *MethodBuilder) WithOptionalParameter(name, phpType string, defaultValu
 
 // WithReferenceParameter adds a reference parameter
 func (mb *MethodBuilder) WithReferenceParameter(name, phpType string) *MethodBuilder {
-	mb.method.Parameters = append(mb.method.Parameters, ParameterDescriptor{
+	mb.method.Parameters = append(mb.method.Parameters, &ParameterDescriptor{
 		Name:        name,
 		Type:        phpType,
 		IsReference: true,
@@ -165,7 +165,7 @@ func (mb *MethodBuilder) WithRuntimeHandler(handler func(ExecutionContext, []*va
 }
 
 // WithBytecode sets bytecode instructions as the implementation
-func (mb *MethodBuilder) WithBytecode(instructions []opcodes.Instruction, constants []*values.Value, localVars int) *MethodBuilder {
+func (mb *MethodBuilder) WithBytecode(instructions []*opcodes.Instruction, constants []*values.Value, localVars int) *MethodBuilder {
 	mb.method.Implementation = &BytecodeMethodImpl{
 		Instructions: instructions,
 		Constants:    constants,

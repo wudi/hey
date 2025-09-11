@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/values"
+	"github.com/wudi/hey/vm"
 )
 
 // initClasses initializes built-in PHP classes

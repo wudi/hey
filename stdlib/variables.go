@@ -1,7 +1,7 @@
 package stdlib
 
 import (
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/values"
 )
 
 // initVariables initializes built-in PHP variables

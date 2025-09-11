@@ -8,9 +8,9 @@ import (
 
 	"github.com/wudi/hey/compiler/ast"
 	"github.com/wudi/hey/compiler/lexer"
-	"github.com/wudi/hey/compiler/opcodes"
-	"github.com/wudi/hey/compiler/registry"
-	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/values"
 )
 
 // ForwardJump represents a jump that needs to be resolved later
@@ -22,7 +22,7 @@ type ForwardJump struct {
 
 // Compiler compiles AST to bytecode
 type Compiler struct {
-	instructions     []opcodes.Instruction
+	instructions     []*opcodes.Instruction
 	constants        []*values.Value
 	scopes           []*Scope
 	labels           map[string]int
@@ -30,11 +30,11 @@ type Compiler struct {
 	nextTemp         uint32
 	nextLabel        int
 	nextAnonFunction int // Counter for anonymous functions
-	functions        map[string]*CompilerFunction
-	classes          map[string]*CompilerClass
-	interfaces       map[string]*CompilerInterface
-	traits           map[string]*CompilerTrait
-	currentClass     *CompilerClass // Current class being compiled
+	functions        map[string]*registry.Function
+	classes          map[string]*registry.Class
+	interfaces       map[string]*registry.Interface
+	traits           map[string]*registry.Trait
+	currentClass     *registry.Class // Current class being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -53,7 +53,7 @@ func NewCompiler() *Compiler {
 	registry.Initialize()
 
 	return &Compiler{
-		instructions:     make([]opcodes.Instruction, 0),
+		instructions:     make([]*opcodes.Instruction, 0),
 		constants:        make([]*values.Value, 0),
 		scopes:           make([]*Scope, 0),
 		labels:           make(map[string]int),
@@ -61,10 +61,10 @@ func NewCompiler() *Compiler {
 		nextTemp:         1000, // Start temp vars at 1000 to avoid conflicts
 		nextLabel:        0,
 		nextAnonFunction: 0, // Start anonymous function counter at 0
-		functions:        make(map[string]*CompilerFunction),
-		classes:          make(map[string]*CompilerClass),
-		interfaces:       make(map[string]*CompilerInterface),
-		traits:           make(map[string]*CompilerTrait),
+		functions:        make(map[string]*registry.Function),
+		classes:          make(map[string]*registry.Class),
+		interfaces:       make(map[string]*registry.Interface),
+		traits:           make(map[string]*registry.Trait),
 		currentClass:     nil,
 	}
 }
@@ -89,7 +89,7 @@ func (c *Compiler) Compile(node ast.Node) error {
 }
 
 // GetBytecode returns the compiled bytecode
-func (c *Compiler) GetBytecode() []opcodes.Instruction {
+func (c *Compiler) GetBytecode() []*opcodes.Instruction {
 	return c.instructions
 }
 
@@ -99,11 +99,11 @@ func (c *Compiler) GetConstants() []*values.Value {
 }
 
 // GetFunctions returns the compiled functions
-func (c *Compiler) GetFunctions() map[string]*CompilerFunction {
+func (c *Compiler) GetFunctions() map[string]*registry.Function {
 	return c.functions
 }
 
-func (c *Compiler) GetClasses() map[string]*CompilerClass {
+func (c *Compiler) GetClasses() map[string]*registry.Class {
 	return c.classes
 }
 
@@ -1686,7 +1686,7 @@ func (c *Compiler) compileProgram(program *ast.Program) error {
 func (c *Compiler) emit(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint32, op2Type opcodes.OpType, op2 uint32, resultType opcodes.OpType, result uint32) {
 	opType1, opType2 := opcodes.EncodeOpTypes(op1Type, op2Type, resultType)
 
-	instruction := opcodes.Instruction{
+	instruction := &opcodes.Instruction{
 		Opcode:  opcode,
 		OpType1: opType1,
 		OpType2: opType2,
@@ -1701,7 +1701,7 @@ func (c *Compiler) emit(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint3
 func (c *Compiler) emitReserved(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint32, op2Type opcodes.OpType, op2 uint32, resultType opcodes.OpType, result uint32, reserved byte) {
 	opType1, opType2 := opcodes.EncodeOpTypes(op1Type, op2Type, resultType)
 
-	instruction := opcodes.Instruction{
+	instruction := &opcodes.Instruction{
 		Opcode:   opcode,
 		OpType1:  opType1,
 		OpType2:  opType2,
@@ -1715,7 +1715,7 @@ func (c *Compiler) emitReserved(opcode opcodes.Opcode, op1Type opcodes.OpType, o
 }
 
 func (c *Compiler) emitWithTypes(opcode opcodes.Opcode, opType1 byte, opType2 byte, op1 uint32, op2 uint32, result uint32) {
-	instruction := opcodes.Instruction{
+	instruction := &opcodes.Instruction{
 		Opcode:  opcode,
 		OpType1: opType1,
 		OpType2: opType2,
@@ -1788,7 +1788,7 @@ func (c *Compiler) placeLabel(name string) {
 				c.constants[constantIndex] = values.NewInt(int64(pos))
 			} else {
 				// Update instruction operand (for old jump system)
-				instruction := &c.instructions[jump.instructionIndex]
+				instruction := c.instructions[jump.instructionIndex]
 				if jump.operand == 1 {
 					instruction.Op1 = uint32(pos)
 				} else if jump.operand == 2 {
@@ -2612,11 +2612,11 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	}
 
 	// Create new function
-	function := &CompilerFunction{
+	function := &registry.Function{
 		Name:         funcName,
-		Instructions: make([]opcodes.Instruction, 0),
+		Instructions: make([]*opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]CompilerParameter, 0),
+		Parameters:   make([]*registry.Parameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -2632,7 +2632,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 				return fmt.Errorf("invalid parameter name type")
 			}
 
-			compilerParam := CompilerParameter{
+			compilerParam := &registry.Parameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -2664,7 +2664,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	oldConstants := c.constants
 
 	// Reset for function compilation
-	c.instructions = make([]opcodes.Instruction, 0)
+	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
 
 	// Create function scope
@@ -2724,9 +2724,9 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			}
 
 			// Convert VM parameters to registry parameters
-			registryParams := make([]registry.ParameterDescriptor, len(function.Parameters))
+			registryParams := make([]*registry.ParameterDescriptor, len(function.Parameters))
 			for i, param := range function.Parameters {
-				registryParams[i] = registry.ParameterDescriptor{
+				registryParams[i] = &registry.ParameterDescriptor{
 					Name:         param.Name,
 					Type:         param.Type,
 					IsReference:  param.IsReference,
@@ -2777,11 +2777,11 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	c.nextAnonFunction++
 
 	// Create new function
-	function := &CompilerFunction{
+	function := &registry.Function{
 		Name:         anonName,
-		Instructions: make([]opcodes.Instruction, 0),
+		Instructions: make([]*opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]CompilerParameter, 0),
+		Parameters:   make([]*registry.Parameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -2797,7 +2797,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 				return fmt.Errorf("invalid parameter name type")
 			}
 
-			compilerParam := CompilerParameter{
+			compilerParam := &registry.Parameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -2827,7 +2827,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	oldConstants := c.constants
 
 	// Reset for function compilation
-	c.instructions = make([]opcodes.Instruction, 0)
+	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
 
 	// Create function scope
@@ -2934,12 +2934,12 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	}
 
 	// Create new class
-	class := &CompilerClass{
+	class := &registry.Class{
 		Name:       className,
 		Parent:     "",
-		Properties: make(map[string]*CompilerProperty),
-		Methods:    make(map[string]*CompilerFunction),
-		Constants:  make(map[string]*CompilerClassConstant),
+		Properties: make(map[string]*registry.Property),
+		Methods:    make(map[string]*registry.Function),
+		Constants:  make(map[string]*registry.ClassConstant),
 		IsAbstract: false,
 		IsFinal:    false,
 	}
@@ -3051,7 +3051,7 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 	}
 
 	// Create new property
-	property := &CompilerProperty{
+	property := &registry.Property{
 		Name:       propName,
 		Visibility: decl.Visibility, // public, private, protected
 		IsStatic:   decl.Static,
@@ -3187,7 +3187,7 @@ func (c *Compiler) compileClassConstant(decl *ast.ClassConstantDeclaration) erro
 		}
 
 		// Create class constant with full metadata
-		classConstant := &CompilerClassConstant{
+		classConstant := &registry.ClassConstant{
 			Name:       constName,
 			Value:      constValue,
 			Visibility: visibility,
@@ -3542,7 +3542,7 @@ func (c *Compiler) evaluateClassConstantAccess(expr *ast.ClassConstantAccessExpr
 	}
 
 	// Determine which class to look in
-	var targetClass *CompilerClass
+	var targetClass *registry.Class
 
 	if classExpr, ok := expr.Class.(*ast.IdentifierNode); ok {
 		switch classExpr.Name {
@@ -3782,12 +3782,12 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	}
 
 	// Create new class
-	class := &CompilerClass{
+	class := &registry.Class{
 		Name:       className,
 		Parent:     "",
-		Properties: make(map[string]*CompilerProperty),
-		Methods:    make(map[string]*CompilerFunction),
-		Constants:  make(map[string]*CompilerClassConstant),
+		Properties: make(map[string]*registry.Property),
+		Methods:    make(map[string]*registry.Function),
+		Constants:  make(map[string]*registry.ClassConstant),
 		IsAbstract: decl.Abstract,
 		IsFinal:    decl.Final,
 	}
@@ -4243,7 +4243,7 @@ func (c *Compiler) compileErrorSuppressionExpression(expr *ast.ErrorSuppressionE
 
 	// Emit BEGIN_SILENCE instruction - saves current error reporting level to temp var
 	op1Type, op2Type := opcodes.EncodeOpTypes(opcodes.IS_UNUSED, opcodes.IS_UNUSED, opcodes.IS_TMP_VAR)
-	beginInst := opcodes.Instruction{
+	beginInst := &opcodes.Instruction{
 		Opcode:  opcodes.OP_BEGIN_SILENCE,
 		OpType1: op1Type,
 		OpType2: op2Type,
@@ -4260,7 +4260,7 @@ func (c *Compiler) compileErrorSuppressionExpression(expr *ast.ErrorSuppressionE
 
 	// Emit END_SILENCE instruction - restores previous error reporting level
 	op1Type, op2Type = opcodes.EncodeOpTypes(opcodes.IS_TMP_VAR, opcodes.IS_UNUSED, opcodes.IS_UNUSED)
-	endInst := opcodes.Instruction{
+	endInst := &opcodes.Instruction{
 		Opcode:  opcodes.OP_END_SILENCE,
 		OpType1: op1Type,
 		OpType2: op2Type,
@@ -4930,11 +4930,11 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 	arrowName := fmt.Sprintf("__arrow_%d", len(c.functions))
 
 	// Create new function
-	function := &CompilerFunction{
+	function := &registry.Function{
 		Name:         arrowName,
-		Instructions: make([]opcodes.Instruction, 0),
+		Instructions: make([]*opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]CompilerParameter, 0),
+		Parameters:   make([]*registry.Parameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -4949,7 +4949,7 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 				return fmt.Errorf("invalid parameter name type")
 			}
 
-			compilerParam := CompilerParameter{
+			compilerParam := &registry.Parameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -4981,7 +4981,7 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 	savedLabels := c.labels
 
 	// Reset compiler state for function compilation
-	c.instructions = make([]opcodes.Instruction, 0)
+	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
 	c.nextTemp = 100 // Start temporaries at 100 for function scope
 	c.labels = make(map[string]int)
@@ -5025,7 +5025,7 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 
 	// Add function to functions map
 	if c.functions == nil {
-		c.functions = make(map[string]*CompilerFunction)
+		c.functions = make(map[string]*registry.Function)
 	}
 	c.functions[arrowName] = function
 
@@ -5759,9 +5759,9 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 	}
 
 	// Create new interface
-	iface := &CompilerInterface{
+	iface := &registry.Interface{
 		Name:    interfaceName,
-		Methods: make(map[string]*CompilerInterfaceMethod),
+		Methods: make(map[string]*registry.InterfaceMethod),
 		Extends: make([]string, 0),
 	}
 
@@ -5777,10 +5777,10 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 		}
 
 		methodName := method.Name.Name
-		interfaceMethod := &CompilerInterfaceMethod{
+		interfaceMethod := &registry.InterfaceMethod{
 			Name:       methodName,
 			Visibility: method.Visibility,
-			Parameters: make([]*CompilerParameter, 0),
+			Parameters: make([]*registry.Parameter, 0),
 		}
 
 		// Add parameters if present
@@ -5797,7 +5797,7 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 					continue
 				}
 
-				compilerParam := &CompilerParameter{
+				compilerParam := &registry.Parameter{
 					Name:         paramName,
 					Type:         "", // Type hints not fully implemented yet
 					IsReference:  param.ByReference,
@@ -5849,10 +5849,10 @@ func (c *Compiler) compileTraitDeclaration(decl *ast.TraitDeclaration) error {
 	}
 
 	// Create new trait
-	trait := &CompilerTrait{
+	trait := &registry.Trait{
 		Name:       traitName,
-		Properties: make(map[string]*CompilerProperty),
-		Methods:    make(map[string]*CompilerFunction),
+		Properties: make(map[string]*registry.Property),
+		Methods:    make(map[string]*registry.Function),
 	}
 
 	// Compile trait properties
@@ -5895,12 +5895,12 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 	}
 
 	// Create enum as a special class
-	enumClass := &CompilerClass{
+	enumClass := &registry.Class{
 		Name:       enumName,
 		Parent:     "",
-		Properties: make(map[string]*CompilerProperty),
-		Methods:    make(map[string]*CompilerFunction),
-		Constants:  make(map[string]*CompilerClassConstant),
+		Properties: make(map[string]*registry.Property),
+		Methods:    make(map[string]*registry.Function),
+		Constants:  make(map[string]*registry.ClassConstant),
 		IsAbstract: false,
 		IsFinal:    true, // Enums are final by default
 	}
@@ -5923,7 +5923,7 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 			caseValue = values.NewString(caseName)
 		}
 
-		enumClass.Constants[caseName] = &CompilerClassConstant{
+		enumClass.Constants[caseName] = &registry.ClassConstant{
 			Name:       caseName,
 			Value:      caseValue,
 			Visibility: "public",
@@ -5980,11 +5980,11 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 			}
 
 			// Create a copy of the trait method for the class
-			classMethod := &CompilerFunction{
+			classMethod := &registry.Function{
 				Name:         traitMethod.Name,
-				Instructions: make([]opcodes.Instruction, len(traitMethod.Instructions)),
+				Instructions: make([]*opcodes.Instruction, len(traitMethod.Instructions)),
 				Constants:    make([]*values.Value, len(traitMethod.Constants)),
-				Parameters:   make([]CompilerParameter, len(traitMethod.Parameters)),
+				Parameters:   make([]*registry.Parameter, len(traitMethod.Parameters)),
 				IsVariadic:   traitMethod.IsVariadic,
 				IsGenerator:  traitMethod.IsGenerator,
 			}
@@ -6020,9 +6020,9 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 				}
 
 				// Convert VM parameters to registry parameters
-				registryParams := make([]registry.ParameterDescriptor, len(classMethod.Parameters))
+				registryParams := make([]*registry.ParameterDescriptor, len(classMethod.Parameters))
 				for i, param := range classMethod.Parameters {
-					registryParams[i] = registry.ParameterDescriptor{
+					registryParams[i] = &registry.ParameterDescriptor{
 						Name:         param.Name,
 						Type:         param.Type,
 						IsReference:  param.IsReference,
@@ -6032,9 +6032,9 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 				}
 
 				// Convert VM parameters to registry parameter info for default value support
-				paramInfo := make([]registry.ParameterInfo, len(classMethod.Parameters))
+				paramInfo := make([]*registry.ParameterInfo, len(classMethod.Parameters))
 				for i, param := range classMethod.Parameters {
-					paramInfo[i] = registry.ParameterInfo{
+					paramInfo[i] = &registry.ParameterInfo{
 						Name:         param.Name,
 						HasDefault:   param.HasDefault,
 						DefaultValue: param.DefaultValue,
@@ -6081,7 +6081,7 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 			}
 
 			// Create a copy of the trait property for the class
-			classProp := &CompilerProperty{
+			classProp := &registry.Property{
 				Name:       traitProp.Name,
 				Visibility: traitProp.Visibility,
 				IsStatic:   traitProp.IsStatic,
@@ -6258,9 +6258,9 @@ func (c *Compiler) evaluateConstantArrayExpression(arrExpr *ast.ArrayExpression)
 }
 
 // Helper methods for trait compilation
-func (c *Compiler) compileTraitProperty(trait *CompilerTrait, prop *ast.PropertyDeclaration) error {
+func (c *Compiler) compileTraitProperty(trait *registry.Trait, prop *ast.PropertyDeclaration) error {
 	// PropertyDeclaration contains a single property
-	property := &CompilerProperty{
+	property := &registry.Property{
 		Name:       prop.Name,
 		Type:       "", // Type hints not fully implemented yet
 		Visibility: prop.Visibility,
@@ -6271,7 +6271,7 @@ func (c *Compiler) compileTraitProperty(trait *CompilerTrait, prop *ast.Property
 	return nil
 }
 
-func (c *Compiler) compileTraitMethod(trait *CompilerTrait, method *ast.FunctionDeclaration) error {
+func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.FunctionDeclaration) error {
 	// Validate method name
 	if method.Name == nil {
 		return fmt.Errorf("trait method missing name")
@@ -6289,11 +6289,11 @@ func (c *Compiler) compileTraitMethod(trait *CompilerTrait, method *ast.Function
 	}
 
 	// Create new function for the trait method
-	function := &CompilerFunction{
+	function := &registry.Function{
 		Name:         methodName,
-		Instructions: make([]opcodes.Instruction, 0),
+		Instructions: make([]*opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]CompilerParameter, 0),
+		Parameters:   make([]*registry.Parameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
 	}
@@ -6308,7 +6308,7 @@ func (c *Compiler) compileTraitMethod(trait *CompilerTrait, method *ast.Function
 				return fmt.Errorf("invalid parameter name type in trait method %s", methodName)
 			}
 
-			compilerParam := CompilerParameter{
+			compilerParam := &registry.Parameter{
 				Name:        paramName,
 				IsReference: param.ByReference,
 				HasDefault:  param.DefaultValue != nil,
@@ -6348,7 +6348,7 @@ func (c *Compiler) compileTraitMethod(trait *CompilerTrait, method *ast.Function
 	oldCurrentClass := c.currentClass
 
 	// Reset for trait method compilation
-	c.instructions = make([]opcodes.Instruction, 0)
+	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
 	// Note: we don't set c.currentClass for traits as trait methods are different
 
@@ -6404,7 +6404,7 @@ func (c *Compiler) compileTraitMethod(trait *CompilerTrait, method *ast.Function
 }
 
 // Helper method for enum compilation
-func (c *Compiler) compileEnumMethod(enumClass *CompilerClass, method *ast.FunctionDeclaration) error {
+func (c *Compiler) compileEnumMethod(enumClass *registry.Class, method *ast.FunctionDeclaration) error {
 	// Similar to trait method compilation but store in enum class
 	if method.Name == nil {
 		return nil
@@ -6418,13 +6418,23 @@ func (c *Compiler) compileEnumMethod(enumClass *CompilerClass, method *ast.Funct
 	}
 
 	// Create a simplified function for the enum
-	function := &CompilerFunction{
+	function := &registry.Function{
 		Name:         methodName,
-		Parameters:   make([]CompilerParameter, 0),
-		Instructions: make([]opcodes.Instruction, 0),
+		Parameters:   make([]*registry.Parameter, 0),
+		Instructions: make([]*opcodes.Instruction, 0),
 		Constants:    make([]*values.Value, 0),
 	}
 
 	enumClass.Methods[methodName] = function
 	return nil
+}
+
+// Functions return the compiled functions
+func (c *Compiler) Functions() map[string]*registry.Function {
+	return c.functions
+}
+
+// Classes return the compiled classes
+func (c *Compiler) Classes() map[string]*registry.Class {
+	return c.classes
 }

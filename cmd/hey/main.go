@@ -11,10 +11,10 @@ import (
 	"github.com/wudi/hey/compiler/ast"
 	"github.com/wudi/hey/compiler/lexer"
 	"github.com/wudi/hey/compiler/parser"
-	"github.com/wudi/hey/compiler/runtime"
-	"github.com/wudi/hey/compiler/values"
-	"github.com/wudi/hey/compiler/vm"
+	runtime2 "github.com/wudi/hey/runtime"
+	"github.com/wudi/hey/values"
 	"github.com/wudi/hey/version"
+	"github.com/wudi/hey/vm"
 )
 
 func main() {
@@ -80,8 +80,6 @@ func main() {
 				return err
 			}
 
-			fmt.Println(string(code))
-
 			return parseAndExecuteCode(string(code), false)
 		},
 	}
@@ -125,13 +123,13 @@ func parseAndExecuteCode(code string, inScript bool) error {
 	}
 
 	// Initialize runtime if not already done
-	if err := runtime.Bootstrap(); err != nil {
+	if err := runtime2.Bootstrap(); err != nil {
 		fmt.Println("Failed to bootstrap runtime:", err)
 		os.Exit(1)
 	}
 
 	// Initialize VM integration
-	if err := runtime.InitializeVMIntegration(); err != nil {
+	if err := runtime2.InitializeVMIntegration(); err != nil {
 		fmt.Println("Failed to initialize VM integration:", err)
 		os.Exit(1)
 	}
@@ -142,7 +140,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 		vmCtx.GlobalVars = make(map[string]*values.Value)
 	}
 
-	variables := runtime.GlobalVMIntegration.GetAllVariables()
+	variables := runtime2.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
 		vmCtx.GlobalVars[name] = value
 	}
@@ -167,7 +165,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 		includeCtx.OutputWriter = ctx.OutputWriter   // Share output writer
 
 		// Execute the compiled bytecode in the separate context
-		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetVMFunctions(), comp.GetVMClasses())
+		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes())
 		if err != nil {
 			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
 		}
@@ -201,7 +199,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 	}
 
 	// Execute the program
-	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.GetVMFunctions(), comp.GetVMClasses())
+	return vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes())
 }
 
 func runWebServer(addr string) error {
