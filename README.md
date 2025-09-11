@@ -114,6 +114,39 @@ go build ./cmd/vm-demo
 go test ./...
 ```
 
+### Command Line Tool
+
+Build and use the CLI tool:
+
+```bash
+# Build the parser
+go build -o php-parser ./cmd/php-parser
+
+# Parse a PHP file
+./php-parser example.php
+
+# Show tokens and AST
+./php-parser -tokens -ast example.php
+
+# Output as JSON
+./php-parser -format json example.php
+
+# Parse from stdin
+echo '<?php echo "Hello"; ?>' | ./php-parser
+```
+
+### Bytecode Compiler
+
+Experience next-generation PHP execution with our complete bytecode compiler:
+
+```bash
+# Build the bytecode demo
+go build -o bytecode-demo ./cmd/bytecode-demo
+
+# Run bytecode compilation examples
+./bytecode-demo
+```
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
