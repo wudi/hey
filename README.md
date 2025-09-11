@@ -13,15 +13,43 @@ A high-performance PHP interpreter written in Go, providing syntax compatibility
 - **Lexer & Parser**: Complete lexical analysis and parsing for PHP syntax
 - **Static Analysis**: AST-based code analysis and metrics collection
 
-## Installation
+## Installation Binary
 
 ```bash
-go get github.com/wudi/hey
+go install github.com/wudi/hey/cmd/hey@master
 ```
 
-## Quick Start
+```
+hey -h
 
-### Basic Usage
+NAME:
+   hey - A PHP interpreter written in Go
+
+USAGE:
+   hey [global options] [command [command options]]
+
+COMMANDS:
+   init        Creates a composer.json file in the current directory
+   require     Adds required packages to your composer.json and installs them
+   install, i  Installs your composer.json and installs them
+   update, u   Updates your dependencies to the latest version according to composer.json, and updates the composer.lock file
+   validate    Validates a composer.json file
+   fpm         FastCGI process manager
+   help, h     Shows a list of commands or help for one command
+
+GLOBAL OPTIONS:
+   --code string, -r string     Run PHP <code> without using script tags <?..?>
+   --version string, -v string  Show version
+   --file string, -f string     Parse and execute <file>.
+   -S string                    <addr>:<port> Run with built-in web server.
+   --help, -h                   show help
+
+```
+
+
+## Using modules 
+
+### Basic Usage 
 
 ```go
 package main
