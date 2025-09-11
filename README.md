@@ -1,5 +1,7 @@
 # Hey - PHP Interpreter in Go
 
+**Currently experimental, do not use in production.**
+
 A high-performance PHP interpreter written in Go, providing syntax compatibility with PHP 8.0+.
 
 ## Features
