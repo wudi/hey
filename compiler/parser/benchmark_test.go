@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 func BenchmarkParserCreation(b *testing.B) {

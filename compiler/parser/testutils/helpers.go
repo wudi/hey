@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // PHPSourceBuilder PHP源码构建器

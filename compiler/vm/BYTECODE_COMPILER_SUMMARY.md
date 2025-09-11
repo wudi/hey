@@ -178,7 +178,7 @@ go build -o bytecode-demo ./cmd/bytecode-demo
 ./bytecode-demo
 
 # 3. 集成到现有代码
-import "github.com/wudi/php-parser/compiler"
+import "github.com/wudi/hey/compiler"
 ```
 
 ### 开发建议
@@ -202,4 +202,4 @@ import "github.com/wudi/php-parser/compiler"
 
 这个实现将您的项目从一个 PHP 解析器提升为一个具有编译执行能力的准生产级 PHP 解释器，为未来的功能扩展和性能优化奠定了坚实的基础。
 
-模块名称 `github.com/wudi/php-parser` 已正确配置，所有导入路径已更新，项目可以正常构建和运行。
+模块名称 `github.com/wudi/hey` 已正确配置，所有导入路径已更新，项目可以正常构建和运行。

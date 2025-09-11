@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser"
+	ast2 "github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/parser"
 )
 
 // VariableCollector 收集所有变量名
@@ -23,8 +23,8 @@ func NewVariableCollector() *VariableCollector {
 	}
 }
 
-func (vc *VariableCollector) Visit(node ast.Node) bool {
-	if variable, ok := node.(*ast.Variable); ok {
+func (vc *VariableCollector) Visit(node ast2.Node) bool {
+	if variable, ok := node.(*ast2.Variable); ok {
 		vc.Variables = append(vc.Variables, variable.Name)
 	}
 	return true // 继续遍历子节点
@@ -32,17 +32,17 @@ func (vc *VariableCollector) Visit(node ast.Node) bool {
 
 // FunctionCollector 收集所有函数声明
 type FunctionCollector struct {
-	Functions []*ast.FunctionDeclaration
+	Functions []*ast2.FunctionDeclaration
 }
 
 func NewFunctionCollector() *FunctionCollector {
 	return &FunctionCollector{
-		Functions: make([]*ast.FunctionDeclaration, 0),
+		Functions: make([]*ast2.FunctionDeclaration, 0),
 	}
 }
 
-func (fc *FunctionCollector) Visit(node ast.Node) bool {
-	if funcDecl, ok := node.(*ast.FunctionDeclaration); ok {
+func (fc *FunctionCollector) Visit(node ast2.Node) bool {
+	if funcDecl, ok := node.(*ast2.FunctionDeclaration); ok {
 		fc.Functions = append(fc.Functions, funcDecl)
 	}
 	return true
@@ -58,7 +58,7 @@ func NewDepthCounter() *DepthCounter {
 	return &DepthCounter{}
 }
 
-func (dc *DepthCounter) Visit(node ast.Node) bool {
+func (dc *DepthCounter) Visit(node ast2.Node) bool {
 	dc.currentDepth++
 	if dc.currentDepth > dc.MaxDepth {
 		dc.MaxDepth = dc.currentDepth
@@ -132,7 +132,7 @@ echo $user->getName();
 	// Example 1: Collect all variables using custom visitor
 	fmt.Println("1. Collecting all variables:")
 	variableCollector := NewVariableCollector()
-	ast.Walk(variableCollector, program)
+	ast2.Walk(variableCollector, program)
 
 	// Remove duplicates
 	uniqueVars := removeDuplicates(variableCollector.Variables)
@@ -141,11 +141,11 @@ echo $user->getName();
 	// Example 2: Collect all function declarations
 	fmt.Println("2. Collecting all function declarations:")
 	functionCollector := NewFunctionCollector()
-	ast.Walk(functionCollector, program)
+	ast2.Walk(functionCollector, program)
 
 	for i, fn := range functionCollector.Functions {
 		funcName := ""
-		if identifier, ok := fn.Name.(*ast.IdentifierNode); ok {
+		if identifier, ok := fn.Name.(*ast2.IdentifierNode); ok {
 			funcName = identifier.Name
 		}
 
@@ -161,29 +161,29 @@ echo $user->getName();
 	// Example 3: Calculate AST depth
 	fmt.Println("3. Calculating AST depth:")
 	depthCounter := NewDepthCounter()
-	ast.Walk(depthCounter, program)
+	ast2.Walk(depthCounter, program)
 	fmt.Printf("   Maximum AST depth: %d\n\n", depthCounter.MaxDepth)
 
 	// Example 4: Using built-in visitor functions
 	fmt.Println("4. Using built-in visitor functions:")
 
 	// Find all string literals
-	stringLiterals := ast.FindAllFunc(program, func(node ast.Node) bool {
-		_, ok := node.(*ast.StringLiteral)
+	stringLiterals := ast2.FindAllFunc(program, func(node ast2.Node) bool {
+		_, ok := node.(*ast2.StringLiteral)
 		return ok
 	})
 	fmt.Printf("   Found %d string literals\n", len(stringLiterals))
 
 	// Find all binary expressions
-	binaryExpressions := ast.FindAllFunc(program, func(node ast.Node) bool {
-		_, ok := node.(*ast.BinaryExpression)
+	binaryExpressions := ast2.FindAllFunc(program, func(node ast2.Node) bool {
+		_, ok := node.(*ast2.BinaryExpression)
 		return ok
 	})
 	fmt.Printf("   Found %d binary expressions\n", len(binaryExpressions))
 
 	// Count assignment expressions
-	assignmentCount := ast.CountFunc(program, func(node ast.Node) bool {
-		_, ok := node.(*ast.AssignmentExpression)
+	assignmentCount := ast2.CountFunc(program, func(node ast2.Node) bool {
+		_, ok := node.(*ast2.AssignmentExpression)
 		return ok
 	})
 	fmt.Printf("   Found %d assignment expressions\n\n", assignmentCount)
@@ -192,7 +192,7 @@ echo $user->getName();
 	fmt.Println("5. Using WalkFunc for node type analysis:")
 	nodeTypes := make(map[string]int)
 
-	ast.WalkFunc(program, func(node ast.Node) bool {
+	ast2.WalkFunc(program, func(node ast2.Node) bool {
 		nodeType := fmt.Sprintf("%T", node)
 		// Remove package prefix for cleaner output
 		if idx := strings.LastIndex(nodeType, "."); idx != -1 {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // Node 表示抽象语法树中的节点接口

@@ -3,7 +3,7 @@ package testutils
 import (
 	"testing"
 
-	"github.com/wudi/php-parser/ast"
+	"github.com/wudi/hey/compiler/ast"
 )
 
 // ParserInterface 定义解析器接口以避免循环依赖

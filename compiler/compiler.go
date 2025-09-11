@@ -6,12 +6,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/compiler/opcodes"
-	"github.com/wudi/php-parser/compiler/registry"
-	"github.com/wudi/php-parser/compiler/values"
-	"github.com/wudi/php-parser/compiler/vm"
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/opcodes"
+	"github.com/wudi/hey/compiler/registry"
+	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/compiler/vm"
 )
 
 // ForwardJump represents a jump that needs to be resolved later

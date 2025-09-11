@@ -3,9 +3,9 @@ package compiler
 import (
 	"fmt"
 
-	"github.com/wudi/php-parser/compiler/registry"
-	"github.com/wudi/php-parser/compiler/runtime"
-	"github.com/wudi/php-parser/compiler/stdlib"
+	"github.com/wudi/hey/compiler/registry"
+	"github.com/wudi/hey/compiler/runtime"
+	"github.com/wudi/hey/stdlib"
 )
 
 // InitializeUnifiedSystem initializes the unified class registry system

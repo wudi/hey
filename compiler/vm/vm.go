@@ -9,23 +9,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/compiler/opcodes"
-	"github.com/wudi/php-parser/compiler/registry"
-	runtimeRegistry "github.com/wudi/php-parser/compiler/runtime"
-	"github.com/wudi/php-parser/compiler/values"
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/opcodes"
+	"github.com/wudi/hey/compiler/parser"
+	"github.com/wudi/hey/compiler/registry"
+	runtime3 "github.com/wudi/hey/compiler/runtime"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // Initialize runtime integration on package init
 func init() {
-	runtimeRegistry.SetVMFactory(func() runtimeRegistry.VMExecutor {
+	runtime3.SetVMFactory(func() runtime3.VMExecutor {
 		return &VMAdapter{vm: NewVirtualMachine()}
 	})
-	runtimeRegistry.SetContextFactory(func() *runtimeRegistry.GoroutineContext {
+	runtime3.SetContextFactory(func() *runtime3.GoroutineContext {
 		ctx := NewExecutionContext()
-		return &runtimeRegistry.GoroutineContext{
+		return &runtime3.GoroutineContext{
 			GlobalVars:      ctx.GlobalVars,
 			GlobalConstants: ctx.GlobalConstants,
 			Functions:       convertFunctionsToRuntime(ctx.Functions),
@@ -40,7 +40,7 @@ type VMAdapter struct {
 	vm *VirtualMachine
 }
 
-func (adapter *VMAdapter) ExecuteClosure(ctx *runtimeRegistry.GoroutineContext, closure *values.Closure, args []*values.Value) (*values.Value, error) {
+func (adapter *VMAdapter) ExecuteClosure(ctx *runtime3.GoroutineContext, closure *values.Closure, args []*values.Value) (*values.Value, error) {
 	// Convert runtime ExecutionContext to VM ExecutionContext
 	vmCtx := &ExecutionContext{
 		GlobalVars:        ctx.GlobalVars,
@@ -68,10 +68,10 @@ func (adapter *VMAdapter) ExecuteClosure(ctx *runtimeRegistry.GoroutineContext, 
 }
 
 // Helper functions to convert between runtime and vm function types
-func convertFunctionsToRuntime(vmFunctions map[string]*Function) map[string]*runtimeRegistry.VMFunction {
-	result := make(map[string]*runtimeRegistry.VMFunction)
+func convertFunctionsToRuntime(vmFunctions map[string]*Function) map[string]*runtime3.VMFunction {
+	result := make(map[string]*runtime3.VMFunction)
 	for name, vmFunc := range vmFunctions {
-		runtimeFunc := &runtimeRegistry.VMFunction{
+		runtimeFunc := &runtime3.VMFunction{
 			Name:         vmFunc.Name,
 			Instructions: make([]interface{}, len(vmFunc.Instructions)),
 			Constants:    vmFunc.Constants,
@@ -84,7 +84,7 @@ func convertFunctionsToRuntime(vmFunctions map[string]*Function) map[string]*run
 	return result
 }
 
-func convertFunctionsFromRuntime(runtimeFunctions map[string]*runtimeRegistry.VMFunction) map[string]*Function {
+func convertFunctionsFromRuntime(runtimeFunctions map[string]*runtime3.VMFunction) map[string]*Function {
 	result := make(map[string]*Function)
 	for name, runtimeFunc := range runtimeFunctions {
 		result[name] = &Function{
@@ -193,7 +193,7 @@ func (ctx *ExecutionContext) WriteOutput(output string) {
 // HasFunction implements the ExecutionContext interface for runtime functions
 func (ctx *ExecutionContext) HasFunction(name string) bool {
 	// Check both runtime registered functions and VM functions
-	if runtimeRegistry.HasBuiltinFunction(name) {
+	if runtime3.HasBuiltinFunction(name) {
 		return true
 	}
 	// Check VM functions (user-defined functions)
@@ -204,7 +204,7 @@ func (ctx *ExecutionContext) HasFunction(name string) bool {
 // HasClass implements the ExecutionContext interface for runtime classes
 func (ctx *ExecutionContext) HasClass(name string) bool {
 	// Check runtime registered classes (built-in classes)
-	if runtimeRegistry.GlobalRegistry.HasClass(name) {
+	if runtime3.GlobalRegistry.HasClass(name) {
 		return true
 	}
 	// Check legacy registry for user-defined classes
@@ -217,7 +217,7 @@ func (ctx *ExecutionContext) HasClass(name string) bool {
 // HasMethod implements the ExecutionContext interface for method introspection
 func (ctx *ExecutionContext) HasMethod(className, methodName string) bool {
 	// Check runtime registry first (built-in classes)
-	if classDesc, exists := runtimeRegistry.GlobalRegistry.GetClass(className); exists {
+	if classDesc, exists := runtime3.GlobalRegistry.GetClass(className); exists {
 		// Check for case-insensitive match
 		targetMethod := strings.ToLower(methodName)
 		for methodKey := range classDesc.Methods {
@@ -2489,8 +2489,8 @@ func (vm *VirtualMachine) executeInitFunctionCall(ctx *ExecutionContext, inst *o
 
 	// In PHP, INIT_FCALL validates function existence at this point
 	// For built-in functions, we can check the runtime registry
-	if runtimeRegistry.GlobalRegistry != nil {
-		if fn, exists := runtimeRegistry.GlobalRegistry.GetFunction(functionName); exists && fn != nil {
+	if runtime3.GlobalRegistry != nil {
+		if fn, exists := runtime3.GlobalRegistry.GetFunction(functionName); exists && fn != nil {
 			// Function exists in runtime registry - this is good
 		} else {
 			// Check if it's a user-defined function (would be in vm.functions)
@@ -2589,8 +2589,8 @@ func (vm *VirtualMachine) executeDoFunctionCall(ctx *ExecutionContext, inst *opc
 	}
 
 	// Check for runtime registered functions
-	if runtimeRegistry.GlobalVMIntegration != nil && runtimeRegistry.GlobalVMIntegration.HasFunction(functionName) {
-		result, err := runtimeRegistry.GlobalVMIntegration.CallFunction(ctx, functionName, ctx.CallContext.Arguments)
+	if runtime3.GlobalVMIntegration != nil && runtime3.GlobalVMIntegration.HasFunction(functionName) {
+		result, err := runtime3.GlobalVMIntegration.CallFunction(ctx, functionName, ctx.CallContext.Arguments)
 		if err != nil {
 			return err
 		}
@@ -2678,11 +2678,11 @@ func (vm *VirtualMachine) ExecuteClosure(ctx *ExecutionContext, closure *values.
 
 	// Handle different closure function types
 	switch fn := closure.Function.(type) {
-	case runtimeRegistry.FunctionHandler:
+	case runtime3.FunctionHandler:
 		// Runtime function handler with execution context
 		return fn(ctx, args)
 
-	case func(runtimeRegistry.ExecutionContext, []*values.Value) (*values.Value, error):
+	case func(runtime3.ExecutionContext, []*values.Value) (*values.Value, error):
 		// Direct runtime function handler
 		return fn(ctx, args)
 
@@ -2785,8 +2785,8 @@ func (vm *VirtualMachine) executeVMFunction(ctx *ExecutionContext, function *Fun
 // executeNamedFunction looks up and executes a function by name
 func (vm *VirtualMachine) executeNamedFunction(ctx *ExecutionContext, functionName string, args []*values.Value) (*values.Value, error) {
 	// Check runtime registered functions first
-	if runtimeRegistry.GlobalVMIntegration != nil && runtimeRegistry.GlobalVMIntegration.HasFunction(functionName) {
-		return runtimeRegistry.GlobalVMIntegration.CallFunction(ctx, functionName, args)
+	if runtime3.GlobalVMIntegration != nil && runtime3.GlobalVMIntegration.HasFunction(functionName) {
+		return runtime3.GlobalVMIntegration.CallFunction(ctx, functionName, args)
 	}
 
 	// Check VM functions

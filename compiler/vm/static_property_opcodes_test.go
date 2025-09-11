@@ -3,9 +3,9 @@ package vm
 import (
 	"testing"
 
-	"github.com/wudi/php-parser/compiler/opcodes"
-	"github.com/wudi/php-parser/compiler/registry"
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/opcodes"
+	"github.com/wudi/hey/compiler/registry"
+	"github.com/wudi/hey/compiler/values"
 )
 
 func TestFetchStaticPropertyIssetOpcode(t *testing.T) {

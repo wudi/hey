@@ -84,9 +84,9 @@ go run main.go
 ## Example Dependencies
 
 All examples depend on the core PHP parser modules:
-- `github.com/php-parser/lexer` - Lexical analysis
-- `github.com/php-parser/parser` - Syntax analysis  
-- `github.com/php-parser/ast` - Abstract Syntax Tree
+- `github.com/wudi/hey/compiler/lexer` - Lexical analysis
+- `github.com/wudi/hey/compiler/parser` - Syntax analysis  
+- `github.com/wudi/hey/compiler/ast` - Abstract Syntax Tree
 
 ## Learning Path
 
@@ -164,7 +164,7 @@ for {
 
 ## Further Reading
 
-- [Parser Implementation Details](../parser/)
-- [AST Node Reference](../ast/)
-- [Lexer Token Types](../lexer/)
+- [Parser Implementation Details](../compiler/parser/)
+- [AST Node Reference](../compiler/ast/)
+- [Lexer Token Types](../compiler/lexer/)
 - [PHP Language Grammar](https://github.com/php/php-src)

@@ -1,8 +1,8 @@
 package passes
 
 import (
-	"github.com/wudi/php-parser/compiler/opcodes"
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/opcodes"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // OptimizationPass represents a single optimization pass

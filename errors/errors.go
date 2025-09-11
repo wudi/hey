@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // ErrorType 错误类型

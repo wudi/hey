@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the complete implementation of three critical PHP language features in the php-parser compiler:
+This document describes the complete implementation of three critical PHP language features in the hey compiler:
 
 1. **StaticAccessExpression** - Class constant and method access (`Class::CONSTANT`)
 2. **VariableVariableExpression** - Dynamic variable access (`${expression}`)
@@ -182,7 +182,7 @@ The implementation matches PHP's internal behavior:
 
 ## Conclusion
 
-The implementation successfully provides complete PHP 8.4 compatibility for static expressions and variable variables. The architecture is extensible, performant, and maintains full compliance with PHP's specification.
+The implementation successfully provides complete PHP 8 compatibility for static expressions and variable variables. The architecture is extensible, performant, and maintains full compliance with PHP's specification.
 
 **Files Modified**: 6 files, +200 lines of code  
 **Test Coverage**: 16 comprehensive test cases  

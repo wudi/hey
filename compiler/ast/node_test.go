@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 func TestProgram_String(t *testing.T) {

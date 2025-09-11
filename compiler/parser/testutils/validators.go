@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/php-parser/ast"
+	"github.com/wudi/hey/compiler/ast"
 )
 
 // 高级验证函数集合，用于复杂的AST结构验证

@@ -7,14 +7,14 @@ import (
 	"os"
 
 	"github.com/urfave/cli/v3"
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/compiler"
-	"github.com/wudi/php-parser/compiler/runtime"
-	"github.com/wudi/php-parser/compiler/values"
-	"github.com/wudi/php-parser/compiler/vm"
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser"
-	"github.com/wudi/php-parser/version"
+	"github.com/wudi/hey/compiler"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/parser"
+	"github.com/wudi/hey/compiler/runtime"
+	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/version"
 )
 
 func main() {

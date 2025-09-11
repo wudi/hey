@@ -3,8 +3,8 @@ package stdlib
 import (
 	"fmt"
 
-	"github.com/wudi/php-parser/compiler/values"
-	"github.com/wudi/php-parser/compiler/vm"
+	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/compiler/vm"
 )
 
 // ExtensionManager manages external PHP extensions

@@ -3,8 +3,8 @@ package runtime
 import (
 	"fmt"
 
-	"github.com/wudi/php-parser/compiler/registry"
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/registry"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // UnifiedBootstrap initializes the runtime with the unified class system

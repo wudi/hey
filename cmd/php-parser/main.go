@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/parser"
 )
 
 const (

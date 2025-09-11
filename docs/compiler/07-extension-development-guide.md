@@ -21,8 +21,8 @@ Here's the simplest possible extension:
 package main
 
 import (
-    "github.com/wudi/php-parser/compiler/runtime"
-    "github.com/wudi/php-parser/compiler/values"
+    "github.com/wudi/hey/compiler/runtime"
+    "github.com/wudi/hey/compiler/values"
 )
 
 type HelloExtension struct {
@@ -90,8 +90,8 @@ import (
     "fmt"
     "math"
     
-    "github.com/wudi/php-parser/compiler/runtime"
-    "github.com/wudi/php-parser/compiler/values"
+    "github.com/wudi/hey/compiler/runtime"
+    "github.com/wudi/hey/compiler/values"
 )
 
 // MathPlusExtension provides additional mathematical functions

@@ -5,8 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // TestContext 提供测试上下文和工具

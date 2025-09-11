@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // Bootstrap initializes the runtime with all built-in entities
@@ -139,7 +139,7 @@ func registerBuiltinVariables() error {
 
 	// Create $argv
 	argv := values.NewArray()
-	argv.ArraySet(values.NewInt(0), values.NewString("php-parser"))
+	argv.ArraySet(values.NewInt(0), values.NewString("hey"))
 	if err := GlobalRegistry.RegisterVariable("argv", argv, true, ""); err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func createServerArray() *values.Value {
 
 	// Basic server information
 	serverVars := map[string]string{
-		"SERVER_SOFTWARE":       "PHP-Parser/1.0",
+		"SERVER_SOFTWARE":       "Hey",
 		"SERVER_NAME":           "localhost",
 		"SERVER_ADDR":           "127.0.0.1",
 		"SERVER_PORT":           "80",
@@ -168,7 +168,7 @@ func createServerArray() *values.Value {
 		"QUERY_STRING":          "",
 		"HTTP_ACCEPT":           "*/*",
 		"HTTP_HOST":             "localhost",
-		"HTTP_USER_AGENT":       "PHP-Parser/1.0",
+		"HTTP_USER_AGENT":       "Hey",
 		"REQUEST_URI":           "/",
 		"SCRIPT_NAME":           "/index.php",
 		"PHP_SELF":              "/index.php",

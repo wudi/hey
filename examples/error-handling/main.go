@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/parser"
 )
 
 // ErrorReporter 自定义错误报告器

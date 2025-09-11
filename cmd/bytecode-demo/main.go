@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 
-	"github.com/wudi/php-parser/compiler/opcodes"
-	"github.com/wudi/php-parser/compiler/passes"
-	"github.com/wudi/php-parser/compiler/values"
-	"github.com/wudi/php-parser/compiler/vm"
+	"github.com/wudi/hey/compiler/opcodes"
+	"github.com/wudi/hey/compiler/passes"
+	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/compiler/vm"
 )
 
 func main() {

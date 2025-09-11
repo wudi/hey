@@ -3,7 +3,7 @@ package ast
 import (
 	"testing"
 
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // TestASTKindConstants 测试AST Kind常量值

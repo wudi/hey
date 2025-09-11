@@ -1,7 +1,7 @@
 package stdlib
 
 import (
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // initVariables initializes built-in PHP variables
@@ -38,7 +38,7 @@ func (stdlib *StandardLibrary) initVariables() {
 
 	// Initialize $argv (command line arguments)
 	argv := values.NewArray()
-	argv.ArraySet(values.NewInt(0), values.NewString("php-parser"))
+	argv.ArraySet(values.NewInt(0), values.NewString("hey"))
 	stdlib.Variables["argv"] = argv
 
 	// Initialize $http_response_header
@@ -50,7 +50,7 @@ func createServerArray() *values.Value {
 	server := values.NewArray()
 
 	// Basic server information
-	server.ArraySet(values.NewString("SERVER_SOFTWARE"), values.NewString("PHP-Parser/1.0"))
+	server.ArraySet(values.NewString("SERVER_SOFTWARE"), values.NewString("Hey"))
 	server.ArraySet(values.NewString("SERVER_NAME"), values.NewString("localhost"))
 	server.ArraySet(values.NewString("SERVER_ADDR"), values.NewString("127.0.0.1"))
 	server.ArraySet(values.NewString("SERVER_PORT"), values.NewString("80"))
@@ -72,7 +72,7 @@ func createServerArray() *values.Value {
 	server.ArraySet(values.NewString("HTTP_CONNECTION"), values.NewString(""))
 	server.ArraySet(values.NewString("HTTP_HOST"), values.NewString("localhost"))
 	server.ArraySet(values.NewString("HTTP_REFERER"), values.NewString(""))
-	server.ArraySet(values.NewString("HTTP_USER_AGENT"), values.NewString("PHP-Parser/1.0"))
+	server.ArraySet(values.NewString("HTTP_USER_AGENT"), values.NewString("Hey"))
 	server.ArraySet(values.NewString("HTTPS"), values.NewString(""))
 	server.ArraySet(values.NewString("REQUEST_URI"), values.NewString("/"))
 	server.ArraySet(values.NewString("SCRIPT_NAME"), values.NewString("/index.php"))

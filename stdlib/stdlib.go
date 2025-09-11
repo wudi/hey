@@ -1,8 +1,8 @@
 package stdlib
 
 import (
-	"github.com/wudi/php-parser/compiler/values"
-	"github.com/wudi/php-parser/compiler/vm"
+	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/compiler/vm"
 )
 
 // StandardLibrary represents the PHP standard library

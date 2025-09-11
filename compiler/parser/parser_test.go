@@ -5,9 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser/testutils"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/parser/testutils"
 )
 
 // checkParserErrors 检查解析器错误的帮助函数

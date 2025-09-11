@@ -3,8 +3,8 @@ package testutils
 import (
 	"testing"
 
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // TestSuiteBuilder 测试套件构建器

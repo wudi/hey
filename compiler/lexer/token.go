@@ -30,7 +30,7 @@ func (t Token) String() string {
 		TokenNames[t.Type], t.Value, t.Position.Line, t.Position.Column)
 }
 
-// PHP Token 类型常量，与 PHP 8.4 官方保持一致
+// PHP Token 类型常量，与 PHP 8 官方保持一致
 const (
 	T_EOF TokenType = 0 /* end of file (T_EOF) */
 

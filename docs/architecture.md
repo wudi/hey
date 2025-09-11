@@ -24,7 +24,7 @@ INITIAL -> ST_IN_SCRIPTING -> ST_DOUBLE_QUOTES -> ST_HEREDOC -> ST_NOWDOC -> ST_
 ### 2. Token 类型系统
 - **位置**: `lexer/token.go`
 - **功能**: 定义所有 PHP Token 类型常量
-- **兼容性**: 与 PHP 8.4 官方 Token ID 保持一致
+- **兼容性**: 与 PHP 8 官方 Token ID 保持一致
 
 ### 3. 语法分析器 (Parser)
 - **位置**: `parser/` 目录

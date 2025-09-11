@@ -5,7 +5,7 @@ package parser
 import (
 	"sync"
 
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 var parserPool = sync.Pool{New: func() any { return &Parser{} }}

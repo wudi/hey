@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/php-parser/compiler/opcodes"
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/opcodes"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // TestPerformanceMetrics tests the performance metrics tracking

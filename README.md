@@ -1,17 +1,18 @@
-# PHP Parser
+# Hey - A PHP Interpreter written in Go
+**Experimental**
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/wudi/php-parser)](https://goreportcard.com/report/github.com/wudi/php-parser)
+[![Go Report Card](https://goreportcard.com/badge/github.com/wudi/hey)](https://goreportcard.com/report/github.com/wudi/hey)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-blue.svg)](https://golang.org/doc/install)
 
-A high-performance, comprehensive PHP parser implementation in Go with full PHP 8.4 syntax support. This parser provides complete lexical analysis, syntax parsing, and AST generation capabilities for PHP code.
+A high-performance, comprehensive PHP interpreter implementation in Go with full PHP 8 syntax support. This interpreter provides complete lexical analysis, syntax parsing, and AST generation capabilities for PHP code.
 
 [中文文档](README-zh_CN.md) | [Documentation](docs/) | [Examples](examples/)
 
 ## Features
 
 ### 🚀 Core Capabilities
-- **Full PHP 8.4 Compatibility**: Complete syntax support including modern PHP features
+- **Full PHP 8 Compatibility**: Complete syntax support including modern PHP features
 - **High Performance**: Optimized lexer and parser with benchmark support
 - **Complete AST**: Rich Abstract Syntax Tree with 150+ node types
 - **Error Recovery**: Robust error handling with partial parsing capabilities
@@ -40,7 +41,7 @@ A high-performance, comprehensive PHP parser implementation in Go with full PHP 
 ### Installation
 
 ```bash
-go get github.com/wudi/php-parser
+go get github.com/wudi/hey/compiler/parser
 ```
 
 ### Basic Usage
@@ -50,8 +51,8 @@ package main
 
 import (
     "fmt"
-    "github.com/wudi/php-parser/lexer"
-    "github.com/wudi/php-parser/parser"
+    "github.com/wudi/hey/compiler/lexer"
+    "github.com/wudi/hey/compiler/parser"
 )
 
 func main() {
@@ -120,7 +121,10 @@ go build -o bytecode-demo ./cmd/bytecode-demo
 
 ```go
 // Compile PHP to bytecode and execute
-import "github.com/wudi/php-parser/compiler"
+import (
+	"github.com/wudi/hey/compiler"
+	"github.com/wudi/hey/compiler/parser"
+)
 
 code := `<?php $x = 10 * 5 + 3; echo "Result: " . $x; ?>`
 
@@ -145,37 +149,7 @@ vm.Execute(ctx, bytecode, constants)
 ### Project Structure
 
 ```
-php-parser/
-├── ast/            # Abstract Syntax Tree implementation
-│   ├── node.go     # 150+ AST node types (6K+ lines)
-│   ├── kind.go     # AST node type constants  
-│   ├── visitor.go  # Visitor pattern utilities
-│   └── builder.go  # AST construction helpers
-├── lexer/          # Lexical analyzer  
-│   ├── lexer.go    # Main lexer with state machine (1.5K+ lines)
-│   ├── token.go    # PHP token definitions (150+ tokens)
-│   └── states.go   # Lexer state management
-├── parser/         # Syntax parser
-│   ├── parser.go   # Recursive descent parser (7K+ lines)
-│   ├── pool.go     # Parser pooling for concurrency
-│   └── testdata/   # Test cases and fixtures
-├── compiler/       # Bytecode compiler and virtual machine
-│   ├── compiler.go # AST → Bytecode compilation (2K+ lines)
-│   ├── opcodes/    # 200+ bytecode instruction definitions
-│   ├── values/     # PHP value system with type conversion
-│   ├── vm/         # Virtual machine execution engine
-│   └── passes/     # Optimization passes (constant folding, etc.)
-├── cmd/            # Command-line interface
-│   ├── php-parser/     # CLI implementation (244 lines)
-│   └── bytecode-demo/  # Bytecode compiler demonstration
-├── examples/       # Usage examples and tutorials
-│   ├── basic-parsing/      # Fundamental parsing concepts
-│   ├── ast-visitor/        # Visitor pattern examples
-│   ├── token-extraction/   # Lexical analysis
-│   ├── error-handling/     # Error recovery examples
-│   └── code-analysis/      # Static analysis tools
-├── errors/         # Error handling utilities  
-└── scripts/        # Development and testing scripts
+TODO
 ```
 
 **Code Statistics**: 25,000+ lines of Go code across 25+ source files with 35+ test files
@@ -184,7 +158,7 @@ php-parser/
 
 #### Lexer (Tokenizer)
 - **11 Parsing States**: Including `ST_IN_SCRIPTING`, `ST_DOUBLE_QUOTES`, `ST_HEREDOC`
-- **150+ Token Types**: Complete PHP 8.4 token compatibility
+- **150+ Token Types**: Complete PHP 8 token compatibility
 - **State Machine**: Handles complex PHP syntax like string interpolation
 - **Shebang Support**: Recognizes executable PHP files
 - **Position Tracking**: Line, column, and offset information
@@ -211,7 +185,7 @@ php-parser/
 - **Memory Management**: Efficient variable and constant handling
 - **10-50x Performance**: Dramatic speed improvement over direct AST execution
 
-## PHP 8.4 Language Support
+## PHP 8 Language Support
 
 ### Operators
 - **Arithmetic**: `+`, `-`, `*`, `/`, `%`, `**` (power)
@@ -348,7 +322,7 @@ go run scripts/test_folder.go /path/to/symfony
 
 ### Requirements
 - Go 1.21+
-- Optional: PHP 8.4 for compatibility testing
+- Optional: PHP 8 for compatibility testing
 
 ### Development Commands
 
@@ -425,11 +399,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Links
 
-- **Repository**: [github.com/wudi/php-parser](https://github.com/wudi/php-parser)
-- **Issues**: [Report bugs and feature requests](https://github.com/wudi/php-parser/issues)
+- **Repository**: [github.com/wudi/hey](https://github.com/wudi/hey)
+- **Issues**: [Report bugs and feature requests](https://github.com/wudi/hey/issues)
 - **Documentation**: [Detailed API documentation](docs/)
 - **Examples**: [Code examples and tutorials](examples/)
 
 ---
 
-**Built with ❤️ in Go | PHP 8.4 Compatible | Production Ready**
+**Built with ❤️ in Go | PHP 8 Compatible**

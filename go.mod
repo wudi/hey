@@ -1,4 +1,4 @@
-module github.com/wudi/php-parser
+module github.com/wudi/hey
 
 go 1.22
 

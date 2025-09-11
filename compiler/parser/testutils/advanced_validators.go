@@ -3,7 +3,7 @@ package testutils
 import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/php-parser/ast"
+	"github.com/wudi/hey/compiler/ast"
 )
 
 // TypedParam 表示带类型的参数

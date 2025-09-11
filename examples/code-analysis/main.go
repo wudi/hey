@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser"
+	ast2 "github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/parser"
 )
 
 // CodeMetrics 代码度量结构
@@ -71,21 +71,21 @@ func NewCodeAnalyzer() *CodeAnalyzer {
 	}
 }
 
-func (ca *CodeAnalyzer) Visit(node ast.Node) bool {
+func (ca *CodeAnalyzer) Visit(node ast2.Node) bool {
 	switch n := node.(type) {
-	case *ast.FunctionDeclaration:
+	case *ast2.FunctionDeclaration:
 		ca.analyzeFunctionDeclaration(n)
-	case *ast.ClassExpression:
+	case *ast2.ClassExpression:
 		ca.analyzeClassDeclaration(n)
-	case *ast.Variable:
+	case *ast2.Variable:
 		ca.analyzeVariable(n)
-	case *ast.IfStatement:
+	case *ast2.IfStatement:
 		ca.analyzeControlStructure("if")
-	case *ast.WhileStatement:
+	case *ast2.WhileStatement:
 		ca.analyzeControlStructure("while")
-	case *ast.ForStatement:
+	case *ast2.ForStatement:
 		ca.analyzeControlStructure("for")
-	case *ast.BinaryExpression:
+	case *ast2.BinaryExpression:
 		ca.analyzeBinaryExpression(n)
 	}
 
@@ -102,14 +102,14 @@ func (ca *CodeAnalyzer) Visit(node ast.Node) bool {
 	return true
 }
 
-func (ca *CodeAnalyzer) analyzeFunctionDeclaration(fn *ast.FunctionDeclaration) {
+func (ca *CodeAnalyzer) analyzeFunctionDeclaration(fn *ast2.FunctionDeclaration) {
 	ca.Metrics.FunctionCount++
 
 	funcInfo := &FunctionInfo{
 		Complexity: 1, // Base complexity
 	}
 
-	if identifier, ok := fn.Name.(*ast.IdentifierNode); ok {
+	if identifier, ok := fn.Name.(*ast2.IdentifierNode); ok {
 		funcInfo.Name = identifier.Name
 	}
 
@@ -129,7 +129,7 @@ func (ca *CodeAnalyzer) analyzeFunctionDeclaration(fn *ast.FunctionDeclaration) 
 	ca.Functions = append(ca.Functions, funcInfo)
 }
 
-func (ca *CodeAnalyzer) analyzeClassDeclaration(class *ast.ClassExpression) {
+func (ca *CodeAnalyzer) analyzeClassDeclaration(class *ast2.ClassExpression) {
 	ca.Metrics.ClassCount++
 
 	classInfo := &ClassInfo{
@@ -138,14 +138,14 @@ func (ca *CodeAnalyzer) analyzeClassDeclaration(class *ast.ClassExpression) {
 		Visibility: make(map[string]int),
 	}
 
-	if identifier, ok := class.Name.(*ast.IdentifierNode); ok {
+	if identifier, ok := class.Name.(*ast2.IdentifierNode); ok {
 		classInfo.Name = identifier.Name
 	}
 
 	ca.Classes = append(ca.Classes, classInfo)
 }
 
-func (ca *CodeAnalyzer) analyzeVariable(variable *ast.Variable) {
+func (ca *CodeAnalyzer) analyzeVariable(variable *ast2.Variable) {
 	ca.Variables[variable.Name]++
 	ca.Metrics.VariableCount++
 }
@@ -155,7 +155,7 @@ func (ca *CodeAnalyzer) analyzeControlStructure(structType string) {
 	ca.Metrics.CyclomaticComplexity++
 }
 
-func (ca *CodeAnalyzer) analyzeBinaryExpression(expr *ast.BinaryExpression) {
+func (ca *CodeAnalyzer) analyzeBinaryExpression(expr *ast2.BinaryExpression) {
 	// 增加复杂度分数，基于操作符类型
 	if expr.Operator == "&&" || expr.Operator == "||" {
 		ca.currentComplexity++
@@ -425,7 +425,7 @@ function calculateUserScore($user, $activities, $timeframe) {
 	// 分析代码
 	analyzer := NewCodeAnalyzer()
 	analyzer.Metrics.LinesOfCode = strings.Count(phpCode, "\n") + 1
-	ast.Walk(analyzer, program)
+	ast2.Walk(analyzer, program)
 
 	// 生成分析报告
 	analyzer.generateReport()
@@ -437,29 +437,29 @@ function calculateUserScore($user, $activities, $timeframe) {
 	fmt.Println("🔍 Pattern Analysis:")
 
 	// 查找所有字符串字面量
-	stringLiterals := ast.FindAllFunc(program, func(node ast.Node) bool {
-		_, ok := node.(*ast.StringLiteral)
+	stringLiterals := ast2.FindAllFunc(program, func(node ast2.Node) bool {
+		_, ok := node.(*ast2.StringLiteral)
 		return ok
 	})
 	fmt.Printf("  String literals found: %d\n", len(stringLiterals))
 
 	// 查找所有数组表达式
-	arrayExpressions := ast.FindAllFunc(program, func(node ast.Node) bool {
-		_, ok := node.(*ast.ArrayExpression)
+	arrayExpressions := ast2.FindAllFunc(program, func(node ast2.Node) bool {
+		_, ok := node.(*ast2.ArrayExpression)
 		return ok
 	})
 	fmt.Printf("  Array expressions found: %d\n", len(arrayExpressions))
 
 	// 计算二进制表达式数量
-	binaryExprCount := ast.CountFunc(program, func(node ast.Node) bool {
-		_, ok := node.(*ast.BinaryExpression)
+	binaryExprCount := ast2.CountFunc(program, func(node ast2.Node) bool {
+		_, ok := node.(*ast2.BinaryExpression)
 		return ok
 	})
 	fmt.Printf("  Binary expressions: %d\n", binaryExprCount)
 
 	// 计算赋值表达式数量
-	assignmentCount := ast.CountFunc(program, func(node ast.Node) bool {
-		_, ok := node.(*ast.AssignmentExpression)
+	assignmentCount := ast2.CountFunc(program, func(node ast2.Node) bool {
+		_, ok := node.(*ast2.AssignmentExpression)
 		return ok
 	})
 	fmt.Printf("  Assignment expressions: %d\n", assignmentCount)

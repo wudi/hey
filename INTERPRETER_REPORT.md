@@ -67,7 +67,7 @@ const (
 ### 2.2 Token 系统分析
 
 **Zend Token 设计：**
-- 150+ token 类型，与 PHP 8.4 完全对应
+- 150+ token 类型，与 PHP 8 完全对应
 - Token ID 数值与官方保持一致（如 `T_VARIABLE = 320`）
 
 **当前实现优势：**

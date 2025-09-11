@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/wudi/php-parser/ast"
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/ast"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // Precedence 操作符优先级 - 根据 PHP 官方优先级顺序

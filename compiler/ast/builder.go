@@ -1,7 +1,7 @@
 package ast
 
 import (
-	"github.com/wudi/php-parser/lexer"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 // ASTBuilder AST构建器，用于创建符合PHP官方结构的AST节点

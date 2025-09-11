@@ -5,11 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/wudi/php-parser/compiler"
-	"github.com/wudi/php-parser/compiler/runtime"
-	"github.com/wudi/php-parser/compiler/vm"
-	"github.com/wudi/php-parser/lexer"
-	"github.com/wudi/php-parser/parser"
+	"github.com/wudi/hey/compiler"
+	"github.com/wudi/hey/compiler/lexer"
+	"github.com/wudi/hey/compiler/parser"
+	"github.com/wudi/hey/compiler/runtime"
+	"github.com/wudi/hey/compiler/vm"
 )
 
 func main() {

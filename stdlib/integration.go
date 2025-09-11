@@ -3,9 +3,9 @@ package stdlib
 import (
 	"fmt"
 
-	"github.com/wudi/php-parser/compiler/registry"
-	"github.com/wudi/php-parser/compiler/values"
-	"github.com/wudi/php-parser/compiler/vm"
+	"github.com/wudi/hey/compiler/registry"
+	"github.com/wudi/hey/compiler/values"
+	"github.com/wudi/hey/compiler/vm"
 )
 
 // StdlibIntegration provides integration between the standard library and VM

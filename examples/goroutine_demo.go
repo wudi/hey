@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/wudi/php-parser/compiler/runtime"
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/runtime"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // MockExecutionContext for the demo
@@ -17,7 +17,7 @@ func (m *MockExecutionContext) HasClass(name string) bool                   { re
 func (m *MockExecutionContext) HasMethod(className, methodName string) bool { return false }
 
 func main() {
-	fmt.Println("=== PHP-Parser Goroutine Demo ===")
+	fmt.Println("=== PHP-Interpreter Goroutine Demo ===")
 
 	// Initialize the runtime system
 	err := runtime.Bootstrap()

@@ -30,43 +30,43 @@ The bytecode compiler consists of several key components:
 package main
 
 import (
-    "fmt"
-    "log"
-    
-    "github.com/wudi/php-parser/compiler"
-    "github.com/wudi/php-parser/compiler/vm"
-    "github.com/wudi/php-parser/parser"
-    "github.com/wudi/php-parser/lexer"
+	"fmt"
+	"log"
+
+	"github.com/wudi/hey/compiler"
+	"github.com/wudi/hey/compiler/vm"
+	"github.com/wudi/hey/compiler/parser"
+	"github.com/wudi/hey/compiler/lexer"
 )
 
 func main() {
-    code := `<?php 
+	code := `<?php 
         $x = 10;
         $y = 20; 
         echo $x + $y;
     ?>`
-    
-    // Parse PHP code to AST
-    p := parser.New(lexer.New(code))
-    program, err := p.ParseProgram()
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    // Compile AST to bytecode
-    compiler := compiler.NewCompiler()
-    err = compiler.Compile(program)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    // Execute bytecode
-    vm := vm.NewVirtualMachine()
-    ctx := vm.NewExecutionContext()
-    err = vm.Execute(ctx, compiler.GetBytecode(), compiler.GetConstants())
-    if err != nil {
-        log.Fatal(err)
-    }
+
+	// Parse PHP code to AST
+	p := parser.New(lexer.New(code))
+	program, err := p.ParseProgram()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Compile AST to bytecode
+	compiler := compiler.NewCompiler()
+	err = compiler.Compile(program)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Execute bytecode
+	vm := vm.NewVirtualMachine()
+	ctx := vm.NewExecutionContext()
+	err = vm.Execute(ctx, compiler.GetBytecode(), compiler.GetConstants())
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 ```
 

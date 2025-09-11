@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/wudi/php-parser/compiler/values"
+	"github.com/wudi/hey/compiler/values"
 )
 
 // PerformanceMetrics tracks VM execution statistics
