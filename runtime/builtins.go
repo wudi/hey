@@ -810,6 +810,28 @@ var builtinFunctionSpecs = []builtinSpec{
 	},
 }
 
+var builtinConstants = []*registry.ConstantDescriptor{
+	// Case conversion constants for array_change_key_case
+	intConst("CASE_LOWER", 0),
+	intConst("CASE_UPPER", 1),
+
+	// Sort flags for array functions
+	intConst("SORT_REGULAR", 0),
+	intConst("SORT_NUMERIC", 1),
+	intConst("SORT_STRING", 2),
+	intConst("SORT_DESC", 3),
+	intConst("SORT_ASC", 4),
+	intConst("SORT_LOCALE_STRING", 5),
+	intConst("SORT_NATURAL", 6),
+	intConst("SORT_FLAG_CASE", 8),
+
+	// others
+}
+
+func intConst(name string, v int64) *registry.ConstantDescriptor {
+	return &registry.ConstantDescriptor{Name: name, Value: values.NewInt(v)}
+}
+
 // helper to normalise missing args to NULL when builtin expects them.
 func ensureArgs(args []*values.Value, expected int) []*values.Value {
 	if len(args) >= expected {

@@ -147,5 +147,12 @@ func registerBuiltinSymbols() error {
 		return err
 	}
 
+	// Register builtin constants.
+	for _, v := range builtinConstants {
+		if err := registry.GlobalRegistry.RegisterConstant(v); err != nil {
+			return fmt.Errorf("register constant %s: %w", v.Name, err)
+		}
+	}
+
 	return nil
 }
