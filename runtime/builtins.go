@@ -437,6 +437,377 @@ var builtinFunctionSpecs = []builtinSpec{
 			return values.NewGoroutine(closure, useVars), nil
 		},
 	},
+	{
+		Name:       "array_change_key_case",
+		Parameters: []*registry.Parameter{{Name: "array", Type: "array"}},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr := args[0].Data.(*values.Array)
+			caseMode := int64(0)
+			if len(args) > 1 && args[1] != nil {
+				caseMode = args[1].ToInt()
+			}
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			for key, val := range arr.Elements {
+				newKey := key
+				if strKey, ok := key.(string); ok {
+					if caseMode == 0 {
+						newKey = strings.ToLower(strKey)
+					} else {
+						newKey = strings.ToUpper(strKey)
+					}
+				}
+				resultArr.Elements[newKey] = val
+			}
+			resultArr.NextIndex = arr.NextIndex
+			return result, nil
+		},
+	},
+	{
+		Name: "array_chunk",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+			{Name: "length", Type: "int"},
+		},
+		ReturnType: "array",
+		MinArgs:    2,
+		MaxArgs:    3,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr := args[0].Data.(*values.Array)
+			chunkSize := int(args[1].ToInt())
+			if chunkSize <= 0 {
+				return values.NewArray(), nil
+			}
+			preserveKeys := false
+			if len(args) > 2 && args[2] != nil {
+				preserveKeys = args[2].ToBool()
+			}
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			currentChunk := values.NewArray()
+			currentChunkArr := currentChunk.Data.(*values.Array)
+			chunkIdx := int64(0)
+			itemCount := 0
+			for key, val := range arr.Elements {
+				if preserveKeys {
+					currentChunkArr.Elements[key] = val
+				} else {
+					currentChunkArr.Elements[int64(itemCount)] = val
+				}
+				itemCount++
+				if itemCount >= chunkSize {
+					resultArr.Elements[chunkIdx] = currentChunk
+					chunkIdx++
+					currentChunk = values.NewArray()
+					currentChunkArr = currentChunk.Data.(*values.Array)
+					itemCount = 0
+				}
+			}
+			if itemCount > 0 {
+				if !preserveKeys {
+					currentChunkArr.NextIndex = int64(itemCount)
+				}
+				resultArr.Elements[chunkIdx] = currentChunk
+				chunkIdx++
+			}
+			resultArr.NextIndex = chunkIdx
+			return result, nil
+		},
+	},
+	{
+		Name: "array_combine",
+		Parameters: []*registry.Parameter{
+			{Name: "keys", Type: "array"},
+			{Name: "values", Type: "array"},
+		},
+		ReturnType: "array",
+		MinArgs:    2,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || !args[0].IsArray() || args[1] == nil || !args[1].IsArray() {
+				return values.NewBool(false), nil
+			}
+			keysArr := args[0].Data.(*values.Array)
+			valsArr := args[1].Data.(*values.Array)
+			if args[0].ArrayCount() != args[1].ArrayCount() {
+				return values.NewBool(false), nil
+			}
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			keysList := make([]*values.Value, 0, args[0].ArrayCount())
+			for _, k := range keysArr.Elements {
+				keysList = append(keysList, k)
+			}
+			valsList := make([]*values.Value, 0, args[1].ArrayCount())
+			for _, v := range valsArr.Elements {
+				valsList = append(valsList, v)
+			}
+			for i := 0; i < len(keysList) && i < len(valsList); i++ {
+				keyVal := keysList[i]
+				if keyVal.IsInt() {
+					resultArr.Elements[keyVal.ToInt()] = valsList[i]
+				} else {
+					resultArr.Elements[keyVal.ToString()] = valsList[i]
+				}
+			}
+			return result, nil
+		},
+	},
+	{
+		Name:       "array_count_values",
+		Parameters: []*registry.Parameter{{Name: "array", Type: "array"}},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			for _, val := range arr.Elements {
+				if val == nil {
+					continue
+				}
+				key := val.ToString()
+				if existing, ok := resultArr.Elements[key]; ok && existing != nil {
+					resultArr.Elements[key] = values.NewInt(existing.ToInt() + 1)
+				} else {
+					resultArr.Elements[key] = values.NewInt(1)
+				}
+			}
+			return result, nil
+		},
+	},
+	{
+		Name: "array_diff",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		IsVariadic: true,
+		MinArgs:    2,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr1 := args[0].Data.(*values.Array)
+			otherValues := make(map[string]bool)
+			for i := 1; i < len(args); i++ {
+				if args[i] != nil && args[i].IsArray() {
+					arr := args[i].Data.(*values.Array)
+					for _, v := range arr.Elements {
+						if v != nil {
+							otherValues[v.ToString()] = true
+						}
+					}
+				}
+			}
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			for key, val := range arr1.Elements {
+				if val != nil && !otherValues[val.ToString()] {
+					resultArr.Elements[key] = val
+				}
+			}
+			return result, nil
+		},
+	},
+	{
+		Name:       "array_flip",
+		Parameters: []*registry.Parameter{{Name: "array", Type: "array"}},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			for key, val := range arr.Elements {
+				if val == nil {
+					continue
+				}
+				var keyStr string
+				switch k := key.(type) {
+				case string:
+					keyStr = k
+				case int:
+					keyStr = fmt.Sprintf("%d", k)
+				case int64:
+					keyStr = fmt.Sprintf("%d", k)
+				default:
+					keyStr = fmt.Sprintf("%v", key)
+				}
+				if val.IsInt() {
+					resultArr.Elements[val.ToInt()] = values.NewString(keyStr)
+				} else {
+					resultArr.Elements[val.ToString()] = values.NewString(keyStr)
+				}
+			}
+			return result, nil
+		},
+	},
+	{
+		Name: "array_intersect",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		IsVariadic: true,
+		MinArgs:    2,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr1 := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			for key, val := range arr1.Elements {
+				if val == nil {
+					continue
+				}
+				found := true
+				for i := 1; i < len(args); i++ {
+					if args[i] == nil || !args[i].IsArray() {
+						continue
+					}
+					arr := args[i].Data.(*values.Array)
+					hasValue := false
+					for _, v := range arr.Elements {
+						if v != nil && v.ToString() == val.ToString() {
+							hasValue = true
+							break
+						}
+					}
+					if !hasValue {
+						found = false
+						break
+					}
+				}
+				if found {
+					resultArr.Elements[key] = val
+				}
+			}
+			return result, nil
+		},
+	},
+	{
+		Name:       "array_reverse",
+		Parameters: []*registry.Parameter{{Name: "array", Type: "array"}},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr := args[0].Data.(*values.Array)
+			preserveKeys := false
+			if len(args) > 1 && args[1] != nil {
+				preserveKeys = args[1].ToBool()
+			}
+			elements := make([]struct {
+				key interface{}
+				val *values.Value
+			}, 0, args[0].ArrayCount())
+			for k, v := range arr.Elements {
+				elements = append(elements, struct {
+					key interface{}
+					val *values.Value
+				}{k, v})
+			}
+			for i, j := 0, len(elements)-1; i < j; i, j = i+1, j-1 {
+				elements[i], elements[j] = elements[j], elements[i]
+			}
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			if preserveKeys {
+				for _, elem := range elements {
+					resultArr.Elements[elem.key] = elem.val
+				}
+			} else {
+				idx := int64(0)
+				for _, elem := range elements {
+					resultArr.Elements[idx] = elem.val
+					idx++
+				}
+				resultArr.NextIndex = idx
+			}
+			return result, nil
+		},
+	},
+	{
+		Name:       "array_sum",
+		Parameters: []*registry.Parameter{{Name: "array", Type: "array"}},
+		ReturnType: "number",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewInt(0), nil
+			}
+			arr := args[0].Data.(*values.Array)
+			sum := float64(0)
+			hasFloat := false
+			for _, val := range arr.Elements {
+				if val == nil {
+					continue
+				}
+				if val.IsFloat() {
+					hasFloat = true
+					sum += val.ToFloat()
+				} else if val.IsInt() {
+					sum += float64(val.ToInt())
+				}
+			}
+			if hasFloat {
+				return values.NewFloat(sum), nil
+			}
+			return values.NewInt(int64(sum)), nil
+		},
+	},
+	{
+		Name:       "array_unique",
+		Parameters: []*registry.Parameter{{Name: "array", Type: "array"}},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			seen := make(map[string]bool)
+			for key, val := range arr.Elements {
+				if val == nil {
+					continue
+				}
+				valStr := val.ToString()
+				if !seen[valStr] {
+					seen[valStr] = true
+					resultArr.Elements[key] = val
+				}
+			}
+			return result, nil
+		},
+	},
 }
 
 // helper to normalise missing args to NULL when builtin expects them.
