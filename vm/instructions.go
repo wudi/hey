@@ -65,6 +65,9 @@ func (vm *VirtualMachine) writeOperand(ctx *ExecutionContext, frame *CallFrame, 
 		return nil
 	case opcodes.IS_VAR, opcodes.IS_CV:
 		frame.setLocal(operand, value)
+		if globalName, ok := frame.globalSlotName(operand); ok {
+			ctx.bindGlobalValue(globalName, value)
+		}
 		ctx.recordAssignment(frame, operand, value)
 		if name, ok := frame.SlotNames[operand]; ok {
 			if _, watched := vm.watchVars[name]; watched {
@@ -1286,12 +1289,49 @@ func (vm *VirtualMachine) execBindVarName(ctx *ExecutionContext, frame *CallFram
 	}
 	name := frame.Constants[op2].ToString()
 	frame.bindSlotName(op1, name)
-	if val, ok := ctx.Variables[name]; ok {
-		if _, exists := frame.getLocalWithStatus(op1); !exists {
-			frame.setLocal(op1, val)
+	localVal, exists := frame.getLocalWithStatus(op1)
+	if frame.Function == nil {
+		frame.bindGlobalSlot(op1, name)
+		if !exists {
+			localVal = ctx.ensureGlobal(name)
+			exists = true
+			frame.setLocal(op1, localVal)
 		}
 	}
+	if val, ok := ctx.Variables[name]; ok && !exists {
+		localVal = val
+		exists = true
+		frame.setLocal(op1, val)
+	}
+	if frame.Function == nil {
+		ctx.bindGlobalValue(name, frame.getLocal(op1))
+	}
 	ctx.setVariable(name, frame.getLocal(op1))
+	return true, nil
+}
+
+func (vm *VirtualMachine) execBindGlobal(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	if ctx == nil || frame == nil {
+		return false, fmt.Errorf("bind global requires valid execution context")
+	}
+	nameType, nameOp := decodeOperand(inst, 1)
+	if nameType != opcodes.IS_CONST {
+		return false, fmt.Errorf("BIND_GLOBAL expects constant operand")
+	}
+	if int(nameOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", nameOp)
+	}
+	name := frame.Constants[nameOp].ToString()
+	resType, resSlot := decodeResult(inst)
+	if resType != opcodes.IS_VAR && resType != opcodes.IS_CV {
+		return false, fmt.Errorf("BIND_GLOBAL result must target variable slot")
+	}
+	frame.bindSlotName(resSlot, name)
+	frame.bindGlobalSlot(resSlot, name)
+	globalVal := ctx.ensureGlobal(name)
+	frame.setLocal(resSlot, globalVal)
+	ctx.bindGlobalValue(name, globalVal)
+	ctx.setVariable(name, globalVal)
 	return true, nil
 }
 
@@ -1666,6 +1706,10 @@ func (vm *VirtualMachine) execUnsetVar(ctx *ExecutionContext, frame *CallFrame, 
 	case opcodes.IS_VAR, opcodes.IS_CV:
 		name, _ := frame.SlotNames[op1]
 		frame.unsetLocal(op1)
+		if globalName, ok := frame.globalSlotName(op1); ok {
+			ctx.unsetGlobal(globalName)
+			frame.unbindGlobalSlot(op1)
+		}
 		if name != "" {
 			ctx.unsetVariable(name)
 			if _, watched := vm.watchVars[name]; watched {

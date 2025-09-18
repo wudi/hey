@@ -160,6 +160,7 @@ type CallFrame struct {
 	TempVars         map[uint32]*values.Value
 	SlotNames        map[uint32]string
 	NameSlots        map[string]uint32
+	GlobalSlots      map[uint32]string
 	Iterators        map[uint32]*foreachIterator
 	exHandlers       []*exceptionHandler
 	pendingException *values.Value
@@ -205,6 +206,7 @@ func newCallFrame(name string, fn *registry.Function, instructions []*opcodes.In
 		TempVars:     make(map[uint32]*values.Value),
 		SlotNames:    make(map[uint32]string),
 		NameSlots:    make(map[string]uint32),
+		GlobalSlots:  make(map[uint32]string),
 		Iterators:    make(map[uint32]*foreachIterator),
 		exHandlers:   make([]*exceptionHandler, 0, 4),
 		pendingCalls: make([]*PendingCall, 0, 4),
@@ -271,6 +273,31 @@ func (f *CallFrame) bindSlotName(slot uint32, name string) {
 	if sanitized := sanitizeVariableName(name); sanitized != "" && sanitized != name {
 		f.NameSlots[sanitized] = slot
 	}
+}
+
+func (f *CallFrame) bindGlobalSlot(slot uint32, name string) {
+	if name == "" {
+		return
+	}
+	if f.GlobalSlots == nil {
+		f.GlobalSlots = make(map[uint32]string)
+	}
+	f.GlobalSlots[slot] = name
+}
+
+func (f *CallFrame) unbindGlobalSlot(slot uint32) {
+	if f.GlobalSlots == nil {
+		return
+	}
+	delete(f.GlobalSlots, slot)
+}
+
+func (f *CallFrame) globalSlotName(slot uint32) (string, bool) {
+	if f.GlobalSlots == nil {
+		return "", false
+	}
+	name, ok := f.GlobalSlots[slot]
+	return name, ok
 }
 
 func (f *CallFrame) slotByName(name string) (uint32, bool) {
@@ -356,6 +383,30 @@ func sanitizeVariableName(name string) string {
 		trimmed = strings.Trim(inner, "\"'")
 	}
 	return trimmed
+}
+
+func globalNameVariants(name string) []string {
+	variants := make([]string, 0, 3)
+	seen := make(map[string]struct{}, 3)
+	add := func(candidate string) {
+		if candidate == "" {
+			return
+		}
+		if _, ok := seen[candidate]; ok {
+			return
+		}
+		seen[candidate] = struct{}{}
+		variants = append(variants, candidate)
+	}
+
+	add(name)
+	sanitized := sanitizeVariableName(name)
+	if sanitized != "" {
+		add(sanitized)
+		add("$" + sanitized)
+	}
+
+	return variants
 }
 
 func (ctx *ExecutionContext) ensureClass(name string) *classRuntime {
@@ -607,11 +658,22 @@ func descriptorFromClass(class *registry.Class) *registry.ClassDescriptor {
 }
 
 func (ctx *ExecutionContext) ensureGlobal(name string) *values.Value {
-	if val, ok := ctx.GlobalVars[name]; ok {
-		return val
+	for _, variant := range globalNameVariants(name) {
+		if val, ok := ctx.GlobalVars[variant]; ok {
+			ctx.bindGlobalValue(name, val)
+			return val
+		}
+	}
+	for _, variant := range globalNameVariants(name) {
+		if ctx.Variables != nil {
+			if val, ok := ctx.Variables[variant]; ok {
+				ctx.bindGlobalValue(name, val)
+				return val
+			}
+		}
 	}
 	null := values.NewNull()
-	ctx.GlobalVars[name] = null
+	ctx.bindGlobalValue(name, null)
 	return null
 }
 
@@ -632,6 +694,44 @@ func (ctx *ExecutionContext) unsetVariable(name string) {
 	delete(ctx.Variables, name)
 	if sanitized := sanitizeVariableName(name); sanitized != "" && sanitized != name {
 		delete(ctx.Variables, sanitized)
+	}
+}
+
+func (ctx *ExecutionContext) bindGlobalValue(name string, value *values.Value) {
+	if ctx.GlobalVars == nil {
+		ctx.GlobalVars = make(map[string]*values.Value)
+	}
+	variants := globalNameVariants(name)
+	for _, variant := range variants {
+		ctx.GlobalVars[variant] = value
+	}
+	ctx.updateGlobalBindings(variants, value)
+}
+
+func (ctx *ExecutionContext) unsetGlobal(name string) {
+	if ctx.GlobalVars == nil {
+		return
+	}
+	for _, variant := range globalNameVariants(name) {
+		delete(ctx.GlobalVars, variant)
+	}
+}
+
+func (ctx *ExecutionContext) updateGlobalBindings(names []string, value *values.Value) {
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+	for _, frame := range ctx.CallStack {
+		if frame == nil || len(frame.GlobalSlots) == 0 {
+			continue
+		}
+		for slot, bound := range frame.GlobalSlots {
+			for _, candidate := range names {
+				if bound == candidate {
+					frame.Locals[slot] = value
+					break
+				}
+			}
+		}
 	}
 }
 

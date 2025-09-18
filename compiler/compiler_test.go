@@ -5654,27 +5654,47 @@ func TestIssetExpression(t *testing.T) {
 // TestGlobalStatement tests the compilation of global statements
 func TestGlobalStatement(t *testing.T) {
 	tests := []struct {
-		name    string
-		phpCode string
+		name           string
+		phpCode        string
+		expectedOutput string
 	}{
 		{
-			name:    "Global variable declaration",
-			phpCode: `<?php function test() { global $x; } ?>`,
+			name:           "Global variable declaration",
+			phpCode:        `<?php function test() { global $x; } test(); ?>`,
+			expectedOutput: "",
+		},
+		{
+			name: "Global modification visible outside",
+			phpCode: `<?php
+$g = 2;
+function inc() {
+    global $g;
+    $g++;
+}
+inc();
+echo $g;
+?>`,
+			expectedOutput: "3",
+		},
+		{
+			name: "Global created inside function",
+			phpCode: `<?php
+function assignGlobal() {
+    global $foo;
+    $foo = 42;
+}
+assignGlobal();
+echo $foo;
+?>`,
+			expectedOutput: "42",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := parser.New(lexer.New(tt.phpCode))
-			prog := p.ParseProgram()
-			require.NotNil(t, prog, "Failed to parse program for test: %s", tt.name)
-
-			comp := NewCompiler()
-			err := comp.Compile(prog)
-			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
-
-			err = executeWithRuntime(t, comp)
+			output, err := compileAndExecute(t, tt.phpCode)
 			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+			require.Equal(t, tt.expectedOutput, output, "Unexpected output for test: %s", tt.name)
 		})
 	}
 }

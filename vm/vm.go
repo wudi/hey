@@ -291,6 +291,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execFetchDynamic(ctx, frame, inst)
 	case opcodes.OP_FETCH_W, opcodes.OP_FETCH_RW:
 		return vm.execFetch(ctx, frame, inst)
+	case opcodes.OP_BIND_GLOBAL:
+		return vm.execBindGlobal(ctx, frame, inst)
 	case opcodes.OP_BIND_VAR_NAME:
 		return vm.execBindVarName(ctx, frame, inst)
 	case opcodes.OP_DECLARE_FUNCTION:
