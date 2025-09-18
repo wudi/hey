@@ -60,6 +60,33 @@ func TestLexer_Variables(t *testing.T) {
 	}
 }
 
+func TestLexer_UnicodeEscapeInDoubleQuotedString(t *testing.T) {
+	input := `<?php $s = "This is a unicode character: \u{1F600}"; ?>`
+
+	expectedString := "\"This is a unicode character: \U0001F600\""
+
+	tests := []struct {
+		expectedType  TokenType
+		expectedValue string
+	}{
+		{T_OPEN_TAG, "<?php "},
+		{T_VARIABLE, "$s"},
+		{TOKEN_EQUAL, "="},
+		{T_CONSTANT_ENCAPSED_STRING, expectedString},
+		{TOKEN_SEMICOLON, ";"},
+		{T_CLOSE_TAG, "?>"},
+		{T_EOF, ""},
+	}
+
+	lexer := New(input)
+
+	for i, tt := range tests {
+		tok := lexer.NextToken()
+		assert.Equal(t, tt.expectedType, tok.Type, "test[%d] - tokentype wrong. expected=%q, got=%q", i, TokenNames[tt.expectedType], TokenNames[tok.Type])
+		assert.Equal(t, tt.expectedValue, tok.Value, "test[%d] - value wrong. expected=%q, got=%q", i, tt.expectedValue, tok.Value)
+	}
+}
+
 func TestLexer_Operators(t *testing.T) {
 	input := `<?php $a + $b - $c * $d / $e % $f; ?>`
 

@@ -376,45 +376,182 @@ func (l *Lexer) convertNumberString(value string, tokenType TokenType) (TokenTyp
 }
 
 // readString 读取字符串
+type escapeContext int
+
+const (
+	escapeContextSingle escapeContext = iota
+	escapeContextDouble
+)
+
+func encodeCodePointToUTF8(codepoint int) string {
+	switch {
+	case codepoint <= 0x7F:
+		return string([]byte{byte(codepoint)})
+	case codepoint <= 0x7FF:
+		return string([]byte{
+			0xC0 | byte((codepoint>>6)&0x1F),
+			0x80 | byte(codepoint&0x3F),
+		})
+	case codepoint <= 0xFFFF:
+		return string([]byte{
+			0xE0 | byte((codepoint>>12)&0x0F),
+			0x80 | byte((codepoint>>6)&0x3F),
+			0x80 | byte(codepoint&0x3F),
+		})
+	default:
+		return string([]byte{
+			0xF0 | byte((codepoint>>18)&0x07),
+			0x80 | byte((codepoint>>12)&0x3F),
+			0x80 | byte((codepoint>>6)&0x3F),
+			0x80 | byte(codepoint&0x3F),
+		})
+	}
+}
+
+func (l *Lexer) readEscapeSequence(delimiter byte, ctx escapeContext) (string, error) {
+	if l.ch == 0 {
+		return "", fmt.Errorf("unterminated escape sequence at line %d, column %d", l.line, l.column)
+	}
+
+	switch ctx {
+	case escapeContextSingle:
+		switch l.ch {
+		case '\\':
+			l.readChar()
+			return "\\", nil
+		case delimiter:
+			ch := l.ch
+			l.readChar()
+			return string(ch), nil
+		default:
+			ch := l.ch
+			l.readChar()
+			return "\\" + string(ch), nil
+		}
+	case escapeContextDouble:
+		switch l.ch {
+		case 'n':
+			l.readChar()
+			return "\n", nil
+		case 'r':
+			l.readChar()
+			return "\r", nil
+		case 't':
+			l.readChar()
+			return "\t", nil
+		case 'v':
+			l.readChar()
+			return "\v", nil
+		case 'e':
+			l.readChar()
+			return string([]byte{0x1b}), nil
+		case 'f':
+			l.readChar()
+			return "\f", nil
+		case '\\':
+			l.readChar()
+			return "\\", nil
+		case '$':
+			l.readChar()
+			return "$", nil
+		case delimiter:
+			ch := l.ch
+			l.readChar()
+			return string(ch), nil
+		case '0', '1', '2', '3', '4', '5', '6', '7':
+			value := int(l.ch - '0')
+			count := 1
+			for count < 3 && isOctalDigit(l.peekChar()) {
+				l.readChar()
+				value = value*8 + int(l.ch-'0')
+				count++
+			}
+			l.readChar()
+			return string([]byte{byte(value)}), nil
+		case 'x':
+			var digits strings.Builder
+			for i := 0; i < 2 && isHexDigit(l.peekChar()); i++ {
+				l.readChar()
+				digits.WriteByte(l.ch)
+			}
+			if digits.Len() == 0 {
+				l.readChar()
+				return "\\x", nil
+			}
+			l.readChar()
+			value, err := strconv.ParseInt(digits.String(), 16, 32)
+			if err != nil {
+				return "", fmt.Errorf("invalid hex escape sequence at line %d, column %d", l.line, l.column)
+			}
+			return string([]byte{byte(value)}), nil
+		case 'u':
+			if l.peekChar() != '{' {
+				l.readChar()
+				return "\\u", nil
+			}
+			l.readChar() // 跳过 '{'
+			l.readChar() // 移动到第一个代码点字符
+			var digits strings.Builder
+			for l.ch != '}' && l.ch != 0 {
+				if !isHexDigit(l.ch) {
+					return "", fmt.Errorf("invalid unicode escape sequence at line %d, column %d", l.line, l.column)
+				}
+				digits.WriteByte(l.ch)
+				l.readChar()
+			}
+			if l.ch != '}' {
+				return "", fmt.Errorf("unterminated unicode escape sequence at line %d, column %d", l.line, l.column)
+			}
+			if digits.Len() == 0 {
+				return "", fmt.Errorf("invalid unicode escape sequence at line %d, column %d", l.line, l.column)
+			}
+			codepoint, err := strconv.ParseInt(digits.String(), 16, 32)
+			if err != nil {
+				return "", fmt.Errorf("invalid unicode escape sequence at line %d, column %d", l.line, l.column)
+			}
+			if codepoint > 0x10FFFF {
+				return "", fmt.Errorf("unicode codepoint out of range at line %d, column %d", l.line, l.column)
+			}
+			l.readChar() // 跳过 '}'
+			return encodeCodePointToUTF8(int(codepoint)), nil
+		default:
+			ch := l.ch
+			l.readChar()
+			return "\\" + string(ch), nil
+		}
+	}
+
+	return "", nil
+}
+
 func (l *Lexer) readString(delimiter byte) (string, error) {
 	l.readChar() // 移动到引号后
 
 	var result strings.Builder
+	ctx := escapeContextDouble
+	if delimiter == '\'' {
+		ctx = escapeContextSingle
+	}
 
-	for l.ch != delimiter && l.position < len(l.input) {
-		if l.ch == '\\' {
-			// 处理转义字符
-			l.readChar()
-			switch l.ch {
-			case 'n':
-				result.WriteByte('\n')
-			case 'r':
-				result.WriteByte('\r')
-			case 't':
-				result.WriteByte('\t')
-			case '\\':
-				result.WriteByte('\\')
-			case '\'':
-				result.WriteByte('\'')
-			case '"':
-				result.WriteByte('"')
-			case '$':
-				result.WriteByte('$')
-			default:
-				result.WriteByte(l.ch)
+	for {
+		switch {
+		case l.ch == 0:
+			return "", fmt.Errorf("unterminated string at line %d, column %d", l.line, l.column)
+		case l.ch == delimiter:
+			l.readChar() // 跳过结束的引号
+			return result.String(), nil
+		case l.ch == '\\':
+			l.readChar() // 跳过反斜杠
+			seq, err := l.readEscapeSequence(delimiter, ctx)
+			if err != nil {
+				return "", err
 			}
-		} else {
+			result.WriteString(seq)
+		default:
 			result.WriteByte(l.ch)
+			l.readChar()
 		}
-		l.readChar()
 	}
-
-	if l.ch != delimiter {
-		return "", fmt.Errorf("unterminated string at line %d, column %d", l.line, l.column)
-	}
-
-	l.readChar() // 跳过结束的引号
-	return result.String(), nil
 }
 
 // readLineComment 读取单行注释
@@ -1070,29 +1207,17 @@ func (l *Lexer) nextTokenInDoubleQuotes() Token {
 		// 处理转义字符
 		if l.ch == '\\' {
 			l.readChar() // 跳过反斜杠
-			if l.ch != 0 {
-				switch l.ch {
-				case 'n':
-					content.WriteByte('\n')
-				case 'r':
-					content.WriteByte('\r')
-				case 't':
-					content.WriteByte('\t')
-				case '\\':
-					content.WriteByte('\\')
-				case '"':
-					content.WriteByte('"')
-				case '$':
-					content.WriteByte('$')
-				default:
-					content.WriteByte(l.ch)
-				}
-				l.readChar()
+			seq, err := l.readEscapeSequence('"', escapeContextDouble)
+			if err != nil {
+				l.addError(err.Error())
+				return Token{Type: T_BAD_CHARACTER, Value: "", Position: pos}
 			}
-		} else {
-			content.WriteByte(l.ch)
-			l.readChar()
+			content.WriteString(seq)
+			continue
 		}
+
+		content.WriteByte(l.ch)
+		l.readChar()
 	}
 
 	if content.Len() > 0 {
@@ -1146,29 +1271,17 @@ func (l *Lexer) nextTokenInBackquote() Token {
 		// 处理转义字符
 		if l.ch == '\\' {
 			l.readChar() // 跳过反斜杠
-			if l.ch != 0 {
-				switch l.ch {
-				case 'n':
-					content.WriteByte('\n')
-				case 'r':
-					content.WriteByte('\r')
-				case 't':
-					content.WriteByte('\t')
-				case '\\':
-					content.WriteByte('\\')
-				case '`':
-					content.WriteByte('`')
-				case '$':
-					content.WriteByte('$')
-				default:
-					content.WriteByte(l.ch)
-				}
-				l.readChar()
+			seq, err := l.readEscapeSequence('`', escapeContextDouble)
+			if err != nil {
+				l.addError(err.Error())
+				return Token{Type: T_BAD_CHARACTER, Value: "", Position: pos}
 			}
-		} else {
-			content.WriteByte(l.ch)
-			l.readChar()
+			content.WriteString(seq)
+			continue
 		}
+
+		content.WriteByte(l.ch)
+		l.readChar()
 	}
 
 	if content.Len() > 0 {
@@ -1305,6 +1418,17 @@ func (l *Lexer) nextTokenInHeredoc() Token {
 			l.readChar() // 跳过 $
 			identifier := l.readIdentifier()
 			return Token{Type: T_VARIABLE, Value: "$" + identifier, Position: pos}
+		}
+
+		if l.ch == '\\' {
+			l.readChar() // 跳过反斜杠
+			seq, err := l.readEscapeSequence('"', escapeContextDouble)
+			if err != nil {
+				l.addError(err.Error())
+				return Token{Type: T_BAD_CHARACTER, Value: "", Position: pos}
+			}
+			content.WriteString(seq)
+			continue
 		}
 		content.WriteByte(l.ch)
 		l.readChar()

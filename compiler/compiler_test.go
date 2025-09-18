@@ -512,6 +512,16 @@ func TestStringOperators(t *testing.T) {
 	}
 }
 
+func TestUnicodeEscapeStringExecution(t *testing.T) {
+	code := `<?php echo "This is a unicode character: \u{1F600}"; ?>`
+	expected := "This is a unicode character: \U0001F600"
+
+	output, err := compileAndExecute(t, code)
+	require.NoError(t, err, "Execution failed for unicode escape test")
+
+	require.Equal(t, expected, output, "VM output should match expected unicode escape expansion")
+}
+
 func TestAdvancedComparisonOperators(t *testing.T) {
 	testCases := []struct {
 		name   string
