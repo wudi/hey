@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -239,7 +240,10 @@ func keyFor(name string) string {
 // for user code executed at runtime.
 func (r *Registry) RegisterFunction(fn *Function) error {
 	if fn == nil {
-		return fmt.Errorf("cannot register nil function")
+		return errors.New("cannot register nil function")
+	}
+	if fn.Name == "" {
+		return errors.New("cannot register function with empty name")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -278,7 +282,10 @@ func (r *Registry) GetFunction(name string) (*Function, bool) {
 // RegisterClass stores or replaces a class descriptor.
 func (r *Registry) RegisterClass(class *ClassDescriptor) error {
 	if class == nil {
-		return fmt.Errorf("cannot register nil class descriptor")
+		return errors.New("cannot register nil class descriptor")
+	}
+	if class.Name == "" {
+		return errors.New("cannot register class with empty name")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -303,7 +310,7 @@ func (r *Registry) GetAllClasses() map[string]*ClassDescriptor {
 // GetClass retrieves a class descriptor when present.
 func (r *Registry) GetClass(name string) (*ClassDescriptor, error) {
 	if r == nil {
-		return nil, fmt.Errorf("registry not initialized")
+		return nil, errors.New("registry not initialized")
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -317,7 +324,10 @@ func (r *Registry) GetClass(name string) (*ClassDescriptor, error) {
 // RegisterConstant stores a global constant descriptor.
 func (r *Registry) RegisterConstant(constant *ConstantDescriptor) error {
 	if constant == nil {
-		return fmt.Errorf("cannot register nil constant descriptor")
+		return errors.New("cannot register nil constant descriptor")
+	}
+	if constant.Name == "" {
+		return errors.New("cannot register constant with empty name")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -339,7 +349,10 @@ func (r *Registry) GetConstant(name string) (*ConstantDescriptor, bool) {
 // RegisterInterface stores an interface definition.
 func (r *Registry) RegisterInterface(iface *Interface) error {
 	if iface == nil {
-		return fmt.Errorf("cannot register nil interface")
+		return errors.New("cannot register nil interface")
+	}
+	if iface.Name == "" {
+		return errors.New("cannot register interface with empty name")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -361,7 +374,10 @@ func (r *Registry) GetInterface(name string) (*Interface, bool) {
 // RegisterTrait stores a trait definition.
 func (r *Registry) RegisterTrait(trait *Trait) error {
 	if trait == nil {
-		return fmt.Errorf("cannot register nil trait")
+		return errors.New("cannot register nil trait")
+	}
+	if trait.Name == "" {
+		return errors.New("cannot register trait with empty name")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
