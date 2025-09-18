@@ -2,6 +2,7 @@ package values
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -833,6 +834,175 @@ func (v *Value) String() string {
 		return fmt.Sprintf("&%s", v.Deref().String())
 	default:
 		return "unknown"
+	}
+}
+
+// VarDump renders the value following PHP's var_dump formatting rules.
+func (v *Value) VarDump() string {
+	var b strings.Builder
+	visited := make(map[*Array]bool)
+	v.appendVarDump(&b, 0, visited)
+	return b.String()
+}
+
+func (v *Value) appendVarDump(b *strings.Builder, indent int, visited map[*Array]bool) {
+	ind := strings.Repeat(" ", indent)
+	switch v.Type {
+	case TypeNull:
+		b.WriteString(ind + "NULL\n")
+	case TypeBool:
+		if v.Data.(bool) {
+			b.WriteString(ind + "bool(true)\n")
+		} else {
+			b.WriteString(ind + "bool(false)\n")
+		}
+	case TypeInt:
+		b.WriteString(fmt.Sprintf("%sint(%d)\n", ind, v.Data.(int64)))
+	case TypeFloat:
+		b.WriteString(fmt.Sprintf("%sfloat(%s)\n", ind, strconv.FormatFloat(v.Data.(float64), 'g', -1, 64)))
+	case TypeString:
+		s := v.Data.(string)
+		b.WriteString(fmt.Sprintf("%sstring(%d) %q\n", ind, len(s), s))
+	case TypeArray:
+		v.appendArrayVarDump(b, indent, visited)
+	case TypeObject:
+		v.appendObjectVarDump(b, indent, visited)
+	case TypeReference:
+		v.Deref().appendVarDump(b, indent, visited)
+	case TypeCallable:
+		b.WriteString(ind + "object(Closure)#1 (0) {}\n")
+	case TypeResource:
+		b.WriteString(ind + "resource(0) of type (unknown)\n")
+	default:
+		b.WriteString(ind + v.Type.String() + "\n")
+	}
+}
+
+func (v *Value) appendArrayVarDump(b *strings.Builder, indent int, visited map[*Array]bool) {
+	arr := v.Data.(*Array)
+	ind := strings.Repeat(" ", indent)
+	if visited[arr] {
+		b.WriteString(ind + "*RECURSION*\n")
+		return
+	}
+	visited[arr] = true
+	defer delete(visited, arr)
+
+	keys := make([]interface{}, 0, len(arr.Elements))
+	for k := range arr.Elements {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return compareArrayKeys(keys[i], keys[j])
+	})
+
+	b.WriteString(fmt.Sprintf("%sarray(%d) {\n", ind, len(arr.Elements)))
+	for _, key := range keys {
+		keyStr := formatArrayKey(key)
+		b.WriteString(fmt.Sprintf("%s  [%s]=>\n", ind, keyStr))
+		val := arr.Elements[key]
+		if val == nil {
+			b.WriteString(strings.Repeat(" ", indent+2) + "NULL\n")
+			continue
+		}
+		val.appendVarDump(b, indent+2, visited)
+	}
+	b.WriteString(ind + "}\n")
+}
+
+func (v *Value) appendObjectVarDump(b *strings.Builder, indent int, visited map[*Array]bool) {
+	obj := v.Data.(*Object)
+	ind := strings.Repeat(" ", indent)
+	propKeys := make([]string, 0, len(obj.Properties))
+	for name := range obj.Properties {
+		propKeys = append(propKeys, name)
+	}
+	sort.Strings(propKeys)
+	b.WriteString(fmt.Sprintf("%sobject(%s)#1 (%d) {\n", ind, obj.ClassName, len(obj.Properties)))
+	for _, name := range propKeys {
+		b.WriteString(fmt.Sprintf("%s  [\"%s\"]=>\n", ind, name))
+		val := obj.Properties[name]
+		if val == nil {
+			b.WriteString(strings.Repeat(" ", indent+2) + "NULL\n")
+		} else {
+			val.appendVarDump(b, indent+2, visited)
+		}
+	}
+	b.WriteString(ind + "}\n")
+}
+
+func compareArrayKeys(a, b interface{}) bool {
+	k1, kind1 := arrayKeySortValue(a)
+	k2, kind2 := arrayKeySortValue(b)
+	if kind1 != kind2 {
+		return kind1 < kind2
+	}
+	if kind1 == 0 {
+		return k1 < k2
+	}
+	if kind1 == 1 {
+		s1 := a.(string)
+		s2 := b.(string)
+		return s1 < s2
+	}
+	return fmt.Sprint(a) < fmt.Sprint(b)
+}
+
+func arrayKeySortValue(key interface{}) (int64, int) {
+	switch k := key.(type) {
+	case int:
+		return int64(k), 0
+	case int8:
+		return int64(k), 0
+	case int16:
+		return int64(k), 0
+	case int32:
+		return int64(k), 0
+	case int64:
+		return k, 0
+	case uint:
+		return int64(k), 0
+	case uint8:
+		return int64(k), 0
+	case uint16:
+		return int64(k), 0
+	case uint32:
+		return int64(k), 0
+	case uint64:
+		return int64(k), 0
+	case string:
+		return 0, 1
+	default:
+		return 0, 2
+	}
+}
+
+func formatArrayKey(key interface{}) string {
+	switch k := key.(type) {
+	case string:
+		return fmt.Sprintf("\"%s\"", k)
+	case int:
+		return fmt.Sprintf("%d", k)
+	case int8:
+		return fmt.Sprintf("%d", k)
+	case int16:
+		return fmt.Sprintf("%d", k)
+	case int32:
+		return fmt.Sprintf("%d", k)
+	case int64:
+		return fmt.Sprintf("%d", k)
+	case uint:
+		return fmt.Sprintf("%d", k)
+	case uint8:
+		return fmt.Sprintf("%d", k)
+	case uint16:
+		return fmt.Sprintf("%d", k)
+	case uint32:
+		return fmt.Sprintf("%d", k)
+	case uint64:
+		return fmt.Sprintf("%d", k)
+	default:
+		return fmt.Sprintf("\"%v\"", k)
 	}
 }
 
