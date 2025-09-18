@@ -1,0 +1,381 @@
+package registry
+
+import (
+	"fmt"
+	"strings"
+	"sync"
+
+	"github.com/wudi/hey/opcodes"
+	"github.com/wudi/hey/values"
+)
+
+// BuiltinImplementation defines the function signature for builtin functions
+// implemented in Go and callable from the VM.
+type BuiltinImplementation func(ctx BuiltinCallContext, args []*values.Value) (*values.Value, error)
+
+// BuiltinCallContext exposes the minimal VM services that builtin implementations
+// need without creating a dependency cycle back to the vm package.
+type BuiltinCallContext interface {
+	// WriteOutput should render the provided value to the active output stream.
+	WriteOutput(val *values.Value) error
+	// GetGlobal fetches a global variable by name if it exists.
+	GetGlobal(name string) (*values.Value, bool)
+	// SetGlobal updates or creates a global variable by name.
+	SetGlobal(name string, val *values.Value)
+	// SymbolRegistry returns the unified registry to allow builtins to inspect
+	// other symbols (functions, classes, etc.).
+	SymbolRegistry() *Registry
+	// LookupUserFunction returns a user-defined function registered inside the
+	// active execution context, if available.
+	LookupUserFunction(name string) (*Function, bool)
+	// LookupUserClass returns a user-defined class registered inside the active
+	// execution context, if available.
+	LookupUserClass(name string) (*Class, bool)
+}
+
+// Function describes a PHP function that can either be user-defined (bytecode)
+// or builtin (Go implementation).
+type Function struct {
+	Name         string
+	Parameters   []*Parameter
+	ReturnType   string
+	Instructions []*opcodes.Instruction
+	Constants    []*values.Value
+	IsVariadic   bool
+	IsGenerator  bool
+	IsAnonymous  bool
+	IsBuiltin    bool
+	Builtin      BuiltinImplementation
+	Handler      func(interface{}, []*values.Value) (*values.Value, error)
+	MinArgs      int
+	MaxArgs      int
+}
+
+// Clone creates a shallow copy of the function metadata. Instructions and
+// constants are re-used, mirroring PHP's copy-on-write semantics for op arrays.
+func (f *Function) Clone() *Function {
+	if f == nil {
+		return nil
+	}
+	clone := *f
+	return &clone
+}
+
+// Parameter captures metadata about a compiled parameter.
+type Parameter struct {
+	Name         string
+	Type         string
+	IsReference  bool
+	HasDefault   bool
+	DefaultValue *values.Value
+}
+
+// Class models a compiled PHP class definition used by the compiler and VM.
+type Class struct {
+	Name       string
+	Parent     string
+	Interfaces []string
+	Traits     []string
+	Properties map[string]*Property
+	Methods    map[string]*Function
+	Constants  map[string]*ClassConstant
+	IsAbstract bool
+	IsFinal    bool
+}
+
+// Property represents a class property.
+type Property struct {
+	Name         string
+	Visibility   string
+	IsStatic     bool
+	Type         string
+	DefaultValue *values.Value
+	DocComment   string
+}
+
+// ClassConstant represents a class constant.
+type ClassConstant struct {
+	Name       string
+	Value      *values.Value
+	Visibility string
+	IsFinal    bool
+	Type       string
+	IsAbstract bool
+}
+
+// Interface models an interface declaration.
+type Interface struct {
+	Name    string
+	Methods map[string]*InterfaceMethod
+	Extends []string
+}
+
+// InterfaceMethod represents a method requirement within an interface.
+type InterfaceMethod struct {
+	Name       string
+	Visibility string
+	Parameters []*Parameter
+	ReturnType string
+}
+
+// Trait models a PHP trait definition.
+type Trait struct {
+	Name       string
+	Properties map[string]*Property
+	Methods    map[string]*Function
+}
+
+// Constant represents a global constant.
+type Constant struct {
+	Name  string
+	Value *values.Value
+}
+
+// The descriptor layer is used by the unified symbol system to expose
+// lightweight metadata to the runtime and tools without binding to the VM
+// execution data structures.
+
+type ParameterDescriptor struct {
+	Name         string
+	Type         string
+	IsReference  bool
+	HasDefault   bool
+	DefaultValue *values.Value
+}
+
+type PropertyDescriptor struct {
+	Name         string
+	Visibility   string
+	IsStatic     bool
+	Type         string
+	DefaultValue *values.Value
+	IsReadonly   bool
+}
+
+type ConstantDescriptor struct {
+	Name       string
+	Visibility string
+	Value      *values.Value
+	IsFinal    bool
+}
+
+type MethodImplementation interface {
+	ImplementationKind() string
+}
+
+type ParameterInfo struct {
+	Name         string
+	HasDefault   bool
+	DefaultValue *values.Value
+	IsVariadic   bool
+}
+
+type BytecodeMethodImpl struct {
+	Instructions []*opcodes.Instruction
+	Constants    []*values.Value
+	LocalVars    int
+	Parameters   []*ParameterInfo
+}
+
+func (b *BytecodeMethodImpl) ImplementationKind() string { return "bytecode" }
+
+type MethodDescriptor struct {
+	Name           string
+	Visibility     string
+	IsStatic       bool
+	IsAbstract     bool
+	IsFinal        bool
+	IsVariadic     bool
+	Parameters     []*ParameterDescriptor
+	Implementation MethodImplementation
+}
+
+type ClassDescriptor struct {
+	Name       string
+	Parent     string
+	Interfaces []string
+	Traits     []string
+	IsAbstract bool
+	IsFinal    bool
+	Properties map[string]*PropertyDescriptor
+	Methods    map[string]*MethodDescriptor
+	Constants  map[string]*ConstantDescriptor
+}
+
+// Registry is a threadsafe container for all globally registered symbols.
+type Registry struct {
+	mu         sync.RWMutex
+	functions  map[string]*Function
+	classes    map[string]*ClassDescriptor
+	constants  map[string]*ConstantDescriptor
+	interfaces map[string]*Interface
+	traits     map[string]*Trait
+}
+
+var (
+	initOnce       sync.Once
+	GlobalRegistry *Registry
+)
+
+// Initialize ensures the global registry instance is created exactly once.
+func Initialize() {
+	initOnce.Do(func() {
+		GlobalRegistry = &Registry{
+			functions:  make(map[string]*Function),
+			classes:    make(map[string]*ClassDescriptor),
+			constants:  make(map[string]*ConstantDescriptor),
+			interfaces: make(map[string]*Interface),
+			traits:     make(map[string]*Trait),
+		}
+	})
+}
+
+func keyFor(name string) string {
+	return strings.ToLower(name)
+}
+
+// RegisterFunction registers a function (builtin or user) with the registry.
+// The last registration wins which mirrors PHP's function redeclaration rules
+// for user code executed at runtime.
+func (r *Registry) RegisterFunction(fn *Function) error {
+	if fn == nil {
+		return fmt.Errorf("cannot register nil function")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.functions[keyFor(fn.Name)] = fn
+	return nil
+}
+
+// GetAllFunctions returns a shallow copy of all registered functions.
+func (r *Registry) GetAllFunctions() map[string]*Function {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[string]*Function, len(r.functions))
+	for name, fn := range r.functions {
+		out[name] = fn
+	}
+	return out
+}
+
+// GetFunction fetches a function by case-insensitive name.
+func (r *Registry) GetFunction(name string) (*Function, bool) {
+	if r == nil {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	fn, ok := r.functions[keyFor(name)]
+	if !ok {
+		return nil, false
+	}
+	return fn, true
+}
+
+// RegisterClass stores or replaces a class descriptor.
+func (r *Registry) RegisterClass(class *ClassDescriptor) error {
+	if class == nil {
+		return fmt.Errorf("cannot register nil class descriptor")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.classes[keyFor(class.Name)] = class
+	return nil
+}
+
+// GetAllClasses returns a shallow copy of all registered class descriptors.
+func (r *Registry) GetAllClasses() map[string]*ClassDescriptor {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make(map[string]*ClassDescriptor, len(r.classes))
+	for name, class := range r.classes {
+		out[name] = class
+	}
+	return out
+}
+
+// GetClass retrieves a class descriptor when present.
+func (r *Registry) GetClass(name string) (*ClassDescriptor, error) {
+	if r == nil {
+		return nil, fmt.Errorf("registry not initialized")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	class, ok := r.classes[keyFor(name)]
+	if !ok {
+		return nil, fmt.Errorf("class %s not registered", name)
+	}
+	return class, nil
+}
+
+// RegisterConstant stores a global constant descriptor.
+func (r *Registry) RegisterConstant(constant *ConstantDescriptor) error {
+	if constant == nil {
+		return fmt.Errorf("cannot register nil constant descriptor")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.constants[keyFor(constant.Name)] = constant
+	return nil
+}
+
+// GetConstant retrieves a constant descriptor if available.
+func (r *Registry) GetConstant(name string) (*ConstantDescriptor, bool) {
+	if r == nil {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	c, ok := r.constants[keyFor(name)]
+	return c, ok
+}
+
+// RegisterInterface stores an interface definition.
+func (r *Registry) RegisterInterface(iface *Interface) error {
+	if iface == nil {
+		return fmt.Errorf("cannot register nil interface")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.interfaces[keyFor(iface.Name)] = iface
+	return nil
+}
+
+// GetInterface fetches an interface definition.
+func (r *Registry) GetInterface(name string) (*Interface, bool) {
+	if r == nil {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	iface, ok := r.interfaces[keyFor(name)]
+	return iface, ok
+}
+
+// RegisterTrait stores a trait definition.
+func (r *Registry) RegisterTrait(trait *Trait) error {
+	if trait == nil {
+		return fmt.Errorf("cannot register nil trait")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.traits[keyFor(trait.Name)] = trait
+	return nil
+}
+
+// GetTrait fetches a trait definition.
+func (r *Registry) GetTrait(name string) (*Trait, bool) {
+	if r == nil {
+		return nil, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	trait, ok := r.traits[keyFor(name)]
+	return trait, ok
+}
