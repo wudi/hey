@@ -27,7 +27,7 @@ all: build
 # Build the main binary
 .PHONY: build
 build:
-	$(GOBUILD) -o $(BINARY_NAME) $(LDFLAGS) $(MAIN_PATH)
+	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) $(LDFLAGS) $(MAIN_PATH)
 
 # Build all demo binaries
 .PHONY: build-all
