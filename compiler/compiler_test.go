@@ -6244,6 +6244,142 @@ func BenchmarkWaitGroupOperations(b *testing.B) {
 	})
 }
 
+// TestGeneratorImplementation tests comprehensive generator functionality including loops
+func TestGeneratorImplementation(t *testing.T) {
+	tests := []struct {
+		name           string
+		phpCode        string
+		expectedOutput string
+	}{
+		{
+			name: "Simple sequential yields",
+			phpCode: `<?php
+$gen = function() {
+    yield 1;
+    yield 2;
+    yield 3;
+};
+
+foreach ($gen() as $value) {
+    echo $value . "\n";
+}`,
+			expectedOutput: "1\n2\n3\n",
+		},
+		{
+			name: "Generator with for loop",
+			phpCode: `<?php
+$gen = function() {
+    for ($i = 0; $i < 3; $i++) {
+        yield $i;
+    }
+};
+
+foreach ($gen() as $value) {
+    echo $value . "\n";
+}`,
+			expectedOutput: "0\n1\n2\n",
+		},
+		{
+			name: "Generator with while loop",
+			phpCode: `<?php
+$gen = function() {
+    $i = 0;
+    while ($i < 3) {
+        yield $i;
+        $i++;
+    }
+};
+
+foreach ($gen() as $value) {
+    echo $value . "\n";
+}`,
+			expectedOutput: "0\n1\n2\n",
+		},
+		{
+			name: "Generator with key-value pairs",
+			phpCode: `<?php
+$gen = function() {
+    yield "a" => 1;
+    yield "b" => 2;
+    yield "c" => 3;
+};
+
+foreach ($gen() as $key => $value) {
+    echo $key . ":" . $value . "\n";
+}`,
+			expectedOutput: "a:1\nb:2\nc:3\n",
+		},
+		{
+			name: "Generator with variable preservation",
+			phpCode: `<?php
+$gen = function() {
+    $x = 10;
+    yield $x;
+    $x = $x + 5;
+    yield $x;
+    $x = $x * 2;
+    yield $x;
+};
+
+foreach ($gen() as $value) {
+    echo $value . "\n";
+}`,
+			expectedOutput: "10\n15\n30\n",
+		},
+		{
+			name: "Nested generator function calls",
+			phpCode: `<?php
+function createGen($start, $count) {
+    for ($i = $start; $i < $start + $count; $i++) {
+        yield $i;
+    }
+}
+
+foreach (createGen(5, 3) as $value) {
+    echo $value . "\n";
+}`,
+			expectedOutput: "5\n6\n7\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			// Parse and compile
+			p := parser.New(lexer.New(test.phpCode))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Program should not be nil")
+			require.Empty(t, p.Errors(), "Parser should not have errors: %v", p.Errors())
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Compilation should succeed")
+
+			// Capture output
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			done := make(chan string)
+			go func() {
+				var output bytes.Buffer
+				output.ReadFrom(r)
+				done <- output.String()
+			}()
+
+			// Execute
+			err = executeWithRuntime(t, comp)
+			require.NoError(t, err, "Execution should succeed")
+
+			// Restore stdout and get output
+			w.Close()
+			os.Stdout = oldStdout
+			output := <-done
+
+			require.Equal(t, test.expectedOutput, output, "Output should match expected")
+		})
+	}
+}
+
 func TestFinalStaticImplementation(t *testing.T) {
 	code := `<?php
 // Test 1: Basic static counter

@@ -10,162 +10,186 @@ import (
 
 // GeneratorExecutor is used to execute generator functions with yield support
 type GeneratorExecutor struct {
-	generator *ChannelGenerator
+	generator *Generator
 }
 
-// ChannelGenerator implements PHP generators using Go channels
-type ChannelGenerator struct {
-	valueChan    chan *values.Value  // Channel for yielded values
-	keyChan      chan *values.Value  // Channel for yielded keys
-	closeChan    chan struct{}       // Channel to signal generator completion
-	errorChan    chan error          // Channel for error propagation
+// Generator implements PHP generators with proper execution suspension/resumption
+type Generator struct {
+	function     *registry.Function
+	args         []*values.Value
+	vm           interface{} // VM interface to avoid import cycles
+
+	// Generator state
 	started      bool
 	finished     bool
+	suspended    bool
 	currentKey   *values.Value
 	currentValue *values.Value
-	function     interface{} // *registry.Function
-	args         []*values.Value
-	vm           interface{} // *vm.VirtualMachine (avoid import cycle)
+
+	// Suspended execution state
+	suspendedContext *GeneratorExecutionState
 }
 
-// NewChannelGenerator creates a new channel-based generator
-func NewChannelGenerator(function interface{}, args []*values.Value, vm interface{}) *ChannelGenerator {
-	return &ChannelGenerator{
-		valueChan:    make(chan *values.Value),
-		keyChan:      make(chan *values.Value),
-		closeChan:    make(chan struct{}),
-		errorChan:    make(chan error, 1), // Buffered to prevent blocking
-		started:      false,
-		finished:     false,
-		currentKey:   values.NewNull(),
-		currentValue: values.NewNull(),
+// GeneratorExecutionState preserves VM execution state at yield points
+type GeneratorExecutionState struct {
+	frame interface{} // Actual CallFrame object
+	ctx   interface{} // Actual ExecutionContext object
+}
+
+// NewGenerator creates a new generator
+func NewGenerator(function *registry.Function, args []*values.Value, vm interface{}) *Generator {
+	return &Generator{
 		function:     function,
 		args:         args,
 		vm:           vm,
+		started:      false,
+		finished:     false,
+		suspended:    false,
+		currentKey:   values.NewNull(),
+		currentValue: values.NewNull(),
+		suspendedContext: nil,
 	}
 }
 
-// Start begins the generator execution in a separate goroutine
-func (g *ChannelGenerator) Start() {
-	if g.started {
-		return
-	}
-	g.started = true
-
-	// Launch generator function in goroutine
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				g.errorChan <- fmt.Errorf("generator panic: %v", r)
-			}
-			close(g.valueChan)
-			close(g.keyChan)
-			close(g.closeChan)
-			g.finished = true
-		}()
-
-		// Execute generator function
-		// This will be implemented to actually run the function
-		// For now, simulate some yields for testing
-		g.executeGeneratorFunction()
-	}()
-}
-
-// executeGeneratorFunction executes the actual PHP generator function
-func (g *ChannelGenerator) executeGeneratorFunction() {
-	// Cast the function and VM interfaces back to their concrete types
-	fn, ok := g.function.(*registry.Function)
+// NewChannelGenerator creates a new channel-based generator (DEPRECATED - for compatibility)
+func NewChannelGenerator(function interface{}, args []*values.Value, vm interface{}) *Generator {
+	fn, ok := function.(*registry.Function)
 	if !ok {
-		g.errorChan <- fmt.Errorf("invalid function type")
-		return
+		return nil
+	}
+	return NewGenerator(fn, args, vm)
+}
+
+
+// Next advances the generator to the next value
+func (g *Generator) Next() bool {
+	if g.finished {
+		return false
 	}
 
+	if !g.started {
+		// First call - start execution from beginning
+		g.started = true
+		return g.executeUntilYield()
+	} else if g.suspended {
+		// Resume from suspended state
+		return g.resumeFromYield()
+	}
+
+	return false
+}
+
+// executeUntilYield starts generator execution from the beginning
+func (g *Generator) executeUntilYield() bool {
 	vm, ok := g.vm.(interface {
 		CreateExecutionContext() interface{}
 		CreateCallFrame(*registry.Function, []*values.Value) interface{}
-		ExecuteFunction(interface{}, interface{}) error
+		ExecuteUntilYield(interface{}, interface{}) (bool, error)
 	})
 	if !ok {
-		g.errorChan <- fmt.Errorf("invalid VM type")
-		return
+		return false
 	}
 
-	// Create execution context and call frame for generator
+	// Create fresh execution context and call frame
 	ctx := vm.CreateExecutionContext()
-	frame := vm.CreateCallFrame(fn, g.args)
+	frame := vm.CreateCallFrame(g.function, g.args)
 
 	// Set generator reference in call frame
 	if frameTyped, ok := frame.(interface{ SetGenerator(interface{}) }); ok {
 		frameTyped.SetGenerator(g)
 	}
 
-	// Execute the generator function
-	// The function will yield values through execYield calls
-	err := vm.ExecuteFunction(ctx, frame)
+	// Execute until first yield
+	yielded, err := vm.ExecuteUntilYield(ctx, frame)
 	if err != nil {
-		g.errorChan <- fmt.Errorf("generator execution error: %v", err)
-		return
+		g.finished = true
+		return false
 	}
 
-	// Generator finished normally
-	g.finished = true
+	if !yielded {
+		// Function completed without yield
+		g.finished = true
+		return false
+	}
+
+	// Save execution state for resumption
+	g.saveExecutionState(ctx, frame)
+	g.suspended = true
+	return true
 }
 
-// Next advances the generator to the next value
-func (g *ChannelGenerator) Next() bool {
-	if !g.started {
-		g.Start()
-	}
-
-	if g.finished {
+// resumeFromYield resumes generator execution from saved state
+func (g *Generator) resumeFromYield() bool {
+	if g.suspendedContext == nil {
 		return false
 	}
 
-	select {
-	case key, ok := <-g.keyChan:
-		if !ok {
-			g.finished = true
-			return false
-		}
-		g.currentKey = key
-
-		value, ok := <-g.valueChan
-		if !ok {
-			g.finished = true
-			return false
-		}
-		g.currentValue = value
-		return true
-
-	case err := <-g.errorChan:
-		// Handle generator error
-		fmt.Printf("Generator error: %v\n", err)
-		g.finished = true
+	vm, ok := g.vm.(interface {
+		ResumeFromYield(interface{}, interface{}) (bool, error)
+	})
+	if !ok {
 		return false
+	}
 
-	case <-g.closeChan:
+	// Restore execution state
+	ctx, frame := g.restoreExecutionState()
+
+	// Resume execution until next yield
+	yielded, err := vm.ResumeFromYield(ctx, frame)
+	if err != nil {
 		g.finished = true
 		return false
 	}
+
+	if !yielded {
+		// Function completed
+		g.finished = true
+		g.suspended = false
+		g.suspendedContext = nil
+		return false
+	}
+
+	// Update saved state for next resumption
+	g.saveExecutionState(ctx, frame)
+	return true
+}
+
+
+// saveExecutionState preserves VM state for resumption
+func (g *Generator) saveExecutionState(ctx, frame interface{}) {
+	// Store the actual execution context and call frame objects
+	// These will be reused for resumption
+	g.suspendedContext = &GeneratorExecutionState{
+		frame: frame,
+		ctx:   ctx,
+	}
+}
+
+// restoreExecutionState recreates VM state from saved state
+func (g *Generator) restoreExecutionState() (interface{}, interface{}) {
+	if g.suspendedContext == nil {
+		return nil, nil
+	}
+	return g.suspendedContext.ctx, g.suspendedContext.frame
 }
 
 // Current returns the current value
-func (g *ChannelGenerator) Current() *values.Value {
+func (g *Generator) Current() *values.Value {
 	return g.currentValue
 }
 
 // Key returns the current key
-func (g *ChannelGenerator) Key() *values.Value {
+func (g *Generator) Key() *values.Value {
 	return g.currentKey
 }
 
 // Valid returns whether the generator has more values
-func (g *ChannelGenerator) Valid() bool {
+func (g *Generator) Valid() bool {
 	return !g.finished && g.started
 }
 
-// Rewind resets the generator (not supported for channel generators)
-func (g *ChannelGenerator) Rewind() error {
+// Rewind resets the generator (not supported for generators)
+func (g *Generator) Rewind() error {
 	if g.started {
 		return fmt.Errorf("Cannot rewind a generator that was already run")
 	}
@@ -173,23 +197,11 @@ func (g *ChannelGenerator) Rewind() error {
 }
 
 // Yield is called from within the generator function to yield a value
-func (g *ChannelGenerator) Yield(key, value *values.Value) {
-	if key == nil {
-		// Auto-increment key
-		key = values.NewInt(0) // This should be tracked properly
-	}
-
-	select {
-	case g.keyChan <- key:
-	case <-g.closeChan:
-		return
-	}
-
-	select {
-	case g.valueChan <- value:
-	case <-g.closeChan:
-		return
-	}
+func (g *Generator) Yield(key, value *values.Value) {
+	// Store the yielded values for retrieval
+	g.currentKey = key
+	g.currentValue = value
+	// Actual suspension logic will be handled by VM.execYield
 }
 
 
@@ -1389,9 +1401,9 @@ func registerGeneratorClass() error {
 			}
 			obj := args[0].Data.(*values.Object)
 
-			// Get channel generator
-			if channelGen, ok := obj.Properties["__channel_generator"]; ok && channelGen != nil {
-				if gen, ok := channelGen.Data.(*ChannelGenerator); ok {
+			// Get generator
+			if genVal, ok := obj.Properties["__channel_generator"]; ok && genVal != nil {
+				if gen, ok := genVal.Data.(*Generator); ok {
 					return gen.Current(), nil
 				}
 			}
@@ -1410,9 +1422,9 @@ func registerGeneratorClass() error {
 			}
 			obj := args[0].Data.(*values.Object)
 
-			// Get channel generator
-			if channelGen, ok := obj.Properties["__channel_generator"]; ok && channelGen != nil {
-				if gen, ok := channelGen.Data.(*ChannelGenerator); ok {
+			// Get generator
+			if genVal, ok := obj.Properties["__channel_generator"]; ok && genVal != nil {
+				if gen, ok := genVal.Data.(*Generator); ok {
 					return gen.Key(), nil
 				}
 			}
@@ -1431,9 +1443,9 @@ func registerGeneratorClass() error {
 			}
 			obj := args[0].Data.(*values.Object)
 
-			// Get channel generator
-			if channelGen, ok := obj.Properties["__channel_generator"]; ok && channelGen != nil {
-				if gen, ok := channelGen.Data.(*ChannelGenerator); ok {
+			// Get generator
+			if genVal, ok := obj.Properties["__channel_generator"]; ok && genVal != nil {
+				if gen, ok := genVal.Data.(*Generator); ok {
 					gen.Next() // Advance to next value
 					return values.NewNull(), nil
 				}
@@ -1453,9 +1465,9 @@ func registerGeneratorClass() error {
 			}
 			obj := args[0].Data.(*values.Object)
 
-			// Get channel generator
-			if channelGen, ok := obj.Properties["__channel_generator"]; ok && channelGen != nil {
-				if gen, ok := channelGen.Data.(*ChannelGenerator); ok {
+			// Get generator
+			if genVal, ok := obj.Properties["__channel_generator"]; ok && genVal != nil {
+				if gen, ok := genVal.Data.(*Generator); ok {
 					if err := gen.Rewind(); err != nil {
 						return values.NewNull(), err
 					}
@@ -1478,9 +1490,9 @@ func registerGeneratorClass() error {
 			}
 			obj := args[0].Data.(*values.Object)
 
-			// Get channel generator
-			if channelGen, ok := obj.Properties["__channel_generator"]; ok && channelGen != nil {
-				if gen, ok := channelGen.Data.(*ChannelGenerator); ok {
+			// Get generator
+			if genVal, ok := obj.Properties["__channel_generator"]; ok && genVal != nil {
+				if gen, ok := genVal.Data.(*Generator); ok {
 					return values.NewBool(gen.Valid()), nil
 				}
 			}

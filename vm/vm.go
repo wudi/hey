@@ -514,8 +514,8 @@ func (vm *VirtualMachine) execYield(ctx *ExecutionContext, frame *CallFrame, ins
 		yieldValue = values.NewNull()
 	}
 
-	// Use the Yield method to send key and value
-	gen := generator.(*runtime2.ChannelGenerator)
+	// Use the Yield method to store key and value
+	gen := generator.(*runtime2.Generator)
 	gen.Yield(keyValue, yieldValue)
 
 	// Store result if needed (yield expression result)
@@ -598,4 +598,124 @@ func (vm *VirtualMachine) ExecuteFunction(ctxInterface, frameInterface interface
 	}
 
 	return nil
+}
+
+// ExecuteUntilYield executes a function until first yield or completion
+func (vm *VirtualMachine) ExecuteUntilYield(ctxInterface, frameInterface interface{}) (bool, error) {
+	ctx, ok := ctxInterface.(*ExecutionContext)
+	if !ok {
+		return false, fmt.Errorf("invalid execution context type")
+	}
+
+	frame, ok := frameInterface.(*CallFrame)
+	if !ok {
+		return false, fmt.Errorf("invalid call frame type")
+	}
+
+	// Push frame onto call stack
+	ctx.CallStack = append(ctx.CallStack, frame)
+	defer func() {
+		// Pop frame when done
+		if len(ctx.CallStack) > 0 {
+			ctx.CallStack = ctx.CallStack[:len(ctx.CallStack)-1]
+		}
+	}()
+
+	// Execute function instructions until yield or completion
+	for frame.IP < len(frame.Instructions) {
+		inst := frame.Instructions[frame.IP]
+
+		// Check if this is a yield instruction
+		if inst.Opcode == opcodes.OP_YIELD {
+			// Execute the yield instruction
+			_, err := vm.executeInstruction(ctx, frame, inst)
+			if err != nil {
+				return false, err
+			}
+			// Yield suspends execution - don't advance IP
+			// The IP will be advanced when resuming
+			return true, nil // true = yielded
+		}
+
+		continued, err := vm.executeInstruction(ctx, frame, inst)
+		if err != nil {
+			return false, err
+		}
+
+		if continued {
+			// Normal instruction - advance IP
+			frame.IP++
+		} else {
+			// Instruction handled IP manually (jump, return, etc.)
+			// Check if this was a return instruction
+			if inst.Opcode == opcodes.OP_RETURN || inst.Opcode == opcodes.OP_RETURN_BY_REF || inst.Opcode == opcodes.OP_GENERATOR_RETURN {
+				// Function returned
+				return false, nil // false = completed
+			}
+			// Otherwise it was a jump - continue execution from new IP
+		}
+	}
+
+	return false, nil // false = completed
+}
+
+// ResumeFromYield resumes generator execution from suspended state
+func (vm *VirtualMachine) ResumeFromYield(ctxInterface, frameInterface interface{}) (bool, error) {
+	ctx, ok := ctxInterface.(*ExecutionContext)
+	if !ok {
+		return false, fmt.Errorf("invalid execution context type")
+	}
+
+	frame, ok := frameInterface.(*CallFrame)
+	if !ok {
+		return false, fmt.Errorf("invalid call frame type")
+	}
+
+	// Push frame onto call stack
+	ctx.CallStack = append(ctx.CallStack, frame)
+	defer func() {
+		// Pop frame when done
+		if len(ctx.CallStack) > 0 {
+			ctx.CallStack = ctx.CallStack[:len(ctx.CallStack)-1]
+		}
+	}()
+
+	// Advance IP past the yield instruction
+	frame.IP++
+
+	// Continue execution until next yield or completion
+	for frame.IP < len(frame.Instructions) {
+		inst := frame.Instructions[frame.IP]
+
+		// Check if this is a yield instruction
+		if inst.Opcode == opcodes.OP_YIELD {
+			// Execute the yield instruction
+			_, err := vm.executeInstruction(ctx, frame, inst)
+			if err != nil {
+				return false, err
+			}
+			// Yield suspends execution - don't advance IP
+			return true, nil // true = yielded
+		}
+
+		continued, err := vm.executeInstruction(ctx, frame, inst)
+		if err != nil {
+			return false, err
+		}
+
+		if continued {
+			// Normal instruction - advance IP
+			frame.IP++
+		} else {
+			// Instruction handled IP manually (jump, return, etc.)
+			// Check if this was a return instruction by seeing if we're at end
+			if inst.Opcode == opcodes.OP_RETURN || inst.Opcode == opcodes.OP_RETURN_BY_REF || inst.Opcode == opcodes.OP_GENERATOR_RETURN {
+				// Function returned
+				return false, nil // false = completed
+			}
+			// Otherwise it was a jump - continue execution from new IP
+		}
+	}
+
+	return false, nil // false = completed
 }

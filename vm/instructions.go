@@ -1551,24 +1551,24 @@ func (vm *VirtualMachine) execFeFetch(ctx *ExecutionContext, frame *CallFrame, i
 		// Handle Generator iteration
 		obj := iterator.generator.Data.(*values.Object)
 
-		// Get channel generator
-		if channelGenVal, ok := obj.Properties["__channel_generator"]; ok {
-			if channelGen, ok := channelGenVal.Data.(*runtime2.ChannelGenerator); ok {
+		// Get generator
+		if genVal, ok := obj.Properties["__channel_generator"]; ok {
+			if gen, ok := genVal.Data.(*runtime2.Generator); ok {
 				if iterator.isFirst {
 					iterator.isFirst = false
 					// Start the generator and get first value
-					if channelGen.Next() {
-						nextValue = channelGen.Current()
-						nextKey = channelGen.Key()
+					if gen.Next() {
+						nextValue = gen.Current()
+						nextKey = gen.Key()
 					} else {
 						nextValue = values.NewNull()
 						nextKey = values.NewNull()
 					}
 				} else {
 					// Advance to next value
-					if channelGen.Next() {
-						nextValue = channelGen.Current()
-						nextKey = channelGen.Key()
+					if gen.Next() {
+						nextValue = gen.Current()
+						nextKey = gen.Key()
 					} else {
 						nextValue = values.NewNull()
 						nextKey = values.NewNull()
@@ -2103,8 +2103,8 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 
 	// Handle generator functions
 	if pending.Function.IsGenerator {
-		// Create channel-based generator
-		channelGen := runtime2.NewChannelGenerator(pending.Function, pending.Args, vm)
+		// Create generator
+		gen := runtime2.NewGenerator(pending.Function, pending.Args, vm)
 
 		// Create Generator object
 		generatorObj := &values.Object{
@@ -2113,7 +2113,7 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 		}
 		generatorObj.Properties["__channel_generator"] = &values.Value{
 			Type: values.TypeResource,
-			Data: channelGen,
+			Data: gen,
 		}
 		// Store function name for debugging/reflection
 		generatorObj.Properties["function"] = values.NewString(pending.Function.Name)
