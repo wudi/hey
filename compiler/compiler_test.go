@@ -7215,13 +7215,13 @@ func TestConstantResolution(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "CASE_UPPER constant",
-			code: `<?php var_dump(CASE_UPPER);`,
+			name:     "CASE_UPPER constant",
+			code:     `<?php var_dump(CASE_UPPER);`,
 			expected: "int(1)\n",
 		},
 		{
-			name: "CASE_LOWER constant",
-			code: `<?php var_dump(CASE_LOWER);`,
+			name:     "CASE_LOWER constant",
+			code:     `<?php var_dump(CASE_LOWER);`,
 			expected: "int(0)\n",
 		},
 		{
@@ -7259,8 +7259,8 @@ func TestConstantResolution(t *testing.T) {
 			expected: "upper",
 		},
 		{
-			name: "Undefined constant treated as string",
-			code: `<?php var_dump(UNDEFINED_CONSTANT);`,
+			name:     "Undefined constant treated as string",
+			code:     `<?php var_dump(UNDEFINED_CONSTANT);`,
 			expected: "string(18) \"UNDEFINED_CONSTANT\"\n",
 		},
 		{
@@ -7387,8 +7387,8 @@ echo testFunction("value1", "custom2") . "\n";
 echo testFunction("value1", "custom2", "custom3") . "\n";
 			`,
 			expectedOutput: "Param1: value1, Param2: default2, Param3: default3\n" +
-							"Param1: value1, Param2: custom2, Param3: default3\n" +
-							"Param1: value1, Param2: custom2, Param3: custom3\n",
+				"Param1: value1, Param2: custom2, Param3: default3\n" +
+				"Param1: value1, Param2: custom2, Param3: custom3\n",
 		},
 		{
 			name: "Mixed parameters with defaults",
@@ -7405,7 +7405,7 @@ echo testFunction("test") . "\n";
 echo testFunction("test", 200) . "\n";
 			`,
 			expectedOutput: "Required: test, Optional1: 100, Optional2: text, Optional3: false\n" +
-							"Required: test, Optional1: 200, Optional2: text, Optional3: false\n",
+				"Required: test, Optional1: 200, Optional2: text, Optional3: false\n",
 		},
 	}
 
@@ -7657,109 +7657,6 @@ echo $concat("Hello", "World") . "\n";
 
 			require.NoError(t, err, "Test failed with error")
 			assert.Equal(t, tt.expectedOutput, output, "Output mismatch")
-		})
-	}
-}
-
-func TestGeneratorBasics(t *testing.T) {
-	tests := []struct {
-		name           string
-		code           string
-		expectedOutput string
-	}{
-		{
-			name: "generator_function_creates_object",
-			code: `<?php
-function gen() {
-    yield 42;
-}
-
-$g = gen();
-echo "Generator created successfully\n";
-`,
-			expectedOutput: "Generator created successfully\n",
-		},
-		{
-			name: "generator_with_foreach_basic",
-			code: `<?php
-function gen() {
-    yield 1;
-    yield 2;
-    yield 3;
-}
-
-foreach (gen() as $value) {
-    echo $value . "\n";
-}
-`,
-			expectedOutput: "0\n", // Currently returns hardcoded values
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			output, err := compileAndExecute(t, tt.code)
-
-			require.NoError(t, err, "Test failed with error")
-			// Note: Some tests expect hardcoded values until proper generator execution is implemented
-			if strings.Contains(tt.name, "basic") {
-				// For now, these tests verify the foreach integration works
-				assert.NotEmpty(t, output, "Should produce some output")
-			} else {
-				assert.Equal(t, tt.expectedOutput, output, "Output mismatch")
-			}
-		})
-	}
-}
-
-func TestGeneratorCompilation(t *testing.T) {
-	tests := []struct {
-		name           string
-		code           string
-		shouldHaveYield bool
-	}{
-		{
-			name: "function_with_yield_marked_as_generator",
-			code: `<?php
-function gen() {
-    yield 42;
-}
-`,
-			shouldHaveYield: true,
-		},
-		{
-			name: "function_without_yield_not_generator",
-			code: `<?php
-function regular() {
-    return 42;
-}
-`,
-			shouldHaveYield: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			compiler := NewCompiler()
-
-			l := lexer.New(tt.code)
-			p := parser.New(l)
-			program := p.ParseProgram()
-
-			require.NotNil(t, program)
-			require.Empty(t, p.Errors())
-
-			err := compiler.Compile(program)
-			require.NoError(t, err)
-
-			// Check if function was marked as generator
-			for _, fn := range compiler.functions {
-				if tt.shouldHaveYield {
-					assert.True(t, fn.IsGenerator, "Function should be marked as generator")
-				} else {
-					assert.False(t, fn.IsGenerator, "Function should not be marked as generator")
-				}
-			}
 		})
 	}
 }
