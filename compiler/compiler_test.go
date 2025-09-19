@@ -7271,3 +7271,108 @@ func TestConstantsWithArrayFunctions(t *testing.T) {
 	assert.Contains(t, output, "FIRST", "Should have uppercase keys")
 	assert.Contains(t, output, "SECOND", "Should have uppercase keys")
 }
+
+// TestFunctionDefaultParameters tests function default parameter handling
+func TestFunctionDefaultParameters(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		{
+			name: "Basic string default parameter",
+			code: `<?php
+function testFunction($param1, $param2 = "default") {
+    return "Param1: $param1, Param2: $param2";
+}
+
+echo testFunction("value1") . "\n";
+			`,
+			expectedOutput: "Param1: value1, Param2: default\n",
+		},
+		{
+			name: "Integer default parameter",
+			code: `<?php
+function testFunction($param1, $param2 = 42) {
+    return "Param1: $param1, Param2: $param2";
+}
+
+echo testFunction("value1") . "\n";
+			`,
+			expectedOutput: "Param1: value1, Param2: 42\n",
+		},
+		{
+			name: "Float default parameter",
+			code: `<?php
+function testFunction($param1, $param2 = 3.14) {
+    return "Param1: $param1, Param2: $param2";
+}
+
+echo testFunction("value1") . "\n";
+			`,
+			expectedOutput: "Param1: value1, Param2: 3.14\n",
+		},
+		{
+			name: "Boolean default parameter",
+			code: `<?php
+function testFunction($param1, $param2 = true) {
+    return "Param1: $param1, Param2: " . ($param2 ? "true" : "false");
+}
+
+echo testFunction("value1") . "\n";
+			`,
+			expectedOutput: "Param1: value1, Param2: true\n",
+		},
+		{
+			name: "Null default parameter",
+			code: `<?php
+function testFunction($param1, $param2 = null) {
+    return "Param1: $param1, Param2: " . ($param2 === null ? "null" : $param2);
+}
+
+echo testFunction("value1") . "\n";
+			`,
+			expectedOutput: "Param1: value1, Param2: null\n",
+		},
+		{
+			name: "Multiple default parameters",
+			code: `<?php
+function testFunction($param1, $param2 = "default2", $param3 = "default3") {
+    return "Param1: $param1, Param2: $param2, Param3: $param3";
+}
+
+echo testFunction("value1") . "\n";
+echo testFunction("value1", "custom2") . "\n";
+echo testFunction("value1", "custom2", "custom3") . "\n";
+			`,
+			expectedOutput: "Param1: value1, Param2: default2, Param3: default3\n" +
+							"Param1: value1, Param2: custom2, Param3: default3\n" +
+							"Param1: value1, Param2: custom2, Param3: custom3\n",
+		},
+		{
+			name: "Mixed parameters with defaults",
+			code: `<?php
+function testFunction($required, $optional1 = 100, $optional2 = "text", $optional3 = false) {
+    $result = "Required: $required";
+    $result .= ", Optional1: $optional1";
+    $result .= ", Optional2: $optional2";
+    $result .= ", Optional3: " . ($optional3 ? "true" : "false");
+    return $result;
+}
+
+echo testFunction("test") . "\n";
+echo testFunction("test", 200) . "\n";
+			`,
+			expectedOutput: "Required: test, Optional1: 100, Optional2: text, Optional3: false\n" +
+							"Required: test, Optional1: 200, Optional2: text, Optional3: false\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tt.code)
+			require.NoError(t, err, "Failed to compile and execute code")
+			assert.Equal(t, tt.expectedOutput, output, "Output mismatch")
+		})
+	}
+}

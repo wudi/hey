@@ -2659,9 +2659,15 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 
 			// Handle default value
 			if param.DefaultValue != nil {
-				// For now, we'll compile the default value later
-				// This requires more complex evaluation
 				compilerParam.HasDefault = true
+				// Evaluate the default value expression at compile time
+				defaultValue := c.evaluateConstantExpression(param.DefaultValue)
+				if defaultValue != nil {
+					compilerParam.DefaultValue = defaultValue
+				} else {
+					// If we can't evaluate it at compile time, use null as fallback
+					compilerParam.DefaultValue = values.NewNull()
+				}
 			}
 
 			// Check for variadic
@@ -6151,6 +6157,19 @@ func (c *Compiler) evaluateConstantExpression(expr ast.Node) *values.Value {
 		return values.NewBool(e.Value)
 	case *ast.NullLiteral:
 		return values.NewNull()
+	case *ast.IdentifierNode:
+		// Handle special constant identifiers (true, false, null)
+		switch strings.ToLower(e.Name) {
+		case "true":
+			return values.NewBool(true)
+		case "false":
+			return values.NewBool(false)
+		case "null":
+			return values.NewNull()
+		default:
+			// For other identifiers, we can't evaluate at compile time
+			return nil
+		}
 	default:
 		// For complex expressions, we can't evaluate at compile time
 		return nil
