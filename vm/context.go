@@ -170,6 +170,17 @@ type CallFrame struct {
 	ReturnTarget operandTarget
 
 	This *values.Value
+
+	// Generator context for generator functions
+	Generator interface{}
+
+	// Generator state
+	generatorIndex int // Auto-incrementing index for generator keys
+}
+
+// SetGenerator sets the generator reference for this call frame
+func (cf *CallFrame) SetGenerator(generator interface{}) {
+	cf.Generator = generator
 }
 
 // operandTarget identifies where a return value should be written when a call

@@ -36,6 +36,7 @@ type Compiler struct {
 	interfaces       map[string]*registry.Interface
 	traits           map[string]*registry.Trait
 	currentClass     *registry.Class // Current class being compiled
+	currentFunction  *registry.Function // Current function being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -2694,6 +2695,9 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 		IsGenerator:  false,
 	}
 
+	// Set current function for generator detection
+	c.currentFunction = function
+
 	// Compile parameters
 	if decl.Parameters != nil {
 		for _, param := range decl.Parameters.Parameters {
@@ -2842,6 +2846,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	c.popScope()
 	c.instructions = oldInstructions
 	c.constants = oldConstants
+	c.currentFunction = nil
 
 	// Emit function declaration instruction
 	nameConstant := c.addConstant(values.NewString(funcName))
@@ -4766,6 +4771,10 @@ func (c *Compiler) compileEvalExpression(expr *ast.EvalExpression) error {
 
 // YieldExpression compilation
 func (c *Compiler) compileYieldExpression(expr *ast.YieldExpression) error {
+	// Mark current function as generator if we're in one
+	if c.currentFunction != nil {
+		c.currentFunction.IsGenerator = true
+	}
 	var keyOperand uint32 = 0
 	var keyType opcodes.OpType = opcodes.IS_UNUSED
 	var valueOperand uint32 = 0
@@ -4802,6 +4811,10 @@ func (c *Compiler) compileYieldExpression(expr *ast.YieldExpression) error {
 
 // YieldFromExpression compilation
 func (c *Compiler) compileYieldFromExpression(expr *ast.YieldFromExpression) error {
+	// Mark current function as generator if we're in one
+	if c.currentFunction != nil {
+		c.currentFunction.IsGenerator = true
+	}
 	// Compile the expression to yield from
 	if err := c.compileNode(expr.Expression); err != nil {
 		return err

@@ -13,13 +13,16 @@ import (
 	"github.com/wudi/hey/compiler/parser"
 	"github.com/wudi/hey/opcodes"
 	"github.com/wudi/hey/registry"
+	runtime2 "github.com/wudi/hey/runtime"
 	"github.com/wudi/hey/values"
 )
 
 type foreachIterator struct {
-	keys   []*values.Value
-	values []*values.Value
-	index  int
+	keys      []*values.Value
+	values    []*values.Value
+	index     int
+	generator *values.Value // For Generator objects
+	isFirst   bool         // For generators, track if this is the first iteration
 }
 
 func decodeOperand(inst *opcodes.Instruction, idx int) (opcodes.OpType, uint32) {
@@ -1468,9 +1471,11 @@ func (vm *VirtualMachine) execFeReset(ctx *ExecutionContext, frame *CallFrame, i
 	}
 
 	iterator := &foreachIterator{
-		keys:   make([]*values.Value, 0),
-		values: make([]*values.Value, 0),
-		index:  0,
+		keys:      make([]*values.Value, 0),
+		values:    make([]*values.Value, 0),
+		index:     0,
+		generator: nil,
+		isFirst:   true,
 	}
 
 	if iterable != nil && iterable.IsArray() {
@@ -1508,6 +1513,16 @@ func (vm *VirtualMachine) execFeReset(ctx *ExecutionContext, frame *CallFrame, i
 				iterator.values = append(iterator.values, copyValue(val))
 			}
 		}
+	} else if iterable != nil && iterable.IsObject() {
+		obj := iterable.Data.(*values.Object)
+		// Check if this is a Generator object
+		if obj.ClassName == "Generator" {
+			// Store the generator object for use in FE_FETCH
+			iterator.generator = iterable
+		} else {
+			// Handle other object types that might be iterable
+			// TODO: Add support for other Iterator interface implementations
+		}
 	}
 
 	frame.Iterators[iteratorID] = iterator
@@ -1532,7 +1547,37 @@ func (vm *VirtualMachine) execFeFetch(ctx *ExecutionContext, frame *CallFrame, i
 	nextValue := values.NewNull()
 	nextKey := values.NewNull()
 
-	if iterator != nil && iterator.index < len(iterator.values) {
+	if iterator != nil && iterator.generator != nil {
+		// Handle Generator iteration
+		obj := iterator.generator.Data.(*values.Object)
+
+		// Get channel generator
+		if channelGenVal, ok := obj.Properties["__channel_generator"]; ok {
+			if channelGen, ok := channelGenVal.Data.(*runtime2.ChannelGenerator); ok {
+				if iterator.isFirst {
+					iterator.isFirst = false
+					// Start the generator and get first value
+					if channelGen.Next() {
+						nextValue = channelGen.Current()
+						nextKey = channelGen.Key()
+					} else {
+						nextValue = values.NewNull()
+						nextKey = values.NewNull()
+					}
+				} else {
+					// Advance to next value
+					if channelGen.Next() {
+						nextValue = channelGen.Current()
+						nextKey = channelGen.Key()
+					} else {
+						nextValue = values.NewNull()
+						nextKey = values.NewNull()
+					}
+				}
+			}
+		}
+	} else if iterator != nil && iterator.index < len(iterator.values) {
+		// Handle array iteration
 		nextValue = copyValue(iterator.values[iterator.index])
 		if iterator.index < len(iterator.keys) {
 			nextKey = copyValue(iterator.keys[iterator.index])
@@ -2049,6 +2094,38 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 				valueToStore = pending.This
 			}
 			if err := vm.writeOperand(ctx, frame, resultType, resultSlot, valueToStore); err != nil {
+				return false, err
+			}
+		}
+		frame.resetReturnTarget()
+		return true, nil
+	}
+
+	// Handle generator functions
+	if pending.Function.IsGenerator {
+		// Create channel-based generator
+		channelGen := runtime2.NewChannelGenerator(pending.Function, pending.Args, vm)
+
+		// Create Generator object
+		generatorObj := &values.Object{
+			ClassName:  "Generator",
+			Properties: make(map[string]*values.Value),
+		}
+		generatorObj.Properties["__channel_generator"] = &values.Value{
+			Type: values.TypeObject,
+			Data: channelGen,
+		}
+		// Store function name for debugging/reflection
+		generatorObj.Properties["function"] = values.NewString(pending.Function.Name)
+
+		generator := &values.Value{
+			Type: values.TypeObject,
+			Data: generatorObj,
+		}
+
+		// Return generator object
+		if frame.ReturnTarget.valid {
+			if err := vm.writeOperand(ctx, frame, resultType, resultSlot, generator); err != nil {
 				return false, err
 			}
 		}

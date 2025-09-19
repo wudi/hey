@@ -377,6 +377,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execAssignException(ctx, frame, inst)
 	case opcodes.OP_INSTANCEOF:
 		return vm.execInstanceof(ctx, frame, inst)
+	case opcodes.OP_YIELD:
+		return vm.execYield(ctx, frame, inst)
+	case opcodes.OP_YIELD_FROM:
+		return vm.execYieldFrom(ctx, frame, inst)
 	default:
 		return false, fmt.Errorf("opcode %s not implemented", inst.Opcode)
 	}
@@ -471,4 +475,127 @@ func (vm *VirtualMachine) raiseException(ctx *ExecutionContext, frame *CallFrame
 		ctx.popFrame()
 		frame = ctx.currentFrame()
 	}
+}
+
+func (vm *VirtualMachine) execYield(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Extract yield operands
+	keyType := opcodes.DecodeOpType1(inst.OpType1)
+	valueType := opcodes.DecodeOpType2(inst.OpType1)
+
+	// Get the generator context from call frame
+	generator := frame.Generator
+	if generator == nil {
+		return false, fmt.Errorf("yield called outside generator context")
+	}
+
+	// Get key value (if any)
+	var keyValue *values.Value
+	if keyType != opcodes.IS_UNUSED {
+		var err error
+		keyValue, err = vm.readOperand(ctx, frame, keyType, inst.Op1)
+		if err != nil {
+			return false, fmt.Errorf("error getting yield key: %v", err)
+		}
+	} else {
+		// Auto-increment key for generators without explicit keys
+		keyValue = values.NewInt(int64(frame.generatorIndex))
+		frame.generatorIndex++
+	}
+
+	// Get value
+	var yieldValue *values.Value
+	if valueType != opcodes.IS_UNUSED {
+		var err error
+		yieldValue, err = vm.readOperand(ctx, frame, valueType, inst.Op2)
+		if err != nil {
+			return false, fmt.Errorf("error getting yield value: %v", err)
+		}
+	} else {
+		yieldValue = values.NewNull()
+	}
+
+	// Use the Yield method to send key and value
+	gen := generator.(*runtime2.ChannelGenerator)
+	gen.Yield(keyValue, yieldValue)
+
+	// Store result if needed (yield expression result)
+	resultType := opcodes.DecodeResultType(inst.OpType2)
+	if resultType != opcodes.IS_UNUSED {
+		// For now, yield result is always null (sent value)
+		// In full PHP implementation, this would be the value sent via send() method
+		result := yieldValue
+		err := vm.writeOperand(ctx, frame, resultType, inst.Result, result)
+		if err != nil {
+			return false, fmt.Errorf("error storing yield result: %v", err)
+		}
+	}
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execYieldFrom(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// TODO: Implement yield from - delegates to another generator
+	return false, fmt.Errorf("yield from not yet implemented")
+}
+
+// CreateExecutionContext creates a new execution context for generator execution
+func (vm *VirtualMachine) CreateExecutionContext() interface{} {
+	return NewExecutionContext()
+}
+
+// CreateCallFrame creates a new call frame for generator function execution
+func (vm *VirtualMachine) CreateCallFrame(fn *registry.Function, args []*values.Value) interface{} {
+	frame := newCallFrame(fn.Name, fn, fn.Instructions, fn.Constants)
+
+	// Set up arguments in the frame's locals
+	for i, arg := range args {
+		if i < len(fn.Parameters) {
+			// Map argument to parameter slot
+			slot := uint32(i)
+			frame.Locals[slot] = arg
+		}
+	}
+
+	return frame
+}
+
+// ExecuteFunction executes a function in the given context and frame
+func (vm *VirtualMachine) ExecuteFunction(ctxInterface, frameInterface interface{}) error {
+	ctx, ok := ctxInterface.(*ExecutionContext)
+	if !ok {
+		return fmt.Errorf("invalid execution context type")
+	}
+
+	frame, ok := frameInterface.(*CallFrame)
+	if !ok {
+		return fmt.Errorf("invalid call frame type")
+	}
+
+	// Push frame onto call stack
+	ctx.CallStack = append(ctx.CallStack, frame)
+	defer func() {
+		// Pop frame when done
+		if len(ctx.CallStack) > 0 {
+			ctx.CallStack = ctx.CallStack[:len(ctx.CallStack)-1]
+		}
+	}()
+
+	// Execute function instructions
+	for frame.IP < len(frame.Instructions) {
+		inst := frame.Instructions[frame.IP]
+
+		continued, err := vm.executeInstruction(ctx, frame, inst)
+		if err != nil {
+			return err
+		}
+
+		if !continued {
+			// Function returned or yielded
+			break
+		}
+
+		frame.IP++
+	}
+
+	return nil
 }

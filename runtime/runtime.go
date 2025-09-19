@@ -151,6 +151,18 @@ func registerBuiltinSymbols() error {
 		return err
 	}
 
+	if err := registerTraversableInterface(); err != nil {
+		return err
+	}
+
+	if err := registerIteratorInterface(); err != nil {
+		return err
+	}
+
+	if err := registerGeneratorClass(); err != nil {
+		return err
+	}
+
 	// Register builtin constants.
 	for _, v := range builtinConstants {
 		if err := registry.GlobalRegistry.RegisterConstant(v); err != nil {
