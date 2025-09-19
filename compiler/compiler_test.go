@@ -7577,3 +7577,86 @@ echo "after try-finally\n";`,
 		})
 	}
 }
+
+func TestAnonymousAndArrowFunctions(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		{
+			name: "anonymous and arrow functions with parameters",
+			code: `<?php
+$anonymousFunction = function($name) {
+    return "Hello, $name!";
+};
+echo $anonymousFunction("Anonymous") . "\n";
+
+$arrowFunction = fn($name) => "Hello, $name!";
+echo $arrowFunction("Arrow") . "\n";
+`,
+			expectedOutput: "Hello, Anonymous!\nHello, Arrow!\n",
+		},
+		{
+			name: "arrow function with different parameter names",
+			code: `<?php
+$anon = function($x) {
+    return "anon: " . $x;
+};
+
+$arrow = fn($y) => "arrow: " . $y;
+
+echo $anon("test1") . "\n";
+echo $arrow("test2") . "\n";
+`,
+			expectedOutput: "anon: test1\narrow: test2\n",
+		},
+		{
+			name: "simple functions without parameters",
+			code: `<?php
+$anon = function() {
+    return "anon";
+};
+
+$arrow = fn() => "arrow";
+
+echo $anon() . "\n";
+echo $arrow() . "\n";
+`,
+			expectedOutput: "anon\narrow\n",
+		},
+		{
+			name: "multiple arrow functions",
+			code: `<?php
+$arrow1 = fn($x) => "First: " . $x;
+$arrow2 = fn($y) => "Second: " . $y;
+
+echo $arrow1("A") . "\n";
+echo $arrow2("B") . "\n";
+`,
+			expectedOutput: "First: A\nSecond: B\n",
+		},
+		{
+			name: "mixed function types with different operations",
+			code: `<?php
+$add = fn($a, $b) => $a + $b;
+$concat = function($a, $b) {
+    return $a . " " . $b;
+};
+
+echo $add(5, 3) . "\n";
+echo $concat("Hello", "World") . "\n";
+`,
+			expectedOutput: "8\nHello World\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tt.code)
+
+			require.NoError(t, err, "Test failed with error")
+			assert.Equal(t, tt.expectedOutput, output, "Output mismatch")
+		})
+	}
+}

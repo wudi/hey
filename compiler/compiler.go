@@ -30,6 +30,7 @@ type Compiler struct {
 	nextTemp         uint32
 	nextLabel        int
 	nextAnonFunction int // Counter for anonymous functions
+	nextArrowFunction int // Counter for arrow functions
 	functions        map[string]*registry.Function
 	classes          map[string]*registry.Class
 	interfaces       map[string]*registry.Interface
@@ -61,6 +62,7 @@ func NewCompiler() *Compiler {
 		nextTemp:         1000, // Start temp vars at 1000 to avoid conflicts
 		nextLabel:        0,
 		nextAnonFunction: 0, // Start anonymous function counter at 0
+		nextArrowFunction: 0, // Start arrow function counter at 0
 		functions:        make(map[string]*registry.Function),
 		classes:          make(map[string]*registry.Class),
 		interfaces:       make(map[string]*registry.Interface),
@@ -5003,8 +5005,9 @@ func (c *Compiler) compileSpreadExpression(expr *ast.SpreadExpression) error {
 
 // ArrowFunctionExpression compilation (fn() => expr)
 func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpression) error {
-	// Generate a unique name for the arrow function
-	arrowName := fmt.Sprintf("__arrow_%d", len(c.functions))
+	// Generate a unique name for the arrow function using the counter
+	arrowName := fmt.Sprintf("__arrow_%d", c.nextArrowFunction)
+	c.nextArrowFunction++
 
 	// Create new function
 	function := &registry.Function{
@@ -5063,9 +5066,23 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 	c.nextTemp = 100 // Start temporaries at 100 for function scope
 	c.labels = make(map[string]int)
 
+	// Create function scope
+	c.pushScope(true)
+
+	// Set up parameter variables in the function scope
+	if expr.Parameters != nil {
+		for _, param := range expr.Parameters.Parameters {
+			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+				// Register parameter name in function scope
+				c.getOrCreateVariable(nameNode.Name)
+			}
+		}
+	}
+
 	// Compile the arrow function body (expression)
 	if err := c.compileNode(expr.Body); err != nil {
 		// Restore compiler state on error
+		c.popScope()
 		c.instructions = savedInstructions
 		c.constants = savedConstants
 		c.nextTemp = savedNextTemp
@@ -5093,6 +5110,9 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 	// Store compiled function
 	function.Instructions = c.instructions
 	function.Constants = c.constants
+
+	// Pop function scope
+	c.popScope()
 
 	// Restore compiler state
 	c.instructions = savedInstructions
