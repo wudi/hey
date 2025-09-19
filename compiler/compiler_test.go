@@ -7376,3 +7376,69 @@ echo testFunction("test", 200) . "\n";
 		})
 	}
 }
+
+// TestMixedHTMLPHP tests mixed HTML and PHP content (inline HTML output)
+func TestMixedHTMLPHP(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		{
+			name:           "Simple HTML with PHP",
+			code:           `<html><?php echo "Hello"; ?></html>`,
+			expectedOutput: "<html>Hello</html>",
+		},
+		{
+			name: "Multiple HTML blocks with PHP",
+			code: `Before PHP
+<?php echo "First"; ?>
+Between blocks
+<?php echo "Second"; ?>
+After PHP`,
+			expectedOutput: "Before PHP\nFirst\nBetween blocks\nSecond\nAfter PHP",
+		},
+		{
+			name: "Complex HTML structure",
+			code: `<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body>
+    <h1>Welcome</h1>
+    <?php echo "Hello, World!"; ?>
+    <p>End of page</p>
+</body>
+</html>`,
+			expectedOutput: "<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body>\n    <h1>Welcome</h1>\n    Hello, World!\n    <p>End of page</p>\n</body>\n</html>",
+		},
+		{
+			name:           "Only HTML content",
+			code:           `<p>Pure HTML content</p>`,
+			expectedOutput: "<p>Pure HTML content</p>",
+		},
+		{
+			name:           "HTML with PHP variables",
+			code:           `<?php $name = "World"; ?><h1>Hello <?php echo $name; ?>!</h1>`,
+			expectedOutput: "<h1>Hello World!</h1>",
+		},
+		{
+			name: "Nested PHP and HTML",
+			code: `<div>
+    <?php
+    for ($i = 1; $i <= 3; $i++) {
+        echo "<p>Item $i</p>";
+    }
+    ?>
+</div>`,
+			expectedOutput: "<div>\n    <p>Item 1</p><p>Item 2</p><p>Item 3</p>\n</div>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tt.code)
+			require.NoError(t, err, "Failed to compile and execute code")
+			assert.Equal(t, tt.expectedOutput, output, "Output mismatch")
+		})
+	}
+}

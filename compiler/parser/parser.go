@@ -768,8 +768,10 @@ func (p *Parser) ParseProgram() *ast.Program {
 			// Create a statement from the inline HTML content
 			htmlExpr := parseInlineHTML(p)
 			if htmlExpr != nil {
-				// Wrap inline HTML as an expression statement
-				program.Body = append(program.Body, ast.NewExpressionStatement(htmlExpr.(*ast.StringLiteral).Position, htmlExpr))
+				// Wrap inline HTML as an echo statement to automatically output it
+				echoStmt := ast.NewEchoStatement(htmlExpr.(*ast.StringLiteral).Position)
+				echoStmt.Arguments = ast.NewArgumentList(htmlExpr.(*ast.StringLiteral).Position, []ast.Expression{htmlExpr})
+				program.Body = append(program.Body, echoStmt)
 			}
 			p.nextToken()
 			continue
@@ -2876,8 +2878,10 @@ func parseBlockStatement(p *Parser) *ast.BlockStatement {
 			// Create a statement from the inline HTML content
 			htmlExpr := parseInlineHTML(p)
 			if htmlExpr != nil {
-				htmlStmt := ast.NewExpressionStatement(p.currentToken.Position, htmlExpr)
-				block.Body = append(block.Body, htmlStmt)
+				// Wrap inline HTML as an echo statement to automatically output it
+				echoStmt := ast.NewEchoStatement(htmlExpr.(*ast.StringLiteral).Position)
+				echoStmt.Arguments = ast.NewArgumentList(htmlExpr.(*ast.StringLiteral).Position, []ast.Expression{htmlExpr})
+				block.Body = append(block.Body, echoStmt)
 			}
 			p.nextToken()
 			continue
