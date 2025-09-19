@@ -2211,7 +2211,7 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 					return err
 				}
 				argResult := c.nextTemp - 1
-				c.emit(opcodes.OP_SEND_VAL, opcodes.IS_TMP_VAR, argResult, 0, 0, 0, 0)
+				c.emit(opcodes.OP_SEND_VAL, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, argResult, 0, 0)
 			}
 
 			// Execute constructor call (store result in separate temp to avoid overwriting object)
