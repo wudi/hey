@@ -78,6 +78,7 @@ const (
 	OP_THROW
 	OP_CATCH
 	OP_FINALLY
+	OP_ASSIGN_EXCEPTION // Assign caught exception to variable
 
 	// Loop operations
 	OP_FE_RESET // foreach reset
@@ -430,7 +431,8 @@ var opcodeNames = map[Opcode]string{
 	// Exception handling
 	OP_THROW:   "THROW",
 	OP_CATCH:   "CATCH",
-	OP_FINALLY: "FINALLY",
+	OP_FINALLY:          "FINALLY",
+	OP_ASSIGN_EXCEPTION: "ASSIGN_EXCEPTION",
 
 	// Loop operations
 	OP_FE_RESET: "FE_RESET",

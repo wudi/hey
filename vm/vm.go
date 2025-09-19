@@ -373,6 +373,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execInclude(ctx, frame, inst)
 	case opcodes.OP_FETCH_CLASS_CONSTANT:
 		return vm.execFetchClassConstant(ctx, frame, inst)
+	case opcodes.OP_ASSIGN_EXCEPTION:
+		return vm.execAssignException(ctx, frame, inst)
+	case opcodes.OP_INSTANCEOF:
+		return vm.execInstanceof(ctx, frame, inst)
 	default:
 		return false, fmt.Errorf("opcode %s not implemented", inst.Opcode)
 	}
@@ -446,6 +450,7 @@ func (vm *VirtualMachine) recordDebug(ctx *ExecutionContext, message string) {
 }
 
 func (vm *VirtualMachine) raiseException(ctx *ExecutionContext, frame *CallFrame, value *values.Value) (bool, error) {
+
 	for {
 		if frame == nil {
 			return false, fmt.Errorf("uncaught exception: %s", value.ToString())
@@ -453,7 +458,7 @@ func (vm *VirtualMachine) raiseException(ctx *ExecutionContext, frame *CallFrame
 		if handler := frame.popExceptionHandler(); handler != nil {
 			if handler.catchIP > 0 {
 				frame.IP = handler.catchIP
-				frame.pendingException = nil
+				frame.pendingException = value
 				return false, nil
 			}
 			if handler.finallyIP > 0 {

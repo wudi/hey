@@ -564,9 +564,21 @@ func classFromDescriptor(desc *registry.ClassDescriptor) *registry.Class {
 					DefaultValue: copyValue(paramDesc.DefaultValue),
 				})
 			}
-			if impl, ok := method.Implementation.(*registry.BytecodeMethodImpl); ok && impl != nil {
-				fn.Instructions = impl.Instructions
-				fn.Constants = impl.Constants
+			switch impl := method.Implementation.(type) {
+			case *registry.BytecodeMethodImpl:
+				if impl != nil {
+					fn.Instructions = impl.Instructions
+					fn.Constants = impl.Constants
+				}
+			case interface{ GetFunction() *registry.Function }:
+				// Handle BuiltinMethodImpl
+				if builtinFn := impl.GetFunction(); builtinFn != nil {
+					fn.IsBuiltin = builtinFn.IsBuiltin
+					fn.Builtin = builtinFn.Builtin
+					fn.Handler = builtinFn.Handler
+					fn.MinArgs = builtinFn.MinArgs
+					fn.MaxArgs = builtinFn.MaxArgs
+				}
 			}
 			fn.MinArgs = len(fn.Parameters)
 			fn.MaxArgs = len(fn.Parameters)

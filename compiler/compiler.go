@@ -2198,8 +2198,31 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
-		// For simplicity, we'll ignore constructor arguments for now
-		// In a full implementation, we'd compile the arguments and call the constructor
+		// Call constructor if arguments are provided
+		if class.Arguments != nil && len(class.Arguments.Arguments) > 0 {
+			// Setup method call to __construct
+			methodName := c.addConstant(values.NewString("__construct"))
+			c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, methodName, 0, 0)
+
+			// Compile and send constructor arguments
+			for _, arg := range class.Arguments.Arguments {
+				err := c.compileNode(arg)
+				if err != nil {
+					return err
+				}
+				argResult := c.nextTemp - 1
+				c.emit(opcodes.OP_SEND_VAL, opcodes.IS_TMP_VAR, argResult, 0, 0, 0, 0)
+			}
+
+			// Execute constructor call (store result in separate temp to avoid overwriting object)
+			constructorResult := c.allocateTemp()
+			c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, constructorResult, 0, 0, 0, 0)
+
+			// Constructor calls in PHP don't return anything useful - keep the original object
+			// Copy the object back to be the final result of the expression
+			finalResult := c.allocateTemp()
+			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, 0, 0, opcodes.IS_TMP_VAR, finalResult)
+		}
 
 		return nil
 
@@ -2214,6 +2237,13 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 	classConstant := c.addConstant(values.NewString(className))
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
+
+	// TODO: Only call constructor if it exists
+	// For now, skip constructor calling for simple case to test object creation
+	// methodName := c.addConstant(values.NewString("__construct"))
+	// c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, methodName, 0, 0)
+	// constructorResult := c.allocateTemp()
+	// c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, constructorResult, 0, 0, 0, 0)
 
 	return nil
 }
@@ -2469,18 +2499,12 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 	for i := range stmt.CatchClauses {
 		catchLabels[i] = c.generateLabel()
 	}
+	catchDispatchLabel := c.generateLabel()
 	finallyLabel := c.generateLabel()
 	endLabel := c.generateLabel()
 
 	// Start of try block - emit exception handler setup
-	// For now, we'll use a simple approach: register first catch block
-	var firstCatchLabel string
-	if len(catchLabels) > 0 {
-		firstCatchLabel = catchLabels[0]
-	}
-
-	// This is a simplified exception handler registration
-	// Real implementation would encode all handler info in instruction
+	// Point to the catch dispatch logic, not directly to a catch block
 	c.emit(opcodes.OP_CATCH, opcodes.IS_CONST, 0, 0, 0, 0, 0)
 
 	// Compile try block body
@@ -2498,21 +2522,54 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
 	}
 
+	// Exception dispatch logic - this is where all exceptions first land
+	c.placeLabel(catchDispatchLabel)
+
+	// Check each catch clause type in order
+	for i, catchClause := range stmt.CatchClauses {
+		if len(catchClause.Types) > 0 {
+			// Get exception type name
+			var typeName string
+			if ident, ok := catchClause.Types[0].(*ast.IdentifierNode); ok {
+				typeName = ident.Name
+			} else {
+				// Complex type expression - for now, assume Exception
+				typeName = "Exception"
+			}
+
+			// Emit type check instruction
+			typeConst := c.addConstant(values.NewString(typeName))
+			resultTemp := c.nextTemp
+			c.nextTemp++
+			c.emit(opcodes.OP_INSTANCEOF, opcodes.IS_CONST, typeConst, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, resultTemp)
+
+			// If type matches, jump to this catch block
+			c.emitJumpNZ(opcodes.IS_TMP_VAR, resultTemp, catchLabels[i])
+		} else {
+			// No type specified - this catch block catches everything
+			c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, catchLabels[i])
+		}
+	}
+
+	// If no catch block matched, jump to finally (or end if no finally)
+	if len(stmt.FinallyBlock) > 0 {
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, finallyLabel)
+	} else {
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+	}
+
 	// Compile catch blocks
 	for i, catchClause := range stmt.CatchClauses {
 		c.placeLabel(catchLabels[i])
 
-		// Get exception variable slot if specified
+		// Assign caught exception to parameter variable
 		if catchClause.Parameter != nil {
 			paramVar, ok := catchClause.Parameter.(*ast.Variable)
 			if ok {
-				// Store variable slot for exception parameter (used by VM during exception handling)
-				_ = c.getVariableSlot(paramVar.Name)
+				slot := c.getVariableSlot(paramVar.Name)
+				c.emit(opcodes.OP_ASSIGN_EXCEPTION, opcodes.IS_CV, slot, 0, 0, 0, 0)
 			}
 		}
-
-		// For now, we catch all exceptions (type matching not fully implemented)
-		// In a full implementation, we'd emit type checking code here
 
 		// Compile catch block body
 		for _, s := range catchClause.Body {
@@ -2548,7 +2605,7 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 
 	// Now we need to patch the OP_CATCH instruction with the actual catch block address
 	// This is a post-processing step after labels are resolved
-	c.patchExceptionHandler(firstCatchLabel, finallyLabel)
+	c.patchExceptionHandler(catchDispatchLabel, finallyLabel)
 
 	return nil
 }

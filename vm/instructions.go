@@ -289,23 +289,116 @@ func resolveClassMethod(ctx *ExecutionContext, cls *classRuntime, method string)
 	return nil
 }
 
+
 func instantiateObject(ctx *ExecutionContext, className string) *values.Value {
 	obj := values.NewObject(className)
 	cls := ctx.ensureClass(className)
 	if cls != nil {
+		// Initialize properties from both runtime and descriptor
+		if obj.Data.(*values.Object).Properties == nil {
+			obj.Data.(*values.Object).Properties = make(map[string]*values.Value)
+		}
+
+		// Initialize from runtime properties
 		if cls.Properties != nil {
 			for name, prop := range cls.Properties {
 				if prop.IsStatic {
 					continue
 				}
-				if obj.Data.(*values.Object).Properties == nil {
-					obj.Data.(*values.Object).Properties = make(map[string]*values.Value)
-				}
 				obj.Data.(*values.Object).Properties[name] = copyValue(prop.Default)
+			}
+		}
+
+		// Initialize from descriptor properties (for builtin classes like Exception)
+		if cls.Descriptor != nil && cls.Descriptor.Properties != nil {
+			for name, propDesc := range cls.Descriptor.Properties {
+				if propDesc.IsStatic {
+					continue
+				}
+				// Only set if not already set by runtime properties
+				if _, exists := obj.Data.(*values.Object).Properties[name]; !exists {
+					obj.Data.(*values.Object).Properties[name] = copyValue(propDesc.DefaultValue)
+				}
 			}
 		}
 	}
 	return obj
+}
+
+func (vm *VirtualMachine) execAssignException(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the variable slot to assign the exception to
+	opType1, op1 := decodeOperand(inst, 1)
+	if opType1 != opcodes.IS_CV {
+		return false, fmt.Errorf("ASSIGN_EXCEPTION requires CV operand")
+	}
+
+	// Get the pending exception from the current frame
+	if frame.pendingException == nil {
+		return false, fmt.Errorf("no pending exception to assign")
+	}
+
+
+	// Assign the exception to the specified variable slot
+	if err := vm.writeOperand(ctx, frame, opType1, op1, frame.pendingException); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+
+func (vm *VirtualMachine) execInstanceof(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// For exception handling, we need to check if the pending exception
+	// matches the specified type. In a full implementation, this would
+	// check the object against the class hierarchy.
+
+	// Get the class name to check against
+	opType1, op1 := decodeOperand(inst, 1)
+	classVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	targetClassName := classVal.ToString()
+
+	// Get the exception object to check
+	if frame.pendingException == nil {
+		// No pending exception, result is false
+		resultType, resultSlot := decodeResult(inst)
+		if err := vm.writeOperand(ctx, frame, resultType, resultSlot, values.NewBool(false)); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	// Check if the exception object is of the specified type
+	isMatch := false
+	if frame.pendingException.IsObject() {
+		obj := frame.pendingException.Data.(*values.Object)
+
+		// Exact class name matching first
+		if strings.EqualFold(obj.ClassName, targetClassName) {
+			isMatch = true
+		}
+		// Handle inheritance - check if Exception is a base class
+		if !isMatch && strings.EqualFold(targetClassName, "Exception") {
+			// Objects of class "Exception" should match Exception catch blocks
+			if strings.EqualFold(obj.ClassName, "Exception") {
+				isMatch = true
+			}
+		}
+		// TODO: Implement proper inheritance hierarchy checking
+		// For now, we only do exact matching or Exception base class matching
+	}
+
+	// Store the result
+	resultType, resultSlot := decodeResult(inst)
+	result := values.NewBool(isMatch)
+	if err := vm.writeOperand(ctx, frame, resultType, resultSlot, result); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func resolveThis(frame *CallFrame, val *values.Value) *values.Value {
@@ -1187,13 +1280,31 @@ func (vm *VirtualMachine) execConditionalJump(ctx *ExecutionContext, frame *Call
 		return false, err
 	}
 
+
 	opType2, op2 := decodeOperand(inst, 2)
 	targetVal, err := vm.readOperand(ctx, frame, opType2, op2)
 	if err != nil {
 		return false, err
 	}
 
-	jump := cond.ToBool()
+	// PHP-style truthiness check
+	jump := false
+	switch cond.Type {
+	case values.TypeNull:
+		jump = false
+	case values.TypeBool:
+		jump = cond.Data.(bool)
+	case values.TypeInt:
+		jump = cond.Data.(int64) != 0
+	case values.TypeFloat:
+		jump = cond.Data.(float64) != 0.0
+	case values.TypeString:
+		str := cond.Data.(string)
+		jump = str != "" && str != "0"
+	default:
+		jump = true // Objects, arrays, etc. are truthy
+	}
+
 	if inst.Opcode == opcodes.OP_JMPZ {
 		jump = !jump
 	}
@@ -1903,7 +2014,7 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 	}
 
 	resultType, resultSlot := decodeResult(inst)
-	frame.ReturnTarget = operandTarget{opType: resultType, slot: resultSlot, valid: true}
+	frame.ReturnTarget = operandTarget{opType: resultType, slot: resultSlot, valid: resultType != opcodes.IS_UNUSED}
 
 	if pending.Function == nil || pending.Function.Builtin != nil && pending.Function.IsBuiltin {
 		// Builtin function invocation
@@ -1920,12 +2031,26 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			return false, fmt.Errorf("callable %s not resolved", pending.ClosureName)
 		}
 		ctxBuiltin := &builtinContext{vm: vm, ctx: ctx}
-		ret, err := fn.Builtin(ctxBuiltin, pending.Args)
+		args := pending.Args
+		// For method calls, prepend the 'this' object as the first argument
+		if pending.Method && pending.This != nil {
+			args = append([]*values.Value{pending.This}, pending.Args...)
+		}
+		ret, err := fn.Builtin(ctxBuiltin, args)
 		if err != nil {
 			return false, err
 		}
-		if err := vm.writeOperand(ctx, frame, resultType, resultSlot, ret); err != nil {
-			return false, err
+
+		// For constructors (__construct), ignore the return value and use the 'this' object instead
+		if frame.ReturnTarget.valid {
+			var valueToStore *values.Value = ret
+			if pending.Method && fn.Name == "__construct" && pending.This != nil {
+				// Constructor call - use the 'this' object, not the return value
+				valueToStore = pending.This
+			}
+			if err := vm.writeOperand(ctx, frame, resultType, resultSlot, valueToStore); err != nil {
+				return false, err
+			}
 		}
 		frame.resetReturnTarget()
 		return true, nil
