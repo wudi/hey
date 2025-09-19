@@ -2112,7 +2112,7 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			Properties: make(map[string]*values.Value),
 		}
 		generatorObj.Properties["__channel_generator"] = &values.Value{
-			Type: values.TypeObject,
+			Type: values.TypeResource,
 			Data: channelGen,
 		}
 		// Store function name for debugging/reflection

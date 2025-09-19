@@ -2909,10 +2909,14 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	// Store current compiler state
 	oldInstructions := c.instructions
 	oldConstants := c.constants
+	oldCurrentFunction := c.currentFunction
 
 	// Reset for function compilation
 	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
+
+	// Set current function for generator detection
+	c.currentFunction = function
 
 	// Create function scope
 	c.pushScope(true)
@@ -2934,6 +2938,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 			c.popScope()
 			c.instructions = oldInstructions
 			c.constants = oldConstants
+			c.currentFunction = oldCurrentFunction
 			return fmt.Errorf("error compiling anonymous function: %v", err)
 		}
 	}
@@ -2954,6 +2959,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	c.popScope()
 	c.instructions = oldInstructions
 	c.constants = oldConstants
+	c.currentFunction = oldCurrentFunction
 
 	// Create closure at runtime
 	functionConstant := c.addConstant(values.NewString(anonName))
