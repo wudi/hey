@@ -343,7 +343,7 @@ func (c *Compiler) compileUnaryOp(expr *ast.UnaryExpression) error {
 
 	result := c.allocateTemp()
 	opcode := c.getOpcodeForUnaryOperator(expr.Operator)
-	c.emit(opcode, opcodes.IS_TMP_VAR, result, opcodes.IS_TMP_VAR, operandResult, 0, 0)
+	c.emit(opcode, opcodes.IS_TMP_VAR, operandResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, result)
 
 	return nil
 }

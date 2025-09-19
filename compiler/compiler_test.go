@@ -488,6 +488,47 @@ func TestUnaryOperators(t *testing.T) {
 	}
 }
 
+func TestLogicalNotVarDump(t *testing.T) {
+	testCases := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{"VarDumpNotInteger", `<?php var_dump(!10);`, "bool(false)\n"},
+		{"VarDumpNotOne", `<?php var_dump(!1);`, "bool(false)\n"},
+		{"VarDumpNotZero", `<?php var_dump(!0);`, "bool(true)\n"},
+		{"VarDumpNotTrue", `<?php var_dump(!true);`, "bool(false)\n"},
+		{"VarDumpNotFalse", `<?php var_dump(!false);`, "bool(true)\n"},
+		{"VarDumpNotString", `<?php var_dump(!"hello");`, "bool(false)\n"},
+		{"VarDumpNotEmptyString", `<?php var_dump(!"");`, "bool(true)\n"},
+		{"VarDumpNotZeroString", `<?php var_dump(!"0");`, "bool(true)\n"},
+		{"VarDumpVariableAssignment", `<?php $x = !10; var_dump($x);`, "bool(false)\n"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := parser.New(lexer.New(tc.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse %s", tc.name)
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile %s", tc.name)
+
+			vmCtx := vm.NewExecutionContext()
+			var buf bytes.Buffer
+			vmCtx.SetOutputWriter(&buf)
+
+			vm := vm.NewVirtualMachine()
+			err = vm.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes())
+			require.NoError(t, err, "Failed to execute %s", tc.name)
+
+			output := buf.String()
+			assert.Equal(t, tc.expected, output, "Output mismatch for %s", tc.name)
+		})
+	}
+}
+
 func TestStringOperators(t *testing.T) {
 	testCases := []struct {
 		name string
