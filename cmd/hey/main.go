@@ -116,15 +116,15 @@ func parseAndExecuteCode(code string, inScript bool) error {
 		os.Exit(1)
 	}
 
-	comp := compiler.NewCompiler()
-	if err := comp.Compile(prog); err != nil {
-		fmt.Println(err)
+	// Initialize runtime first so constants are registered
+	if err := runtime2.Bootstrap(); err != nil {
+		fmt.Println("Failed to bootstrap runtime:", err)
 		os.Exit(1)
 	}
 
-	// Initialize runtime if not already done
-	if err := runtime2.Bootstrap(); err != nil {
-		fmt.Println("Failed to bootstrap runtime:", err)
+	comp := compiler.NewCompiler()
+	if err := comp.Compile(prog); err != nil {
+		fmt.Println(err)
 		os.Exit(1)
 	}
 

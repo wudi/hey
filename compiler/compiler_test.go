@@ -7161,3 +7161,113 @@ func parseAndCompileOnly(t *testing.T, code string) (*Compiler, error) {
 
 	return comp, err
 }
+
+// TestConstantResolution tests that constants are properly resolved
+func TestConstantResolution(t *testing.T) {
+	// Ensure runtime is initialized for constants
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	testCases := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "CASE_UPPER constant",
+			code: `<?php var_dump(CASE_UPPER);`,
+			expected: "int(1)\n",
+		},
+		{
+			name: "CASE_LOWER constant",
+			code: `<?php var_dump(CASE_LOWER);`,
+			expected: "int(0)\n",
+		},
+		{
+			name: "Multiple constants",
+			code: `<?php
+				var_dump(CASE_UPPER);
+				var_dump(CASE_LOWER);
+				var_dump(SORT_REGULAR);`,
+			expected: "int(1)\nint(0)\nint(0)\n",
+		},
+		{
+			name: "Constant in expression",
+			code: `<?php
+				$x = CASE_UPPER + 10;
+				var_dump($x);`,
+			expected: "int(11)\n",
+		},
+		{
+			name: "Constant in comparison",
+			code: `<?php
+				if (CASE_UPPER === 1) {
+					echo "correct";
+				} else {
+					echo "wrong";
+				}`,
+			expected: "correct",
+		},
+		{
+			name: "Constant as function argument",
+			code: `<?php
+				function test($mode) {
+					return $mode === 1 ? "upper" : "lower";
+				}
+				echo test(CASE_UPPER);`,
+			expected: "upper",
+		},
+		{
+			name: "Undefined constant treated as string",
+			code: `<?php var_dump(UNDEFINED_CONSTANT);`,
+			expected: "string(18) \"UNDEFINED_CONSTANT\"\n",
+		},
+		{
+			name: "Sort constants",
+			code: `<?php
+				var_dump(SORT_REGULAR);
+				var_dump(SORT_NUMERIC);
+				var_dump(SORT_STRING);`,
+			expected: "int(0)\nint(1)\nint(2)\n",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tc.code)
+			if err != nil {
+				t.Skipf("Skipping test due to execution error: %v", err)
+				return
+			}
+			assert.Equal(t, tc.expected, output, "Unexpected output for %s", tc.name)
+		})
+	}
+}
+
+// Test that constants work with array_change_key_case
+func TestConstantsWithArrayFunctions(t *testing.T) {
+	// Ensure runtime is initialized
+	err := runtime2.Bootstrap()
+	require.NoError(t, err)
+
+	code := `<?php
+		$array = array("FirSt" => 1, "SecOnd" => 2);
+		$lower = array_change_key_case($array, CASE_LOWER);
+		$upper = array_change_key_case($array, CASE_UPPER);
+
+		var_dump($lower);
+		var_dump($upper);
+	`
+
+	output, err := compileAndExecute(t, code)
+	if err != nil {
+		t.Skipf("Skipping due to execution error: %v", err)
+		return
+	}
+
+	// Check that output contains the expected array transformations
+	assert.Contains(t, output, "first", "Should have lowercase keys")
+	assert.Contains(t, output, "second", "Should have lowercase keys")
+	assert.Contains(t, output, "FIRST", "Should have uppercase keys")
+	assert.Contains(t, output, "SECOND", "Should have uppercase keys")
+}

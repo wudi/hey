@@ -1052,10 +1052,11 @@ func (c *Compiler) compileVariableVariable(expr *ast.VariableVariableExpression)
 }
 
 func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
-	// Handle special literal keywords
+	// Handle special literal keywords first (case-insensitive as per PHP spec)
 	var constant uint32
+	lowerName := strings.ToLower(expr.Name)
 
-	switch expr.Name {
+	switch lowerName {
 	case "null":
 		constant = c.addConstant(values.NewNull())
 	case "true":
@@ -1063,8 +1064,21 @@ func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
 	case "false":
 		constant = c.addConstant(values.NewBool(false))
 	default:
-		// Identifiers are typically constants or function names
-		constant = c.addConstant(values.NewString(expr.Name))
+		// For other identifiers, check if it's a registered constant
+		// PHP constants are case-sensitive (except true/false/null)
+		if registry.GlobalRegistry != nil {
+			if constDesc, ok := registry.GlobalRegistry.GetConstant(expr.Name); ok {
+				// Found exact match - use the constant value
+				constant = c.addConstant(constDesc.Value)
+			} else {
+				// PHP behavior: undefined constants become strings
+				// TODO: In future, should emit E_NOTICE/E_WARNING
+				constant = c.addConstant(values.NewString(expr.Name))
+			}
+		} else {
+			// Registry not initialized - fallback to string
+			constant = c.addConstant(values.NewString(expr.Name))
+		}
 	}
 
 	result := c.allocateTemp()
