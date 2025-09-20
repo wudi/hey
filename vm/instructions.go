@@ -293,9 +293,16 @@ func resolveClassMethod(ctx *ExecutionContext, cls *classRuntime, method string)
 }
 
 
-func instantiateObject(ctx *ExecutionContext, className string) *values.Value {
-	obj := values.NewObject(className)
+func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, error) {
 	cls := ctx.ensureClass(className)
+	if cls != nil {
+		// Check if the class is abstract
+		if cls.Descriptor.IsAbstract {
+			return nil, fmt.Errorf("cannot instantiate abstract class %s", className)
+		}
+	}
+
+	obj := values.NewObject(className)
 	if cls != nil {
 		// Initialize properties from both runtime and descriptor
 		if obj.Data.(*values.Object).Properties == nil {
@@ -325,7 +332,7 @@ func instantiateObject(ctx *ExecutionContext, className string) *values.Value {
 			}
 		}
 	}
-	return obj
+	return obj, nil
 }
 
 func (vm *VirtualMachine) execAssignException(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
@@ -1929,7 +1936,10 @@ func (vm *VirtualMachine) execNew(ctx *ExecutionContext, frame *CallFrame, inst 
 	if err != nil {
 		return false, err
 	}
-	obj := instantiateObject(ctx, className)
+	obj, err := instantiateObject(ctx, className)
+	if err != nil {
+		return false, err
+	}
 	resType, resSlot := decodeResult(inst)
 	if err := vm.writeOperand(ctx, frame, resType, resSlot, obj); err != nil {
 		return false, err

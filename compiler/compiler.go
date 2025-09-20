@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,7 @@ type Compiler struct {
 	traits           map[string]*registry.Trait
 	currentClass     *registry.Class // Current class being compiled
 	currentFunction  *registry.Function // Current function being compiled
+	currentFile      string // Current file being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -2709,6 +2711,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 		Parameters:   make([]*registry.Parameter, 0),
 		IsVariadic:   false,
 		IsGenerator:  false,
+		IsAbstract:   decl.IsAbstract,
 	}
 
 	// Set current function for generator detection
@@ -3943,6 +3946,14 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 		}
 	}
 
+	// Validate abstract method implementation if this class extends an abstract class
+	if class.Parent != "" {
+		if err := c.validateAbstractMethodImplementation(class); err != nil {
+			c.currentClass = oldCurrentClass
+			return err
+		}
+	}
+
 	// Store compiled class
 	c.classes[className] = class
 	c.currentClass = oldCurrentClass
@@ -4882,18 +4893,67 @@ func (c *Compiler) compileMagicConstantExpression(expr *ast.MagicConstantExpress
 	var constValue *values.Value
 	switch expr.TokenType {
 	case lexer.T_FILE:
-		constValue = values.NewString("<unknown>") // Would need file context
+		// __FILE__ returns absolute path to current file
+		if c.currentFile != "" {
+			// Convert to absolute path if it's not already
+			absPath, err := filepath.Abs(c.currentFile)
+			if err == nil {
+				constValue = values.NewString(absPath)
+			} else {
+				constValue = values.NewString(c.currentFile)
+			}
+		} else {
+			constValue = values.NewString("<unknown>")
+		}
 	case lexer.T_LINE:
 		constValue = values.NewInt(int64(expr.GetLineNo()))
 	case lexer.T_DIR:
-		constValue = values.NewString(".")
-	case lexer.T_FUNCTION:
-		constValue = values.NewString("")
-	case lexer.T_CLASS:
-		constValue = values.NewString("")
+		// __DIR__ returns directory containing current file
+		if c.currentFile != "" {
+			// Get absolute path first, then get directory
+			absPath, err := filepath.Abs(c.currentFile)
+			if err == nil {
+				dirPath := filepath.Dir(absPath)
+				constValue = values.NewString(dirPath)
+			} else {
+				// Fallback to relative directory
+				dirPath := filepath.Dir(c.currentFile)
+				constValue = values.NewString(dirPath)
+			}
+		} else {
+			constValue = values.NewString(".")
+		}
+	case lexer.T_CLASS_C:
+		// __CLASS__ returns current class name or empty string if not in a class
+		if c.currentClass != nil {
+			constValue = values.NewString(c.currentClass.Name)
+		} else {
+			constValue = values.NewString("")
+		}
+	case lexer.T_METHOD_C:
+		// __METHOD__ returns "ClassName::methodName" for methods, or just "functionName" for functions
+		if c.currentFunction != nil {
+			if c.currentClass != nil {
+				// We're in a class method
+				constValue = values.NewString(c.currentClass.Name + "::" + c.currentFunction.Name)
+			} else {
+				// We're in a global function
+				constValue = values.NewString(c.currentFunction.Name)
+			}
+		} else {
+			// Global context
+			constValue = values.NewString("")
+		}
+	case lexer.T_FUNC_C:
+		// __FUNCTION__ returns current function/method name or empty string if not in a function
+		if c.currentFunction != nil {
+			constValue = values.NewString(c.currentFunction.Name)
+		} else {
+			constValue = values.NewString("")
+		}
 	case lexer.T_NAMESPACE:
 		constValue = values.NewString("")
-	case lexer.T_TRAIT:
+	case lexer.T_TRAIT_C:
 		constValue = values.NewString("")
 	default:
 		constValue = values.NewString("")
@@ -6594,4 +6654,135 @@ func (c *Compiler) Interfaces() map[string]*registry.Interface {
 
 func (c *Compiler) Traits() map[string]*registry.Trait {
 	return c.traits
+}
+
+// SetCurrentFile sets the current file being compiled for magic constants
+func (c *Compiler) SetCurrentFile(filePath string) {
+	c.currentFile = filePath
+}
+
+// validateAbstractMethodImplementation checks if a class properly implements all abstract methods from its parent
+func (c *Compiler) validateAbstractMethodImplementation(class *registry.Class) error {
+	if class.Parent == "" {
+		return nil
+	}
+
+	// Get parent class - check both compiled classes and runtime registry
+	var parentClass *registry.Class
+	if pc, exists := c.classes[class.Parent]; exists {
+		parentClass = pc
+	} else if registry.GlobalRegistry != nil {
+		if pc, err := registry.GlobalRegistry.GetClass(class.Parent); err == nil && pc != nil {
+			parentClass = &registry.Class{
+				Name:       pc.Name,
+				Parent:     pc.Parent,
+				IsAbstract: pc.IsAbstract,
+				IsFinal:    pc.IsFinal,
+				Methods:    make(map[string]*registry.Function),
+			}
+			// Convert methods from descriptors to functions
+			for methodName, methodDesc := range pc.Methods {
+				parentClass.Methods[methodName] = &registry.Function{
+					Name:       methodDesc.Name,
+					IsAbstract: methodDesc.IsAbstract,
+				}
+			}
+		}
+	}
+
+	if parentClass == nil {
+		// Parent class not found - this might be a forward declaration issue
+		// For now, skip validation but this could be improved
+		return nil
+	}
+
+	// If parent is not abstract, no validation needed
+	if !parentClass.IsAbstract {
+		return nil
+	}
+
+	// If current class is also abstract, it doesn't need to implement abstract methods
+	if class.IsAbstract {
+		return nil
+	}
+
+	// Collect all abstract methods from parent hierarchy
+	abstractMethods := make(map[string]*registry.Function)
+	c.collectAbstractMethods(parentClass, abstractMethods)
+
+	// Check if all abstract methods are implemented
+	var missingMethods []string
+	for methodName, abstractMethod := range abstractMethods {
+		if _, implemented := class.Methods[methodName]; !implemented {
+			missingMethods = append(missingMethods, methodName)
+		} else {
+			// Check if the implemented method matches the abstract signature
+			implementedMethod := class.Methods[methodName]
+			if err := c.validateMethodSignature(abstractMethod, implementedMethod); err != nil {
+				return fmt.Errorf("method %s::%s does not match abstract signature: %v", class.Name, methodName, err)
+			}
+		}
+	}
+
+	if len(missingMethods) > 0 {
+		if len(missingMethods) == 1 {
+			return fmt.Errorf("class %s contains 1 abstract method and must therefore be declared abstract or implement the remaining method (%s::%s)",
+				class.Name, parentClass.Name, missingMethods[0])
+		} else {
+			return fmt.Errorf("class %s contains %d abstract methods and must therefore be declared abstract or implement the remaining methods (%s::%s)",
+				class.Name, len(missingMethods), parentClass.Name, strings.Join(missingMethods, ", "+parentClass.Name+"::"))
+		}
+	}
+
+	return nil
+}
+
+// collectAbstractMethods recursively collects all abstract methods from a class hierarchy
+func (c *Compiler) collectAbstractMethods(class *registry.Class, abstractMethods map[string]*registry.Function) {
+	if class == nil {
+		return
+	}
+
+	// Add abstract methods from this class
+	for methodName, method := range class.Methods {
+		if method.IsAbstract {
+			abstractMethods[methodName] = method
+		}
+	}
+
+	// Recursively check parent classes
+	if class.Parent != "" {
+		var parentClass *registry.Class
+		if pc, exists := c.classes[class.Parent]; exists {
+			parentClass = pc
+		} else if registry.GlobalRegistry != nil {
+			if pc, err := registry.GlobalRegistry.GetClass(class.Parent); err == nil && pc != nil {
+				parentClass = &registry.Class{
+					Name:       pc.Name,
+					Parent:     pc.Parent,
+					IsAbstract: pc.IsAbstract,
+					IsFinal:    pc.IsFinal,
+					Methods:    make(map[string]*registry.Function),
+				}
+				// Convert methods from descriptors to functions
+				for methodName, methodDesc := range pc.Methods {
+					parentClass.Methods[methodName] = &registry.Function{
+						Name:       methodDesc.Name,
+						IsAbstract: methodDesc.IsAbstract,
+					}
+				}
+			}
+		}
+		c.collectAbstractMethods(parentClass, abstractMethods)
+	}
+}
+
+// validateMethodSignature checks if an implemented method matches the abstract method signature
+func (c *Compiler) validateMethodSignature(abstractMethod, implementedMethod *registry.Function) error {
+	// For now, just check parameter count - could be extended to check parameter types
+	if len(abstractMethod.Parameters) != len(implementedMethod.Parameters) {
+		return fmt.Errorf("parameter count mismatch: expected %d, got %d",
+			len(abstractMethod.Parameters), len(implementedMethod.Parameters))
+	}
+	return nil
 }

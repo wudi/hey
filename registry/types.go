@@ -46,6 +46,7 @@ type Function struct {
 	IsGenerator  bool
 	IsAnonymous  bool
 	IsBuiltin    bool
+	IsAbstract   bool
 	Builtin      BuiltinImplementation
 	Handler      func(interface{}, []*values.Value) (*values.Value, error)
 	MinArgs      int
