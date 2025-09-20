@@ -3970,14 +3970,17 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 func (c *Compiler) compileClassConstantAccess(expr *ast.ClassConstantAccessExpression) error {
 	// Handle class constant access like ClassName::CONSTANT_NAME
 
-	// Get class name
+	// Get class name and determine if it's late static binding
 	var className string
+	var isLateStaticBinding bool
 	switch class := expr.Class.(type) {
 	case *ast.IdentifierNode:
 		className = class.Name
+		isLateStaticBinding = (className == "static")
 	case *ast.Variable:
 		// Handle self::, static::, parent:: etc
 		className = class.Name // Will be "self", "static", "parent"
+		isLateStaticBinding = (className == "static")
 	default:
 		return fmt.Errorf("unsupported class expression in constant access: %T", expr.Class)
 	}
@@ -3990,19 +3993,25 @@ func (c *Compiler) compileClassConstantAccess(expr *ast.ClassConstantAccessExpre
 		return fmt.Errorf("invalid constant name type")
 	}
 
-	// For now, we'll create a simplified implementation
-	// In a full implementation, this would look up the constant value from the class
+	// Allocate temporary for result
 	result := c.allocateTemp()
 
 	// Create constants for the class and constant names
 	classConstant := c.addConstant(values.NewString(className))
 	constConstant := c.addConstant(values.NewString(constantName))
 
-	// Emit instruction to fetch class constant
-	c.emit(opcodes.OP_FETCH_CLASS_CONSTANT,
-		opcodes.IS_CONST, classConstant,
-		opcodes.IS_CONST, constConstant,
-		opcodes.IS_TMP_VAR, result)
+	// Emit appropriate instruction based on whether it's late static binding
+	if isLateStaticBinding {
+		c.emit(opcodes.OP_FETCH_LATE_STATIC_CONSTANT,
+			opcodes.IS_CONST, classConstant,
+			opcodes.IS_CONST, constConstant,
+			opcodes.IS_TMP_VAR, result)
+	} else {
+		c.emit(opcodes.OP_FETCH_CLASS_CONSTANT,
+			opcodes.IS_CONST, classConstant,
+			opcodes.IS_CONST, constConstant,
+			opcodes.IS_TMP_VAR, result)
+	}
 
 	return nil
 }
@@ -4077,20 +4086,28 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 	// Compile class expression (supports both static names and dynamic expressions)
 	var classOperandType opcodes.OpType
 	var classOperand uint32
+	var isLateStaticBinding bool
 
 	switch class := expr.Class.(type) {
 	case *ast.IdentifierNode:
-		// Static class name like MyClass::
+		// Static class name like MyClass:: or static::
 		className := class.Name
 		classOperand = c.addConstant(values.NewString(className))
 		classOperandType = opcodes.IS_CONST
+		isLateStaticBinding = (className == "static")
 	case *ast.Variable:
 		// Handle self::, static::, parent:: etc - these are also treated as constants
 		// But regular variables like $obj should be compiled dynamically
 		className := class.Name
-		if className == "self" || className == "static" || className == "parent" {
+		if className == "self" || className == "parent" {
 			classOperand = c.addConstant(values.NewString(className))
 			classOperandType = opcodes.IS_CONST
+			isLateStaticBinding = false
+		} else if className == "static" {
+			// static:: requires special handling for late static binding
+			classOperand = c.addConstant(values.NewString(className))
+			classOperandType = opcodes.IS_CONST
+			isLateStaticBinding = true
 		} else {
 			// Regular variable - compile it dynamically
 			err := c.compileNode(class)
@@ -4099,6 +4116,7 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 			}
 			classOperand = c.nextTemp - 1 // Last allocated temp contains the class name
 			classOperandType = opcodes.IS_TMP_VAR
+			isLateStaticBinding = false
 		}
 	default:
 		// Dynamic class expression like $className::
@@ -4108,17 +4126,25 @@ func (c *Compiler) compileStaticAccess(expr *ast.StaticAccessExpression) error {
 		}
 		classOperand = c.nextTemp - 1 // Last allocated temp contains the class name
 		classOperandType = opcodes.IS_TMP_VAR
+		isLateStaticBinding = false
 	}
 
 	// Compile property expression and determine access type
 	switch property := expr.Property.(type) {
 	case *ast.IdentifierNode:
-		// Constant access (Class::CONSTANT)
+		// Constant access (Class::CONSTANT or static::CONSTANT)
 		propOperand := c.addConstant(values.NewString(property.Name))
-		c.emit(opcodes.OP_FETCH_CLASS_CONSTANT,
-			classOperandType, classOperand,
-			opcodes.IS_CONST, propOperand,
-			opcodes.IS_TMP_VAR, result)
+		if isLateStaticBinding {
+			c.emit(opcodes.OP_FETCH_LATE_STATIC_CONSTANT,
+				classOperandType, classOperand,
+				opcodes.IS_CONST, propOperand,
+				opcodes.IS_TMP_VAR, result)
+		} else {
+			c.emit(opcodes.OP_FETCH_CLASS_CONSTANT,
+				classOperandType, classOperand,
+				opcodes.IS_CONST, propOperand,
+				opcodes.IS_TMP_VAR, result)
+		}
 	case *ast.Variable:
 		// Static property access (Class::$property)
 		propOperand := c.addConstant(values.NewString(property.Name))

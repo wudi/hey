@@ -292,6 +292,33 @@ func resolveClassMethod(ctx *ExecutionContext, cls *classRuntime, method string)
 	return nil
 }
 
+// resolveClassMethodWithDefiningClass returns both the method and the class where it's defined
+func resolveClassMethodWithDefiningClass(ctx *ExecutionContext, cls *classRuntime, method string) (*registry.Function, *classRuntime) {
+	if cls == nil {
+		return nil, nil
+	}
+	methodLower := strings.ToLower(method)
+	if cls.Descriptor != nil && cls.Descriptor.Methods != nil {
+		if fn, ok := cls.Descriptor.Methods[method]; ok {
+			return fn, cls
+		}
+		if fn, ok := cls.Descriptor.Methods[methodLower]; ok {
+			return fn, cls
+		}
+		// Fallback: linear scan for case-insensitive match if map uses mixed keys
+		for name, fn := range cls.Descriptor.Methods {
+			if strings.ToLower(name) == methodLower {
+				return fn, cls
+			}
+		}
+	}
+	if cls.Parent != "" {
+		parent := ctx.ensureClass(cls.Parent)
+		return resolveClassMethodWithDefiningClass(ctx, parent, method)
+	}
+	return nil, nil
+}
+
 
 func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, error) {
 	cls := ctx.ensureClass(className)
@@ -927,6 +954,71 @@ func (vm *VirtualMachine) execFetchClassConstant(ctx *ExecutionContext, frame *C
 	if result == nil {
 		return false, fmt.Errorf("undefined class constant %s::%s", className, constName)
 	}
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, result); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (vm *VirtualMachine) execFetchLateStaticConstant(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	classType, classOp := decodeOperand(inst, 1)
+	classVal, err := vm.readOperand(ctx, frame, classType, classOp)
+	if err != nil {
+		return false, err
+	}
+	if classVal != nil {
+		classVal = classVal.Deref()
+	}
+
+	var rawClass string
+	if classVal != nil {
+		rawClass = classVal.ToString()
+	}
+
+	// For late static binding, "static" should resolve to the calling class
+	var className string
+	if rawClass == "static" {
+		// Use the calling class from the call frame for late static binding
+		if frame.CallingClass != "" {
+			className = frame.CallingClass
+		} else {
+			// Fallback to current class if no calling class is set
+			className = frame.ClassName
+		}
+	} else {
+		// For non-static references, resolve normally
+		var err error
+		className, err = resolveRuntimeClassName(ctx, frame, rawClass)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if className == "" {
+		return false, fmt.Errorf("invalid class reference for late static constant fetch")
+	}
+
+	constType, constOp := decodeOperand(inst, 2)
+	constVal, err := vm.readOperand(ctx, frame, constType, constOp)
+	if err != nil {
+		return false, err
+	}
+	if constVal != nil {
+		constVal = constVal.Deref()
+	}
+	constName := constVal.ToString()
+
+	cls := ctx.ensureClass(className)
+	if cls == nil {
+		return false, fmt.Errorf("class %s not found", className)
+	}
+
+	result := lookupClassConstantValue(ctx, cls, constName)
+	if result == nil {
+		return false, fmt.Errorf("undefined class constant %s::%s", className, constName)
+	}
+
 	resType, resSlot := decodeResult(inst)
 	if err := vm.writeOperand(ctx, frame, resType, resSlot, result); err != nil {
 		return false, err
@@ -2147,7 +2239,8 @@ func (vm *VirtualMachine) execInitStaticMethodCall(ctx *ExecutionContext, frame 
 	if err != nil {
 		return false, err
 	}
-	className, err := resolveRuntimeClassName(ctx, frame, classVal.ToString())
+	originalClassName := classVal.ToString()
+	className, err := resolveRuntimeClassName(ctx, frame, originalClassName)
 	if err != nil {
 		return false, err
 	}
@@ -2161,10 +2254,10 @@ func (vm *VirtualMachine) execInitStaticMethodCall(ctx *ExecutionContext, frame 
 	if cls == nil {
 		return false, fmt.Errorf("undefined class %s", className)
 	}
-	targetFn := resolveClassMethod(ctx, cls, methodNameRaw)
+	targetFn, definingClass := resolveClassMethodWithDefiningClass(ctx, cls, methodNameRaw)
 	if targetFn == nil {
 		// Check if __callStatic magic method exists
-		callStaticMethod := resolveClassMethod(ctx, cls, "__callStatic")
+		callStaticMethod, callStaticDefining := resolveClassMethodWithDefiningClass(ctx, cls, "__callStatic")
 		if callStaticMethod != nil {
 			// Use __callStatic as the target, passing method name and arguments
 			pending := &PendingCall{
@@ -2173,7 +2266,8 @@ func (vm *VirtualMachine) execInitStaticMethodCall(ctx *ExecutionContext, frame 
 				Args:          []*values.Value{values.NewString(methodNameRaw)}, // First arg is method name
 				Method:        true,
 				Static:        true,
-				ClassName:     cls.Name,
+				ClassName:     callStaticDefining.Name, // Use the class where __callStatic is defined
+				CallingClass:  originalClassName, // Set calling class for late static binding
 				MethodName:    "__callStatic",
 				IsMagicMethod: true, // Mark as magic method for special argument handling
 			}
@@ -2183,13 +2277,14 @@ func (vm *VirtualMachine) execInitStaticMethodCall(ctx *ExecutionContext, frame 
 		return false, fmt.Errorf("undefined method %s::%s", className, methodNameRaw)
 	}
 	pending := &PendingCall{
-		Function:    targetFn,
-		ClosureName: methodNameRaw,
-		Args:        make([]*values.Value, 0),
-		Method:      true,
-		Static:      true,
-		ClassName:   cls.Name,
-		MethodName:  methodNameRaw,
+		Function:     targetFn,
+		ClosureName:  methodNameRaw,
+		Args:         make([]*values.Value, 0),
+		Method:       true,
+		Static:       true,
+		ClassName:    definingClass.Name, // Use the class where the method is actually defined
+		CallingClass: originalClassName, // Set calling class for late static binding
+		MethodName:   methodNameRaw,
 	}
 	frame.pushPendingCall(pending)
 	return true, nil
@@ -2292,6 +2387,7 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 
 	child := newCallFrame(pending.Function.Name, pending.Function, pending.Function.Instructions, pending.Function.Constants)
 	child.ClassName = pending.ClassName
+	child.CallingClass = pending.CallingClass
 
 	// Handle magic method argument restructuring
 	if pending.IsMagicMethod && len(pending.Args) > 1 {

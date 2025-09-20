@@ -403,6 +403,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execInclude(ctx, frame, inst)
 	case opcodes.OP_FETCH_CLASS_CONSTANT:
 		return vm.execFetchClassConstant(ctx, frame, inst)
+	case opcodes.OP_FETCH_LATE_STATIC_CONSTANT:
+		return vm.execFetchLateStaticConstant(ctx, frame, inst)
 	case opcodes.OP_ASSIGN_EXCEPTION:
 		return vm.execAssignException(ctx, frame, inst)
 	case opcodes.OP_INSTANCEOF:

@@ -154,6 +154,7 @@ type CallFrame struct {
 	Function     *registry.Function
 	FunctionName string
 	ClassName    string
+	CallingClass string // For late static binding - the class that initiated the call
 
 	Instructions []*opcodes.Instruction
 	Constants    []*values.Value
@@ -206,6 +207,7 @@ type PendingCall struct {
 	Static      bool
 	This        *values.Value
 	ClassName   string
+	CallingClass string // For late static binding - the class that initiated the call
 	MethodName  string
 	IsMagicMethod bool  // Flag to indicate magic method calls (__call, __callStatic)
 }
