@@ -566,9 +566,9 @@ func (c *Compiler) compilePropertyIncDec(expr *ast.UnaryExpression, propAccess *
 	var objectOperand uint32
 
 	if variable, ok := propAccess.Object.(*ast.Variable); ok && variable.Name == "$this" {
-		// Use $this directly from slot 0 (when in class context)
+		// Use $this from its actual slot (may not be slot 0 after parameter fix)
 		objectOpType = opcodes.IS_VAR
-		objectOperand = 0 // $this is always in slot 0
+		objectOperand = uint32(c.getVariableSlot("$this")) // Get the actual slot for $this
 	} else {
 		// Compile object expression normally
 		err := c.compileNode(propAccess.Object)
@@ -741,9 +741,9 @@ func (c *Compiler) compilePropertyAssignment(propAccess *ast.PropertyAccessExpre
 	var objectOperand uint32
 
 	if variable, ok := propAccess.Object.(*ast.Variable); ok && variable.Name == "$this" {
-		// Use $this directly from slot 0
+		// Use $this from its actual slot (may not be slot 0 after parameter fix)
 		objectOpType = opcodes.IS_VAR
-		objectOperand = 0 // $this is always in slot 0
+		objectOperand = uint32(c.getVariableSlot("$this")) // Get the actual slot for $this
 	} else {
 		// Compile object expression normally
 		err := c.compileNode(propAccess.Object)
@@ -1286,9 +1286,9 @@ func (c *Compiler) compilePropertyAccess(expr *ast.PropertyAccessExpression) err
 	var objectOperand uint32
 
 	if variable, ok := expr.Object.(*ast.Variable); ok && variable.Name == "$this" {
-		// Use $this directly from slot 0 (when in class context)
+		// Use $this from its actual slot (may not be slot 0 after parameter fix)
 		objectOpType = opcodes.IS_VAR
-		objectOperand = 0 // $this is always in slot 0
+		objectOperand = uint32(c.getVariableSlot("$this")) // Get the actual slot for $this
 	} else {
 		// Compile object expression normally
 		err := c.compileNode(expr.Object)
@@ -6502,11 +6502,8 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 	// Create method scope
 	c.pushScope(true)
 
-	// Add implicit $this variable FIRST (to ensure it gets slot 0)
-	thisSlot := c.getOrCreateVariable("this")
-	_ = thisSlot // Ensure it's slot 0
-
-	// Set up parameter variables in the method scope (they get slots 1, 2, 3, ...)
+	// Set up parameter variables FIRST in the method scope (they get slots 0, 1, 2, ...)
+	// This matches the fix for regular method parameter passing
 	if method.Parameters != nil {
 		for _, param := range method.Parameters.Parameters {
 			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
@@ -6515,6 +6512,11 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 			}
 		}
 	}
+
+	// Add implicit $this variable AFTER parameters
+	// It will get the slot after the last parameter
+	thisSlot := c.getOrCreateVariable("$this")
+	_ = thisSlot // Use the variable to avoid compiler warning
 
 	// Compile method body
 	for _, stmt := range method.Body {
