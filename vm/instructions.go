@@ -351,48 +351,58 @@ func (vm *VirtualMachine) execAssignException(ctx *ExecutionContext, frame *Call
 
 
 func (vm *VirtualMachine) execInstanceof(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
-	// For exception handling, we need to check if the pending exception
-	// matches the specified type. In a full implementation, this would
-	// check the object against the class hierarchy.
-
-	// Get the class name to check against
+	// Get the object to check (left operand)
 	opType1, op1 := decodeOperand(inst, 1)
-	classVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	objectVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the class name to check against (right operand)
+	opType2, op2 := decodeOperand(inst, 2)
+	classVal, err := vm.readOperand(ctx, frame, opType2, op2)
 	if err != nil {
 		return false, err
 	}
 
 	targetClassName := classVal.ToString()
-
-	// Get the exception object to check
-	if frame.pendingException == nil {
-		// No pending exception, result is false
-		resultType, resultSlot := decodeResult(inst)
-		if err := vm.writeOperand(ctx, frame, resultType, resultSlot, values.NewBool(false)); err != nil {
-			return false, err
-		}
-		return true, nil
-	}
-
-	// Check if the exception object is of the specified type
 	isMatch := false
-	if frame.pendingException.IsObject() {
-		obj := frame.pendingException.Data.(*values.Object)
 
-		// Exact class name matching first
+	// Check if the object is an instance of the specified class
+	if objectVal != nil && objectVal.IsObject() {
+		obj := objectVal.Data.(*values.Object)
+
+		// Exact class name matching
 		if strings.EqualFold(obj.ClassName, targetClassName) {
 			isMatch = true
-		}
-		// Handle inheritance - check if Exception is a base class
-		if !isMatch && strings.EqualFold(targetClassName, "Exception") {
-			// Objects of class "Exception" should match Exception catch blocks
-			if strings.EqualFold(obj.ClassName, "Exception") {
-				isMatch = true
+		} else {
+			// Check inheritance hierarchy
+			currentClass := ctx.ensureClass(obj.ClassName)
+			for currentClass != nil && !isMatch {
+				if strings.EqualFold(currentClass.Name, targetClassName) {
+					isMatch = true
+					break
+				}
+				// Check parent class
+				if currentClass.Parent != "" {
+					currentClass = ctx.ensureClass(currentClass.Parent)
+				} else {
+					break
+				}
+			}
+
+			// Check interfaces implemented by the class
+			if !isMatch && currentClass != nil && currentClass.Descriptor != nil {
+				for _, iface := range currentClass.Descriptor.Interfaces {
+					if strings.EqualFold(iface, targetClassName) {
+						isMatch = true
+						break
+					}
+				}
 			}
 		}
-		// TODO: Implement proper inheritance hierarchy checking
-		// For now, we only do exact matching or Exception base class matching
 	}
+	// Non-objects are never instances of classes
 
 	// Store the result
 	resultType, resultSlot := decodeResult(inst)
@@ -607,6 +617,76 @@ func (vm *VirtualMachine) execAssignObj(ctx *ExecutionContext, frame *CallFrame,
 	}
 	obj := objVal.Data.(*values.Object)
 	obj.Properties[propName] = copyValue(value)
+	return true, nil
+}
+
+func (vm *VirtualMachine) execAssignObjOp(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Read object (operand 1)
+	objType, objOp := decodeOperand(inst, 1)
+	objVal, err := vm.readOperand(ctx, frame, objType, objOp)
+	if err != nil {
+		return false, err
+	}
+	objVal = resolveThis(frame, objVal)
+	if objVal == nil || !objVal.IsObject() {
+		return false, fmt.Errorf("ASSIGN_OBJ_OP target is not object")
+	}
+
+	// Read property name (operand 2)
+	propType, propOp := decodeOperand(inst, 2)
+	propVal, err := vm.readOperand(ctx, frame, propType, propOp)
+	if err != nil {
+		return false, err
+	}
+	propName := propVal.ToString()
+
+	// Read right-hand side value (result operand)
+	valueType, valueOp := decodeResult(inst)
+	right, err := vm.readOperand(ctx, frame, valueType, valueOp)
+	if err != nil {
+		return false, err
+	}
+
+	// Get current property value (left operand)
+	obj := objVal.Data.(*values.Object)
+	left, exists := obj.Properties[propName]
+	if !exists {
+		left = values.NewNull()
+	}
+
+	// Perform the operation based on inst.Reserved
+	var result *values.Value
+	switch inst.Reserved {
+	case 1: // +=
+		result = left.Add(right)
+	case 2: // -=
+		result = left.Subtract(right)
+	case 3: // *=
+		result = left.Multiply(right)
+	case 4: // /=
+		result = left.Divide(right)
+	case 5: // %=
+		result = left.Modulo(right)
+	case 6: // **=
+		result = left.Power(right)
+	case 8: // .=
+		result = left.Concat(right)
+	case 9: // &=
+		result = values.NewInt(left.ToInt() & right.ToInt())
+	case 10: // |=
+		result = values.NewInt(left.ToInt() | right.ToInt())
+	case 11: // ^=
+		result = values.NewInt(left.ToInt() ^ right.ToInt())
+	case 12: // <<=
+		result = values.NewInt(left.ToInt() << right.ToInt())
+	case 13: // >>=
+		result = values.NewInt(left.ToInt() >> right.ToInt())
+	default:
+		return false, fmt.Errorf("unsupported object assignment op code %d", inst.Reserved)
+	}
+
+	// Store the result back to the object property
+	obj.Properties[propName] = copyValue(result)
 	return true, nil
 }
 
@@ -1101,6 +1181,7 @@ func (vm *VirtualMachine) execConcat(ctx *ExecutionContext, frame *CallFrame, in
 	}
 	return true, nil
 }
+
 
 func (vm *VirtualMachine) execComparison(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	opType1, op1 := decodeOperand(inst, 1)
@@ -1958,7 +2039,28 @@ func (vm *VirtualMachine) execInitFCall(ctx *ExecutionContext, frame *CallFrame,
 			}
 		}
 		if pending.Function == nil {
-			return false, fmt.Errorf("undefined function %s", name)
+			// Check if this is an object with __invoke method
+			if callee.IsObject() {
+				obj := callee.Data.(*values.Object)
+				class := ctx.ensureClass(obj.ClassName)
+				if class != nil && class.Descriptor != nil {
+					if invokeMethod, hasInvoke := class.Descriptor.Methods["__invoke"]; hasInvoke {
+						// Convert to method call to __invoke
+						pending.Function = invokeMethod
+						pending.ClosureName = "__invoke"
+						pending.Method = true
+						pending.This = callee
+						pending.ClassName = obj.ClassName
+						pending.MethodName = "__invoke"
+					} else {
+						return false, fmt.Errorf("function name must be a string")
+					}
+				} else {
+					return false, fmt.Errorf("undefined function %s", name)
+				}
+			} else {
+				return false, fmt.Errorf("undefined function %s", name)
+			}
 		}
 	}
 
@@ -1985,6 +2087,24 @@ func (vm *VirtualMachine) execInitMethodCall(ctx *ExecutionContext, frame *CallF
 	cls := ctx.ensureClass(className)
 	targetFn := resolveClassMethod(ctx, cls, methodRaw)
 	if targetFn == nil {
+		// Check if __call magic method exists
+		callMethod := resolveClassMethod(ctx, cls, "__call")
+		if callMethod != nil {
+			// Use __call as the target, passing method name and arguments
+			pending := &PendingCall{
+				Callee:        objectVal,
+				Function:      callMethod,
+				ClosureName:   "__call",
+				Args:          []*values.Value{values.NewString(methodRaw)}, // First arg is method name
+				Method:        true,
+				This:          objectVal,
+				ClassName:     cls.Name,
+				MethodName:    "__call",
+				IsMagicMethod: true, // Mark as magic method for special argument handling
+			}
+			frame.pushPendingCall(pending)
+			return true, nil
+		}
 		return false, fmt.Errorf("undefined method %s::%s", className, methodRaw)
 	}
 	pending := &PendingCall{
@@ -2023,6 +2143,23 @@ func (vm *VirtualMachine) execInitStaticMethodCall(ctx *ExecutionContext, frame 
 	}
 	targetFn := resolveClassMethod(ctx, cls, methodNameRaw)
 	if targetFn == nil {
+		// Check if __callStatic magic method exists
+		callStaticMethod := resolveClassMethod(ctx, cls, "__callStatic")
+		if callStaticMethod != nil {
+			// Use __callStatic as the target, passing method name and arguments
+			pending := &PendingCall{
+				Function:      callStaticMethod,
+				ClosureName:   "__callStatic",
+				Args:          []*values.Value{values.NewString(methodNameRaw)}, // First arg is method name
+				Method:        true,
+				Static:        true,
+				ClassName:     cls.Name,
+				MethodName:    "__callStatic",
+				IsMagicMethod: true, // Mark as magic method for special argument handling
+			}
+			frame.pushPendingCall(pending)
+			return true, nil
+		}
 		return false, fmt.Errorf("undefined method %s::%s", className, methodNameRaw)
 	}
 	pending := &PendingCall{
@@ -2135,24 +2272,29 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 
 	child := newCallFrame(pending.Function.Name, pending.Function, pending.Function.Instructions, pending.Function.Constants)
 	child.ClassName = pending.ClassName
-	if pending.Method {
-		child.bindSlotName(0, "this")
-		if pending.This != nil {
-			child.setLocal(0, pending.This)
-			child.This = pending.This
-		} else {
-			child.setLocal(0, values.NewNull())
+
+	// Handle magic method argument restructuring
+	if pending.IsMagicMethod && len(pending.Args) > 1 {
+		// For magic methods, convert: [methodName, arg1, arg2, ...]
+		// to: [methodName, [arg1, arg2, ...]]
+		methodName := pending.Args[0]
+		actualArgs := pending.Args[1:] // All arguments except the method name
+
+		// Create an array containing all the actual arguments
+		argsArray := values.NewArray()
+		for i, arg := range actualArgs {
+			argsArray.ArraySet(values.NewInt(int64(i)), arg)
 		}
+
+		// Replace the arguments with: [methodName, argsArray]
+		pending.Args = []*values.Value{methodName, argsArray}
 	}
 
-	baseSlot := uint32(0)
-	if pending.Method {
-		baseSlot = 1
-	}
+	// Handle both $this and parameters in the same slot range
+	// This is a compromise solution for the compiler's slot expectations
 
-	// Bind parameters
+	// Bind parameters first (starting from slot 0)
 	for i, param := range pending.Function.Parameters {
-		slot := baseSlot + uint32(i)
 		var arg *values.Value
 		if i < len(pending.Args) {
 			arg = copyValue(pending.Args[i])
@@ -2161,8 +2303,20 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 		} else {
 			arg = values.NewNull()
 		}
-		child.setLocal(slot, arg)
-		child.bindSlotName(slot, param.Name)
+		child.setLocal(uint32(i), arg)
+		child.bindSlotName(uint32(i), param.Name)
+	}
+
+	if pending.Method {
+		// Put $this in the next available slot after parameters
+		thisSlot := uint32(len(pending.Function.Parameters))
+		child.bindSlotName(thisSlot, "this")
+		if pending.This != nil {
+			child.setLocal(thisSlot, pending.This)
+			child.This = pending.This
+		} else {
+			child.setLocal(thisSlot, values.NewNull())
+		}
 	}
 
 	ctx.pushFrame(child)
@@ -2299,4 +2453,151 @@ func keyInterface(val *values.Value) interface{} {
 	default:
 		return val.ToString()
 	}
+}
+
+func (vm *VirtualMachine) execDeclareInterface(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	opType1, op1 := decodeOperand(inst, 1)
+	if opType1 != opcodes.IS_CONST {
+		return false, fmt.Errorf("DECLARE_INTERFACE requires interface name constant")
+	}
+	if int(op1) >= len(frame.Constants) {
+		return false, fmt.Errorf("interface name constant %d out of range", op1)
+	}
+	_ = frame.Constants[op1].ToString() // interfaceName for future use
+
+	// Store interface declaration in context (interfaces are compile-time constructs)
+	// In PHP, interfaces are primarily used for type checking and contracts
+	// They don't need runtime state like classes do
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execAddInterface(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get class name (first operand)
+	classType, classOp := decodeOperand(inst, 1)
+	interfaceType, interfaceOp := decodeOperand(inst, 2)
+
+	if classType != opcodes.IS_CONST || interfaceType != opcodes.IS_CONST {
+		return false, fmt.Errorf("ADD_INTERFACE expects constant operands")
+	}
+
+	if int(classOp) >= len(frame.Constants) || int(interfaceOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("ADD_INTERFACE constant operand out of range")
+	}
+
+	className := frame.Constants[classOp].ToString()
+	interfaceName := frame.Constants[interfaceOp].ToString()
+
+	// Ensure the class exists
+	class := ctx.ensureClass(className)
+	if class == nil {
+		return false, fmt.Errorf("class %s not found for interface implementation", className)
+	}
+
+	// Add interface to class (for future interface checking)
+	if class.Descriptor != nil && class.Descriptor.Interfaces == nil {
+		class.Descriptor.Interfaces = make([]string, 0)
+	}
+	if class.Descriptor != nil {
+		class.Descriptor.Interfaces = append(class.Descriptor.Interfaces, interfaceName)
+	}
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execDeclareTrait(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	opType1, op1 := decodeOperand(inst, 1)
+	if opType1 != opcodes.IS_CONST {
+		return false, fmt.Errorf("DECLARE_TRAIT requires trait name constant")
+	}
+	if int(op1) >= len(frame.Constants) {
+		return false, fmt.Errorf("trait name constant %d out of range", op1)
+	}
+	_ = frame.Constants[op1].ToString() // traitName for future use
+
+	// Store trait declaration in context (traits are compile-time constructs)
+	// In PHP, traits provide a method of code reuse similar to mixins
+	// They don't need runtime state like classes do
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execUseTrait(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get trait name (first operand)
+	traitType, traitOp := decodeOperand(inst, 1)
+
+	if traitType != opcodes.IS_CONST {
+		return false, fmt.Errorf("USE_TRAIT expects trait name constant")
+	}
+
+	if int(traitOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("USE_TRAIT trait name constant out of range")
+	}
+
+	_ = frame.Constants[traitOp].ToString() // traitName for future use
+
+	// This opcode is executed within class declaration context
+	// The trait methods and properties have already been copied by the compiler
+	// We just need to record the trait usage for runtime reflection if needed
+
+	// For now, this is mainly for tracking purposes
+	// The actual trait method and property copying is done at compile time
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execClone(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the object to clone
+	opType1, op1 := decodeOperand(inst, 1)
+	objectVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	var clonedObj *values.Value
+
+	if objectVal == nil || !objectVal.IsObject() {
+		return false, fmt.Errorf("clone can only be used on objects")
+	}
+
+	// Get the original object
+	originalObj := objectVal.Data.(*values.Object)
+
+	// Create a shallow copy of the object
+	clonedObj = values.NewObject(originalObj.ClassName)
+	clonedObjData := clonedObj.Data.(*values.Object)
+
+	// Copy properties from original to clone
+	for name, prop := range originalObj.Properties {
+		// Shallow copy - properties reference the same values
+		clonedObjData.Properties[name] = prop
+	}
+
+	// Check if the class has a __clone magic method
+	class := ctx.ensureClass(originalObj.ClassName)
+	if class != nil && class.Descriptor != nil {
+		if cloneMethod, hasClone := class.Descriptor.Methods["__clone"]; hasClone {
+			// Call __clone method on the cloned object
+			pending := &PendingCall{
+				Function:    cloneMethod,
+				ClosureName: "__clone",
+				Args:        make([]*values.Value, 0),
+				Method:      true,
+				This:        clonedObj,
+				ClassName:   originalObj.ClassName,
+			}
+			frame.pushPendingCall(pending)
+
+			// We need to execute the __clone method, but for now just log
+			// The actual call will be handled by the next DO_FCALL instruction
+		}
+	}
+
+	// Store the result
+	resultType, resultSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resultType, resultSlot, clonedObj); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }

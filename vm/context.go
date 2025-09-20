@@ -31,6 +31,8 @@ type ExecutionContext struct {
 
 	UserFunctions map[string]*registry.Function
 	UserClasses   map[string]*registry.Class
+	UserInterfaces map[string]*registry.Interface
+	UserTraits     map[string]*registry.Trait
 
 	Constants    []*values.Value
 	Variables    map[string]*values.Value
@@ -51,6 +53,8 @@ func NewExecutionContext() *ExecutionContext {
 		CallStack:     make([]*CallFrame, 0, 8),
 		UserFunctions: make(map[string]*registry.Function),
 		UserClasses:   make(map[string]*registry.Class),
+		UserInterfaces: make(map[string]*registry.Interface),
+		UserTraits:     make(map[string]*registry.Trait),
 		Variables:     make(map[string]*values.Value),
 		Temporaries:   make(map[uint32]*values.Value),
 		ClassTable:    make(map[string]*classRuntime),
@@ -203,6 +207,7 @@ type PendingCall struct {
 	This        *values.Value
 	ClassName   string
 	MethodName  string
+	IsMagicMethod bool  // Flag to indicate magic method calls (__call, __callStatic)
 }
 
 // newCallFrame constructs an initialized call frame.

@@ -144,7 +144,7 @@ func (vm *VirtualMachine) WatchVariable(name string) {
 }
 
 // Execute runs the provided bytecode inside the supplied execution context.
-func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []*opcodes.Instruction, constants []*values.Value, functions map[string]*registry.Function, classes map[string]*registry.Class) error {
+func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []*opcodes.Instruction, constants []*values.Value, functions map[string]*registry.Function, classes map[string]*registry.Class, interfaces map[string]*registry.Interface, traits map[string]*registry.Trait) error {
 	if ctx == nil {
 		return errors.New("nil execution context")
 	}
@@ -184,6 +184,18 @@ func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []*opcodes
 				_ = registry.GlobalRegistry.RegisterClass(desc)
 			}
 		}
+	}
+
+	// Copy interfaces to context
+	for name, iface := range interfaces {
+		lower := strings.ToLower(name)
+		ctx.UserInterfaces[lower] = iface
+	}
+
+	// Copy traits to context
+	for name, trait := range traits {
+		lower := strings.ToLower(name)
+		ctx.UserTraits[lower] = trait
 	}
 
 	mainFrame := newCallFrame("{main}", nil, instructions, constants)
@@ -269,6 +281,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execConcat(ctx, frame, inst)
 	case opcodes.OP_NEW:
 		return vm.execNew(ctx, frame, inst)
+	case opcodes.OP_CLONE:
+		return vm.execClone(ctx, frame, inst)
 	case opcodes.OP_IS_EQUAL, opcodes.OP_IS_NOT_EQUAL, opcodes.OP_IS_IDENTICAL, opcodes.OP_IS_NOT_IDENTICAL,
 		opcodes.OP_IS_SMALLER, opcodes.OP_IS_SMALLER_OR_EQUAL, opcodes.OP_IS_GREATER, opcodes.OP_IS_GREATER_OR_EQUAL,
 		opcodes.OP_SPACESHIP:
@@ -315,6 +329,14 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execClearCurrentClass(ctx, frame, inst)
 	case opcodes.OP_DECLARE_CLASS:
 		return vm.execDeclareClass(ctx, frame, inst)
+	case opcodes.OP_DECLARE_INTERFACE:
+		return vm.execDeclareInterface(ctx, frame, inst)
+	case opcodes.OP_ADD_INTERFACE:
+		return vm.execAddInterface(ctx, frame, inst)
+	case opcodes.OP_DECLARE_TRAIT:
+		return vm.execDeclareTrait(ctx, frame, inst)
+	case opcodes.OP_USE_TRAIT:
+		return vm.execUseTrait(ctx, frame, inst)
 	case opcodes.OP_DECLARE_CONSTANT:
 		return vm.execDeclareConstant(ctx, frame, inst)
 	case opcodes.OP_FETCH_DIM_R:
@@ -329,6 +351,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execFetchDimWrite(ctx, frame, inst, true)
 	case opcodes.OP_ASSIGN_OBJ:
 		return vm.execAssignObj(ctx, frame, inst)
+	case opcodes.OP_ASSIGN_OBJ_OP:
+		return vm.execAssignObjOp(ctx, frame, inst)
 	case opcodes.OP_FETCH_OBJ_R:
 		return vm.execFetchObj(ctx, frame, inst)
 	case opcodes.OP_FETCH_OBJ_IS:
@@ -362,6 +386,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 	case opcodes.OP_SEND_VAL, opcodes.OP_SEND_VAR, opcodes.OP_SEND_REF:
 		return vm.execSendArg(ctx, frame, inst)
 	case opcodes.OP_DO_FCALL, opcodes.OP_DO_UCALL, opcodes.OP_DO_ICALL, opcodes.OP_DO_FCALL_BY_NAME:
+		return vm.execDoFCall(ctx, frame, inst)
+	case opcodes.OP_STATIC_METHOD_CALL:
+		return vm.execDoFCall(ctx, frame, inst)
+	case opcodes.OP_METHOD_CALL:
 		return vm.execDoFCall(ctx, frame, inst)
 	case opcodes.OP_RETURN, opcodes.OP_RETURN_BY_REF:
 		return vm.execReturn(ctx, frame, inst)

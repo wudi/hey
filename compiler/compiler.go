@@ -728,14 +728,14 @@ func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
 		// Handle list assignment: list($a, $b, $c) = $array
 		return c.compileListAssignmentFromValue(listExpr, valueResult)
 	} else if propAccess, ok := expr.Left.(*ast.PropertyAccessExpression); ok {
-		// Handle property assignment: $obj->prop = value
-		return c.compilePropertyAssignment(propAccess, valueResult)
+		// Handle property assignment: $obj->prop = value or $obj->prop += value
+		return c.compilePropertyAssignment(propAccess, valueResult, expr.Operator)
 	}
 	return nil
 }
 
-// compilePropertyAssignment handles property assignments like $obj->prop = value
-func (c *Compiler) compilePropertyAssignment(propAccess *ast.PropertyAccessExpression, valueResult uint32) error {
+// compilePropertyAssignment handles property assignments like $obj->prop = value or $obj->prop += value
+func (c *Compiler) compilePropertyAssignment(propAccess *ast.PropertyAccessExpression, valueResult uint32, operator string) error {
 	// Special handling for $this
 	var objectOpType opcodes.OpType
 	var objectOperand uint32
@@ -760,7 +760,15 @@ func (c *Compiler) compilePropertyAssignment(propAccess *ast.PropertyAccessExpre
 	if ident, ok := propAccess.Property.(*ast.IdentifierNode); ok {
 		// Property is a simple identifier like "value" in $this->value
 		propConstant = c.addConstant(values.NewString(ident.Name))
-		c.emit(opcodes.OP_ASSIGN_OBJ, objectOpType, objectOperand, opcodes.IS_CONST, propConstant, opcodes.IS_TMP_VAR, valueResult)
+
+		// Choose appropriate opcode based on operator
+		if operator == "=" {
+			c.emit(opcodes.OP_ASSIGN_OBJ, objectOpType, objectOperand, opcodes.IS_CONST, propConstant, opcodes.IS_TMP_VAR, valueResult)
+		} else {
+			// Compound assignment: use OP_ASSIGN_OBJ_OP with operation type
+			operationType := c.getOperationTypeForAssignmentOperator(operator)
+			c.emitReserved(opcodes.OP_ASSIGN_OBJ_OP, objectOpType, objectOperand, opcodes.IS_CONST, propConstant, opcodes.IS_TMP_VAR, valueResult, operationType)
+		}
 	} else {
 		// Property is an expression - compile it normally
 		err := c.compileNode(propAccess.Property)
@@ -768,7 +776,15 @@ func (c *Compiler) compilePropertyAssignment(propAccess *ast.PropertyAccessExpre
 			return err
 		}
 		propResult := c.nextTemp - 1
-		c.emit(opcodes.OP_ASSIGN_OBJ, objectOpType, objectOperand, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, valueResult)
+
+		// Choose appropriate opcode based on operator
+		if operator == "=" {
+			c.emit(opcodes.OP_ASSIGN_OBJ, objectOpType, objectOperand, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, valueResult)
+		} else {
+			// Compound assignment: use OP_ASSIGN_OBJ_OP with operation type
+			operationType := c.getOperationTypeForAssignmentOperator(operator)
+			c.emitReserved(opcodes.OP_ASSIGN_OBJ_OP, objectOpType, objectOperand, opcodes.IS_TMP_VAR, propResult, opcodes.IS_TMP_VAR, valueResult, operationType)
+		}
 	}
 
 	return nil
@@ -4244,11 +4260,13 @@ func (c *Compiler) compileCloneExpression(expr *ast.CloneExpression) error {
 		return err
 	}
 
-	// Emit CLONE instruction
+	// Get the object operand
+	objectOperand := c.nextTemp - 1
 	result := c.allocateTemp()
-	arg := c.nextTemp - 1
+
+	// Emit CLONE instruction
 	c.emit(opcodes.OP_CLONE,
-		opcodes.IS_TMP_VAR, arg,
+		opcodes.IS_TMP_VAR, objectOperand,
 		opcodes.IS_UNUSED, 0,
 		opcodes.IS_TMP_VAR, result)
 
@@ -6566,4 +6584,12 @@ func (c *Compiler) Functions() map[string]*registry.Function {
 // Classes return the compiled classes
 func (c *Compiler) Classes() map[string]*registry.Class {
 	return c.classes
+}
+
+func (c *Compiler) Interfaces() map[string]*registry.Interface {
+	return c.interfaces
+}
+
+func (c *Compiler) Traits() map[string]*registry.Trait {
+	return c.traits
 }
