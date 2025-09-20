@@ -179,7 +179,7 @@ func executeCode(vmachine *vm.VirtualMachine, phpCode, description string) {
 	var output strings.Builder
 	ctx.SetOutputWriter(&output)
 
-	err = vmachine.Execute(ctx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes())
+	err = vmachine.Execute(ctx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
 	if err != nil {
 		fmt.Printf("❌ Execution failed for %s: %v\n", description, err)
 		return

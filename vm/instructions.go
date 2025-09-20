@@ -322,7 +322,7 @@ func resolveClassMethodWithDefiningClass(ctx *ExecutionContext, cls *classRuntim
 
 func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, error) {
 	cls := ctx.ensureClass(className)
-	if cls != nil {
+	if cls != nil && cls.Descriptor != nil {
 		// Check if the class is abstract
 		if cls.Descriptor.IsAbstract {
 			return nil, fmt.Errorf("cannot instantiate abstract class %s", className)
@@ -2270,6 +2270,7 @@ func (vm *VirtualMachine) execInitStaticMethodCall(ctx *ExecutionContext, frame 
 				CallingClass:  originalClassName, // Set calling class for late static binding
 				MethodName:    "__callStatic",
 				IsMagicMethod: true, // Mark as magic method for special argument handling
+				This:          frame.This, // Pass current $this for parent:: calls and constructors
 			}
 			frame.pushPendingCall(pending)
 			return true, nil
@@ -2285,6 +2286,7 @@ func (vm *VirtualMachine) execInitStaticMethodCall(ctx *ExecutionContext, frame 
 		ClassName:    definingClass.Name, // Use the class where the method is actually defined
 		CallingClass: originalClassName, // Set calling class for late static binding
 		MethodName:   methodNameRaw,
+		This:         frame.This, // Pass current $this for parent:: calls and constructors
 	}
 	frame.pushPendingCall(pending)
 	return true, nil

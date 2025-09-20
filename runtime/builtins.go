@@ -513,6 +513,27 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name: "str_repeat",
+		Parameters: []*registry.Parameter{
+			{Name: "input", Type: "string"},
+			{Name: "multiplier", Type: "int"},
+		},
+		ReturnType: "string",
+		MinArgs:    2,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 {
+				return values.NewString(""), nil
+			}
+			str := args[0].ToString()
+			times := int(args[1].ToInt())
+			if times <= 0 {
+				return values.NewString(""), nil
+			}
+			return values.NewString(strings.Repeat(str, times)), nil
+		},
+	},
+	{
 		Name:       "strtolower",
 		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
 		ReturnType: "string",
