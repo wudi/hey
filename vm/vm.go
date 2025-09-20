@@ -291,6 +291,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execBoolean(ctx, frame, inst)
 	case opcodes.OP_LOGICAL_AND, opcodes.OP_LOGICAL_OR, opcodes.OP_LOGICAL_XOR:
 		return vm.execLogical(ctx, frame, inst)
+	case opcodes.OP_CAST_BOOL, opcodes.OP_CAST_LONG, opcodes.OP_CAST_DOUBLE, opcodes.OP_CAST_STRING, opcodes.OP_CAST_ARRAY, opcodes.OP_CAST_OBJECT:
+		return vm.execCast(ctx, frame, inst)
 	case opcodes.OP_PRE_INC, opcodes.OP_PRE_DEC, opcodes.OP_POST_INC, opcodes.OP_POST_DEC:
 		return vm.execIncDec(ctx, frame, inst)
 	case opcodes.OP_BW_NOT:

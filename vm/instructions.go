@@ -2414,7 +2414,17 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 	// Bind parameters first (starting from slot 0)
 	for i, param := range pending.Function.Parameters {
 		var arg *values.Value
-		if i < len(pending.Args) {
+
+		// Handle variadic parameter (last parameter when function is variadic)
+		if pending.Function.IsVariadic && i == len(pending.Function.Parameters)-1 {
+			// This is the variadic parameter - collect all remaining arguments into an array
+			variadicArray := values.NewArray()
+			startIndex := i // Start collecting from current parameter index
+			for argIndex := startIndex; argIndex < len(pending.Args); argIndex++ {
+				variadicArray.ArraySet(values.NewInt(int64(argIndex-startIndex)), copyValue(pending.Args[argIndex]))
+			}
+			arg = variadicArray
+		} else if i < len(pending.Args) {
 			arg = copyValue(pending.Args[i])
 		} else if param.HasDefault {
 			arg = copyValue(param.DefaultValue)
@@ -2675,7 +2685,7 @@ func (vm *VirtualMachine) execClone(ctx *ExecutionContext, frame *CallFrame, ins
 	var clonedObj *values.Value
 
 	if objectVal == nil || !objectVal.IsObject() {
-		return false, fmt.Errorf("clone can only be used on objects")
+		return false, fmt.Errorf("__clone method called on non-object")
 	}
 
 	// Get the original object
@@ -2807,6 +2817,56 @@ func (vm *VirtualMachine) callDestructor(ctx *ExecutionContext, objectVal *value
 }
 
 // CallAllDestructors calls destructors on all objects in the execution context
+func (vm *VirtualMachine) execCast(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the value to cast
+	valueType, valueOp := decodeOperand(inst, 1)
+	value, err := vm.readOperand(ctx, frame, valueType, valueOp)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the result target
+	resultType, resultOp := decodeResult(inst)
+
+	var result *values.Value
+
+	// Cast based on the opcode
+	switch inst.Opcode {
+	case opcodes.OP_CAST_BOOL:
+		result = values.NewBool(value.ToBool())
+	case opcodes.OP_CAST_LONG:
+		result = values.NewInt(value.ToInt())
+	case opcodes.OP_CAST_DOUBLE:
+		result = values.NewFloat(value.ToFloat())
+	case opcodes.OP_CAST_STRING:
+		result = values.NewString(value.ToString())
+	case opcodes.OP_CAST_ARRAY:
+		if value.Type == values.TypeArray {
+			result = value
+		} else {
+			// Convert to single-element array
+			arr := values.NewArray()
+			arr.ArraySet(values.NewNull(), value)
+			result = arr
+		}
+	case opcodes.OP_CAST_OBJECT:
+		if value.Type == values.TypeObject {
+			result = value
+		} else {
+			// Create stdClass object with single property
+			obj := values.NewObject("stdClass")
+			obj.Data.(*values.Object).Properties["scalar"] = value
+			result = obj
+		}
+	default:
+		return false, fmt.Errorf("unsupported cast opcode: %s", inst.Opcode)
+	}
+
+	// Store the result
+	err = vm.writeOperand(ctx, frame, resultType, resultOp, result)
+	return err == nil, err
+}
+
 // This should be called at script end to clean up remaining objects
 func (vm *VirtualMachine) CallAllDestructors(ctx *ExecutionContext) {
 	// Call destructors on objects in all frames
