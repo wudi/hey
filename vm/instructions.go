@@ -1942,6 +1942,16 @@ func (vm *VirtualMachine) execUnsetVar(ctx *ExecutionContext, frame *CallFrame, 
 	switch opType1 {
 	case opcodes.IS_VAR, opcodes.IS_CV:
 		name, _ := frame.SlotNames[op1]
+
+		// Get the value before unsetting to check if it's an object
+		val, exists := frame.getLocalWithStatus(op1)
+		if exists && val != nil && val.IsObject() {
+			// Call destructor on the object before unsetting
+			if err := vm.callDestructor(ctx, val); err != nil {
+				return false, fmt.Errorf("error calling destructor: %v", err)
+			}
+		}
+
 		frame.unsetLocal(op1)
 		if globalName, ok := frame.globalSlotName(op1); ok {
 			ctx.unsetGlobal(globalName)
@@ -2623,4 +2633,98 @@ func (vm *VirtualMachine) execClone(ctx *ExecutionContext, frame *CallFrame, ins
 	}
 
 	return true, nil
+}
+
+// callDestructor calls the __destruct method on an object if it exists
+func (vm *VirtualMachine) callDestructor(ctx *ExecutionContext, objectVal *values.Value) error {
+	if objectVal == nil || !objectVal.IsObject() {
+		return nil // Not an object, nothing to destruct
+	}
+
+	obj := objectVal.Data.(*values.Object)
+	// Check if already destructed to prevent multiple calls
+	if obj.Destructed {
+		return nil
+	}
+
+	class := ctx.ensureClass(obj.ClassName)
+	if class == nil || class.Descriptor == nil {
+		return nil // No class descriptor
+	}
+
+	// Mark object as destructed immediately to prevent multiple calls
+	obj.Destructed = true
+
+	// Check if the class has a __destruct magic method
+	if destructMethod, hasDestruct := class.Descriptor.Methods["__destruct"]; hasDestruct {
+		// Create a new frame for the __destruct method
+		child := newCallFrame("__destruct", destructMethod, destructMethod.Instructions, destructMethod.Constants)
+		child.ClassName = obj.ClassName
+
+		// __destruct has no parameters, so $this goes in slot 0
+		child.bindSlotName(0, "$this")
+		child.setLocal(0, objectVal)
+		child.This = objectVal
+
+		// Push frame and execute
+		ctx.pushFrame(child)
+
+		// Execute the __destruct method instructions
+		for child.IP < len(child.Instructions) {
+			instruction := child.Instructions[child.IP]
+			child.IP++
+
+			// Special handling for RETURN in __destruct
+			if instruction.Opcode == opcodes.OP_RETURN {
+				// Pop the frame and continue
+				ctx.popFrame()
+				return nil
+			}
+
+			// Execute the instruction
+			_, err := vm.executeInstruction(ctx, child, instruction)
+			if err != nil {
+				ctx.popFrame()
+				return fmt.Errorf("error in __destruct: %v", err)
+			}
+		}
+
+		// Ensure frame is popped if we reached the end without a return
+		if ctx.currentFrame() == child {
+			ctx.popFrame()
+		}
+	}
+
+	return nil
+}
+
+// CallAllDestructors calls destructors on all objects in the execution context
+// This should be called at script end to clean up remaining objects
+func (vm *VirtualMachine) CallAllDestructors(ctx *ExecutionContext) {
+	// Call destructors on objects in all frames
+	for frameIndex := len(ctx.CallStack) - 1; frameIndex >= 0; frameIndex-- {
+		frame := ctx.CallStack[frameIndex]
+		for slot := uint32(0); slot < uint32(len(frame.Locals)); slot++ {
+			if val, exists := frame.getLocalWithStatus(slot); exists && val != nil && val.IsObject() {
+				// Call destructor (ignore errors at script end)
+				vm.callDestructor(ctx, val)
+			}
+		}
+	}
+
+	// Call destructors on global variables
+	for _, val := range ctx.GlobalVars {
+		if val != nil && val.IsObject() {
+			// Call destructor (ignore errors at script end)
+			vm.callDestructor(ctx, val)
+		}
+	}
+
+	// Call destructors on other variables in the context
+	for _, val := range ctx.Variables {
+		if val != nil && val.IsObject() {
+			// Call destructor (ignore errors at script end)
+			vm.callDestructor(ctx, val)
+		}
+	}
 }

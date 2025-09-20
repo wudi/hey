@@ -45,6 +45,7 @@ type Object struct {
 	ClassName  string
 	Properties map[string]*Value
 	Methods    map[string]interface{} // function pointers
+	Destructed bool                   // flag to prevent multiple destructor calls
 }
 
 // Reference wrapper for pass-by-reference
