@@ -2573,23 +2573,46 @@ func (vm *VirtualMachine) execClone(ctx *ExecutionContext, frame *CallFrame, ins
 		clonedObjData.Properties[name] = prop
 	}
 
-	// Check if the class has a __clone magic method
+	// Check if the class has a __clone magic method and call it
 	class := ctx.ensureClass(originalObj.ClassName)
 	if class != nil && class.Descriptor != nil {
 		if cloneMethod, hasClone := class.Descriptor.Methods["__clone"]; hasClone {
-			// Call __clone method on the cloned object
-			pending := &PendingCall{
-				Function:    cloneMethod,
-				ClosureName: "__clone",
-				Args:        make([]*values.Value, 0),
-				Method:      true,
-				This:        clonedObj,
-				ClassName:   originalObj.ClassName,
-			}
-			frame.pushPendingCall(pending)
+			// Prepare to call __clone method on the cloned object
+			child := newCallFrame("__clone", cloneMethod, cloneMethod.Instructions, cloneMethod.Constants)
+			child.ClassName = originalObj.ClassName
 
-			// We need to execute the __clone method, but for now just log
-			// The actual call will be handled by the next DO_FCALL instruction
+			// __clone has no parameters, so $this goes in slot 0
+			child.bindSlotName(0, "$this")
+			child.setLocal(0, clonedObj)
+			child.This = clonedObj
+
+			// Push frame and execute
+			ctx.pushFrame(child)
+
+			// Execute the __clone method instructions
+			for child.IP < len(child.Instructions) {
+				instruction := child.Instructions[child.IP]
+				child.IP++
+
+				// Special handling for RETURN in __clone
+				if instruction.Opcode == opcodes.OP_RETURN {
+					// Pop the frame and continue with clone operation
+					ctx.popFrame()
+					break
+				}
+
+				// Execute the instruction
+				_, err := vm.executeInstruction(ctx, child, instruction)
+				if err != nil {
+					ctx.popFrame()
+					return false, fmt.Errorf("error in __clone: %v", err)
+				}
+			}
+
+			// Ensure frame is popped if we reached the end without a return
+			if ctx.currentFrame() == child {
+				ctx.popFrame()
+			}
 		}
 	}
 

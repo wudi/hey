@@ -355,6 +355,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execAssignObjOp(ctx, frame, inst)
 	case opcodes.OP_FETCH_OBJ_R:
 		return vm.execFetchObj(ctx, frame, inst)
+	case opcodes.OP_FETCH_OBJ_RW:
+		return vm.execFetchObj(ctx, frame, inst)
 	case opcodes.OP_FETCH_OBJ_IS:
 		return vm.execFetchObjIs(ctx, frame, inst)
 	case opcodes.OP_FETCH_STATIC_PROP_R:
