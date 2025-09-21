@@ -628,6 +628,7 @@ func descriptorFromClass(class *registry.Class) *registry.ClassDescriptor {
 				Name:         prop.Name,
 				Visibility:   prop.Visibility,
 				IsStatic:     prop.IsStatic,
+				IsReadonly:   prop.IsReadonly,
 				Type:         prop.Type,
 				DefaultValue: copyValue(prop.DefaultValue),
 			}

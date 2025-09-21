@@ -2864,6 +2864,18 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 		function.Attributes = c.compileAttributes(decl.Attributes)
 	}
 
+	// Handle Constructor Property Promotion (PHP 8.0)
+	if c.currentClass != nil && funcName == "__construct" && decl.Parameters != nil {
+		for _, param := range decl.Parameters.Parameters {
+			if param.Visibility != "" {
+				// This is a promoted property - auto-declare it
+				if err := c.declarePromotedProperty(param); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
 	// Store current compiler state
 	oldInstructions := c.instructions
 	oldConstants := c.constants
@@ -2881,6 +2893,21 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
 				// Register parameter name in function scope
 				c.getOrCreateVariable(nameNode.Name)
+			}
+		}
+	}
+
+	// Generate property assignments for promoted constructor parameters (PHP 8.0)
+	if c.currentClass != nil && funcName == "__construct" && decl.Parameters != nil {
+		for _, param := range decl.Parameters.Parameters {
+			if param.Visibility != "" {
+				// Generate $this->property = $parameter assignment
+				if err := c.generatePromotedPropertyAssignment(param); err != nil {
+					c.popScope()
+					c.instructions = oldInstructions
+					c.constants = oldConstants
+					return fmt.Errorf("error generating promoted property assignment: %v", err)
+				}
 			}
 		}
 	}
@@ -3273,6 +3300,7 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 		Name:       propName,
 		Visibility: decl.Visibility, // public, private, protected
 		IsStatic:   decl.Static,
+		IsReadonly: decl.ReadOnly,
 	}
 
 	// Handle type hint
@@ -6374,15 +6402,25 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 		}
 
 		caseName := enumCase.Name.Name
-		var caseValue *values.Value
+		// Create enum case object with name property
+		enumCaseObj := &values.Object{
+			ClassName:  enumName,
+			Properties: make(map[string]*values.Value),
+		}
+		enumCaseObj.Properties["name"] = values.NewString(caseName)
 
+		var caseValue *values.Value
 		if enumCase.Value != nil {
 			// Backed enum - evaluate the backing value
-			// For now, simplified - assume it's a literal
-			caseValue = values.NewString(caseName) // Simplified
-		} else {
-			// Pure enum - use the case name
-			caseValue = values.NewString(caseName)
+			backingValue := c.evaluateConstantExpression(enumCase.Value)
+			if backingValue != nil {
+				enumCaseObj.Properties["value"] = backingValue
+			}
+		}
+
+		caseValue = &values.Value{
+			Type: values.TypeObject,
+			Data: enumCaseObj,
 		}
 
 		enumClass.Constants[caseName] = &registry.ClassConstant{
@@ -6883,28 +6921,17 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 
 // Helper method for enum compilation
 func (c *Compiler) compileEnumMethod(enumClass *registry.Class, method *ast.FunctionDeclaration) error {
-	// Similar to trait method compilation but store in enum class
-	if method.Name == nil {
-		return nil
-	}
+	// Store current class context and set enum as current class
+	oldCurrentClass := c.currentClass
+	c.currentClass = enumClass
 
-	var methodName string
-	if ident, ok := method.Name.(*ast.IdentifierNode); ok {
-		methodName = ident.Name
-	} else {
-		return nil
-	}
+	// Use the regular function compilation but treat as method
+	err := c.compileFunctionDeclaration(method)
 
-	// Create a simplified function for the enum
-	function := &registry.Function{
-		Name:         methodName,
-		Parameters:   make([]*registry.Parameter, 0),
-		Instructions: make([]*opcodes.Instruction, 0),
-		Constants:    make([]*values.Value, 0),
-	}
+	// Restore class context
+	c.currentClass = oldCurrentClass
 
-	enumClass.Methods[methodName] = function
-	return nil
+	return err
 }
 
 // Functions return the compiled functions
@@ -7086,4 +7113,94 @@ func (c *Compiler) compileAttributes(attributeGroups []*ast.AttributeGroup) []*r
 	}
 
 	return result
+}
+
+// declarePromotedProperty automatically declares a property from a promoted constructor parameter
+func (c *Compiler) declarePromotedProperty(param *ast.ParameterNode) error {
+	if c.currentClass == nil {
+		return fmt.Errorf("promoted property outside class context")
+	}
+
+	// Extract property name (remove $ prefix if present)
+	var propName string
+	if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+		propName = nameNode.Name
+		if strings.HasPrefix(propName, "$") {
+			propName = propName[1:]
+		}
+	} else {
+		return fmt.Errorf("invalid parameter name for promoted property")
+	}
+
+	// Check if property already exists
+	if _, exists := c.currentClass.Properties[propName]; exists {
+		return fmt.Errorf("property $%s already declared in class %s", propName, c.currentClass.Name)
+	}
+
+	// Create property from parameter
+	property := &registry.Property{
+		Name:       propName,
+		Visibility: param.Visibility,
+		IsStatic:   false, // Promoted properties are never static
+		IsReadonly: param.ReadOnly,
+	}
+
+	// Handle type hint
+	if param.Type != nil {
+		property.Type = param.Type.String()
+	}
+
+	// Handle default value
+	if param.DefaultValue != nil {
+		defaultValue := c.evaluateConstantExpression(param.DefaultValue)
+		if defaultValue != nil {
+			property.DefaultValue = defaultValue
+		} else {
+			property.DefaultValue = values.NewNull()
+		}
+	}
+
+	// Compile property attributes
+	if len(param.Attributes) > 0 {
+		property.Attributes = c.compileAttributes(param.Attributes)
+	}
+
+	// Add property to current class
+	c.currentClass.Properties[propName] = property
+
+	return nil
+}
+
+// generatePromotedPropertyAssignment generates bytecode for $this->property = $parameter
+func (c *Compiler) generatePromotedPropertyAssignment(param *ast.ParameterNode) error {
+	// Extract property name (remove $ prefix if present)
+	var propName string
+	var paramName string
+	if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+		paramName = nameNode.Name
+		propName = paramName
+		if strings.HasPrefix(propName, "$") {
+			propName = propName[1:]
+		}
+	} else {
+		return fmt.Errorf("invalid parameter name for promoted property assignment")
+	}
+
+	// Get parameter variable slot
+	paramSlot := c.getOrCreateVariable(paramName)
+
+	// Generate: $this->property = $parameter
+	// Get $this variable slot
+	thisSlot := c.getOrCreateVariable("$this")
+
+	// 2. Load parameter value
+	// 3. Assign to property
+	propNameConstant := c.addConstant(values.NewString(propName))
+
+	c.emit(opcodes.OP_ASSIGN_OBJ,
+		opcodes.IS_VAR, thisSlot,        // $this
+		opcodes.IS_CONST, propNameConstant, // property name
+		opcodes.IS_VAR, paramSlot)       // parameter value
+
+	return nil
 }

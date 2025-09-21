@@ -342,6 +342,17 @@ func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, 
 				if prop.IsStatic {
 					continue
 				}
+				// Check if this property is readonly in the descriptor
+				isReadonly := false
+				if cls.Descriptor != nil && cls.Descriptor.Properties != nil {
+					if propDesc, exists := cls.Descriptor.Properties[name]; exists && propDesc.IsReadonly {
+						isReadonly = true
+					}
+				}
+				// Skip readonly properties - they should only be set explicitly
+				if isReadonly {
+					continue
+				}
 				obj.Data.(*values.Object).Properties[name] = copyValue(prop.Default)
 			}
 		}
@@ -350,6 +361,10 @@ func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, 
 		if cls.Descriptor != nil && cls.Descriptor.Properties != nil {
 			for name, propDesc := range cls.Descriptor.Properties {
 				if propDesc.IsStatic {
+					continue
+				}
+				// Skip readonly properties - they should only be set explicitly
+				if propDesc.IsReadonly {
 					continue
 				}
 				// Only set if not already set by runtime properties
@@ -709,6 +724,12 @@ func (vm *VirtualMachine) execAssignObj(ctx *ExecutionContext, frame *CallFrame,
 		return false, err
 	}
 	obj := objVal.Data.(*values.Object)
+
+	// Check readonly property enforcement
+	if err := vm.checkReadonlyProperty(ctx, obj, propName); err != nil {
+		return false, err
+	}
+
 	obj.Properties[propName] = copyValue(value)
 	return true, nil
 }
@@ -742,6 +763,12 @@ func (vm *VirtualMachine) execAssignObjOp(ctx *ExecutionContext, frame *CallFram
 
 	// Get current property value (left operand)
 	obj := objVal.Data.(*values.Object)
+
+	// Check readonly property enforcement for compound assignment
+	if err := vm.checkReadonlyProperty(ctx, obj, propName); err != nil {
+		return false, err
+	}
+
 	left, exists := obj.Properties[propName]
 	if !exists {
 		left = values.NewNull()
@@ -3137,4 +3164,34 @@ func (vm *VirtualMachine) CallAllDestructors(ctx *ExecutionContext) {
 			vm.callDestructor(ctx, val)
 		}
 	}
+}
+
+// checkReadonlyProperty validates that a property assignment is allowed based on readonly semantics
+func (vm *VirtualMachine) checkReadonlyProperty(ctx *ExecutionContext, obj *values.Object, propName string) error {
+	// Get the class descriptor from the registry
+	classDesc, err := registry.GlobalRegistry.GetClass(obj.ClassName)
+	if err != nil {
+		// If class not found in registry, allow assignment (could be stdClass or builtin)
+		return nil
+	}
+
+	// Check if the property is defined and readonly
+	prop, exists := classDesc.Properties[propName]
+	if !exists {
+		// Property not defined in class, allow dynamic assignment
+		return nil
+	}
+
+	if !prop.IsReadonly {
+		// Property is not readonly, allow assignment
+		return nil
+	}
+
+	// Check if property is already set (readonly = write-once semantics)
+	if _, alreadySet := obj.Properties[propName]; alreadySet {
+		return fmt.Errorf("cannot modify readonly property %s::$%s", obj.ClassName, propName)
+	}
+
+	// First assignment to readonly property is allowed
+	return nil
 }

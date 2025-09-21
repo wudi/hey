@@ -99,6 +99,7 @@ type Property struct {
 	Name         string
 	Visibility   string
 	IsStatic     bool
+	IsReadonly   bool
 	Type         string
 	DefaultValue *values.Value
 	DocComment   string

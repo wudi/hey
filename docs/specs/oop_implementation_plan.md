@@ -113,12 +113,12 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
 
 **Modern PHP 8.0+ Features (Next Priority):**
 
-1. **Constructor Property Promotion** (PHP 8.0) - Not implemented
-2. **Enums** (PHP 8.1) - Basic structure exists, needs full implementation
+1. **Readonly Properties** (PHP 8.1) - Not implemented
+2. **First-class Callable Syntax** (PHP 8.1) - Not implemented
 
 ### 🔧 Partially Working Features
 
-1. **Constructor Property Promotion** - Parser support exists, needs implementation
+1. **First-class Callable Syntax** - Parser support exists, needs full implementation
 
 ## Implementation Tasks
 
@@ -143,20 +143,22 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
 17. **Nullsafe Operator** - COMPLETED (PHP 8.0 ?-> operator with full null propagation)
 18. **Union Types Runtime Support** - COMPLETED (PHP 8.0 type validation for int|string syntax)
 19. **Attributes/Annotations** - COMPLETED (PHP 8.0 #[Attribute] syntax with metadata storage)
+20. **Enums (Complete)** - COMPLETED (PHP 8.1 full enum support: cases, methods, static methods, backed enums)
+21. **Constructor Property Promotion** - COMPLETED (PHP 8.0 automatic property declaration and assignment)
 
 ### 🔄 Next Priority Tasks
 
 #### Phase 5: Modern PHP 8.0+ Features (Priority: HIGH)
 
-**Next Task: Enums (PHP 8.1)**
-- **Status**: Basic structure exists, needs full implementation
+**Next Task: Readonly Properties (PHP 8.1)**
+- **Status**: Not implemented
 - **Priority**: HIGH (important PHP 8.1 feature)
-- **Dependencies**: Enum declaration parsing, case compilation
+- **Dependencies**: Property declaration, immutability enforcement
 - **Implementation**:
-  1. Complete enum case compilation with values
-  2. Implement enum methods and properties
-  3. Add enum instanceof and comparison support
-  4. Support backed enums (string/int values)
+  1. Add readonly keyword support to property parsing
+  2. Implement readonly enforcement (write-once semantics)
+  3. Support readonly promoted properties
+  4. Add proper error handling for readonly violations
 
 ### Phase 1: Core Fixes (Priority: HIGH)
 
