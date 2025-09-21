@@ -39,6 +39,7 @@ type Compiler struct {
 	currentClass     *registry.Class // Current class being compiled
 	currentFunction  *registry.Function // Current function being compiled
 	currentFile      string // Current file being compiled
+	currentNamespace string // Current namespace being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -1354,16 +1355,48 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 
 	// Compile and send arguments
 	if expr.Arguments != nil {
-		for i, arg := range expr.Arguments.Arguments {
-			err := c.compileNode(arg)
-			if err != nil {
-				return err
+		// Check if we have any named arguments
+		hasNamedArgs := false
+		for _, arg := range expr.Arguments.Arguments {
+			if _, isNamed := arg.(*ast.NamedArgument); isNamed {
+				hasNamedArgs = true
+				break
 			}
-			argResult := c.allocateTemp()
-			c.emitMove(argResult)
+		}
 
-			argNum := c.addConstant(values.NewInt(int64(i)))
-			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+		for i, arg := range expr.Arguments.Arguments {
+			if namedArg, isNamed := arg.(*ast.NamedArgument); isNamed {
+				// Handle named argument
+				err := c.compileNode(namedArg.Value)
+				if err != nil {
+					return err
+				}
+				argResult := c.allocateTemp()
+				c.emitMove(argResult)
+
+				// Send argument name and value
+				argName := c.addConstant(values.NewString(namedArg.Name.Name))
+				c.emit(opcodes.OP_SEND_VAL_NAMED, opcodes.IS_CONST, argName, opcodes.IS_TMP_VAR, argResult, 0, 0)
+			} else {
+				// Handle positional argument
+				err := c.compileNode(arg)
+				if err != nil {
+					return err
+				}
+				argResult := c.allocateTemp()
+				c.emitMove(argResult)
+
+				if hasNamedArgs {
+					// If we have named args mixed with positional, we need to handle this specially
+					// For now, we'll send positional args with their index as the name
+					argNum := c.addConstant(values.NewInt(int64(i)))
+					c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+				} else {
+					// Pure positional arguments - use existing logic
+					argNum := c.addConstant(values.NewInt(int64(i)))
+					c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+				}
+			}
 		}
 	}
 
@@ -2215,7 +2248,8 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 		}
 
 		// Create object first
-		classConstant := c.addConstant(values.NewString(className))
+		resolvedClassName := c.resolveClassName(className)
+		classConstant := c.addConstant(values.NewString(resolvedClassName))
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
@@ -2255,7 +2289,8 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 	}
 
 	// Create the object
-	classConstant := c.addConstant(values.NewString(className))
+	resolvedClassName := c.resolveClassName(className)
+	classConstant := c.addConstant(values.NewString(resolvedClassName))
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
@@ -2778,6 +2813,10 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			paramName := ""
 			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
 				paramName = nameNode.Name
+				// Remove $ prefix for named argument matching
+				if strings.HasPrefix(paramName, "$") {
+					paramName = paramName[1:]
+				}
 			} else {
 				return fmt.Errorf("invalid parameter name type")
 			}
@@ -2811,7 +2850,29 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 				function.IsVariadic = true
 			}
 
+			// Compile parameter attributes
+			if len(param.Attributes) > 0 {
+				compilerParam.Attributes = c.compileAttributes(param.Attributes)
+			}
+
 			function.Parameters = append(function.Parameters, compilerParam)
+		}
+	}
+
+	// Compile function attributes
+	if len(decl.Attributes) > 0 {
+		function.Attributes = c.compileAttributes(decl.Attributes)
+	}
+
+	// Handle Constructor Property Promotion (PHP 8.0)
+	if c.currentClass != nil && funcName == "__construct" && decl.Parameters != nil {
+		for _, param := range decl.Parameters.Parameters {
+			if param.Visibility != "" {
+				// This is a promoted property - auto-declare it
+				if err := c.declarePromotedProperty(param); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -2832,6 +2893,21 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
 				// Register parameter name in function scope
 				c.getOrCreateVariable(nameNode.Name)
+			}
+		}
+	}
+
+	// Generate property assignments for promoted constructor parameters (PHP 8.0)
+	if c.currentClass != nil && funcName == "__construct" && decl.Parameters != nil {
+		for _, param := range decl.Parameters.Parameters {
+			if param.Visibility != "" {
+				// Generate $this->property = $parameter assignment
+				if err := c.generatePromotedPropertyAssignment(param); err != nil {
+					c.popScope()
+					c.instructions = oldInstructions
+					c.constants = oldConstants
+					return fmt.Errorf("error generating promoted property assignment: %v", err)
+				}
 			}
 		}
 	}
@@ -3117,6 +3193,11 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 		}
 	}
 
+	// Compile class attributes
+	if len(decl.Attributes) > 0 {
+		class.Attributes = c.compileAttributes(decl.Attributes)
+	}
+
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
@@ -3146,7 +3227,8 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	// Handle implements
 	for _, iface := range decl.Implements {
 		if ifaceId, ok := iface.(*ast.IdentifierNode); ok {
-			ifaceConstant := c.addConstant(values.NewString(ifaceId.Name))
+			resolvedIfaceName := c.resolveClassName(ifaceId.Name)
+			ifaceConstant := c.addConstant(values.NewString(resolvedIfaceName))
 			c.emit(opcodes.OP_ADD_INTERFACE, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, ifaceConstant, 0, 0)
 		} else {
 			return fmt.Errorf("complex interface expressions not supported yet")
@@ -3173,24 +3255,38 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	c.emit(opcodes.OP_DECLARE_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 
 	// Handle constructor arguments if provided
-	if decl.Arguments != nil {
-		// Compile constructor call arguments
-		for _, arg := range decl.Arguments.Arguments {
+	if decl.Arguments != nil && len(decl.Arguments.Arguments) > 0 {
+		// Compile constructor call arguments first
+		argTemps := make([]uint32, len(decl.Arguments.Arguments))
+		for i, arg := range decl.Arguments.Arguments {
 			err := c.compileNode(arg)
 			if err != nil {
 				return fmt.Errorf("error compiling constructor argument: %v", err)
 			}
+			argTemps[i] = c.nextTemp - 1 // Save the temp variable for this argument
 		}
 
-		// Create new instance with constructor call
+		// Create new instance
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, nameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
-		// If there are arguments, we need to call constructor
-		if len(decl.Arguments.Arguments) > 0 {
-			// This would require more complex constructor calling logic
-			// For now, we'll just create the object without calling constructor
+		// Call constructor with the compiled arguments
+		constructorName := c.addConstant(values.NewString("__construct"))
+		c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constructorName, 0, 0)
+
+		// Send each argument in order
+		for _, argTemp := range argTemps {
+			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, argTemp, 0, 0)
 		}
+
+		// Execute the constructor call (store result in separate temp to avoid overwriting object)
+		constructorResult := c.allocateTemp()
+		c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, constructorResult, 0, 0, 0, 0)
+
+		// Constructor calls in PHP don't return anything useful - keep the original object
+		// Copy the object back to be the final result of the expression
+		finalResult := c.allocateTemp()
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, 0, 0, opcodes.IS_TMP_VAR, finalResult)
 	} else {
 		// Simple instantiation without constructor arguments
 		result := c.allocateTemp()
@@ -3218,6 +3314,7 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 		Name:       propName,
 		Visibility: decl.Visibility, // public, private, protected
 		IsStatic:   decl.Static,
+		IsReadonly: decl.ReadOnly,
 	}
 
 	// Handle type hint
@@ -3262,6 +3359,11 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 	}
 
 	property.DefaultValue = defaultValue
+
+	// Compile property attributes
+	if len(decl.Attributes) > 0 {
+		property.Attributes = c.compileAttributes(decl.Attributes)
+	}
 
 	// Add property to current class
 	c.currentClass.Properties[propName] = property
@@ -3939,14 +4041,17 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 		return fmt.Errorf("invalid class name type")
 	}
 
+	// Build fully qualified class name
+	fullyQualifiedName := c.buildFullyQualifiedName(className)
+
 	// Check if class already exists
-	if _, exists := c.classes[className]; exists {
-		return fmt.Errorf("class %s already declared", className)
+	if _, exists := c.classes[fullyQualifiedName]; exists {
+		return fmt.Errorf("class %s already declared", fullyQualifiedName)
 	}
 
 	// Create new class
 	class := &registry.Class{
-		Name:       className,
+		Name:       fullyQualifiedName, // Store fully qualified name
 		Parent:     "",
 		Properties: make(map[string]*registry.Property),
 		Methods:    make(map[string]*registry.Function),
@@ -3958,10 +4063,15 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
-			class.Parent = parent.Name
+			class.Parent = c.resolveClassName(parent.Name) // Resolve parent class name
 		} else {
 			return fmt.Errorf("complex parent class expressions not supported yet")
 		}
+	}
+
+	// Compile class attributes
+	if len(decl.Attributes) > 0 {
+		class.Attributes = c.compileAttributes(decl.Attributes)
 	}
 
 	// Store current class context
@@ -3969,7 +4079,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	c.currentClass = class
 
 	// Emit class table initialization
-	nameConstant := c.addConstant(values.NewString(className))
+	nameConstant := c.addConstant(values.NewString(fullyQualifiedName))
 	c.emit(opcodes.OP_INIT_CLASS_TABLE, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 
 	// Set current class context in VM
@@ -3984,7 +4094,8 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	// Handle implements
 	for _, iface := range decl.Implements {
 		if ifaceId, ok := iface.(*ast.IdentifierNode); ok {
-			ifaceConstant := c.addConstant(values.NewString(ifaceId.Name))
+			resolvedIfaceName := c.resolveClassName(ifaceId.Name)
+			ifaceConstant := c.addConstant(values.NewString(resolvedIfaceName))
 			c.emit(opcodes.OP_ADD_INTERFACE, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, ifaceConstant, 0, 0)
 		} else {
 			return fmt.Errorf("complex interface expressions not supported yet")
@@ -4009,7 +4120,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	}
 
 	// Store compiled class
-	c.classes[className] = class
+	c.classes[fullyQualifiedName] = class
 	c.currentClass = oldCurrentClass
 
 	// Clear current class context in VM
@@ -5072,7 +5183,32 @@ func (c *Compiler) compileNullsafePropertyAccessExpression(expr *ast.NullsafePro
 	}
 
 	objectOperand := c.nextTemp - 1
+
+	// Generate labels for null check
+	notNullLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	// Check if object is null
+	nullConstant := c.addConstant(values.NewNull())
+	isNullResult := c.allocateTemp()
 	result := c.allocateTemp()
+	c.emit(opcodes.OP_IS_IDENTICAL,
+		opcodes.IS_TMP_VAR, objectOperand,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_TMP_VAR, isNullResult)
+
+	// If null, skip to null assignment; if not null, jump to property access
+	c.emitJumpZ(opcodes.IS_TMP_VAR, isNullResult, notNullLabel)
+
+	// Object is null, set result to null
+	c.emit(opcodes.OP_ASSIGN,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+
+	// Not null, perform property access
+	c.placeLabel(notNullLabel)
 
 	// Compile property name
 	var propOperand uint32
@@ -5090,25 +5226,50 @@ func (c *Compiler) compileNullsafePropertyAccessExpression(expr *ast.NullsafePro
 		propType = opcodes.IS_TMP_VAR
 	}
 
-	// Emit nullsafe property fetch (for now, same as regular)
+	// Emit property fetch
 	c.emit(opcodes.OP_FETCH_OBJ_R,
 		opcodes.IS_TMP_VAR, objectOperand,
 		propType, propOperand,
 		opcodes.IS_TMP_VAR, result)
+
+	c.placeLabel(endLabel)
 
 	return nil
 }
 
 // NullsafeMethodCallExpression compilation (object?->method())
 func (c *Compiler) compileNullsafeMethodCallExpression(expr *ast.NullsafeMethodCallExpression) error {
-	// Similar to regular method call but with nullsafe semantics
-	// For now, compile as regular method call
-
 	// Compile object
 	if err := c.compileNode(expr.Object); err != nil {
 		return err
 	}
 	objectOperand := c.nextTemp - 1
+
+	// Generate labels for null check
+	notNullLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	// Check if object is null
+	nullConstant := c.addConstant(values.NewNull())
+	isNullResult := c.allocateTemp()
+	result := c.allocateTemp()
+	c.emit(opcodes.OP_IS_IDENTICAL,
+		opcodes.IS_TMP_VAR, objectOperand,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_TMP_VAR, isNullResult)
+
+	// If null, skip to null assignment; if not null, jump to method call
+	c.emitJumpZ(opcodes.IS_TMP_VAR, isNullResult, notNullLabel)
+
+	// Object is null, set result to null
+	c.emit(opcodes.OP_ASSIGN,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+
+	// Not null, perform method call
+	c.placeLabel(notNullLabel)
 
 	// Compile method name
 	var methodOperand uint32
@@ -5125,13 +5286,37 @@ func (c *Compiler) compileNullsafeMethodCallExpression(expr *ast.NullsafeMethodC
 		methodType = opcodes.IS_TMP_VAR
 	}
 
-	result := c.allocateTemp()
+	// Handle arguments if present
+	var numArgs uint32
+	if expr.Arguments != nil && expr.Arguments.Arguments != nil {
+		numArgs = uint32(len(expr.Arguments.Arguments))
+	}
 
-	// For now, treat nullsafe same as regular method call
-	c.emit(opcodes.OP_DO_FCALL,
+	// Initialize method call
+	c.emit(opcodes.OP_INIT_METHOD_CALL,
 		opcodes.IS_TMP_VAR, objectOperand,
 		methodType, methodOperand,
-		opcodes.IS_TMP_VAR, result)
+		opcodes.IS_CONST, c.addConstant(values.NewInt(int64(numArgs))))
+
+	// Compile and send arguments
+	if expr.Arguments != nil && expr.Arguments.Arguments != nil {
+		for i, arg := range expr.Arguments.Arguments {
+			err := c.compileNode(arg)
+			if err != nil {
+				return err
+			}
+			argResult := c.allocateTemp()
+			c.emitMove(argResult)
+
+			argNum := c.addConstant(values.NewInt(int64(i)))
+			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+		}
+	}
+
+	// Execute method call
+	c.emit(opcodes.OP_DO_FCALL, 0, 0, 0, 0, opcodes.IS_TMP_VAR, result)
+
+	c.placeLabel(endLabel)
 
 	return nil
 }
@@ -5317,8 +5502,112 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 
 // FirstClassCallable compilation (strlen(...))
 func (c *Compiler) compileFirstClassCallable(expr *ast.FirstClassCallable) error {
-	// First-class callable creates a Closure object
-	return fmt.Errorf("first-class callables not yet implemented")
+	// First-class callable creates a Closure object that can be called later
+	// We need to ensure the result ends up in c.nextTemp-1 for compileAssign to work correctly
+
+	switch callable := expr.Callable.(type) {
+	case *ast.IdentifierNode:
+		// Function reference: strlen(...)
+		result := c.allocateTemp()
+		return c.compileFirstClassFunction(callable.Name, result)
+
+	case *ast.PropertyAccessExpression:
+		// Method reference: $obj->method(...)
+		return c.compileFirstClassMethod(callable)
+
+	case *ast.StaticPropertyAccessExpression:
+		// Static method reference: Class::method(...)
+		result := c.allocateTemp()
+		return c.compileFirstClassStaticMethod(callable, result)
+
+	case *ast.StaticAccessExpression:
+		// Static method reference: Class::method(...) - alternative form
+		result := c.allocateTemp()
+		return c.compileFirstClassStaticAccess(callable, result)
+
+	default:
+		return fmt.Errorf("unsupported first-class callable type: %T", callable)
+	}
+}
+
+// compileFirstClassFunction creates a callable for a function reference: strlen(...)
+func (c *Compiler) compileFirstClassFunction(functionName string, result uint32) error {
+	// Create a callable closure for the function
+	funcNameConstant := c.addConstant(values.NewString(functionName))
+	c.emit(opcodes.OP_CREATE_FUNC_CALLABLE, opcodes.IS_CONST, funcNameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+// compileFirstClassMethod creates a callable for a method reference: $obj->method(...)
+func (c *Compiler) compileFirstClassMethod(methodAccess *ast.PropertyAccessExpression) error {
+	// Compile the object expression
+	if err := c.compileNode(methodAccess.Object); err != nil {
+		return err
+	}
+	objectResult := c.nextTemp - 1
+
+	// Get method name
+	var methodName string
+	if prop, ok := methodAccess.Property.(*ast.IdentifierNode); ok {
+		methodName = prop.Name
+	} else {
+		return fmt.Errorf("invalid method name in first-class callable")
+	}
+
+	// Allocate the result temp AFTER all internal compilation is done
+	result := c.allocateTemp()
+
+	methodNameConstant := c.addConstant(values.NewString(methodName))
+	c.emit(opcodes.OP_CREATE_METHOD_CALLABLE, opcodes.IS_TMP_VAR, objectResult, opcodes.IS_CONST, methodNameConstant, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+// compileFirstClassStaticMethod creates a callable for static method reference: Class::method(...)
+func (c *Compiler) compileFirstClassStaticMethod(staticAccess *ast.StaticPropertyAccessExpression, result uint32) error {
+	// Get class name
+	var className string
+	if class, ok := staticAccess.Class.(*ast.IdentifierNode); ok {
+		className = c.resolveClassName(class.Name)
+	} else {
+		return fmt.Errorf("invalid class name in static first-class callable")
+	}
+
+	// Get method name
+	var methodName string
+	if prop, ok := staticAccess.Property.(*ast.IdentifierNode); ok {
+		methodName = prop.Name
+	} else {
+		return fmt.Errorf("invalid method name in static first-class callable")
+	}
+
+	classNameConstant := c.addConstant(values.NewString(className))
+	methodNameConstant := c.addConstant(values.NewString(methodName))
+	c.emit(opcodes.OP_CREATE_STATIC_CALLABLE, opcodes.IS_CONST, classNameConstant, opcodes.IS_CONST, methodNameConstant, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+// compileFirstClassStaticAccess creates a callable for static access reference: Class::method(...)
+func (c *Compiler) compileFirstClassStaticAccess(staticAccess *ast.StaticAccessExpression, result uint32) error {
+	// Get class name
+	var className string
+	if class, ok := staticAccess.Class.(*ast.IdentifierNode); ok {
+		className = c.resolveClassName(class.Name)
+	} else {
+		return fmt.Errorf("invalid class name in static access first-class callable")
+	}
+
+	// Get method name
+	var methodName string
+	if prop, ok := staticAccess.Property.(*ast.IdentifierNode); ok {
+		methodName = prop.Name
+	} else {
+		return fmt.Errorf("invalid method name in static access first-class callable")
+	}
+
+	classNameConstant := c.addConstant(values.NewString(className))
+	methodNameConstant := c.addConstant(values.NewString(methodName))
+	c.emit(opcodes.OP_CREATE_STATIC_CALLABLE, opcodes.IS_CONST, classNameConstant, opcodes.IS_CONST, methodNameConstant, opcodes.IS_TMP_VAR, result)
+	return nil
 }
 
 // Statement implementations
@@ -5732,6 +6021,24 @@ func (c *Compiler) emitDeclareDirective(directive string, valueTemp uint32) {
 }
 
 func (c *Compiler) compileNamespaceStatement(stmt *ast.NamespaceStatement) error {
+	// Set current namespace context
+	// Note: In PHP, namespace declarations affect all subsequent code in the file
+	// until a new namespace is declared - they don't restore the previous namespace
+	if stmt.Name != nil {
+		// Build namespace string from parts
+		namespaceName := ""
+		for i, part := range stmt.Name.Parts {
+			if i > 0 {
+				namespaceName += "\\"
+			}
+			namespaceName += part
+		}
+		c.currentNamespace = namespaceName
+	} else {
+		// Global namespace
+		c.currentNamespace = ""
+	}
+
 	// Compile namespace body if present
 	if stmt.Body != nil {
 		for _, node := range stmt.Body {
@@ -5741,7 +6048,27 @@ func (c *Compiler) compileNamespaceStatement(stmt *ast.NamespaceStatement) error
 		}
 	}
 
+	// Note: We don't restore the previous namespace context
+	// The namespace change is persistent for subsequent code
 	return nil
+}
+
+// buildFullyQualifiedName creates a fully qualified name with the current namespace
+func (c *Compiler) buildFullyQualifiedName(name string) string {
+	if c.currentNamespace == "" {
+		return name
+	}
+	return c.currentNamespace + "\\" + name
+}
+
+// resolveClassName resolves a class name, supporting both relative and fully qualified names
+func (c *Compiler) resolveClassName(name string) string {
+	// If name starts with \, it's already fully qualified
+	if strings.HasPrefix(name, "\\") {
+		return name[1:] // Remove leading backslash
+	}
+	// Otherwise, make it relative to current namespace
+	return c.buildFullyQualifiedName(name)
 }
 
 func (c *Compiler) compileUseStatement(stmt *ast.UseStatement) error {
@@ -6027,21 +6354,25 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 
 	interfaceName := decl.Name.Name
 
+	// Build fully qualified interface name
+	fullyQualifiedName := c.buildFullyQualifiedName(interfaceName)
+
 	// Check if interface already exists
-	if _, exists := c.interfaces[interfaceName]; exists {
-		return fmt.Errorf("interface %s already declared", interfaceName)
+	if _, exists := c.interfaces[fullyQualifiedName]; exists {
+		return fmt.Errorf("interface %s already declared", fullyQualifiedName)
 	}
 
 	// Create new interface
 	iface := &registry.Interface{
-		Name:    interfaceName,
+		Name:    fullyQualifiedName,
 		Methods: make(map[string]*registry.InterfaceMethod),
 		Extends: make([]string, 0),
 	}
 
 	// Handle extends
 	for _, parent := range decl.Extends {
-		iface.Extends = append(iface.Extends, parent.Name)
+		resolvedParentName := c.resolveClassName(parent.Name)
+		iface.Extends = append(iface.Extends, resolvedParentName)
 	}
 
 	// Add interface methods
@@ -6098,10 +6429,10 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 	}
 
 	// Store interface
-	c.interfaces[interfaceName] = iface
+	c.interfaces[fullyQualifiedName] = iface
 
 	// Emit interface declaration opcode
-	nameConstant := c.addConstant(values.NewString(interfaceName))
+	nameConstant := c.addConstant(values.NewString(fullyQualifiedName))
 	c.emit(opcodes.OP_DECLARE_INTERFACE,
 		opcodes.IS_CONST, nameConstant,
 		opcodes.IS_UNUSED, 0,
@@ -6117,14 +6448,17 @@ func (c *Compiler) compileTraitDeclaration(decl *ast.TraitDeclaration) error {
 
 	traitName := decl.Name.Name
 
+	// Build fully qualified trait name
+	fullyQualifiedName := c.buildFullyQualifiedName(traitName)
+
 	// Check if trait already exists
-	if _, exists := c.traits[traitName]; exists {
-		return fmt.Errorf("trait %s already declared", traitName)
+	if _, exists := c.traits[fullyQualifiedName]; exists {
+		return fmt.Errorf("trait %s already declared", fullyQualifiedName)
 	}
 
 	// Create new trait
 	trait := &registry.Trait{
-		Name:       traitName,
+		Name:       fullyQualifiedName,
 		Properties: make(map[string]*registry.Property),
 		Methods:    make(map[string]*registry.Function),
 	}
@@ -6144,10 +6478,10 @@ func (c *Compiler) compileTraitDeclaration(decl *ast.TraitDeclaration) error {
 	}
 
 	// Store trait
-	c.traits[traitName] = trait
+	c.traits[fullyQualifiedName] = trait
 
 	// Emit trait declaration opcode
-	nameConstant := c.addConstant(values.NewString(traitName))
+	nameConstant := c.addConstant(values.NewString(fullyQualifiedName))
 	c.emit(opcodes.OP_DECLARE_TRAIT,
 		opcodes.IS_CONST, nameConstant,
 		opcodes.IS_UNUSED, 0,
@@ -6186,15 +6520,25 @@ func (c *Compiler) compileEnumDeclaration(decl *ast.EnumDeclaration) error {
 		}
 
 		caseName := enumCase.Name.Name
-		var caseValue *values.Value
+		// Create enum case object with name property
+		enumCaseObj := &values.Object{
+			ClassName:  enumName,
+			Properties: make(map[string]*values.Value),
+		}
+		enumCaseObj.Properties["name"] = values.NewString(caseName)
 
+		var caseValue *values.Value
 		if enumCase.Value != nil {
 			// Backed enum - evaluate the backing value
-			// For now, simplified - assume it's a literal
-			caseValue = values.NewString(caseName) // Simplified
-		} else {
-			// Pure enum - use the case name
-			caseValue = values.NewString(caseName)
+			backingValue := c.evaluateConstantExpression(enumCase.Value)
+			if backingValue != nil {
+				enumCaseObj.Properties["value"] = backingValue
+			}
+		}
+
+		caseValue = &values.Value{
+			Type: values.TypeObject,
+			Data: enumCaseObj,
 		}
 
 		enumClass.Constants[caseName] = &registry.ClassConstant{
@@ -6239,9 +6583,10 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 
 		// Find the trait
 		traitNameStr := traitName.Name
-		trait, exists := c.traits[traitNameStr]
+		resolvedTraitName := c.resolveClassName(traitNameStr)
+		trait, exists := c.traits[resolvedTraitName]
 		if !exists {
-			return fmt.Errorf("trait %s not found", traitNameStr)
+			return fmt.Errorf("trait %s not found", resolvedTraitName)
 		}
 
 		// Copy trait methods into current class
@@ -6367,7 +6712,7 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 		}
 
 		// Emit USE_TRAIT opcode for runtime tracking
-		traitConstant := c.addConstant(values.NewString(traitNameStr))
+		traitConstant := c.addConstant(values.NewString(resolvedTraitName))
 		c.emit(opcodes.OP_USE_TRAIT,
 			opcodes.IS_CONST, traitConstant,
 			opcodes.IS_UNUSED, 0,
@@ -6694,28 +7039,17 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 
 // Helper method for enum compilation
 func (c *Compiler) compileEnumMethod(enumClass *registry.Class, method *ast.FunctionDeclaration) error {
-	// Similar to trait method compilation but store in enum class
-	if method.Name == nil {
-		return nil
-	}
+	// Store current class context and set enum as current class
+	oldCurrentClass := c.currentClass
+	c.currentClass = enumClass
 
-	var methodName string
-	if ident, ok := method.Name.(*ast.IdentifierNode); ok {
-		methodName = ident.Name
-	} else {
-		return nil
-	}
+	// Use the regular function compilation but treat as method
+	err := c.compileFunctionDeclaration(method)
 
-	// Create a simplified function for the enum
-	function := &registry.Function{
-		Name:         methodName,
-		Parameters:   make([]*registry.Parameter, 0),
-		Instructions: make([]*opcodes.Instruction, 0),
-		Constants:    make([]*values.Value, 0),
-	}
+	// Restore class context
+	c.currentClass = oldCurrentClass
 
-	enumClass.Methods[methodName] = function
-	return nil
+	return err
 }
 
 // Functions return the compiled functions
@@ -6864,5 +7198,127 @@ func (c *Compiler) validateMethodSignature(abstractMethod, implementedMethod *re
 		return fmt.Errorf("parameter count mismatch: expected %d, got %d",
 			len(abstractMethod.Parameters), len(implementedMethod.Parameters))
 	}
+	return nil
+}
+
+
+// compileAttributes compiles attribute groups from AST to registry format
+func (c *Compiler) compileAttributes(attributeGroups []*ast.AttributeGroup) []*registry.Attribute {
+	var result []*registry.Attribute
+
+	for _, group := range attributeGroups {
+		for _, attr := range group.Attributes {
+			if attr.Name != nil {
+				compiledAttr := &registry.Attribute{
+					Name:      attr.Name.Name,
+					Arguments: make([]*values.Value, 0),
+				}
+
+				// Compile attribute arguments
+				for _, arg := range attr.Arguments {
+					argValue := c.evaluateConstantExpression(arg)
+					if argValue != nil {
+						compiledAttr.Arguments = append(compiledAttr.Arguments, argValue)
+					} else {
+						// If we can't evaluate at compile time, use null
+						compiledAttr.Arguments = append(compiledAttr.Arguments, values.NewNull())
+					}
+				}
+
+				result = append(result, compiledAttr)
+			}
+		}
+	}
+
+	return result
+}
+
+// declarePromotedProperty automatically declares a property from a promoted constructor parameter
+func (c *Compiler) declarePromotedProperty(param *ast.ParameterNode) error {
+	if c.currentClass == nil {
+		return fmt.Errorf("promoted property outside class context")
+	}
+
+	// Extract property name (remove $ prefix if present)
+	var propName string
+	if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+		propName = nameNode.Name
+		if strings.HasPrefix(propName, "$") {
+			propName = propName[1:]
+		}
+	} else {
+		return fmt.Errorf("invalid parameter name for promoted property")
+	}
+
+	// Check if property already exists
+	if _, exists := c.currentClass.Properties[propName]; exists {
+		return fmt.Errorf("property $%s already declared in class %s", propName, c.currentClass.Name)
+	}
+
+	// Create property from parameter
+	property := &registry.Property{
+		Name:       propName,
+		Visibility: param.Visibility,
+		IsStatic:   false, // Promoted properties are never static
+		IsReadonly: param.ReadOnly,
+	}
+
+	// Handle type hint
+	if param.Type != nil {
+		property.Type = param.Type.String()
+	}
+
+	// Handle default value
+	if param.DefaultValue != nil {
+		defaultValue := c.evaluateConstantExpression(param.DefaultValue)
+		if defaultValue != nil {
+			property.DefaultValue = defaultValue
+		} else {
+			property.DefaultValue = values.NewNull()
+		}
+	}
+
+	// Compile property attributes
+	if len(param.Attributes) > 0 {
+		property.Attributes = c.compileAttributes(param.Attributes)
+	}
+
+	// Add property to current class
+	c.currentClass.Properties[propName] = property
+
+	return nil
+}
+
+// generatePromotedPropertyAssignment generates bytecode for $this->property = $parameter
+func (c *Compiler) generatePromotedPropertyAssignment(param *ast.ParameterNode) error {
+	// Extract property name (remove $ prefix if present)
+	var propName string
+	var paramName string
+	if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
+		paramName = nameNode.Name
+		propName = paramName
+		if strings.HasPrefix(propName, "$") {
+			propName = propName[1:]
+		}
+	} else {
+		return fmt.Errorf("invalid parameter name for promoted property assignment")
+	}
+
+	// Get parameter variable slot
+	paramSlot := c.getOrCreateVariable(paramName)
+
+	// Generate: $this->property = $parameter
+	// Get $this variable slot
+	thisSlot := c.getOrCreateVariable("$this")
+
+	// 2. Load parameter value
+	// 3. Assign to property
+	propNameConstant := c.addConstant(values.NewString(propName))
+
+	c.emit(opcodes.OP_ASSIGN_OBJ,
+		opcodes.IS_VAR, thisSlot,        // $this
+		opcodes.IS_CONST, propNameConstant, // property name
+		opcodes.IS_VAR, paramSlot)       // parameter value
+
 	return nil
 }

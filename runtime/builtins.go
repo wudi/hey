@@ -1,12 +1,88 @@
 package runtime
 
 import (
+	"encoding/json"
 	"fmt"
+	"math"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/wudi/hey/registry"
 	"github.com/wudi/hey/values"
 )
+
+// Helper functions for JSON conversion
+func phpValueToGoValue(val *values.Value) interface{} {
+	if val == nil {
+		return nil
+	}
+
+	switch val.Type {
+	case values.TypeNull:
+		return nil
+	case values.TypeBool:
+		return val.Data.(bool)
+	case values.TypeInt:
+		return val.Data.(int64)
+	case values.TypeFloat:
+		return val.Data.(float64)
+	case values.TypeString:
+		return val.Data.(string)
+	case values.TypeArray:
+		arr := val.Data.(*values.Array)
+		result := make(map[string]interface{})
+		for key, value := range arr.Elements {
+			keyStr := fmt.Sprintf("%v", key)
+			result[keyStr] = phpValueToGoValue(value)
+		}
+		return result
+	case values.TypeObject:
+		obj := val.Data.(*values.Object)
+		result := make(map[string]interface{})
+		for key, value := range obj.Properties {
+			result[key] = phpValueToGoValue(value)
+		}
+		return result
+	default:
+		return val.ToString()
+	}
+}
+
+func goValueToPhpValue(val interface{}) *values.Value {
+	if val == nil {
+		return values.NewNull()
+	}
+
+	switch v := val.(type) {
+	case bool:
+		return values.NewBool(v)
+	case float64:
+		// JSON numbers are always float64, check if it's actually an int
+		if v == float64(int64(v)) {
+			return values.NewInt(int64(v))
+		}
+		return values.NewFloat(v)
+	case string:
+		return values.NewString(v)
+	case map[string]interface{}:
+		arr := values.NewArray()
+		arrData := arr.Data.(*values.Array)
+		for key, value := range v {
+			arrData.Elements[key] = goValueToPhpValue(value)
+		}
+		return arr
+	case []interface{}:
+		arr := values.NewArray()
+		arrData := arr.Data.(*values.Array)
+		for i, value := range v {
+			arrData.Elements[int64(i)] = goValueToPhpValue(value)
+		}
+		return arr
+	default:
+		return values.NewString(fmt.Sprintf("%v", v))
+	}
+}
 
 // GeneratorExecutor is used to execute generator functions with yield support
 type GeneratorExecutor struct {
@@ -26,6 +102,13 @@ type Generator struct {
 	currentKey   *values.Value
 	currentValue *values.Value
 
+	// Yield from delegation state
+	delegating        bool
+	delegateIterable  *values.Value
+	delegateKeys      []string // For array iteration
+	delegateIndex     int      // Current index in array
+	delegateGenerator *Generator // For generator delegation
+
 	// Suspended execution state
 	suspendedContext *GeneratorExecutionState
 }
@@ -39,14 +122,19 @@ type GeneratorExecutionState struct {
 // NewGenerator creates a new generator
 func NewGenerator(function *registry.Function, args []*values.Value, vm interface{}) *Generator {
 	return &Generator{
-		function:     function,
-		args:         args,
-		vm:           vm,
-		started:      false,
-		finished:     false,
-		suspended:    false,
-		currentKey:   values.NewNull(),
-		currentValue: values.NewNull(),
+		function:         function,
+		args:             args,
+		vm:               vm,
+		started:          false,
+		finished:         false,
+		suspended:        false,
+		currentKey:       values.NewNull(),
+		currentValue:     values.NewNull(),
+		delegating:       false,
+		delegateIterable: nil,
+		delegateKeys:     nil,
+		delegateIndex:    0,
+		delegateGenerator: nil,
 		suspendedContext: nil,
 	}
 }
@@ -65,6 +153,11 @@ func NewChannelGenerator(function interface{}, args []*values.Value, vm interfac
 func (g *Generator) Next() bool {
 	if g.finished {
 		return false
+	}
+
+	// Check if we're delegating to another iterable
+	if g.delegating {
+		return g.handleDelegateNext()
 	}
 
 	if !g.started {
@@ -204,6 +297,131 @@ func (g *Generator) Yield(key, value *values.Value) {
 	// Actual suspension logic will be handled by VM.execYield
 }
 
+// StartDelegation begins delegating to another iterable
+func (g *Generator) StartDelegation(iterable *values.Value) error {
+	g.delegating = true
+	g.delegateIterable = iterable
+	g.delegateIndex = 0
+	g.suspended = true // Mark as suspended so Next() will handle delegation
+
+	if iterable.IsArray() {
+		// Prepare array keys for iteration
+		if arr, ok := iterable.Data.(*values.Array); ok {
+			g.delegateKeys = make([]string, 0, len(arr.Elements))
+			for key := range arr.Elements {
+				keyStr := fmt.Sprintf("%v", key)
+				g.delegateKeys = append(g.delegateKeys, keyStr)
+			}
+		}
+
+		// Set the first value immediately if array is not empty
+		if len(g.delegateKeys) > 0 {
+			keyStr := g.delegateKeys[0]
+			arr := g.delegateIterable.Data.(*values.Array)
+
+			// Convert string back to interface{} key for lookup
+			var key interface{}
+			if intKey, err := strconv.Atoi(keyStr); err == nil {
+				key = int64(intKey)
+			} else {
+				key = keyStr
+			}
+
+			value := arr.Elements[key]
+
+			// Convert to appropriate Value type
+			var keyValue *values.Value
+			if intKey, err := strconv.Atoi(keyStr); err == nil {
+				keyValue = values.NewInt(int64(intKey))
+			} else {
+				keyValue = values.NewString(keyStr)
+			}
+
+			// Set current values and advance index
+			g.currentKey = keyValue
+			g.currentValue = value
+			g.delegateIndex++
+		}
+	} else if iterable.IsObject() && iterable.Data.(*values.Object).ClassName == "Generator" {
+		// Get the delegate generator
+		obj := iterable.Data.(*values.Object)
+		if genVal, ok := obj.Properties["__channel_generator"]; ok {
+			if delegateGen, ok := genVal.Data.(*Generator); ok {
+				g.delegateGenerator = delegateGen
+				// Get the first value from the delegate generator
+				if g.delegateGenerator.Next() {
+					g.currentKey = g.delegateGenerator.Key()
+					g.currentValue = g.delegateGenerator.Current()
+				} else {
+				}
+			} else {
+				return fmt.Errorf("invalid generator for delegation")
+			}
+		} else {
+			return fmt.Errorf("generator object missing __channel_generator property")
+		}
+	} else {
+		return fmt.Errorf("yield from requires an iterable (array or Generator)")
+	}
+
+	return nil
+}
+
+// handleDelegateNext handles the next iteration when delegating
+func (g *Generator) handleDelegateNext() bool {
+	if g.delegateIterable.IsArray() {
+		// Array delegation
+		if g.delegateIndex >= len(g.delegateKeys) {
+			// Array exhausted, stop delegating and resume normal execution
+			g.delegating = false
+			return g.resumeFromYield()
+		}
+
+		// Get current array item
+		keyStr := g.delegateKeys[g.delegateIndex]
+		arr := g.delegateIterable.Data.(*values.Array)
+
+		// Convert string back to interface{} key for lookup
+		var key interface{}
+		if intKey, err := strconv.Atoi(keyStr); err == nil {
+			key = int64(intKey)
+		} else {
+			key = keyStr
+		}
+
+		value := arr.Elements[key]
+
+		// Convert to appropriate Value type
+		var keyValue *values.Value
+		if intKey, err := strconv.Atoi(keyStr); err == nil {
+			keyValue = values.NewInt(int64(intKey))
+		} else {
+			keyValue = values.NewString(keyStr)
+		}
+
+		// Set current values and advance index
+		g.currentKey = keyValue
+		g.currentValue = value
+		g.delegateIndex++
+
+		return true
+	} else if g.delegateGenerator != nil {
+		// Generator delegation
+		if g.delegateGenerator.Next() {
+			// Delegate generator has a value
+			g.currentKey = g.delegateGenerator.Key()
+			g.currentValue = g.delegateGenerator.Current()
+			return true
+		} else {
+			// Delegate generator is exhausted, stop delegating and resume normal execution
+			g.delegating = false
+			return g.resumeFromYield()
+		}
+	}
+
+	return false
+}
+
 
 type builtinSpec struct {
 	Name       string
@@ -309,6 +527,68 @@ var builtinFunctionSpecs = []builtinSpec{
 				return values.NewBool(true), nil
 			}
 			return values.NewBool(false), nil
+		},
+	},
+	{
+		Name: "get_class",
+		Parameters: []*registry.Parameter{
+			{Name: "object", Type: "object"},
+		},
+		ReturnType: "string",
+		MinArgs:    0,
+		MaxArgs:    1,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 {
+				// Called without arguments - return current class name if in class context
+				// For now, return false (which would be an error in real PHP)
+				return values.NewBool(false), nil
+			}
+
+			if args[0] == nil || !args[0].IsObject() {
+				return values.NewBool(false), nil
+			}
+
+			obj := args[0].Data.(*values.Object)
+			return values.NewString(obj.ClassName), nil
+		},
+	},
+	{
+		Name: "func_num_args",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "int",
+		MinArgs:    0,
+		MaxArgs:    0,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// func_num_args() returns the number of arguments passed to the calling function
+			// We need to access the calling function's arguments
+			// For now, return -1 to indicate it's not implemented correctly
+			return values.NewInt(-1), nil
+		},
+	},
+	{
+		Name: "func_get_args",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "array",
+		MinArgs:    0,
+		MaxArgs:    0,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// func_get_args() returns an array of all arguments passed to the calling function
+			// For now, return empty array
+			return values.NewArray(), nil
+		},
+	},
+	{
+		Name: "func_get_arg",
+		Parameters: []*registry.Parameter{
+			{Name: "arg_num", Type: "int"},
+		},
+		ReturnType: "mixed",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// func_get_arg(n) returns the nth argument passed to the calling function
+			// For now, return null
+			return values.NewNull(), nil
 		},
 	},
 	{
@@ -534,6 +814,30 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name: "str_replace",
+		Parameters: []*registry.Parameter{
+			{Name: "search", Type: "mixed"},
+			{Name: "replace", Type: "mixed"},
+			{Name: "subject", Type: "mixed"},
+		},
+		ReturnType: "mixed",
+		MinArgs:    3,
+		MaxArgs:    4,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 3 {
+				return values.NewString(""), nil
+			}
+
+			search := args[0].ToString()
+			replace := args[1].ToString()
+			subject := args[2].ToString()
+
+			// PHP str_replace performs simple string replacement
+			result := strings.ReplaceAll(subject, search, replace)
+			return values.NewString(result), nil
+		},
+	},
+	{
 		Name:       "strtolower",
 		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
 		ReturnType: "string",
@@ -557,6 +861,82 @@ var builtinFunctionSpecs = []builtinSpec{
 				return values.NewString(""), nil
 			}
 			return values.NewString(strings.ToUpper(args[0].ToString())), nil
+		},
+	},
+	{
+		Name:       "trim",
+		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			str := args[0].ToString()
+			// PHP trim removes whitespace by default
+			if len(args) == 1 {
+				result := strings.TrimSpace(str)
+				return values.NewString(result), nil
+			}
+
+			// Custom character mask (simplified version)
+			mask := args[1].ToString()
+			result := strings.Trim(str, mask)
+			return values.NewString(result), nil
+		},
+	},
+	{
+		Name:       "ltrim",
+		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			str := args[0].ToString()
+			// Left trim whitespace by default
+			if len(args) == 1 {
+				result := strings.TrimLeftFunc(str, func(r rune) bool {
+					return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+				})
+				return values.NewString(result), nil
+			}
+
+			// Custom character mask
+			mask := args[1].ToString()
+			result := strings.TrimLeft(str, mask)
+			return values.NewString(result), nil
+		},
+	},
+	{
+		Name:       "rtrim",
+		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			str := args[0].ToString()
+			// Right trim whitespace by default
+			if len(args) == 1 {
+				result := strings.TrimRightFunc(str, func(r rune) bool {
+					return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+				})
+				return values.NewString(result), nil
+			}
+
+			// Custom character mask
+			mask := args[1].ToString()
+			result := strings.TrimRight(str, mask)
+			return values.NewString(result), nil
 		},
 	},
 	{
@@ -599,6 +979,80 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name:       "is_object",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsObject()), nil
+		},
+	},
+	{
+		Name:       "is_bool",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsBool()), nil
+		},
+	},
+	{
+		Name:       "is_float",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsFloat()), nil
+		},
+	},
+	{
+		Name:       "is_null",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(true), nil
+			}
+			return values.NewBool(args[0].IsNull()), nil
+		},
+	},
+	{
+		Name:       "is_numeric",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			// is_numeric returns true for numbers and numeric strings
+			if args[0].IsInt() || args[0].IsFloat() {
+				return values.NewBool(true), nil
+			}
+			if args[0].IsString() {
+				str := args[0].ToString()
+				_, err := strconv.ParseFloat(str, 64)
+				return values.NewBool(err == nil), nil
+			}
+			return values.NewBool(false), nil
+		},
+	},
+	{
 		Name:       "print",
 		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
 		ReturnType: "int",
@@ -611,6 +1065,117 @@ var builtinFunctionSpecs = []builtinSpec{
 				}
 			}
 			return values.NewInt(1), nil
+		},
+	},
+	{
+		Name: "json_encode",
+		Parameters: []*registry.Parameter{
+			{Name: "value", Type: "mixed"},
+		},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    4,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString("null"), nil
+			}
+
+			// Convert PHP value to Go value for JSON encoding
+			goValue := phpValueToGoValue(args[0])
+
+			// Encode to JSON
+			jsonBytes, err := json.Marshal(goValue)
+			if err != nil {
+				return values.NewBool(false), nil // PHP returns false on error
+			}
+
+			return values.NewString(string(jsonBytes)), nil
+		},
+	},
+	{
+		Name: "json_decode",
+		Parameters: []*registry.Parameter{
+			{Name: "json", Type: "string"},
+			{Name: "associative", Type: "bool"},
+		},
+		ReturnType: "mixed",
+		MinArgs:    1,
+		MaxArgs:    4,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewNull(), nil
+			}
+
+			jsonStr := args[0].ToString()
+
+			// Parse JSON into generic interface
+			var result interface{}
+			err := json.Unmarshal([]byte(jsonStr), &result)
+			if err != nil {
+				return values.NewNull(), nil // PHP returns null on error
+			}
+
+			// Convert Go value back to PHP value
+			return goValueToPhpValue(result), nil
+		},
+	},
+	{
+		Name: "explode",
+		Parameters: []*registry.Parameter{
+			{Name: "delimiter", Type: "string"},
+			{Name: "string", Type: "string"},
+		},
+		ReturnType: "array",
+		MinArgs:    2,
+		MaxArgs:    3,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 {
+				return values.NewArray(), nil
+			}
+
+			delimiter := args[0].ToString()
+			str := args[1].ToString()
+
+			// Split the string
+			parts := strings.Split(str, delimiter)
+
+			// Convert to PHP array
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			for i, part := range parts {
+				resultArr.Elements[int64(i)] = values.NewString(part)
+			}
+
+			return result, nil
+		},
+	},
+	{
+		Name: "implode",
+		Parameters: []*registry.Parameter{
+			{Name: "separator", Type: "string"},
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "string",
+		MinArgs:    2,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[1] == nil || !args[1].IsArray() {
+				return values.NewString(""), nil
+			}
+
+			separator := args[0].ToString()
+			arr := args[1].Data.(*values.Array)
+
+			// Convert array elements to strings and join
+			var parts []string
+			for _, value := range arr.Elements {
+				if value != nil {
+					parts = append(parts, value.ToString())
+				}
+			}
+
+			result := strings.Join(parts, separator)
+			return values.NewString(result), nil
 		},
 	},
 	{
@@ -627,6 +1192,70 @@ var builtinFunctionSpecs = []builtinSpec{
 				}
 			}
 			return values.NewNull(), nil
+		},
+	},
+	{
+		Name:       "abs",
+		Parameters: []*registry.Parameter{{Name: "number", Type: "mixed"}},
+		ReturnType: "number",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewInt(0), nil
+			}
+
+			if args[0].IsInt() {
+				val := args[0].ToInt()
+				if val < 0 {
+					return values.NewInt(-val), nil
+				}
+				return values.NewInt(val), nil
+			}
+
+			if args[0].IsFloat() {
+				val := args[0].ToFloat()
+				return values.NewFloat(math.Abs(val)), nil
+			}
+
+			// Try to convert string to number
+			str := args[0].ToString()
+			if val, err := strconv.ParseFloat(str, 64); err == nil {
+				return values.NewFloat(math.Abs(val)), nil
+			}
+
+			return values.NewInt(0), nil
+		},
+	},
+	{
+		Name:       "round",
+		Parameters: []*registry.Parameter{
+			{Name: "number", Type: "mixed"},
+		},
+		ReturnType: "number",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewFloat(0), nil
+			}
+
+			val := args[0].ToFloat()
+			precision := 0
+			if len(args) > 1 {
+				precision = int(args[1].ToInt())
+			}
+
+			// Round to specified precision
+			multiplier := math.Pow(10, float64(precision))
+			rounded := math.Round(val*multiplier) / multiplier
+
+			// Return int if precision is 0 and result is whole number
+			if precision == 0 && rounded == math.Trunc(rounded) {
+				return values.NewInt(int64(rounded)), nil
+			}
+
+			return values.NewFloat(rounded), nil
 		},
 	},
 	{
@@ -805,6 +1434,162 @@ var builtinFunctionSpecs = []builtinSpec{
 				}
 			}
 			return result, nil
+		},
+	},
+	{
+		Name: "array_push",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "int",
+		IsVariadic: true,
+		MinArgs:    2,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
+				return values.NewInt(0), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			// Add all values to the end of the array
+			for i := 1; i < len(args); i++ {
+				nextIndex := len(arr.Elements)
+				arr.Elements[int64(nextIndex)] = args[i]
+			}
+
+			return values.NewInt(int64(len(arr.Elements))), nil
+		},
+	},
+	{
+		Name: "in_array",
+		Parameters: []*registry.Parameter{
+			{Name: "needle", Type: "mixed"},
+			{Name: "haystack", Type: "array"},
+		},
+		ReturnType: "bool",
+		MinArgs:    2,
+		MaxArgs:    3,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[1] == nil || !args[1].IsArray() {
+				return values.NewBool(false), nil
+			}
+
+			needle := args[0]
+			arr := args[1].Data.(*values.Array)
+
+			// Search for the needle in the array values
+			for _, value := range arr.Elements {
+				if value != nil && value.ToString() == needle.ToString() {
+					return values.NewBool(true), nil
+				}
+			}
+
+			return values.NewBool(false), nil
+		},
+	},
+	{
+		Name: "array_keys",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    3,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+
+			index := 0
+			for key := range arr.Elements {
+				// Convert key to appropriate value type
+				switch k := key.(type) {
+				case string:
+					resultArr.Elements[int64(index)] = values.NewString(k)
+				case int64:
+					resultArr.Elements[int64(index)] = values.NewInt(k)
+				case int:
+					resultArr.Elements[int64(index)] = values.NewInt(int64(k))
+				default:
+					resultArr.Elements[int64(index)] = values.NewString(fmt.Sprintf("%v", k))
+				}
+				index++
+			}
+
+			return result, nil
+		},
+	},
+	{
+		Name: "array_merge",
+		Parameters: []*registry.Parameter{
+			{Name: "array1", Type: "array"},
+		},
+		ReturnType: "array",
+		IsVariadic: true,
+		MinArgs:    1,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			index := int64(0)
+
+			// Merge all arrays
+			for _, arg := range args {
+				if arg != nil && arg.IsArray() {
+					arr := arg.Data.(*values.Array)
+					// Add all elements to result array with new numeric indices
+					for _, value := range arr.Elements {
+						resultArr.Elements[index] = value
+						index++
+					}
+				}
+			}
+
+			return result, nil
+		},
+	},
+	{
+		Name: "sort",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewBool(false), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+
+			// Extract values and sort them
+			var sortedValues []*values.Value
+			for _, value := range arr.Elements {
+				sortedValues = append(sortedValues, value)
+			}
+
+			// Simple bubble sort for string comparison
+			for i := 0; i < len(sortedValues); i++ {
+				for j := i + 1; j < len(sortedValues); j++ {
+					if sortedValues[i].ToString() > sortedValues[j].ToString() {
+						sortedValues[i], sortedValues[j] = sortedValues[j], sortedValues[i]
+					}
+				}
+			}
+
+			// Rebuild array with new sorted order and numeric indices
+			newElements := make(map[interface{}]*values.Value)
+			for i, value := range sortedValues {
+				newElements[int64(i)] = value
+			}
+			arr.Elements = newElements
+
+			return values.NewBool(true), nil
 		},
 	},
 	{
@@ -1024,6 +1809,191 @@ var builtinFunctionSpecs = []builtinSpec{
 				}
 			}
 			return result, nil
+		},
+	},
+	{
+		Name: "file_get_contents",
+		Parameters: []*registry.Parameter{
+			{Name: "filename", Type: "string"},
+		},
+		ReturnType: "string|false",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			filename := args[0].ToString()
+
+			content, err := os.ReadFile(filename)
+			if err != nil {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewString(string(content)), nil
+		},
+	},
+	{
+		Name: "file_put_contents",
+		Parameters: []*registry.Parameter{
+			{Name: "filename", Type: "string"},
+			{Name: "data", Type: "mixed"},
+		},
+		ReturnType: "int|false",
+		MinArgs:    2,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || args[1] == nil {
+				return values.NewBool(false), nil
+			}
+
+			filename := args[0].ToString()
+			data := args[1].ToString()
+
+			err := os.WriteFile(filename, []byte(data), 0644)
+			if err != nil {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewInt(int64(len(data))), nil
+		},
+	},
+	{
+		Name: "unlink",
+		Parameters: []*registry.Parameter{
+			{Name: "filename", Type: "string"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			filename := args[0].ToString()
+
+			err := os.Remove(filename)
+			if err != nil {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewBool(true), nil
+		},
+	},
+	{
+		Name: "sprintf",
+		Parameters: []*registry.Parameter{
+			{Name: "format", Type: "string"},
+		},
+		ReturnType: "string",
+		IsVariadic: true,
+		MinArgs:    1,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			format := args[0].ToString()
+			var goArgs []interface{}
+
+			// Convert PHP values to Go interface{} for fmt.Sprintf
+			for i := 1; i < len(args); i++ {
+				if args[i] == nil {
+					goArgs = append(goArgs, nil)
+				} else if args[i].IsInt() {
+					goArgs = append(goArgs, args[i].ToInt())
+				} else if args[i].IsFloat() {
+					goArgs = append(goArgs, args[i].ToFloat())
+				} else if args[i].IsBool() {
+					goArgs = append(goArgs, args[i].ToBool())
+				} else {
+					goArgs = append(goArgs, args[i].ToString())
+				}
+			}
+
+			// Use Go's fmt.Sprintf which supports similar format specifiers
+			result := fmt.Sprintf(format, goArgs...)
+			return values.NewString(result), nil
+		},
+	},
+	{
+		Name: "array_filter",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+
+			// Filter truthy values (simplified version without callback support)
+			for key, val := range arr.Elements {
+				if val != nil && val.ToBool() {
+					resultArr.Elements[key] = val
+				}
+			}
+
+			return result, nil
+		},
+	},
+	{
+		Name: "array_values",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+
+			// Re-index array with numeric keys starting from 0
+			index := int64(0)
+			for _, val := range arr.Elements {
+				if val != nil {
+					resultArr.Elements[index] = val
+					index++
+				}
+			}
+			resultArr.NextIndex = index
+
+			return result, nil
+		},
+	},
+	{
+		Name: "count",
+		Parameters: []*registry.Parameter{
+			{Name: "array_or_countable", Type: "mixed"},
+		},
+		ReturnType: "int",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewInt(0), nil
+			}
+
+			if args[0].IsArray() {
+				arr := args[0].Data.(*values.Array)
+				return values.NewInt(int64(len(arr.Elements))), nil
+			}
+
+			// For non-arrays, return 1 (PHP behavior)
+			return values.NewInt(1), nil
 		},
 	},
 }

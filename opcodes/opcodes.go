@@ -144,6 +144,7 @@ const (
 	OP_SEND_VAR_NO_REF // Send variable without reference
 	OP_SEND_REF        // Send reference argument
 	OP_SEND_UNPACK     // Send unpacked arguments (...$args)
+	OP_SEND_VAL_NAMED  // Send named argument (name: value)
 
 	// Function calls
 	OP_DO_FCALL         // Execute function call
@@ -309,9 +310,12 @@ const (
 
 // Closure Operations (240-249)
 const (
-	OP_CREATE_CLOSURE Opcode = iota + 240 // Create a closure
-	OP_BIND_USE_VAR                       // Bind a use variable to closure
-	OP_INVOKE_CLOSURE                     // Invoke a closure
+	OP_CREATE_CLOSURE       Opcode = iota + 240 // Create a closure
+	OP_BIND_USE_VAR                             // Bind a use variable to closure
+	OP_INVOKE_CLOSURE                           // Invoke a closure
+	OP_CREATE_FUNC_CALLABLE                     // Create first-class function callable
+	OP_CREATE_METHOD_CALLABLE                   // Create first-class method callable
+	OP_CREATE_STATIC_CALLABLE                   // Create first-class static method callable
 )
 
 // Operand types for instruction encoding
@@ -500,6 +504,7 @@ var opcodeNames = map[Opcode]string{
 	OP_SEND_VAR_NO_REF: "SEND_VAR_NO_REF",
 	OP_SEND_REF:        "SEND_REF",
 	OP_SEND_UNPACK:     "SEND_UNPACK",
+	OP_SEND_VAL_NAMED:  "SEND_VAL_NAMED",
 
 	OP_DO_FCALL:         "DO_FCALL",
 	OP_DO_ICALL:         "DO_ICALL",
@@ -627,9 +632,12 @@ var opcodeNames = map[Opcode]string{
 	OP_RETHROW:          "RETHROW",
 
 	// Closure operations
-	OP_CREATE_CLOSURE: "CREATE_CLOSURE",
-	OP_BIND_USE_VAR:   "BIND_USE_VAR",
-	OP_INVOKE_CLOSURE: "INVOKE_CLOSURE",
+	OP_CREATE_CLOSURE:       "CREATE_CLOSURE",
+	OP_BIND_USE_VAR:         "BIND_USE_VAR",
+	OP_INVOKE_CLOSURE:       "INVOKE_CLOSURE",
+	OP_CREATE_FUNC_CALLABLE: "CREATE_FUNC_CALLABLE",
+	OP_CREATE_METHOD_CALLABLE: "CREATE_METHOD_CALLABLE",
+	OP_CREATE_STATIC_CALLABLE: "CREATE_STATIC_CALLABLE",
 }
 
 func (op Opcode) String() string {

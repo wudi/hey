@@ -5858,11 +5858,6 @@ func TestNotYetImplementedFeatures(t *testing.T) {
 			phpCode:      "<?php `ls`; ?>",
 			errorMessage: "shell execution expressions not yet implemented",
 		},
-		{
-			name:         "First class callable",
-			phpCode:      `<?php $fn = strlen(...); ?>`,
-			errorMessage: "first-class callables not yet implemented",
-		},
 	}
 
 	for _, tt := range tests {

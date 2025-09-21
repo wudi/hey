@@ -202,6 +202,7 @@ type PendingCall struct {
 	Function    *registry.Function
 	ClosureName string
 	Args        []*values.Value
+	ArgNames    []string        // Named argument names (empty string for positional args)
 	Result      operandTarget
 	Method      bool
 	Static      bool
@@ -627,6 +628,7 @@ func descriptorFromClass(class *registry.Class) *registry.ClassDescriptor {
 				Name:         prop.Name,
 				Visibility:   prop.Visibility,
 				IsStatic:     prop.IsStatic,
+				IsReadonly:   prop.IsReadonly,
 				Type:         prop.Type,
 				DefaultValue: copyValue(prop.DefaultValue),
 			}

@@ -342,6 +342,17 @@ func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, 
 				if prop.IsStatic {
 					continue
 				}
+				// Check if this property is readonly in the descriptor
+				isReadonly := false
+				if cls.Descriptor != nil && cls.Descriptor.Properties != nil {
+					if propDesc, exists := cls.Descriptor.Properties[name]; exists && propDesc.IsReadonly {
+						isReadonly = true
+					}
+				}
+				// Skip readonly properties - they should only be set explicitly
+				if isReadonly {
+					continue
+				}
 				obj.Data.(*values.Object).Properties[name] = copyValue(prop.Default)
 			}
 		}
@@ -350,6 +361,10 @@ func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, 
 		if cls.Descriptor != nil && cls.Descriptor.Properties != nil {
 			for name, propDesc := range cls.Descriptor.Properties {
 				if propDesc.IsStatic {
+					continue
+				}
+				// Skip readonly properties - they should only be set explicitly
+				if propDesc.IsReadonly {
 					continue
 				}
 				// Only set if not already set by runtime properties
@@ -709,6 +724,12 @@ func (vm *VirtualMachine) execAssignObj(ctx *ExecutionContext, frame *CallFrame,
 		return false, err
 	}
 	obj := objVal.Data.(*values.Object)
+
+	// Check readonly property enforcement
+	if err := vm.checkReadonlyProperty(ctx, obj, propName); err != nil {
+		return false, err
+	}
+
 	obj.Properties[propName] = copyValue(value)
 	return true, nil
 }
@@ -742,6 +763,12 @@ func (vm *VirtualMachine) execAssignObjOp(ctx *ExecutionContext, frame *CallFram
 
 	// Get current property value (left operand)
 	obj := objVal.Data.(*values.Object)
+
+	// Check readonly property enforcement for compound assignment
+	if err := vm.checkReadonlyProperty(ctx, obj, propName); err != nil {
+		return false, err
+	}
+
 	left, exists := obj.Properties[propName]
 	if !exists {
 		left = values.NewNull()
@@ -1139,6 +1166,7 @@ func (vm *VirtualMachine) execAssign(ctx *ExecutionContext, frame *CallFrame, in
 		value = copyValue(value)
 	}
 	resType, resSlot := decodeResult(inst)
+
 	if err := vm.writeOperand(ctx, frame, resType, resSlot, value); err != nil {
 		return false, err
 	}
@@ -2197,6 +2225,53 @@ func (vm *VirtualMachine) execInitFCall(ctx *ExecutionContext, frame *CallFrame,
 			if fn, ok := closure.Function.(*registry.Function); ok {
 				pending.Function = fn
 				pending.ClosureName = fn.Name
+			} else if fnType, ok := closure.Function.(string); ok {
+				// Handle special first-class callable types
+				switch fnType {
+				case "bound_method":
+					// Set up bound method call
+					if objVal, hasObj := closure.BoundVars["object"]; hasObj && objVal.IsObject() {
+						if methodVal, hasMethod := closure.BoundVars["method"]; hasMethod {
+							obj := objVal.Data.(*values.Object)
+							methodName := methodVal.ToString()
+
+							// Look up the method
+							class := ctx.ensureClass(obj.ClassName)
+							if class != nil {
+								if method := resolveClassMethod(ctx, class, methodName); method != nil {
+									pending.Function = method
+									pending.ClosureName = methodName
+									pending.Method = true
+									pending.This = objVal
+									pending.ClassName = obj.ClassName
+									pending.MethodName = methodName
+								}
+							}
+						}
+					}
+				case "static_method":
+					// Set up static method call
+					if classVal, hasClass := closure.BoundVars["class"]; hasClass {
+						if methodVal, hasMethod := closure.BoundVars["method"]; hasMethod {
+							className := classVal.ToString()
+							methodName := methodVal.ToString()
+
+							// Look up the method
+							class := ctx.ensureClass(className)
+							if class != nil {
+								if method := resolveClassMethod(ctx, class, methodName); method != nil {
+									pending.Function = method
+									pending.ClosureName = methodName
+									pending.Method = true
+									pending.This = nil
+									pending.ClassName = className
+									pending.MethodName = methodName
+									// Static method flag will be handled by the method call logic
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 	} else {
@@ -2362,7 +2437,162 @@ func (vm *VirtualMachine) execSendArg(ctx *ExecutionContext, frame *CallFrame, i
 		return false, err
 	}
 	pending.Args = append(pending.Args, copyValue(val))
+	pending.ArgNames = append(pending.ArgNames, "") // Empty string for positional argument
 	return true, nil
+}
+
+func (vm *VirtualMachine) execSendNamedArg(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	pending := frame.currentPendingCall()
+	if pending == nil {
+		return false, errors.New("named argument sent without pending call")
+	}
+
+	// First operand: argument name (string constant)
+	opType1, op1 := decodeOperand(inst, 1)
+	nameVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Second operand: argument value
+	opType2, op2 := decodeOperand(inst, 2)
+	val, err := vm.readOperand(ctx, frame, opType2, op2)
+	if err != nil {
+		return false, err
+	}
+
+	// Store the argument with its name
+	pending.Args = append(pending.Args, copyValue(val))
+	pending.ArgNames = append(pending.ArgNames, nameVal.ToString())
+	return true, nil
+}
+
+// resolveNamedArguments maps named arguments to their correct positions based on function parameters
+func (vm *VirtualMachine) resolveNamedArguments(fn *registry.Function, args []*values.Value, argNames []string) ([]*values.Value, error) {
+	if fn == nil {
+		return args, nil // No function info available, return as-is
+	}
+	if fn.Parameters == nil {
+		return args, nil // No parameter info available, return as-is
+	}
+
+	// Check if we have any named arguments
+	hasNamedArgs := false
+	for _, name := range argNames {
+		if name != "" {
+			hasNamedArgs = true
+			break
+		}
+	}
+
+	if !hasNamedArgs {
+		return args, nil // All positional arguments, return as-is
+	}
+
+	// Create parameter name to index mapping
+	paramMap := make(map[string]int)
+	for i, param := range fn.Parameters {
+		paramMap[param.Name] = i
+	}
+
+	// Create result array with default values
+	result := make([]*values.Value, len(fn.Parameters))
+	for i, param := range fn.Parameters {
+		if param.DefaultValue != nil {
+			result[i] = param.DefaultValue
+		}
+	}
+
+	// Process arguments
+	positionalIndex := 0
+	for i, arg := range args {
+		if i < len(argNames) && argNames[i] != "" {
+			// Named argument
+			paramName := argNames[i]
+			if paramIndex, exists := paramMap[paramName]; exists {
+				result[paramIndex] = arg
+			} else {
+				// More detailed error message for debugging
+				paramNames := make([]string, len(fn.Parameters))
+				for i, p := range fn.Parameters {
+					paramNames[i] = p.Name
+				}
+				return nil, fmt.Errorf("unknown parameter: %s (function %s has parameters: %v)", paramName, fn.Name, paramNames)
+			}
+		} else {
+			// Positional argument
+			if positionalIndex < len(result) {
+				result[positionalIndex] = arg
+				positionalIndex++
+			} else {
+				return nil, fmt.Errorf("too many arguments")
+			}
+		}
+	}
+
+	// Check for required parameters without values
+	for i, param := range fn.Parameters {
+		if result[i] == nil && param.DefaultValue == nil {
+			return nil, fmt.Errorf("missing required parameter: %s", param.Name)
+		}
+	}
+
+	return result, nil
+}
+
+// validateParameterType validates that a parameter value matches the expected type(s)
+func (vm *VirtualMachine) validateParameterType(param *registry.Parameter, value *values.Value, functionName string, paramIndex int) error {
+	paramType := param.Type
+	valueType := value.Type.String()
+
+	// Handle union types (e.g., "int|string")
+	if strings.Contains(paramType, "|") {
+		allowedTypes := strings.Split(paramType, "|")
+		for _, allowedType := range allowedTypes {
+			allowedType = strings.TrimSpace(allowedType)
+			if vm.isTypeMatch(allowedType, value) {
+				return nil // Type matches one of the union options
+			}
+		}
+		// None of the union types matched
+		return fmt.Errorf("TypeError: %s(): Argument #%d ($%s) must be of type %s, %s given",
+			functionName, paramIndex+1, param.Name, paramType, valueType)
+	}
+
+	// Handle single types
+	if !vm.isTypeMatch(paramType, value) {
+		return fmt.Errorf("TypeError: %s(): Argument #%d ($%s) must be of type %s, %s given",
+			functionName, paramIndex+1, param.Name, paramType, valueType)
+	}
+
+	return nil
+}
+
+// isTypeMatch checks if a value matches a specific type
+func (vm *VirtualMachine) isTypeMatch(expectedType string, value *values.Value) bool {
+	valueType := value.Type.String()
+
+	switch expectedType {
+	case "int":
+		return valueType == "int"
+	case "string":
+		return valueType == "string"
+	case "float":
+		return valueType == "float"
+	case "bool":
+		return valueType == "bool"
+	case "array":
+		return valueType == "array"
+	case "object":
+		return valueType == "object"
+	case "null":
+		return valueType == "null"
+	case "mixed":
+		return true // mixed accepts any type
+	default:
+		// Handle class names and other complex types
+		return valueType == expectedType
+	}
 }
 
 func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
@@ -2389,10 +2619,17 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			return false, fmt.Errorf("callable %s not resolved", pending.ClosureName)
 		}
 		ctxBuiltin := &builtinContext{vm: vm, ctx: ctx}
-		args := pending.Args
+
+		// Resolve named arguments to correct positions
+		resolvedArgs, err := vm.resolveNamedArguments(fn, pending.Args, pending.ArgNames)
+		if err != nil {
+			return false, err
+		}
+		args := resolvedArgs
+
 		// For method calls, prepend the 'this' object as the first argument
 		if pending.Method && pending.This != nil {
-			args = append([]*values.Value{pending.This}, pending.Args...)
+			args = append([]*values.Value{pending.This}, args...)
 		}
 		ret, err := fn.Builtin(ctxBuiltin, args)
 		if err != nil {
@@ -2416,8 +2653,13 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 
 	// Handle generator functions
 	if pending.Function.IsGenerator {
+		// Resolve named arguments for generators too
+		genResolvedArgs, err := vm.resolveNamedArguments(pending.Function, pending.Args, pending.ArgNames)
+		if err != nil {
+			return false, err
+		}
 		// Create generator
-		gen := runtime2.NewGenerator(pending.Function, pending.Args, vm)
+		gen := runtime2.NewGenerator(pending.Function, genResolvedArgs, vm)
 
 		// Create Generator object
 		generatorObj := &values.Object{
@@ -2450,12 +2692,20 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 	child.ClassName = pending.ClassName
 	child.CallingClass = pending.CallingClass
 
+	// Resolve named arguments to correct positions for user-defined functions
+	resolvedUserArgs, err := vm.resolveNamedArguments(pending.Function, pending.Args, pending.ArgNames)
+	if err != nil {
+		return false, err
+	}
+	// Update pending args with resolved arguments
+	functionArgs := resolvedUserArgs
+
 	// Handle magic method argument restructuring
-	if pending.IsMagicMethod && len(pending.Args) > 1 {
+	if pending.IsMagicMethod && len(functionArgs) > 1 {
 		// For magic methods, convert: [methodName, arg1, arg2, ...]
 		// to: [methodName, [arg1, arg2, ...]]
-		methodName := pending.Args[0]
-		actualArgs := pending.Args[1:] // All arguments except the method name
+		methodName := functionArgs[0]
+		actualArgs := functionArgs[1:] // All arguments except the method name
 
 		// Create an array containing all the actual arguments
 		argsArray := values.NewArray()
@@ -2463,8 +2713,8 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			argsArray.ArraySet(values.NewInt(int64(i)), arg)
 		}
 
-		// Replace the arguments with: [methodName, argsArray]
-		pending.Args = []*values.Value{methodName, argsArray}
+		// Replace the function args with: [methodName, argsArray]
+		functionArgs = []*values.Value{methodName, argsArray}
 	}
 
 	// Handle both $this and parameters in the same slot range
@@ -2479,17 +2729,25 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			// This is the variadic parameter - collect all remaining arguments into an array
 			variadicArray := values.NewArray()
 			startIndex := i // Start collecting from current parameter index
-			for argIndex := startIndex; argIndex < len(pending.Args); argIndex++ {
-				variadicArray.ArraySet(values.NewInt(int64(argIndex-startIndex)), copyValue(pending.Args[argIndex]))
+			for argIndex := startIndex; argIndex < len(functionArgs); argIndex++ {
+				variadicArray.ArraySet(values.NewInt(int64(argIndex-startIndex)), copyValue(functionArgs[argIndex]))
 			}
 			arg = variadicArray
-		} else if i < len(pending.Args) {
-			arg = copyValue(pending.Args[i])
+		} else if i < len(functionArgs) {
+			arg = copyValue(functionArgs[i])
 		} else if param.HasDefault {
 			arg = copyValue(param.DefaultValue)
 		} else {
 			arg = values.NewNull()
 		}
+
+		// Validate parameter type
+		if param.Type != "" {
+			if err := vm.validateParameterType(param, arg, pending.Function.Name, i); err != nil {
+				return false, err
+			}
+		}
+
 		child.setLocal(uint32(i), arg)
 		child.bindSlotName(uint32(i), param.Name)
 	}
@@ -2555,6 +2813,121 @@ func (vm *VirtualMachine) execCreateClosure(ctx *ExecutionContext, frame *CallFr
 
 func (vm *VirtualMachine) execBindUseVar(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	// For now closures capture values eagerly during creation, so this is a no-op.
+	return true, nil
+}
+
+// execCreateFuncCallable creates a first-class callable for a function reference
+func (vm *VirtualMachine) execCreateFuncCallable(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get function name from operand 1
+	opType1, op1 := decodeOperand(inst, 1)
+	if opType1 != opcodes.IS_CONST {
+		return false, fmt.Errorf("function callable creation requires const function name")
+	}
+	if int(op1) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", op1)
+	}
+	functionName := frame.Constants[op1].ToString()
+
+	// Look up the function
+	var targetFn *registry.Function
+	if fn, ok := ctx.UserFunctions[strings.ToLower(functionName)]; ok {
+		targetFn = fn
+	} else if registry.GlobalRegistry != nil {
+		if fn, ok := registry.GlobalRegistry.GetFunction(functionName); ok {
+			targetFn = fn
+		}
+	}
+
+	if targetFn == nil {
+		return false, fmt.Errorf("unknown function %s for first-class callable", functionName)
+	}
+
+	// Create a closure for the function
+	closure := values.NewClosure(targetFn, nil, functionName)
+
+	// Store result
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, closure); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// execCreateMethodCallable creates a first-class callable for a method reference
+func (vm *VirtualMachine) execCreateMethodCallable(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get object from operand 1
+	objType, objOp := decodeOperand(inst, 1)
+	objVal, err := vm.readOperand(ctx, frame, objType, objOp)
+	if err != nil {
+		return false, err
+	}
+	if !objVal.IsObject() {
+		return false, fmt.Errorf("method callable requires object")
+	}
+
+	// Get method name from operand 2
+	methodType, methodOp := decodeOperand(inst, 2)
+	if methodType != opcodes.IS_CONST {
+		return false, fmt.Errorf("method callable creation requires const method name")
+	}
+	if int(methodOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", methodOp)
+	}
+	methodName := frame.Constants[methodOp].ToString()
+
+	// Create a bound method callable
+	// We'll store both the object and method name in the closure
+	boundVars := map[string]*values.Value{
+		"object": objVal,
+		"method": values.NewString(methodName),
+	}
+
+	closure := values.NewClosure("bound_method", boundVars, fmt.Sprintf("%s->%s", objVal.Data.(*values.Object).ClassName, methodName))
+
+	// Store result
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, closure); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// execCreateStaticCallable creates a first-class callable for a static method reference
+func (vm *VirtualMachine) execCreateStaticCallable(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get class name from operand 1
+	classType, classOp := decodeOperand(inst, 1)
+	if classType != opcodes.IS_CONST {
+		return false, fmt.Errorf("static callable creation requires const class name")
+	}
+	if int(classOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", classOp)
+	}
+	className := frame.Constants[classOp].ToString()
+
+	// Get method name from operand 2
+	methodType, methodOp := decodeOperand(inst, 2)
+	if methodType != opcodes.IS_CONST {
+		return false, fmt.Errorf("static callable creation requires const method name")
+	}
+	if int(methodOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", methodOp)
+	}
+	methodName := frame.Constants[methodOp].ToString()
+
+	// Create a static method callable
+	// We'll store the class and method name in the closure
+	boundVars := map[string]*values.Value{
+		"class":  values.NewString(className),
+		"method": values.NewString(methodName),
+	}
+
+	closure := values.NewClosure("static_method", boundVars, fmt.Sprintf("%s::%s", className, methodName))
+
+	// Store result
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, closure); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -2955,3 +3328,34 @@ func (vm *VirtualMachine) CallAllDestructors(ctx *ExecutionContext) {
 		}
 	}
 }
+
+// checkReadonlyProperty validates that a property assignment is allowed based on readonly semantics
+func (vm *VirtualMachine) checkReadonlyProperty(ctx *ExecutionContext, obj *values.Object, propName string) error {
+	// Get the class descriptor from the registry
+	classDesc, err := registry.GlobalRegistry.GetClass(obj.ClassName)
+	if err != nil {
+		// If class not found in registry, allow assignment (could be stdClass or builtin)
+		return nil
+	}
+
+	// Check if the property is defined and readonly
+	prop, exists := classDesc.Properties[propName]
+	if !exists {
+		// Property not defined in class, allow dynamic assignment
+		return nil
+	}
+
+	if !prop.IsReadonly {
+		// Property is not readonly, allow assignment
+		return nil
+	}
+
+	// Check if property is already set (readonly = write-once semantics)
+	if _, alreadySet := obj.Properties[propName]; alreadySet {
+		return fmt.Errorf("cannot modify readonly property %s::$%s", obj.ClassName, propName)
+	}
+
+	// First assignment to readonly property is allowed
+	return nil
+}
+

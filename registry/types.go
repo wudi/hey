@@ -51,6 +51,7 @@ type Function struct {
 	Handler      func(interface{}, []*values.Value) (*values.Value, error)
 	MinArgs      int
 	MaxArgs      int
+	Attributes   []*Attribute
 }
 
 // Clone creates a shallow copy of the function metadata. Instructions and
@@ -70,6 +71,13 @@ type Parameter struct {
 	IsReference  bool
 	HasDefault   bool
 	DefaultValue *values.Value
+	Attributes   []*Attribute
+}
+
+// Attribute represents a compiled PHP attribute.
+type Attribute struct {
+	Name      string
+	Arguments []*values.Value
 }
 
 // Class models a compiled PHP class definition used by the compiler and VM.
@@ -83,6 +91,7 @@ type Class struct {
 	Constants  map[string]*ClassConstant
 	IsAbstract bool
 	IsFinal    bool
+	Attributes []*Attribute
 }
 
 // Property represents a class property.
@@ -90,9 +99,11 @@ type Property struct {
 	Name         string
 	Visibility   string
 	IsStatic     bool
+	IsReadonly   bool
 	Type         string
 	DefaultValue *values.Value
 	DocComment   string
+	Attributes   []*Attribute
 }
 
 // ClassConstant represents a class constant.
