@@ -2260,6 +2260,123 @@ var builtinFunctionSpecs = []*registry.Function{
 			return values.NewBool(true), nil
 		},
 	},
+	{
+		Name:       "getcwd",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "string|false",
+		MinArgs:    0,
+		MaxArgs:    0,
+		IsBuiltin:  true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// Get the current working directory
+			cwd, err := os.Getwd()
+			if err != nil {
+				// Return false on error (PHP behavior)
+				return values.NewBool(false), nil
+			}
+			return values.NewString(cwd), nil
+		},
+	},
+	{
+		Name: "is_string",
+		Parameters: []*registry.Parameter{
+			{Name: "value", Type: "mixed"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		IsBuiltin:  true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsString()), nil
+		},
+	},
+	{
+		Name: "substr",
+		Parameters: []*registry.Parameter{
+			{Name: "string", Type: "string"},
+			{Name: "offset", Type: "int"},
+			{Name: "length", Type: "int", HasDefault: true, DefaultValue: values.NewNull()},
+		},
+		ReturnType: "string|false",
+		MinArgs:    2,
+		MaxArgs:    3,
+		IsBuiltin:  true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 {
+				return values.NewBool(false), nil
+			}
+
+			str := args[0].ToString()
+			offset := int(args[1].ToInt())
+			strLen := len(str)
+
+			// Handle negative offset
+			if offset < 0 {
+				offset = strLen + offset
+				if offset < 0 {
+					offset = 0
+				}
+			}
+
+			// If offset is beyond string length, return false
+			if offset >= strLen {
+				return values.NewBool(false), nil
+			}
+
+			// Determine length
+			var length int
+			if len(args) >= 3 && !args[2].IsNull() {
+				length = int(args[2].ToInt())
+			} else {
+				length = strLen - offset
+			}
+
+			// Handle negative length
+			if length < 0 {
+				endPos := strLen + length
+				if endPos <= offset {
+					return values.NewString(""), nil
+				}
+				length = endPos - offset
+			}
+
+			// Ensure we don't go past the end of the string
+			if offset+length > strLen {
+				length = strLen - offset
+			}
+
+			// Extract substring
+			if offset < strLen && length > 0 {
+				end := offset + length
+				if end > strLen {
+					end = strLen
+				}
+				return values.NewString(str[offset:end]), nil
+			}
+
+			return values.NewString(""), nil
+		},
+	},
+	{
+		Name: "strlen",
+		Parameters: []*registry.Parameter{
+			{Name: "string", Type: "string"},
+		},
+		ReturnType: "int",
+		MinArgs:    1,
+		MaxArgs:    1,
+		IsBuiltin:  true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 {
+				return values.NewInt(0), nil
+			}
+			str := args[0].ToString()
+			return values.NewInt(int64(len(str))), nil
+		},
+	},
 }
 
 var builtinConstants = []*registry.ConstantDescriptor{
