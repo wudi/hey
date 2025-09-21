@@ -828,6 +828,80 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name:       "is_object",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsObject()), nil
+		},
+	},
+	{
+		Name:       "is_bool",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsBool()), nil
+		},
+	},
+	{
+		Name:       "is_float",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsFloat()), nil
+		},
+	},
+	{
+		Name:       "is_null",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(true), nil
+			}
+			return values.NewBool(args[0].IsNull()), nil
+		},
+	},
+	{
+		Name:       "is_numeric",
+		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			// is_numeric returns true for numbers and numeric strings
+			if args[0].IsInt() || args[0].IsFloat() {
+				return values.NewBool(true), nil
+			}
+			if args[0].IsString() {
+				str := args[0].ToString()
+				_, err := strconv.ParseFloat(str, 64)
+				return values.NewBool(err == nil), nil
+			}
+			return values.NewBool(false), nil
+		},
+	},
+	{
 		Name:       "print",
 		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
 		ReturnType: "int",
