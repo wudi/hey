@@ -1523,6 +1523,75 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name: "array_merge",
+		Parameters: []*registry.Parameter{
+			{Name: "array1", Type: "array"},
+		},
+		ReturnType: "array",
+		IsVariadic: true,
+		MinArgs:    1,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+			index := int64(0)
+
+			// Merge all arrays
+			for _, arg := range args {
+				if arg != nil && arg.IsArray() {
+					arr := arg.Data.(*values.Array)
+					// Add all elements to result array with new numeric indices
+					for _, value := range arr.Elements {
+						resultArr.Elements[index] = value
+						index++
+					}
+				}
+			}
+
+			return result, nil
+		},
+	},
+	{
+		Name: "sort",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewBool(false), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+
+			// Extract values and sort them
+			var sortedValues []*values.Value
+			for _, value := range arr.Elements {
+				sortedValues = append(sortedValues, value)
+			}
+
+			// Simple bubble sort for string comparison
+			for i := 0; i < len(sortedValues); i++ {
+				for j := i + 1; j < len(sortedValues); j++ {
+					if sortedValues[i].ToString() > sortedValues[j].ToString() {
+						sortedValues[i], sortedValues[j] = sortedValues[j], sortedValues[i]
+					}
+				}
+			}
+
+			// Rebuild array with new sorted order and numeric indices
+			newElements := make(map[interface{}]*values.Value)
+			for i, value := range sortedValues {
+				newElements[int64(i)] = value
+			}
+			arr.Elements = newElements
+
+			return values.NewBool(true), nil
+		},
+	},
+	{
 		Name: "array_diff",
 		Parameters: []*registry.Parameter{
 			{Name: "array", Type: "array"},
