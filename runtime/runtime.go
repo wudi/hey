@@ -109,37 +109,29 @@ func registerBuiltinSymbols() error {
 		registry.Initialize()
 	}
 
-	for _, spec := range builtinFunctionSpecs {
-		fn := &registry.Function{
-			Name:       spec.Name,
-			Parameters: spec.Parameters,
-			ReturnType: spec.ReturnType,
-			IsVariadic: spec.IsVariadic,
-			IsBuiltin:  true,
-			Builtin:    spec.Impl,
+	for _, fn := range builtinFunctionSpecs {
+		// Set default MinArgs and MaxArgs if not specified
+		if fn.MinArgs == 0 && len(fn.Parameters) > 0 {
+			fn.MinArgs = len(fn.Parameters)
 		}
-
-		if spec.MinArgs == 0 && len(spec.Parameters) > 0 {
-			spec.MinArgs = len(spec.Parameters)
-		}
-		if spec.MaxArgs == 0 {
-			if spec.IsVariadic {
-				spec.MaxArgs = -1
+		if fn.MaxArgs == 0 {
+			if fn.IsVariadic {
+				fn.MaxArgs = -1
 			} else {
-				spec.MaxArgs = len(spec.Parameters)
+				fn.MaxArgs = len(fn.Parameters)
 			}
 		}
 
-		fn.MinArgs = spec.MinArgs
-		fn.MaxArgs = spec.MaxArgs
-		if spec.Name == "go" {
+		// Special handler for the "go" function
+		if fn.Name == "go" {
+			builtin := fn.Builtin
 			fn.Handler = func(_ interface{}, args []*values.Value) (*values.Value, error) {
-				return spec.Impl(nil, args)
+				return builtin(nil, args)
 			}
 		}
 
 		if err := registry.GlobalRegistry.RegisterFunction(fn); err != nil {
-			return fmt.Errorf("register builtin %s: %w", spec.Name, err)
+			return fmt.Errorf("register builtin %s: %w", fn.Name, err)
 		}
 	}
 

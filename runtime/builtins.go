@@ -423,16 +423,6 @@ func (g *Generator) handleDelegateNext() bool {
 }
 
 
-type builtinSpec struct {
-	Name       string
-	Parameters []*registry.Parameter
-	ReturnType string
-	IsVariadic bool
-	MinArgs    int
-	MaxArgs    int
-	Impl       registry.BuiltinImplementation
-}
-
 var builtinClassStubs = map[string]map[string]struct{}{
 	"stdclass": {},
 	"exception": {
@@ -445,14 +435,15 @@ var builtinClassStubs = map[string]map[string]struct{}{
 	},
 }
 
-var builtinFunctionSpecs = []builtinSpec{
+var builtinFunctionSpecs = []*registry.Function{
 	{
 		Name:       "count",
 		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
 		ReturnType: "int",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin:  true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 1 {
 				return values.NewInt(0), nil
 			}
@@ -479,7 +470,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -506,7 +498,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -537,7 +530,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    0,
 		MaxArgs:    1,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 {
 				// Called without arguments - return current class name if in class context
 				// For now, return false (which would be an error in real PHP)
@@ -558,7 +552,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "int",
 		MinArgs:    0,
 		MaxArgs:    0,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			// func_num_args() returns the number of arguments passed to the calling function
 			// We need to access the calling function's arguments
 			// For now, return -1 to indicate it's not implemented correctly
@@ -571,7 +566,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    0,
 		MaxArgs:    0,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			// func_get_args() returns an array of all arguments passed to the calling function
 			// For now, return empty array
 			return values.NewArray(), nil
@@ -585,7 +581,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "mixed",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			// func_get_arg(n) returns the nth argument passed to the calling function
 			// For now, return null
 			return values.NewNull(), nil
@@ -600,7 +597,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    2,
 		MaxArgs:    2,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[1] == nil {
 				return values.NewBool(false), nil
 			}
@@ -648,7 +646,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -680,7 +679,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -702,7 +702,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    1,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			result := values.NewArray()
 			targetArr := result.Data.(*values.Array)
 			for _, arg := range args {
@@ -726,7 +727,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "int",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewInt(0), nil
 			}
@@ -742,7 +744,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "int|false",
 		MinArgs:    2,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 {
 				return values.NewBool(false), nil
 			}
@@ -764,7 +767,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    2,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 {
 				return values.NewString(""), nil
 			}
@@ -801,7 +805,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    2,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 {
 				return values.NewString(""), nil
 			}
@@ -823,7 +828,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "mixed",
 		MinArgs:    3,
 		MaxArgs:    4,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 3 {
 				return values.NewString(""), nil
 			}
@@ -843,7 +849,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewString(""), nil
 			}
@@ -856,7 +863,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewString(""), nil
 			}
@@ -869,7 +877,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewString(""), nil
 			}
@@ -893,7 +902,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewString(""), nil
 			}
@@ -919,7 +929,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewString(""), nil
 			}
@@ -945,7 +956,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -958,7 +970,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -971,7 +984,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -984,7 +998,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -997,7 +1012,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -1010,7 +1026,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -1023,7 +1040,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(true), nil
 			}
@@ -1036,7 +1054,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -1058,7 +1077,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "int",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) > 0 {
 				if err := ctx.WriteOutput(args[0]); err != nil {
 					return nil, err
@@ -1075,7 +1095,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    1,
 		MaxArgs:    4,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewString("null"), nil
 			}
@@ -1101,7 +1122,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "mixed",
 		MinArgs:    1,
 		MaxArgs:    4,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewNull(), nil
 			}
@@ -1128,7 +1150,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    2,
 		MaxArgs:    3,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 {
 				return values.NewArray(), nil
 			}
@@ -1158,7 +1181,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    2,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[1] == nil || !args[1].IsArray() {
 				return values.NewString(""), nil
 			}
@@ -1185,7 +1209,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    1,
 		MaxArgs:    -1,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if ctx != nil {
 				for _, arg := range args {
 					_ = ctx.WriteOutput(values.NewString(arg.VarDump()))
@@ -1200,7 +1225,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "number",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewInt(0), nil
 			}
@@ -1235,7 +1261,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "number",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewFloat(0), nil
 			}
@@ -1265,7 +1292,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    1,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 {
 				return nil, fmt.Errorf("go() expects at least one argument")
 			}
@@ -1290,7 +1318,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1325,7 +1354,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    2,
 		MaxArgs:    3,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1379,7 +1409,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    2,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[0] == nil || !args[0].IsArray() || args[1] == nil || !args[1].IsArray() {
 				return values.NewBool(false), nil
 			}
@@ -1415,7 +1446,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1445,7 +1477,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    2,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
 				return values.NewInt(0), nil
 			}
@@ -1469,7 +1502,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    2,
 		MaxArgs:    3,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[1] == nil || !args[1].IsArray() {
 				return values.NewBool(false), nil
 			}
@@ -1495,7 +1529,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    3,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1532,7 +1567,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    1,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			result := values.NewArray()
 			resultArr := result.Data.(*values.Array)
 			index := int64(0)
@@ -1560,7 +1596,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewBool(false), nil
 			}
@@ -1601,7 +1638,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    2,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1633,7 +1671,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1673,7 +1712,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    2,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1715,7 +1755,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1760,7 +1801,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "number",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewInt(0), nil
 			}
@@ -1790,7 +1832,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1819,7 +1862,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string|false",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -1842,7 +1886,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "int|false",
 		MinArgs:    2,
 		MaxArgs:    2,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 || args[0] == nil || args[1] == nil {
 				return values.NewBool(false), nil
 			}
@@ -1866,7 +1911,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -1889,7 +1935,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		IsVariadic: true,
 		MinArgs:    1,
 		MaxArgs:    -1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewString(""), nil
 			}
@@ -1925,7 +1972,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1952,7 +2000,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "array",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
 				return values.NewArray(), nil
 			}
@@ -1982,7 +2031,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "int",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewInt(0), nil
 			}
@@ -2006,7 +2056,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    2,
 		MaxArgs:    3,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) < 2 {
 				return values.NewBool(false), nil
 			}
@@ -2049,7 +2100,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 {
 				return values.NewBool(false), nil
 			}
@@ -2069,7 +2121,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string|array|false",
 		MinArgs:    0,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || (len(args) > 0 && args[0].IsNull()) {
 				// Return all environment variables as an associative array
 				envVars := os.Environ()
@@ -2104,7 +2157,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 {
 				return values.NewBool(false), nil
 			}
@@ -2137,7 +2191,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "string",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 {
 				return values.NewString("NULL"), nil
 			}
@@ -2178,7 +2233,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    1,
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			if len(args) == 0 || args[0] == nil {
 				return values.NewBool(false), nil
 			}
@@ -2193,7 +2249,8 @@ var builtinFunctionSpecs = []builtinSpec{
 		ReturnType: "bool",
 		MinArgs:    1,
 		MaxArgs:    999, // PHP's isset() can take multiple arguments
-		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+		IsBuiltin: true,
+		Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 			// In PHP, isset() returns true only if all arguments are set and not null
 			for _, arg := range args {
 				if arg == nil || arg.IsNull() {
