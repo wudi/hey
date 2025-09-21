@@ -39,6 +39,7 @@ type Compiler struct {
 	currentClass     *registry.Class // Current class being compiled
 	currentFunction  *registry.Function // Current function being compiled
 	currentFile      string // Current file being compiled
+	currentNamespace string // Current namespace being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -2215,7 +2216,8 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 		}
 
 		// Create object first
-		classConstant := c.addConstant(values.NewString(className))
+		resolvedClassName := c.resolveClassName(className)
+		classConstant := c.addConstant(values.NewString(resolvedClassName))
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
@@ -2255,7 +2257,8 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 	}
 
 	// Create the object
-	classConstant := c.addConstant(values.NewString(className))
+	resolvedClassName := c.resolveClassName(className)
+	classConstant := c.addConstant(values.NewString(resolvedClassName))
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
@@ -3146,7 +3149,8 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	// Handle implements
 	for _, iface := range decl.Implements {
 		if ifaceId, ok := iface.(*ast.IdentifierNode); ok {
-			ifaceConstant := c.addConstant(values.NewString(ifaceId.Name))
+			resolvedIfaceName := c.resolveClassName(ifaceId.Name)
+			ifaceConstant := c.addConstant(values.NewString(resolvedIfaceName))
 			c.emit(opcodes.OP_ADD_INTERFACE, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, ifaceConstant, 0, 0)
 		} else {
 			return fmt.Errorf("complex interface expressions not supported yet")
@@ -3939,14 +3943,17 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 		return fmt.Errorf("invalid class name type")
 	}
 
+	// Build fully qualified class name
+	fullyQualifiedName := c.buildFullyQualifiedName(className)
+
 	// Check if class already exists
-	if _, exists := c.classes[className]; exists {
-		return fmt.Errorf("class %s already declared", className)
+	if _, exists := c.classes[fullyQualifiedName]; exists {
+		return fmt.Errorf("class %s already declared", fullyQualifiedName)
 	}
 
 	// Create new class
 	class := &registry.Class{
-		Name:       className,
+		Name:       fullyQualifiedName, // Store fully qualified name
 		Parent:     "",
 		Properties: make(map[string]*registry.Property),
 		Methods:    make(map[string]*registry.Function),
@@ -3958,7 +3965,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
-			class.Parent = parent.Name
+			class.Parent = c.resolveClassName(parent.Name) // Resolve parent class name
 		} else {
 			return fmt.Errorf("complex parent class expressions not supported yet")
 		}
@@ -3969,7 +3976,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	c.currentClass = class
 
 	// Emit class table initialization
-	nameConstant := c.addConstant(values.NewString(className))
+	nameConstant := c.addConstant(values.NewString(fullyQualifiedName))
 	c.emit(opcodes.OP_INIT_CLASS_TABLE, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 
 	// Set current class context in VM
@@ -3984,7 +3991,8 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	// Handle implements
 	for _, iface := range decl.Implements {
 		if ifaceId, ok := iface.(*ast.IdentifierNode); ok {
-			ifaceConstant := c.addConstant(values.NewString(ifaceId.Name))
+			resolvedIfaceName := c.resolveClassName(ifaceId.Name)
+			ifaceConstant := c.addConstant(values.NewString(resolvedIfaceName))
 			c.emit(opcodes.OP_ADD_INTERFACE, opcodes.IS_CONST, nameConstant, opcodes.IS_CONST, ifaceConstant, 0, 0)
 		} else {
 			return fmt.Errorf("complex interface expressions not supported yet")
@@ -4009,7 +4017,7 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 	}
 
 	// Store compiled class
-	c.classes[className] = class
+	c.classes[fullyQualifiedName] = class
 	c.currentClass = oldCurrentClass
 
 	// Clear current class context in VM
@@ -5732,6 +5740,24 @@ func (c *Compiler) emitDeclareDirective(directive string, valueTemp uint32) {
 }
 
 func (c *Compiler) compileNamespaceStatement(stmt *ast.NamespaceStatement) error {
+	// Set current namespace context
+	// Note: In PHP, namespace declarations affect all subsequent code in the file
+	// until a new namespace is declared - they don't restore the previous namespace
+	if stmt.Name != nil {
+		// Build namespace string from parts
+		namespaceName := ""
+		for i, part := range stmt.Name.Parts {
+			if i > 0 {
+				namespaceName += "\\"
+			}
+			namespaceName += part
+		}
+		c.currentNamespace = namespaceName
+	} else {
+		// Global namespace
+		c.currentNamespace = ""
+	}
+
 	// Compile namespace body if present
 	if stmt.Body != nil {
 		for _, node := range stmt.Body {
@@ -5741,7 +5767,27 @@ func (c *Compiler) compileNamespaceStatement(stmt *ast.NamespaceStatement) error
 		}
 	}
 
+	// Note: We don't restore the previous namespace context
+	// The namespace change is persistent for subsequent code
 	return nil
+}
+
+// buildFullyQualifiedName creates a fully qualified name with the current namespace
+func (c *Compiler) buildFullyQualifiedName(name string) string {
+	if c.currentNamespace == "" {
+		return name
+	}
+	return c.currentNamespace + "\\" + name
+}
+
+// resolveClassName resolves a class name, supporting both relative and fully qualified names
+func (c *Compiler) resolveClassName(name string) string {
+	// If name starts with \, it's already fully qualified
+	if strings.HasPrefix(name, "\\") {
+		return name[1:] // Remove leading backslash
+	}
+	// Otherwise, make it relative to current namespace
+	return c.buildFullyQualifiedName(name)
 }
 
 func (c *Compiler) compileUseStatement(stmt *ast.UseStatement) error {
@@ -6027,21 +6073,25 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 
 	interfaceName := decl.Name.Name
 
+	// Build fully qualified interface name
+	fullyQualifiedName := c.buildFullyQualifiedName(interfaceName)
+
 	// Check if interface already exists
-	if _, exists := c.interfaces[interfaceName]; exists {
-		return fmt.Errorf("interface %s already declared", interfaceName)
+	if _, exists := c.interfaces[fullyQualifiedName]; exists {
+		return fmt.Errorf("interface %s already declared", fullyQualifiedName)
 	}
 
 	// Create new interface
 	iface := &registry.Interface{
-		Name:    interfaceName,
+		Name:    fullyQualifiedName,
 		Methods: make(map[string]*registry.InterfaceMethod),
 		Extends: make([]string, 0),
 	}
 
 	// Handle extends
 	for _, parent := range decl.Extends {
-		iface.Extends = append(iface.Extends, parent.Name)
+		resolvedParentName := c.resolveClassName(parent.Name)
+		iface.Extends = append(iface.Extends, resolvedParentName)
 	}
 
 	// Add interface methods
@@ -6098,10 +6148,10 @@ func (c *Compiler) compileInterfaceDeclaration(decl *ast.InterfaceDeclaration) e
 	}
 
 	// Store interface
-	c.interfaces[interfaceName] = iface
+	c.interfaces[fullyQualifiedName] = iface
 
 	// Emit interface declaration opcode
-	nameConstant := c.addConstant(values.NewString(interfaceName))
+	nameConstant := c.addConstant(values.NewString(fullyQualifiedName))
 	c.emit(opcodes.OP_DECLARE_INTERFACE,
 		opcodes.IS_CONST, nameConstant,
 		opcodes.IS_UNUSED, 0,
@@ -6117,14 +6167,17 @@ func (c *Compiler) compileTraitDeclaration(decl *ast.TraitDeclaration) error {
 
 	traitName := decl.Name.Name
 
+	// Build fully qualified trait name
+	fullyQualifiedName := c.buildFullyQualifiedName(traitName)
+
 	// Check if trait already exists
-	if _, exists := c.traits[traitName]; exists {
-		return fmt.Errorf("trait %s already declared", traitName)
+	if _, exists := c.traits[fullyQualifiedName]; exists {
+		return fmt.Errorf("trait %s already declared", fullyQualifiedName)
 	}
 
 	// Create new trait
 	trait := &registry.Trait{
-		Name:       traitName,
+		Name:       fullyQualifiedName,
 		Properties: make(map[string]*registry.Property),
 		Methods:    make(map[string]*registry.Function),
 	}
@@ -6144,10 +6197,10 @@ func (c *Compiler) compileTraitDeclaration(decl *ast.TraitDeclaration) error {
 	}
 
 	// Store trait
-	c.traits[traitName] = trait
+	c.traits[fullyQualifiedName] = trait
 
 	// Emit trait declaration opcode
-	nameConstant := c.addConstant(values.NewString(traitName))
+	nameConstant := c.addConstant(values.NewString(fullyQualifiedName))
 	c.emit(opcodes.OP_DECLARE_TRAIT,
 		opcodes.IS_CONST, nameConstant,
 		opcodes.IS_UNUSED, 0,
@@ -6239,9 +6292,10 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 
 		// Find the trait
 		traitNameStr := traitName.Name
-		trait, exists := c.traits[traitNameStr]
+		resolvedTraitName := c.resolveClassName(traitNameStr)
+		trait, exists := c.traits[resolvedTraitName]
 		if !exists {
-			return fmt.Errorf("trait %s not found", traitNameStr)
+			return fmt.Errorf("trait %s not found", resolvedTraitName)
 		}
 
 		// Copy trait methods into current class
@@ -6367,7 +6421,7 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 		}
 
 		// Emit USE_TRAIT opcode for runtime tracking
-		traitConstant := c.addConstant(values.NewString(traitNameStr))
+		traitConstant := c.addConstant(values.NewString(resolvedTraitName))
 		c.emit(opcodes.OP_USE_TRAIT,
 			opcodes.IS_CONST, traitConstant,
 			opcodes.IS_UNUSED, 0,
