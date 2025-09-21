@@ -166,7 +166,7 @@ The hey-codex interpreter now has full support for modern PHP OOP including:
 - Enhanced features: Generator yield from delegation, PHP reflection functions, comprehensive function library (48+ functions), type checking, JSON/string processing, math/array operations, file I/O, string formatting, array processing
 
 **Possible future enhancements:**
-- Performance optimizations
+- Performance optimizations (Low priority)
 - Additional magic methods (\__sleep, \__wakeup, etc.)
 - Intersection types (PHP 8.1)
 - DNF types (PHP 8.2+)
