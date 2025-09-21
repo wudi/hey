@@ -2362,7 +2362,107 @@ func (vm *VirtualMachine) execSendArg(ctx *ExecutionContext, frame *CallFrame, i
 		return false, err
 	}
 	pending.Args = append(pending.Args, copyValue(val))
+	pending.ArgNames = append(pending.ArgNames, "") // Empty string for positional argument
 	return true, nil
+}
+
+func (vm *VirtualMachine) execSendNamedArg(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	pending := frame.currentPendingCall()
+	if pending == nil {
+		return false, errors.New("named argument sent without pending call")
+	}
+
+	// First operand: argument name (string constant)
+	opType1, op1 := decodeOperand(inst, 1)
+	nameVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Second operand: argument value
+	opType2, op2 := decodeOperand(inst, 2)
+	val, err := vm.readOperand(ctx, frame, opType2, op2)
+	if err != nil {
+		return false, err
+	}
+
+	// Store the argument with its name
+	pending.Args = append(pending.Args, copyValue(val))
+	pending.ArgNames = append(pending.ArgNames, nameVal.ToString())
+	return true, nil
+}
+
+// resolveNamedArguments maps named arguments to their correct positions based on function parameters
+func (vm *VirtualMachine) resolveNamedArguments(fn *registry.Function, args []*values.Value, argNames []string) ([]*values.Value, error) {
+	if fn == nil {
+		return args, nil // No function info available, return as-is
+	}
+	if fn.Parameters == nil {
+		return args, nil // No parameter info available, return as-is
+	}
+
+	// Check if we have any named arguments
+	hasNamedArgs := false
+	for _, name := range argNames {
+		if name != "" {
+			hasNamedArgs = true
+			break
+		}
+	}
+
+	if !hasNamedArgs {
+		return args, nil // All positional arguments, return as-is
+	}
+
+	// Create parameter name to index mapping
+	paramMap := make(map[string]int)
+	for i, param := range fn.Parameters {
+		paramMap[param.Name] = i
+	}
+
+	// Create result array with default values
+	result := make([]*values.Value, len(fn.Parameters))
+	for i, param := range fn.Parameters {
+		if param.DefaultValue != nil {
+			result[i] = param.DefaultValue
+		}
+	}
+
+	// Process arguments
+	positionalIndex := 0
+	for i, arg := range args {
+		if i < len(argNames) && argNames[i] != "" {
+			// Named argument
+			paramName := argNames[i]
+			if paramIndex, exists := paramMap[paramName]; exists {
+				result[paramIndex] = arg
+			} else {
+				// More detailed error message for debugging
+				paramNames := make([]string, len(fn.Parameters))
+				for i, p := range fn.Parameters {
+					paramNames[i] = p.Name
+				}
+				return nil, fmt.Errorf("unknown parameter: %s (function %s has parameters: %v)", paramName, fn.Name, paramNames)
+			}
+		} else {
+			// Positional argument
+			if positionalIndex < len(result) {
+				result[positionalIndex] = arg
+				positionalIndex++
+			} else {
+				return nil, fmt.Errorf("too many arguments")
+			}
+		}
+	}
+
+	// Check for required parameters without values
+	for i, param := range fn.Parameters {
+		if result[i] == nil && param.DefaultValue == nil {
+			return nil, fmt.Errorf("missing required parameter: %s", param.Name)
+		}
+	}
+
+	return result, nil
 }
 
 func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
@@ -2389,10 +2489,17 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			return false, fmt.Errorf("callable %s not resolved", pending.ClosureName)
 		}
 		ctxBuiltin := &builtinContext{vm: vm, ctx: ctx}
-		args := pending.Args
+
+		// Resolve named arguments to correct positions
+		resolvedArgs, err := vm.resolveNamedArguments(fn, pending.Args, pending.ArgNames)
+		if err != nil {
+			return false, err
+		}
+		args := resolvedArgs
+
 		// For method calls, prepend the 'this' object as the first argument
 		if pending.Method && pending.This != nil {
-			args = append([]*values.Value{pending.This}, pending.Args...)
+			args = append([]*values.Value{pending.This}, args...)
 		}
 		ret, err := fn.Builtin(ctxBuiltin, args)
 		if err != nil {
@@ -2416,8 +2523,13 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 
 	// Handle generator functions
 	if pending.Function.IsGenerator {
+		// Resolve named arguments for generators too
+		genResolvedArgs, err := vm.resolveNamedArguments(pending.Function, pending.Args, pending.ArgNames)
+		if err != nil {
+			return false, err
+		}
 		// Create generator
-		gen := runtime2.NewGenerator(pending.Function, pending.Args, vm)
+		gen := runtime2.NewGenerator(pending.Function, genResolvedArgs, vm)
 
 		// Create Generator object
 		generatorObj := &values.Object{
@@ -2450,12 +2562,20 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 	child.ClassName = pending.ClassName
 	child.CallingClass = pending.CallingClass
 
+	// Resolve named arguments to correct positions for user-defined functions
+	resolvedUserArgs, err := vm.resolveNamedArguments(pending.Function, pending.Args, pending.ArgNames)
+	if err != nil {
+		return false, err
+	}
+	// Update pending args with resolved arguments
+	functionArgs := resolvedUserArgs
+
 	// Handle magic method argument restructuring
-	if pending.IsMagicMethod && len(pending.Args) > 1 {
+	if pending.IsMagicMethod && len(functionArgs) > 1 {
 		// For magic methods, convert: [methodName, arg1, arg2, ...]
 		// to: [methodName, [arg1, arg2, ...]]
-		methodName := pending.Args[0]
-		actualArgs := pending.Args[1:] // All arguments except the method name
+		methodName := functionArgs[0]
+		actualArgs := functionArgs[1:] // All arguments except the method name
 
 		// Create an array containing all the actual arguments
 		argsArray := values.NewArray()
@@ -2463,8 +2583,8 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			argsArray.ArraySet(values.NewInt(int64(i)), arg)
 		}
 
-		// Replace the arguments with: [methodName, argsArray]
-		pending.Args = []*values.Value{methodName, argsArray}
+		// Replace the function args with: [methodName, argsArray]
+		functionArgs = []*values.Value{methodName, argsArray}
 	}
 
 	// Handle both $this and parameters in the same slot range
@@ -2479,12 +2599,12 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			// This is the variadic parameter - collect all remaining arguments into an array
 			variadicArray := values.NewArray()
 			startIndex := i // Start collecting from current parameter index
-			for argIndex := startIndex; argIndex < len(pending.Args); argIndex++ {
-				variadicArray.ArraySet(values.NewInt(int64(argIndex-startIndex)), copyValue(pending.Args[argIndex]))
+			for argIndex := startIndex; argIndex < len(functionArgs); argIndex++ {
+				variadicArray.ArraySet(values.NewInt(int64(argIndex-startIndex)), copyValue(functionArgs[argIndex]))
 			}
 			arg = variadicArray
-		} else if i < len(pending.Args) {
-			arg = copyValue(pending.Args[i])
+		} else if i < len(functionArgs) {
+			arg = copyValue(functionArgs[i])
 		} else if param.HasDefault {
 			arg = copyValue(param.DefaultValue)
 		} else {

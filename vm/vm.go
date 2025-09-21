@@ -395,6 +395,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execInitStaticMethodCall(ctx, frame, inst)
 	case opcodes.OP_SEND_VAL, opcodes.OP_SEND_VAR, opcodes.OP_SEND_REF:
 		return vm.execSendArg(ctx, frame, inst)
+	case opcodes.OP_SEND_VAL_NAMED:
+		return vm.execSendNamedArg(ctx, frame, inst)
 	case opcodes.OP_DO_FCALL, opcodes.OP_DO_UCALL, opcodes.OP_DO_ICALL, opcodes.OP_DO_FCALL_BY_NAME:
 		return vm.execDoFCall(ctx, frame, inst)
 	case opcodes.OP_STATIC_METHOD_CALL:

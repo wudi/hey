@@ -144,6 +144,7 @@ const (
 	OP_SEND_VAR_NO_REF // Send variable without reference
 	OP_SEND_REF        // Send reference argument
 	OP_SEND_UNPACK     // Send unpacked arguments (...$args)
+	OP_SEND_VAL_NAMED  // Send named argument (name: value)
 
 	// Function calls
 	OP_DO_FCALL         // Execute function call
@@ -500,6 +501,7 @@ var opcodeNames = map[Opcode]string{
 	OP_SEND_VAR_NO_REF: "SEND_VAR_NO_REF",
 	OP_SEND_REF:        "SEND_REF",
 	OP_SEND_UNPACK:     "SEND_UNPACK",
+	OP_SEND_VAL_NAMED:  "SEND_VAL_NAMED",
 
 	OP_DO_FCALL:         "DO_FCALL",
 	OP_DO_ICALL:         "DO_ICALL",

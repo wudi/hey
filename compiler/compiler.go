@@ -1355,16 +1355,48 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 
 	// Compile and send arguments
 	if expr.Arguments != nil {
-		for i, arg := range expr.Arguments.Arguments {
-			err := c.compileNode(arg)
-			if err != nil {
-				return err
+		// Check if we have any named arguments
+		hasNamedArgs := false
+		for _, arg := range expr.Arguments.Arguments {
+			if _, isNamed := arg.(*ast.NamedArgument); isNamed {
+				hasNamedArgs = true
+				break
 			}
-			argResult := c.allocateTemp()
-			c.emitMove(argResult)
+		}
 
-			argNum := c.addConstant(values.NewInt(int64(i)))
-			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+		for i, arg := range expr.Arguments.Arguments {
+			if namedArg, isNamed := arg.(*ast.NamedArgument); isNamed {
+				// Handle named argument
+				err := c.compileNode(namedArg.Value)
+				if err != nil {
+					return err
+				}
+				argResult := c.allocateTemp()
+				c.emitMove(argResult)
+
+				// Send argument name and value
+				argName := c.addConstant(values.NewString(namedArg.Name.Name))
+				c.emit(opcodes.OP_SEND_VAL_NAMED, opcodes.IS_CONST, argName, opcodes.IS_TMP_VAR, argResult, 0, 0)
+			} else {
+				// Handle positional argument
+				err := c.compileNode(arg)
+				if err != nil {
+					return err
+				}
+				argResult := c.allocateTemp()
+				c.emitMove(argResult)
+
+				if hasNamedArgs {
+					// If we have named args mixed with positional, we need to handle this specially
+					// For now, we'll send positional args with their index as the name
+					argNum := c.addConstant(values.NewInt(int64(i)))
+					c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+				} else {
+					// Pure positional arguments - use existing logic
+					argNum := c.addConstant(values.NewInt(int64(i)))
+					c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+				}
+			}
 		}
 	}
 
@@ -2781,6 +2813,10 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 			paramName := ""
 			if nameNode, ok := param.Name.(*ast.IdentifierNode); ok {
 				paramName = nameNode.Name
+				// Remove $ prefix for named argument matching
+				if strings.HasPrefix(paramName, "$") {
+					paramName = paramName[1:]
+				}
 			} else {
 				return fmt.Errorf("invalid parameter name type")
 			}

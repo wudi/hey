@@ -202,6 +202,7 @@ type PendingCall struct {
 	Function    *registry.Function
 	ClosureName string
 	Args        []*values.Value
+	ArgNames    []string        // Named argument names (empty string for positional args)
 	Result      operandTarget
 	Method      bool
 	Static      bool
