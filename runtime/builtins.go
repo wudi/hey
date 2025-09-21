@@ -280,7 +280,6 @@ func (g *Generator) StartDelegation(iterable *values.Value) error {
 				} else {
 				}
 			} else {
-				fmt.Printf("DEBUG: Invalid generator type\n")
 				return fmt.Errorf("invalid generator for delegation")
 			}
 		} else {

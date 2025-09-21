@@ -144,6 +144,7 @@ None - all listed features are fully implemented and working.
 21. **Constructor Property Promotion** - COMPLETED (PHP 8.0 automatic property declaration and assignment)
 22. **Readonly Properties** - COMPLETED (PHP 8.1 write-once property semantics with readonly keyword)
 23. **First-class Callable Syntax** - COMPLETED (PHP 8.1 callable references: `strlen(...)`, `$obj->method(...)`, `Class::method(...)`)
+24. **Generator Enhancement** - COMPLETED (Enhanced yield from delegation with array and generator support)
 
 ### 🔄 Next Priority Tasks
 

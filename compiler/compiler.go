@@ -3255,24 +3255,38 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 	c.emit(opcodes.OP_DECLARE_CLASS, opcodes.IS_CONST, nameConstant, 0, 0, 0, 0)
 
 	// Handle constructor arguments if provided
-	if decl.Arguments != nil {
-		// Compile constructor call arguments
-		for _, arg := range decl.Arguments.Arguments {
+	if decl.Arguments != nil && len(decl.Arguments.Arguments) > 0 {
+		// Compile constructor call arguments first
+		argTemps := make([]uint32, len(decl.Arguments.Arguments))
+		for i, arg := range decl.Arguments.Arguments {
 			err := c.compileNode(arg)
 			if err != nil {
 				return fmt.Errorf("error compiling constructor argument: %v", err)
 			}
+			argTemps[i] = c.nextTemp - 1 // Save the temp variable for this argument
 		}
 
-		// Create new instance with constructor call
+		// Create new instance
 		result := c.allocateTemp()
 		c.emit(opcodes.OP_NEW, opcodes.IS_CONST, nameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
-		// If there are arguments, we need to call constructor
-		if len(decl.Arguments.Arguments) > 0 {
-			// This would require more complex constructor calling logic
-			// For now, we'll just create the object without calling constructor
+		// Call constructor with the compiled arguments
+		constructorName := c.addConstant(values.NewString("__construct"))
+		c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, constructorName, 0, 0)
+
+		// Send each argument in order
+		for _, argTemp := range argTemps {
+			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, argTemp, 0, 0)
 		}
+
+		// Execute the constructor call (store result in separate temp to avoid overwriting object)
+		constructorResult := c.allocateTemp()
+		c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, constructorResult, 0, 0, 0, 0)
+
+		// Constructor calls in PHP don't return anything useful - keep the original object
+		// Copy the object back to be the final result of the expression
+		finalResult := c.allocateTemp()
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, result, 0, 0, opcodes.IS_TMP_VAR, finalResult)
 	} else {
 		// Simple instantiation without constructor arguments
 		result := c.allocateTemp()
