@@ -3,6 +3,7 @@ package runtime
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -862,6 +863,82 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name:       "trim",
+		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			str := args[0].ToString()
+			// PHP trim removes whitespace by default
+			if len(args) == 1 {
+				result := strings.TrimSpace(str)
+				return values.NewString(result), nil
+			}
+
+			// Custom character mask (simplified version)
+			mask := args[1].ToString()
+			result := strings.Trim(str, mask)
+			return values.NewString(result), nil
+		},
+	},
+	{
+		Name:       "ltrim",
+		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			str := args[0].ToString()
+			// Left trim whitespace by default
+			if len(args) == 1 {
+				result := strings.TrimLeftFunc(str, func(r rune) bool {
+					return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+				})
+				return values.NewString(result), nil
+			}
+
+			// Custom character mask
+			mask := args[1].ToString()
+			result := strings.TrimLeft(str, mask)
+			return values.NewString(result), nil
+		},
+	},
+	{
+		Name:       "rtrim",
+		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			str := args[0].ToString()
+			// Right trim whitespace by default
+			if len(args) == 1 {
+				result := strings.TrimRightFunc(str, func(r rune) bool {
+					return r == ' ' || r == '\t' || r == '\n' || r == '\r'
+				})
+				return values.NewString(result), nil
+			}
+
+			// Custom character mask
+			mask := args[1].ToString()
+			result := strings.TrimRight(str, mask)
+			return values.NewString(result), nil
+		},
+	},
+	{
 		Name:       "is_string",
 		Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
 		ReturnType: "bool",
@@ -1114,6 +1191,70 @@ var builtinFunctionSpecs = []builtinSpec{
 				}
 			}
 			return values.NewNull(), nil
+		},
+	},
+	{
+		Name:       "abs",
+		Parameters: []*registry.Parameter{{Name: "number", Type: "mixed"}},
+		ReturnType: "number",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewInt(0), nil
+			}
+
+			if args[0].IsInt() {
+				val := args[0].ToInt()
+				if val < 0 {
+					return values.NewInt(-val), nil
+				}
+				return values.NewInt(val), nil
+			}
+
+			if args[0].IsFloat() {
+				val := args[0].ToFloat()
+				return values.NewFloat(math.Abs(val)), nil
+			}
+
+			// Try to convert string to number
+			str := args[0].ToString()
+			if val, err := strconv.ParseFloat(str, 64); err == nil {
+				return values.NewFloat(math.Abs(val)), nil
+			}
+
+			return values.NewInt(0), nil
+		},
+	},
+	{
+		Name:       "round",
+		Parameters: []*registry.Parameter{
+			{Name: "number", Type: "mixed"},
+		},
+		ReturnType: "number",
+		MinArgs:    1,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewFloat(0), nil
+			}
+
+			val := args[0].ToFloat()
+			precision := 0
+			if len(args) > 1 {
+				precision = int(args[1].ToInt())
+			}
+
+			// Round to specified precision
+			multiplier := math.Pow(10, float64(precision))
+			rounded := math.Round(val*multiplier) / multiplier
+
+			// Return int if precision is 0 and result is whole number
+			if precision == 0 && rounded == math.Trunc(rounded) {
+				return values.NewInt(int64(rounded)), nil
+			}
+
+			return values.NewFloat(rounded), nil
 		},
 	},
 	{
