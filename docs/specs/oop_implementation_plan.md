@@ -157,7 +157,9 @@ None - all listed features are fully implemented and working.
 34. **Array Processing Functions** - COMPLETED (array_filter, array_values, count with PHP-compliant behavior)
 35. **Runtime Constant Functions** - COMPLETED (define, defined with runtime constant lookup and OP_FETCH_CONSTANT VM instruction)
 36. **Environment Variable Functions** - COMPLETED (getenv, putenv with full PHP compatibility)
-37. **Type Checking Functions** - COMPLETED (gettype, is_array, isset for comprehensive type validation)
+37. **Type Checking Functions** - COMPLETED (gettype, is_array, isset, is_string for comprehensive type validation)
+38. **Filesystem Functions** - COMPLETED (getcwd for current directory retrieval)
+39. **String Manipulation Functions** - COMPLETED (substr, strlen with full PHP compatibility including negative offsets)
 
 ### 🔄 Next Priority Tasks
 
@@ -166,7 +168,7 @@ None - all listed features are fully implemented and working.
 The hey-codex interpreter now has full support for modern PHP OOP including:
 - PHP 8.0 features: Named arguments, match expressions, nullsafe operator, union types, attributes, constructor promotion
 - PHP 8.1 features: Enums, readonly properties, first-class callable syntax, anonymous classes
-- Enhanced features: Generator yield from delegation, PHP reflection functions, comprehensive function library (55+ functions), type checking, JSON/string processing, math/array operations, file I/O, string formatting, array processing, runtime constants, environment variables
+- Enhanced features: Generator yield from delegation, PHP reflection functions, comprehensive function library (59+ functions), type checking, JSON/string processing, math/array operations, file I/O, string formatting, array processing, runtime constants, environment variables, filesystem operations
 
 **Possible future enhancements:**
 - Performance optimizations (Low priority)
@@ -240,4 +242,4 @@ Ensure all currently working features continue to work after each implementation
 
 ---
 
-**Status**: **COMPLETE** - All major PHP OOP features have been successfully implemented and are working correctly! The hey-codex PHP interpreter now supports the full range of core PHP OOP functionality, including all modern PHP 8.0/8.1 features PLUS comprehensive built-in function support (55+ functions including file I/O, string processing, array operations, JSON handling, math functions, string formatting, array processing, runtime constants, environment variables, and type checking). The implementation is feature-complete for PHP 8.1 OOP functionality with extensive standard library support, runtime constant management, and environment interaction capabilities.
+**Status**: **COMPLETE** - All major PHP OOP features have been successfully implemented and are working correctly! The hey-codex PHP interpreter now supports the full range of core PHP OOP functionality, including all modern PHP 8.0/8.1 features PLUS comprehensive built-in function support (59+ functions including file I/O, string processing, array operations, JSON handling, math functions, string formatting, array processing, runtime constants, environment variables, type checking, and filesystem operations). The implementation is feature-complete for PHP 8.1 OOP functionality with extensive standard library support, runtime constant management, environment interaction, and filesystem capabilities.
