@@ -93,12 +93,27 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
     - Namespace-aware class resolution in `new` expressions
     - PHP-compliant namespace isolation and inheritance
 
+16. **Named Arguments** (PHP 8.0) - WORKING
+    - Full named parameter support in function calls
+    - Mixed positional and named arguments
+    - Parameter name-to-position mapping
+    - Default value handling with named arguments
+    - Runtime validation for required parameters
+    - Support for all function types (user-defined, builtin, generators)
+
+17. **Match Expressions** (PHP 8.0) - WORKING
+    - Complete pattern matching with strict comparison
+    - Multiple conditions per arm (comma-separated)
+    - Default case handling
+    - UnhandledMatchError for unmatched cases
+    - Nested match expressions
+    - Complex expression evaluation in conditions
+
 ### ❌ Missing Features
 
 **Modern PHP 8.0+ Features (Next Priority):**
 
-1. **Named Arguments** (PHP 8.0) - Parser implemented, compiler support needed
-2. **Match Expressions** (PHP 8.0) - Partially implemented, needs completion
+1. **Nullsafe Operator** (PHP 8.0) - Partially implemented for properties, needs method calls
 3. **Nullsafe Operator** (PHP 8.0) - Partially implemented for properties, needs method calls
 4. **Constructor Property Promotion** (PHP 8.0) - Not implemented
 5. **Union Types Runtime Support** (PHP 8.0) - Parser support, needs runtime validation
@@ -129,20 +144,22 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
 12. **Late Static Binding** - COMPLETED (`static::` keyword for constants and method calls)
 13. **Exception Handling** - COMPLETED (Proper type checking, inheritance support, multiple catch blocks)
 14. **Namespace Support** - COMPLETED (Full namespace implementation with cross-namespace resolution)
+15. **Named Arguments** - COMPLETED (PHP 8.0 feature with full positional/named mixing support)
+16. **Match Expressions** - COMPLETED (PHP 8.0 pattern matching feature, fully working)
 
 ### 🔄 Next Priority Tasks
 
 #### Phase 5: Modern PHP 8.0+ Features (Priority: HIGH)
 
-**Next Task: Named Arguments Implementation**
-- **Status**: Parser complete, compiler implementation needed
-- **Priority**: HIGH (commonly used feature)
-- **Dependencies**: Function call compilation updates, VM argument dispatch
+**Next Task: Nullsafe Operator (?->)**
+- **Status**: Property access implemented, method calls need completion
+- **Priority**: HIGH (important safety feature)
+- **Dependencies**: Null checking logic, method call chaining
 - **Implementation**:
-  1. Update `compileFunctionCall` to handle named arguments
-  2. Add VM opcodes for named argument dispatch
-  3. Implement argument name-to-position mapping
-  4. Add runtime validation for required parameters
+  1. Complete nullsafe method call compilation
+  2. Implement proper null propagation
+  3. Handle chained nullsafe operations
+  4. Test with complex object hierarchies
 
 ### Phase 1: Core Fixes (Priority: HIGH)
 
