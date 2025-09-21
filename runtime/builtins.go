@@ -739,6 +739,30 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name: "str_replace",
+		Parameters: []*registry.Parameter{
+			{Name: "search", Type: "mixed"},
+			{Name: "replace", Type: "mixed"},
+			{Name: "subject", Type: "mixed"},
+		},
+		ReturnType: "mixed",
+		MinArgs:    3,
+		MaxArgs:    4,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 3 {
+				return values.NewString(""), nil
+			}
+
+			search := args[0].ToString()
+			replace := args[1].ToString()
+			subject := args[2].ToString()
+
+			// PHP str_replace performs simple string replacement
+			result := strings.ReplaceAll(subject, search, replace)
+			return values.NewString(result), nil
+		},
+	},
+	{
 		Name:       "strtolower",
 		Parameters: []*registry.Parameter{{Name: "string", Type: "string"}},
 		ReturnType: "string",
@@ -1009,6 +1033,93 @@ var builtinFunctionSpecs = []builtinSpec{
 					resultArr.Elements[key] = values.NewInt(1)
 				}
 			}
+			return result, nil
+		},
+	},
+	{
+		Name: "array_push",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "int",
+		IsVariadic: true,
+		MinArgs:    2,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
+				return values.NewInt(0), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			// Add all values to the end of the array
+			for i := 1; i < len(args); i++ {
+				nextIndex := len(arr.Elements)
+				arr.Elements[int64(nextIndex)] = args[i]
+			}
+
+			return values.NewInt(int64(len(arr.Elements))), nil
+		},
+	},
+	{
+		Name: "in_array",
+		Parameters: []*registry.Parameter{
+			{Name: "needle", Type: "mixed"},
+			{Name: "haystack", Type: "array"},
+		},
+		ReturnType: "bool",
+		MinArgs:    2,
+		MaxArgs:    3,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[1] == nil || !args[1].IsArray() {
+				return values.NewBool(false), nil
+			}
+
+			needle := args[0]
+			arr := args[1].Data.(*values.Array)
+
+			// Search for the needle in the array values
+			for _, value := range arr.Elements {
+				if value != nil && value.ToString() == needle.ToString() {
+					return values.NewBool(true), nil
+				}
+			}
+
+			return values.NewBool(false), nil
+		},
+	},
+	{
+		Name: "array_keys",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    3,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+
+			index := 0
+			for key := range arr.Elements {
+				// Convert key to appropriate value type
+				switch k := key.(type) {
+				case string:
+					resultArr.Elements[int64(index)] = values.NewString(k)
+				case int64:
+					resultArr.Elements[int64(index)] = values.NewInt(k)
+				case int:
+					resultArr.Elements[int64(index)] = values.NewInt(int64(k))
+				default:
+					resultArr.Elements[int64(index)] = values.NewString(fmt.Sprintf("%v", k))
+				}
+				index++
+			}
+
 			return result, nil
 		},
 	},
