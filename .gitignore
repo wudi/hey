@@ -8,3 +8,4 @@ CLAUDE.md
 ./bytecode-demo
 ./php-parser
 build
+*.php
