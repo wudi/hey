@@ -417,6 +417,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execCreateStaticCallable(ctx, frame, inst)
 	case opcodes.OP_INCLUDE, opcodes.OP_INCLUDE_ONCE, opcodes.OP_REQUIRE, opcodes.OP_REQUIRE_ONCE:
 		return vm.execInclude(ctx, frame, inst)
+	case opcodes.OP_FETCH_CONSTANT:
+		return vm.execFetchConstant(ctx, frame, inst)
 	case opcodes.OP_FETCH_CLASS_CONSTANT:
 		return vm.execFetchClassConstant(ctx, frame, inst)
 	case opcodes.OP_FETCH_LATE_STATIC_CONSTANT:

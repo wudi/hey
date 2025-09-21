@@ -1047,6 +1047,39 @@ func (vm *VirtualMachine) execFetchClassConstant(ctx *ExecutionContext, frame *C
 	return true, nil
 }
 
+func (vm *VirtualMachine) execFetchConstant(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the constant name from operand 1 (string constant)
+	constType, constOp := decodeOperand(inst, 1)
+	constVal, err := vm.readOperand(ctx, frame, constType, constOp)
+	if err != nil {
+		return false, err
+	}
+	if constVal != nil {
+		constVal = constVal.Deref()
+	}
+	constName := constVal.ToString()
+
+	// Look up the constant in the registry
+	var result *values.Value
+	if registry.GlobalRegistry != nil {
+		if constDesc, exists := registry.GlobalRegistry.GetConstant(constName); exists {
+			result = constDesc.Value
+		}
+	}
+
+	// If not found, fall back to the constant name as a string (PHP behavior)
+	if result == nil {
+		result = values.NewString(constName)
+	}
+
+	// Write the result
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, result); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (vm *VirtualMachine) execFetchLateStaticConstant(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	classType, classOp := decodeOperand(inst, 1)
 	classVal, err := vm.readOperand(ctx, frame, classType, classOp)

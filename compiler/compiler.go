@@ -1093,13 +1093,18 @@ func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
 				// Found exact match - use the constant value
 				constant = c.addConstant(constDesc.Value)
 			} else {
-				// PHP behavior: undefined constants become strings
-				// TODO: In future, should emit E_NOTICE/E_WARNING
-				constant = c.addConstant(values.NewString(expr.Name))
+				// Generate runtime constant lookup for potentially runtime-defined constants
+				nameConstant := c.addConstant(values.NewString(expr.Name))
+				result := c.allocateTemp()
+				c.emit(opcodes.OP_FETCH_CONSTANT, opcodes.IS_CONST, nameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
+				return nil
 			}
 		} else {
-			// Registry not initialized - fallback to string
-			constant = c.addConstant(values.NewString(expr.Name))
+			// Registry not initialized - generate runtime lookup anyway
+			nameConstant := c.addConstant(values.NewString(expr.Name))
+			result := c.allocateTemp()
+			c.emit(opcodes.OP_FETCH_CONSTANT, opcodes.IS_CONST, nameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
+			return nil
 		}
 	}
 
