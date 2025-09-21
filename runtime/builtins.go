@@ -2061,6 +2061,148 @@ var builtinFunctionSpecs = []builtinSpec{
 			return values.NewBool(exists), nil
 		},
 	},
+	{
+		Name: "getenv",
+		Parameters: []*registry.Parameter{
+			{Name: "varname", Type: "string", HasDefault: true, DefaultValue: values.NewNull()},
+		},
+		ReturnType: "string|array|false",
+		MinArgs:    0,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || (len(args) > 0 && args[0].IsNull()) {
+				// Return all environment variables as an associative array
+				envVars := os.Environ()
+				result := values.NewArray()
+				arr := result.Data.(*values.Array)
+
+				for _, env := range envVars {
+					parts := strings.SplitN(env, "=", 2)
+					if len(parts) == 2 {
+						arr.Elements[parts[0]] = values.NewString(parts[1])
+					}
+				}
+				return result, nil
+			}
+
+			// Get specific environment variable
+			varname := args[0].ToString()
+			value, exists := os.LookupEnv(varname)
+
+			if !exists {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewString(value), nil
+		},
+	},
+	{
+		Name: "putenv",
+		Parameters: []*registry.Parameter{
+			{Name: "setting", Type: "string"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 {
+				return values.NewBool(false), nil
+			}
+
+			setting := args[0].ToString()
+
+			// Parse the setting string (format: "NAME=value")
+			parts := strings.SplitN(setting, "=", 2)
+			if len(parts) != 2 {
+				return values.NewBool(false), nil
+			}
+
+			name := parts[0]
+			value := parts[1]
+
+			// Set the environment variable
+			err := os.Setenv(name, value)
+			if err != nil {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewBool(true), nil
+		},
+	},
+	{
+		Name: "gettype",
+		Parameters: []*registry.Parameter{
+			{Name: "value", Type: "mixed"},
+		},
+		ReturnType: "string",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 {
+				return values.NewString("NULL"), nil
+			}
+
+			val := args[0]
+			if val == nil {
+				return values.NewString("NULL"), nil
+			}
+
+			// Return PHP type names
+			switch val.Type {
+			case values.TypeNull:
+				return values.NewString("NULL"), nil
+			case values.TypeBool:
+				return values.NewString("boolean"), nil
+			case values.TypeInt:
+				return values.NewString("integer"), nil
+			case values.TypeFloat:
+				return values.NewString("double"), nil
+			case values.TypeString:
+				return values.NewString("string"), nil
+			case values.TypeArray:
+				return values.NewString("array"), nil
+			case values.TypeObject:
+				return values.NewString("object"), nil
+			case values.TypeResource:
+				return values.NewString("resource"), nil
+			default:
+				return values.NewString("unknown type"), nil
+			}
+		},
+	},
+	{
+		Name: "is_array",
+		Parameters: []*registry.Parameter{
+			{Name: "value", Type: "mixed"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			return values.NewBool(args[0].IsArray()), nil
+		},
+	},
+	{
+		Name: "isset",
+		Parameters: []*registry.Parameter{
+			{Name: "value", Type: "mixed"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    999, // PHP's isset() can take multiple arguments
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// In PHP, isset() returns true only if all arguments are set and not null
+			for _, arg := range args {
+				if arg == nil || arg.IsNull() {
+					return values.NewBool(false), nil
+				}
+			}
+			return values.NewBool(true), nil
+		},
+	},
 }
 
 var builtinConstants = []*registry.ConstantDescriptor{
