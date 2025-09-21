@@ -582,8 +582,38 @@ func (vm *VirtualMachine) execYield(ctx *ExecutionContext, frame *CallFrame, ins
 }
 
 func (vm *VirtualMachine) execYieldFrom(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
-	// TODO: Implement yield from - delegates to another generator
-	return false, fmt.Errorf("yield from not yet implemented")
+	// Get the iterable to yield from
+	opType1, op1 := decodeOperand(inst, 1)
+	iterable, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, fmt.Errorf("error reading yield from operand: %v", err)
+	}
+
+	// Get the generator context from call frame
+	generator := frame.Generator
+	if generator == nil {
+		return false, fmt.Errorf("yield from called outside generator context")
+	}
+
+	gen := generator.(*runtime2.Generator)
+
+	// Start delegation - this sets up the generator to delegate to the iterable
+	if err := gen.StartDelegation(iterable); err != nil {
+		return false, fmt.Errorf("error starting delegation: %v", err)
+	}
+
+	// Store the final result (typically null, as yield from returns the final value)
+	resultType, resultSlot := decodeResult(inst)
+	if resultType != opcodes.IS_UNUSED {
+		finalResult := values.NewNull() // For now, always return null
+		if err := vm.writeOperand(ctx, frame, resultType, resultSlot, finalResult); err != nil {
+			return false, fmt.Errorf("error storing yield from result: %v", err)
+		}
+	}
+
+	// The delegation will be handled by the generator's Next() method
+	// We don't suspend here - the current yield from instruction completes
+	return true, nil
 }
 
 // CreateExecutionContext creates a new execution context for generator execution
@@ -674,7 +704,7 @@ func (vm *VirtualMachine) ExecuteUntilYield(ctxInterface, frameInterface interfa
 		inst := frame.Instructions[frame.IP]
 
 		// Check if this is a yield instruction
-		if inst.Opcode == opcodes.OP_YIELD {
+		if inst.Opcode == opcodes.OP_YIELD || inst.Opcode == opcodes.OP_YIELD_FROM {
 			// Execute the yield instruction
 			_, err := vm.executeInstruction(ctx, frame, inst)
 			if err != nil {
@@ -736,7 +766,7 @@ func (vm *VirtualMachine) ResumeFromYield(ctxInterface, frameInterface interface
 		inst := frame.Instructions[frame.IP]
 
 		// Check if this is a yield instruction
-		if inst.Opcode == opcodes.OP_YIELD {
+		if inst.Opcode == opcodes.OP_YIELD || inst.Opcode == opcodes.OP_YIELD_FROM {
 			// Execute the yield instruction
 			_, err := vm.executeInstruction(ctx, frame, inst)
 			if err != nil {

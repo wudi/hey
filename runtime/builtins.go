@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/wudi/hey/registry"
@@ -26,6 +27,13 @@ type Generator struct {
 	currentKey   *values.Value
 	currentValue *values.Value
 
+	// Yield from delegation state
+	delegating        bool
+	delegateIterable  *values.Value
+	delegateKeys      []string // For array iteration
+	delegateIndex     int      // Current index in array
+	delegateGenerator *Generator // For generator delegation
+
 	// Suspended execution state
 	suspendedContext *GeneratorExecutionState
 }
@@ -39,14 +47,19 @@ type GeneratorExecutionState struct {
 // NewGenerator creates a new generator
 func NewGenerator(function *registry.Function, args []*values.Value, vm interface{}) *Generator {
 	return &Generator{
-		function:     function,
-		args:         args,
-		vm:           vm,
-		started:      false,
-		finished:     false,
-		suspended:    false,
-		currentKey:   values.NewNull(),
-		currentValue: values.NewNull(),
+		function:         function,
+		args:             args,
+		vm:               vm,
+		started:          false,
+		finished:         false,
+		suspended:        false,
+		currentKey:       values.NewNull(),
+		currentValue:     values.NewNull(),
+		delegating:       false,
+		delegateIterable: nil,
+		delegateKeys:     nil,
+		delegateIndex:    0,
+		delegateGenerator: nil,
 		suspendedContext: nil,
 	}
 }
@@ -65,6 +78,11 @@ func NewChannelGenerator(function interface{}, args []*values.Value, vm interfac
 func (g *Generator) Next() bool {
 	if g.finished {
 		return false
+	}
+
+	// Check if we're delegating to another iterable
+	if g.delegating {
+		return g.handleDelegateNext()
 	}
 
 	if !g.started {
@@ -202,6 +220,110 @@ func (g *Generator) Yield(key, value *values.Value) {
 	g.currentKey = key
 	g.currentValue = value
 	// Actual suspension logic will be handled by VM.execYield
+}
+
+// StartDelegation begins delegating to another iterable
+func (g *Generator) StartDelegation(iterable *values.Value) error {
+	g.delegating = true
+	g.delegateIterable = iterable
+	g.delegateIndex = 0
+
+	if iterable.IsArray() {
+		// Prepare array keys for iteration
+		if arrayData, ok := iterable.Data.(map[string]*values.Value); ok {
+			g.delegateKeys = make([]string, 0, len(arrayData))
+			for key := range arrayData {
+				g.delegateKeys = append(g.delegateKeys, key)
+			}
+		}
+
+		// Set the first value immediately if array is not empty
+		if len(g.delegateKeys) > 0 {
+			key := g.delegateKeys[0]
+			arrayData := g.delegateIterable.Data.(map[string]*values.Value)
+			value := arrayData[key]
+
+			// Convert string key to appropriate type
+			var keyValue *values.Value
+			if intKey, err := strconv.Atoi(key); err == nil {
+				keyValue = values.NewInt(int64(intKey))
+			} else {
+				keyValue = values.NewString(key)
+			}
+
+			// Set current values and advance index
+			g.currentKey = keyValue
+			g.currentValue = value
+			g.delegateIndex++
+		}
+	} else if iterable.IsObject() && iterable.Data.(*values.Object).ClassName == "Generator" {
+		// Get the delegate generator
+		obj := iterable.Data.(*values.Object)
+		if genVal, ok := obj.Properties["__channel_generator"]; ok {
+			if delegateGen, ok := genVal.Data.(*Generator); ok {
+				g.delegateGenerator = delegateGen
+				// Get the first value from the delegate generator
+				if g.delegateGenerator.Next() {
+					g.currentKey = g.delegateGenerator.Key()
+					g.currentValue = g.delegateGenerator.Current()
+				}
+			} else {
+				return fmt.Errorf("invalid generator for delegation")
+			}
+		} else {
+			return fmt.Errorf("generator object missing __channel_generator property")
+		}
+	} else {
+		return fmt.Errorf("yield from requires an iterable (array or Generator)")
+	}
+
+	return nil
+}
+
+// handleDelegateNext handles the next iteration when delegating
+func (g *Generator) handleDelegateNext() bool {
+	if g.delegateIterable.IsArray() {
+		// Array delegation
+		if g.delegateIndex >= len(g.delegateKeys) {
+			// Array exhausted, stop delegating and resume normal execution
+			g.delegating = false
+			return g.resumeFromYield()
+		}
+
+		// Get current array item
+		key := g.delegateKeys[g.delegateIndex]
+		arrayData := g.delegateIterable.Data.(map[string]*values.Value)
+		value := arrayData[key]
+
+		// Convert string key to appropriate type
+		var keyValue *values.Value
+		if intKey, err := strconv.Atoi(key); err == nil {
+			keyValue = values.NewInt(int64(intKey))
+		} else {
+			keyValue = values.NewString(key)
+		}
+
+		// Set current values and advance index
+		g.currentKey = keyValue
+		g.currentValue = value
+		g.delegateIndex++
+
+		return true
+	} else if g.delegateGenerator != nil {
+		// Generator delegation
+		if g.delegateGenerator.Next() {
+			// Delegate generator has a value
+			g.currentKey = g.delegateGenerator.Key()
+			g.currentValue = g.delegateGenerator.Current()
+			return true
+		} else {
+			// Delegate generator is exhausted, stop delegating and resume normal execution
+			g.delegating = false
+			return g.resumeFromYield()
+		}
+	}
+
+	return false
 }
 
 
