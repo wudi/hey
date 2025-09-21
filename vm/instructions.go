@@ -2465,6 +2465,61 @@ func (vm *VirtualMachine) resolveNamedArguments(fn *registry.Function, args []*v
 	return result, nil
 }
 
+// validateParameterType validates that a parameter value matches the expected type(s)
+func (vm *VirtualMachine) validateParameterType(param *registry.Parameter, value *values.Value, functionName string, paramIndex int) error {
+	paramType := param.Type
+	valueType := value.Type.String()
+
+	// Handle union types (e.g., "int|string")
+	if strings.Contains(paramType, "|") {
+		allowedTypes := strings.Split(paramType, "|")
+		for _, allowedType := range allowedTypes {
+			allowedType = strings.TrimSpace(allowedType)
+			if vm.isTypeMatch(allowedType, value) {
+				return nil // Type matches one of the union options
+			}
+		}
+		// None of the union types matched
+		return fmt.Errorf("TypeError: %s(): Argument #%d ($%s) must be of type %s, %s given",
+			functionName, paramIndex+1, param.Name, paramType, valueType)
+	}
+
+	// Handle single types
+	if !vm.isTypeMatch(paramType, value) {
+		return fmt.Errorf("TypeError: %s(): Argument #%d ($%s) must be of type %s, %s given",
+			functionName, paramIndex+1, param.Name, paramType, valueType)
+	}
+
+	return nil
+}
+
+// isTypeMatch checks if a value matches a specific type
+func (vm *VirtualMachine) isTypeMatch(expectedType string, value *values.Value) bool {
+	valueType := value.Type.String()
+
+	switch expectedType {
+	case "int":
+		return valueType == "int"
+	case "string":
+		return valueType == "string"
+	case "float":
+		return valueType == "float"
+	case "bool":
+		return valueType == "bool"
+	case "array":
+		return valueType == "array"
+	case "object":
+		return valueType == "object"
+	case "null":
+		return valueType == "null"
+	case "mixed":
+		return true // mixed accepts any type
+	default:
+		// Handle class names and other complex types
+		return valueType == expectedType
+	}
+}
+
 func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	pending := frame.popPendingCall()
 	if pending == nil {
@@ -2610,6 +2665,14 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 		} else {
 			arg = values.NewNull()
 		}
+
+		// Validate parameter type
+		if param.Type != "" {
+			if err := vm.validateParameterType(param, arg, pending.Function.Name, i); err != nil {
+				return false, err
+			}
+		}
+
 		child.setLocal(uint32(i), arg)
 		child.bindSlotName(uint32(i), param.Name)
 	}

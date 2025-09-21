@@ -113,18 +113,12 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
 
 **Modern PHP 8.0+ Features (Next Priority):**
 
-1. **Nullsafe Operator** (PHP 8.0) - Partially implemented for properties, needs method calls
-3. **Nullsafe Operator** (PHP 8.0) - Partially implemented for properties, needs method calls
-4. **Constructor Property Promotion** (PHP 8.0) - Not implemented
-5. **Union Types Runtime Support** (PHP 8.0) - Parser support, needs runtime validation
-6. **Attributes/Annotations** (PHP 8.0) - Parser implemented, compiler support needed
+1. **Constructor Property Promotion** (PHP 8.0) - Not implemented
+2. **Enums** (PHP 8.1) - Basic structure exists, needs full implementation
 
 ### 🔧 Partially Working Features
 
-1. **Match Expressions** - AST and basic compilation exist, needs VM completion
-2. **Nullsafe Operator** - Property access works, method calls missing
-3. **Enums** - Basic structure exists, needs full implementation
-4. **Union Types** - Parser support exists, runtime checking missing
+1. **Constructor Property Promotion** - Parser support exists, needs implementation
 
 ## Implementation Tasks
 
@@ -146,20 +140,23 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
 14. **Namespace Support** - COMPLETED (Full namespace implementation with cross-namespace resolution)
 15. **Named Arguments** - COMPLETED (PHP 8.0 feature with full positional/named mixing support)
 16. **Match Expressions** - COMPLETED (PHP 8.0 pattern matching feature, fully working)
+17. **Nullsafe Operator** - COMPLETED (PHP 8.0 ?-> operator with full null propagation)
+18. **Union Types Runtime Support** - COMPLETED (PHP 8.0 type validation for int|string syntax)
+19. **Attributes/Annotations** - COMPLETED (PHP 8.0 #[Attribute] syntax with metadata storage)
 
 ### 🔄 Next Priority Tasks
 
 #### Phase 5: Modern PHP 8.0+ Features (Priority: HIGH)
 
-**Next Task: Nullsafe Operator (?->)**
-- **Status**: Property access implemented, method calls need completion
-- **Priority**: HIGH (important safety feature)
-- **Dependencies**: Null checking logic, method call chaining
+**Next Task: Enums (PHP 8.1)**
+- **Status**: Basic structure exists, needs full implementation
+- **Priority**: HIGH (important PHP 8.1 feature)
+- **Dependencies**: Enum declaration parsing, case compilation
 - **Implementation**:
-  1. Complete nullsafe method call compilation
-  2. Implement proper null propagation
-  3. Handle chained nullsafe operations
-  4. Test with complex object hierarchies
+  1. Complete enum case compilation with values
+  2. Implement enum methods and properties
+  3. Add enum instanceof and comparison support
+  4. Support backed enums (string/int values)
 
 ### Phase 1: Core Fixes (Priority: HIGH)
 

@@ -2850,8 +2850,18 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 				function.IsVariadic = true
 			}
 
+			// Compile parameter attributes
+			if len(param.Attributes) > 0 {
+				compilerParam.Attributes = c.compileAttributes(param.Attributes)
+			}
+
 			function.Parameters = append(function.Parameters, compilerParam)
 		}
+	}
+
+	// Compile function attributes
+	if len(decl.Attributes) > 0 {
+		function.Attributes = c.compileAttributes(decl.Attributes)
 	}
 
 	// Store current compiler state
@@ -3156,6 +3166,11 @@ func (c *Compiler) compileClassDeclaration(decl *ast.AnonymousClass) error {
 		}
 	}
 
+	// Compile class attributes
+	if len(decl.Attributes) > 0 {
+		class.Attributes = c.compileAttributes(decl.Attributes)
+	}
+
 	// Handle extends
 	if decl.Extends != nil {
 		if parent, ok := decl.Extends.(*ast.IdentifierNode); ok {
@@ -3302,6 +3317,11 @@ func (c *Compiler) compilePropertyDeclaration(decl *ast.PropertyDeclaration) err
 	}
 
 	property.DefaultValue = defaultValue
+
+	// Compile property attributes
+	if len(decl.Attributes) > 0 {
+		property.Attributes = c.compileAttributes(decl.Attributes)
+	}
 
 	// Add property to current class
 	c.currentClass.Properties[propName] = property
@@ -4005,6 +4025,11 @@ func (c *Compiler) compileRegularClassDeclaration(decl *ast.ClassExpression) err
 		} else {
 			return fmt.Errorf("complex parent class expressions not supported yet")
 		}
+	}
+
+	// Compile class attributes
+	if len(decl.Attributes) > 0 {
+		class.Attributes = c.compileAttributes(decl.Attributes)
 	}
 
 	// Store current class context
@@ -5116,7 +5141,32 @@ func (c *Compiler) compileNullsafePropertyAccessExpression(expr *ast.NullsafePro
 	}
 
 	objectOperand := c.nextTemp - 1
+
+	// Generate labels for null check
+	notNullLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	// Check if object is null
+	nullConstant := c.addConstant(values.NewNull())
+	isNullResult := c.allocateTemp()
 	result := c.allocateTemp()
+	c.emit(opcodes.OP_IS_IDENTICAL,
+		opcodes.IS_TMP_VAR, objectOperand,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_TMP_VAR, isNullResult)
+
+	// If null, skip to null assignment; if not null, jump to property access
+	c.emitJumpZ(opcodes.IS_TMP_VAR, isNullResult, notNullLabel)
+
+	// Object is null, set result to null
+	c.emit(opcodes.OP_ASSIGN,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+
+	// Not null, perform property access
+	c.placeLabel(notNullLabel)
 
 	// Compile property name
 	var propOperand uint32
@@ -5134,25 +5184,50 @@ func (c *Compiler) compileNullsafePropertyAccessExpression(expr *ast.NullsafePro
 		propType = opcodes.IS_TMP_VAR
 	}
 
-	// Emit nullsafe property fetch (for now, same as regular)
+	// Emit property fetch
 	c.emit(opcodes.OP_FETCH_OBJ_R,
 		opcodes.IS_TMP_VAR, objectOperand,
 		propType, propOperand,
 		opcodes.IS_TMP_VAR, result)
+
+	c.placeLabel(endLabel)
 
 	return nil
 }
 
 // NullsafeMethodCallExpression compilation (object?->method())
 func (c *Compiler) compileNullsafeMethodCallExpression(expr *ast.NullsafeMethodCallExpression) error {
-	// Similar to regular method call but with nullsafe semantics
-	// For now, compile as regular method call
-
 	// Compile object
 	if err := c.compileNode(expr.Object); err != nil {
 		return err
 	}
 	objectOperand := c.nextTemp - 1
+
+	// Generate labels for null check
+	notNullLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	// Check if object is null
+	nullConstant := c.addConstant(values.NewNull())
+	isNullResult := c.allocateTemp()
+	result := c.allocateTemp()
+	c.emit(opcodes.OP_IS_IDENTICAL,
+		opcodes.IS_TMP_VAR, objectOperand,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_TMP_VAR, isNullResult)
+
+	// If null, skip to null assignment; if not null, jump to method call
+	c.emitJumpZ(opcodes.IS_TMP_VAR, isNullResult, notNullLabel)
+
+	// Object is null, set result to null
+	c.emit(opcodes.OP_ASSIGN,
+		opcodes.IS_CONST, nullConstant,
+		opcodes.IS_UNUSED, 0,
+		opcodes.IS_TMP_VAR, result)
+	c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+
+	// Not null, perform method call
+	c.placeLabel(notNullLabel)
 
 	// Compile method name
 	var methodOperand uint32
@@ -5169,13 +5244,37 @@ func (c *Compiler) compileNullsafeMethodCallExpression(expr *ast.NullsafeMethodC
 		methodType = opcodes.IS_TMP_VAR
 	}
 
-	result := c.allocateTemp()
+	// Handle arguments if present
+	var numArgs uint32
+	if expr.Arguments != nil && expr.Arguments.Arguments != nil {
+		numArgs = uint32(len(expr.Arguments.Arguments))
+	}
 
-	// For now, treat nullsafe same as regular method call
-	c.emit(opcodes.OP_DO_FCALL,
+	// Initialize method call
+	c.emit(opcodes.OP_INIT_METHOD_CALL,
 		opcodes.IS_TMP_VAR, objectOperand,
 		methodType, methodOperand,
-		opcodes.IS_TMP_VAR, result)
+		opcodes.IS_CONST, c.addConstant(values.NewInt(int64(numArgs))))
+
+	// Compile and send arguments
+	if expr.Arguments != nil && expr.Arguments.Arguments != nil {
+		for i, arg := range expr.Arguments.Arguments {
+			err := c.compileNode(arg)
+			if err != nil {
+				return err
+			}
+			argResult := c.allocateTemp()
+			c.emitMove(argResult)
+
+			argNum := c.addConstant(values.NewInt(int64(i)))
+			c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+		}
+	}
+
+	// Execute method call
+	c.emit(opcodes.OP_DO_FCALL, 0, 0, 0, 0, opcodes.IS_TMP_VAR, result)
+
+	c.placeLabel(endLabel)
 
 	return nil
 }
@@ -6955,4 +7054,36 @@ func (c *Compiler) validateMethodSignature(abstractMethod, implementedMethod *re
 			len(abstractMethod.Parameters), len(implementedMethod.Parameters))
 	}
 	return nil
+}
+
+
+// compileAttributes compiles attribute groups from AST to registry format
+func (c *Compiler) compileAttributes(attributeGroups []*ast.AttributeGroup) []*registry.Attribute {
+	var result []*registry.Attribute
+
+	for _, group := range attributeGroups {
+		for _, attr := range group.Attributes {
+			if attr.Name != nil {
+				compiledAttr := &registry.Attribute{
+					Name:      attr.Name.Name,
+					Arguments: make([]*values.Value, 0),
+				}
+
+				// Compile attribute arguments
+				for _, arg := range attr.Arguments {
+					argValue := c.evaluateConstantExpression(arg)
+					if argValue != nil {
+						compiledAttr.Arguments = append(compiledAttr.Arguments, argValue)
+					} else {
+						// If we can't evaluate at compile time, use null
+						compiledAttr.Arguments = append(compiledAttr.Arguments, values.NewNull())
+					}
+				}
+
+				result = append(result, compiledAttr)
+			}
+		}
+	}
+
+	return result
 }
