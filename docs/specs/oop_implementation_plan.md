@@ -147,6 +147,7 @@ None - all listed features are fully implemented and working.
 24. **Generator Enhancement** - COMPLETED (Enhanced yield from delegation with array and generator support)
 25. **Anonymous Classes** - COMPLETED (PHP anonymous class syntax with constructor arguments, inheritance, interfaces)
 26. **PHP Reflection Functions** - COMPLETED (get_class() with full inheritance support, func_* stubs)
+27. **Essential PHP Functions** - COMPLETED (str_replace, array_push, in_array, array_keys)
 
 ### 🔄 Next Priority Tasks
 
@@ -155,7 +156,7 @@ None - all listed features are fully implemented and working.
 The hey-codex interpreter now has full support for modern PHP OOP including:
 - PHP 8.0 features: Named arguments, match expressions, nullsafe operator, union types, attributes, constructor promotion
 - PHP 8.1 features: Enums, readonly properties, first-class callable syntax, anonymous classes
-- Enhanced features: Generator yield from delegation, PHP reflection functions
+- Enhanced features: Generator yield from delegation, PHP reflection functions, essential string/array functions
 
 **Possible future enhancements:**
 - Performance optimizations
