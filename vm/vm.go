@@ -409,6 +409,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execCreateClosure(ctx, frame, inst)
 	case opcodes.OP_BIND_USE_VAR:
 		return vm.execBindUseVar(ctx, frame, inst)
+	case opcodes.OP_CREATE_FUNC_CALLABLE:
+		return vm.execCreateFuncCallable(ctx, frame, inst)
+	case opcodes.OP_CREATE_METHOD_CALLABLE:
+		return vm.execCreateMethodCallable(ctx, frame, inst)
+	case opcodes.OP_CREATE_STATIC_CALLABLE:
+		return vm.execCreateStaticCallable(ctx, frame, inst)
 	case opcodes.OP_INCLUDE, opcodes.OP_INCLUDE_ONCE, opcodes.OP_REQUIRE, opcodes.OP_REQUIRE_ONCE:
 		return vm.execInclude(ctx, frame, inst)
 	case opcodes.OP_FETCH_CLASS_CONSTANT:

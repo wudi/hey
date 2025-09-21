@@ -113,8 +113,7 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
 
 **Modern PHP 8.0+ Features (Next Priority):**
 
-1. **Readonly Properties** (PHP 8.1) - Not implemented
-2. **First-class Callable Syntax** (PHP 8.1) - Not implemented
+1. **First-class Callable Syntax** (PHP 8.1) - Not implemented
 
 ### 🔧 Partially Working Features
 
@@ -145,20 +144,21 @@ Based on comprehensive testing, here is the current status of PHP OOP features i
 19. **Attributes/Annotations** - COMPLETED (PHP 8.0 #[Attribute] syntax with metadata storage)
 20. **Enums (Complete)** - COMPLETED (PHP 8.1 full enum support: cases, methods, static methods, backed enums)
 21. **Constructor Property Promotion** - COMPLETED (PHP 8.0 automatic property declaration and assignment)
+22. **Readonly Properties** - COMPLETED (PHP 8.1 write-once property semantics with readonly keyword)
 
 ### 🔄 Next Priority Tasks
 
 #### Phase 5: Modern PHP 8.0+ Features (Priority: HIGH)
 
-**Next Task: Readonly Properties (PHP 8.1)**
-- **Status**: Not implemented
+**Next Task: First-class Callable Syntax (PHP 8.1)**
+- **Status**: Parser support exists, needs full implementation
 - **Priority**: HIGH (important PHP 8.1 feature)
-- **Dependencies**: Property declaration, immutability enforcement
+- **Dependencies**: Parser syntax support, runtime callable object creation
 - **Implementation**:
-  1. Add readonly keyword support to property parsing
-  2. Implement readonly enforcement (write-once semantics)
-  3. Support readonly promoted properties
-  4. Add proper error handling for readonly violations
+  1. Complete runtime support for first-class callable syntax
+  2. Implement callable object creation and invocation
+  3. Support method references and function references
+  4. Add proper type checking for callable references
 
 ### Phase 1: Core Fixes (Priority: HIGH)
 
@@ -226,4 +226,4 @@ Ensure all currently working features continue to work after each implementation
 
 ---
 
-**Status**: **COMPLETE** - All major PHP OOP features have been successfully implemented and are working correctly. The hey-codex PHP interpreter now supports the full range of core PHP OOP functionality.
+**Status**: **NEARLY COMPLETE** - All major PHP OOP features have been successfully implemented and are working correctly. The hey-codex PHP interpreter now supports the full range of core PHP OOP functionality, including 22 completed features. Only first-class callable syntax remains to complete the modern PHP 8.1 feature set.

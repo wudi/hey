@@ -5488,8 +5488,112 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 
 // FirstClassCallable compilation (strlen(...))
 func (c *Compiler) compileFirstClassCallable(expr *ast.FirstClassCallable) error {
-	// First-class callable creates a Closure object
-	return fmt.Errorf("first-class callables not yet implemented")
+	// First-class callable creates a Closure object that can be called later
+	// We need to ensure the result ends up in c.nextTemp-1 for compileAssign to work correctly
+
+	switch callable := expr.Callable.(type) {
+	case *ast.IdentifierNode:
+		// Function reference: strlen(...)
+		result := c.allocateTemp()
+		return c.compileFirstClassFunction(callable.Name, result)
+
+	case *ast.PropertyAccessExpression:
+		// Method reference: $obj->method(...)
+		return c.compileFirstClassMethod(callable)
+
+	case *ast.StaticPropertyAccessExpression:
+		// Static method reference: Class::method(...)
+		result := c.allocateTemp()
+		return c.compileFirstClassStaticMethod(callable, result)
+
+	case *ast.StaticAccessExpression:
+		// Static method reference: Class::method(...) - alternative form
+		result := c.allocateTemp()
+		return c.compileFirstClassStaticAccess(callable, result)
+
+	default:
+		return fmt.Errorf("unsupported first-class callable type: %T", callable)
+	}
+}
+
+// compileFirstClassFunction creates a callable for a function reference: strlen(...)
+func (c *Compiler) compileFirstClassFunction(functionName string, result uint32) error {
+	// Create a callable closure for the function
+	funcNameConstant := c.addConstant(values.NewString(functionName))
+	c.emit(opcodes.OP_CREATE_FUNC_CALLABLE, opcodes.IS_CONST, funcNameConstant, 0, 0, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+// compileFirstClassMethod creates a callable for a method reference: $obj->method(...)
+func (c *Compiler) compileFirstClassMethod(methodAccess *ast.PropertyAccessExpression) error {
+	// Compile the object expression
+	if err := c.compileNode(methodAccess.Object); err != nil {
+		return err
+	}
+	objectResult := c.nextTemp - 1
+
+	// Get method name
+	var methodName string
+	if prop, ok := methodAccess.Property.(*ast.IdentifierNode); ok {
+		methodName = prop.Name
+	} else {
+		return fmt.Errorf("invalid method name in first-class callable")
+	}
+
+	// Allocate the result temp AFTER all internal compilation is done
+	result := c.allocateTemp()
+
+	methodNameConstant := c.addConstant(values.NewString(methodName))
+	c.emit(opcodes.OP_CREATE_METHOD_CALLABLE, opcodes.IS_TMP_VAR, objectResult, opcodes.IS_CONST, methodNameConstant, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+// compileFirstClassStaticMethod creates a callable for static method reference: Class::method(...)
+func (c *Compiler) compileFirstClassStaticMethod(staticAccess *ast.StaticPropertyAccessExpression, result uint32) error {
+	// Get class name
+	var className string
+	if class, ok := staticAccess.Class.(*ast.IdentifierNode); ok {
+		className = c.resolveClassName(class.Name)
+	} else {
+		return fmt.Errorf("invalid class name in static first-class callable")
+	}
+
+	// Get method name
+	var methodName string
+	if prop, ok := staticAccess.Property.(*ast.IdentifierNode); ok {
+		methodName = prop.Name
+	} else {
+		return fmt.Errorf("invalid method name in static first-class callable")
+	}
+
+	classNameConstant := c.addConstant(values.NewString(className))
+	methodNameConstant := c.addConstant(values.NewString(methodName))
+	c.emit(opcodes.OP_CREATE_STATIC_CALLABLE, opcodes.IS_CONST, classNameConstant, opcodes.IS_CONST, methodNameConstant, opcodes.IS_TMP_VAR, result)
+	return nil
+}
+
+// compileFirstClassStaticAccess creates a callable for static access reference: Class::method(...)
+func (c *Compiler) compileFirstClassStaticAccess(staticAccess *ast.StaticAccessExpression, result uint32) error {
+	// Get class name
+	var className string
+	if class, ok := staticAccess.Class.(*ast.IdentifierNode); ok {
+		className = c.resolveClassName(class.Name)
+	} else {
+		return fmt.Errorf("invalid class name in static access first-class callable")
+	}
+
+	// Get method name
+	var methodName string
+	if prop, ok := staticAccess.Property.(*ast.IdentifierNode); ok {
+		methodName = prop.Name
+	} else {
+		return fmt.Errorf("invalid method name in static access first-class callable")
+	}
+
+	classNameConstant := c.addConstant(values.NewString(className))
+	methodNameConstant := c.addConstant(values.NewString(methodName))
+	c.emit(opcodes.OP_CREATE_STATIC_CALLABLE, opcodes.IS_CONST, classNameConstant, opcodes.IS_CONST, methodNameConstant, opcodes.IS_TMP_VAR, result)
+	return nil
 }
 
 // Statement implementations

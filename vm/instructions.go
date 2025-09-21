@@ -1166,6 +1166,7 @@ func (vm *VirtualMachine) execAssign(ctx *ExecutionContext, frame *CallFrame, in
 		value = copyValue(value)
 	}
 	resType, resSlot := decodeResult(inst)
+
 	if err := vm.writeOperand(ctx, frame, resType, resSlot, value); err != nil {
 		return false, err
 	}
@@ -2224,6 +2225,53 @@ func (vm *VirtualMachine) execInitFCall(ctx *ExecutionContext, frame *CallFrame,
 			if fn, ok := closure.Function.(*registry.Function); ok {
 				pending.Function = fn
 				pending.ClosureName = fn.Name
+			} else if fnType, ok := closure.Function.(string); ok {
+				// Handle special first-class callable types
+				switch fnType {
+				case "bound_method":
+					// Set up bound method call
+					if objVal, hasObj := closure.BoundVars["object"]; hasObj && objVal.IsObject() {
+						if methodVal, hasMethod := closure.BoundVars["method"]; hasMethod {
+							obj := objVal.Data.(*values.Object)
+							methodName := methodVal.ToString()
+
+							// Look up the method
+							class := ctx.ensureClass(obj.ClassName)
+							if class != nil {
+								if method := resolveClassMethod(ctx, class, methodName); method != nil {
+									pending.Function = method
+									pending.ClosureName = methodName
+									pending.Method = true
+									pending.This = objVal
+									pending.ClassName = obj.ClassName
+									pending.MethodName = methodName
+								}
+							}
+						}
+					}
+				case "static_method":
+					// Set up static method call
+					if classVal, hasClass := closure.BoundVars["class"]; hasClass {
+						if methodVal, hasMethod := closure.BoundVars["method"]; hasMethod {
+							className := classVal.ToString()
+							methodName := methodVal.ToString()
+
+							// Look up the method
+							class := ctx.ensureClass(className)
+							if class != nil {
+								if method := resolveClassMethod(ctx, class, methodName); method != nil {
+									pending.Function = method
+									pending.ClosureName = methodName
+									pending.Method = true
+									pending.This = nil
+									pending.ClassName = className
+									pending.MethodName = methodName
+									// Static method flag will be handled by the method call logic
+								}
+							}
+						}
+					}
+				}
 			}
 		}
 	} else {
@@ -2768,6 +2816,121 @@ func (vm *VirtualMachine) execBindUseVar(ctx *ExecutionContext, frame *CallFrame
 	return true, nil
 }
 
+// execCreateFuncCallable creates a first-class callable for a function reference
+func (vm *VirtualMachine) execCreateFuncCallable(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get function name from operand 1
+	opType1, op1 := decodeOperand(inst, 1)
+	if opType1 != opcodes.IS_CONST {
+		return false, fmt.Errorf("function callable creation requires const function name")
+	}
+	if int(op1) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", op1)
+	}
+	functionName := frame.Constants[op1].ToString()
+
+	// Look up the function
+	var targetFn *registry.Function
+	if fn, ok := ctx.UserFunctions[strings.ToLower(functionName)]; ok {
+		targetFn = fn
+	} else if registry.GlobalRegistry != nil {
+		if fn, ok := registry.GlobalRegistry.GetFunction(functionName); ok {
+			targetFn = fn
+		}
+	}
+
+	if targetFn == nil {
+		return false, fmt.Errorf("unknown function %s for first-class callable", functionName)
+	}
+
+	// Create a closure for the function
+	closure := values.NewClosure(targetFn, nil, functionName)
+
+	// Store result
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, closure); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// execCreateMethodCallable creates a first-class callable for a method reference
+func (vm *VirtualMachine) execCreateMethodCallable(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get object from operand 1
+	objType, objOp := decodeOperand(inst, 1)
+	objVal, err := vm.readOperand(ctx, frame, objType, objOp)
+	if err != nil {
+		return false, err
+	}
+	if !objVal.IsObject() {
+		return false, fmt.Errorf("method callable requires object")
+	}
+
+	// Get method name from operand 2
+	methodType, methodOp := decodeOperand(inst, 2)
+	if methodType != opcodes.IS_CONST {
+		return false, fmt.Errorf("method callable creation requires const method name")
+	}
+	if int(methodOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", methodOp)
+	}
+	methodName := frame.Constants[methodOp].ToString()
+
+	// Create a bound method callable
+	// We'll store both the object and method name in the closure
+	boundVars := map[string]*values.Value{
+		"object": objVal,
+		"method": values.NewString(methodName),
+	}
+
+	closure := values.NewClosure("bound_method", boundVars, fmt.Sprintf("%s->%s", objVal.Data.(*values.Object).ClassName, methodName))
+
+	// Store result
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, closure); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// execCreateStaticCallable creates a first-class callable for a static method reference
+func (vm *VirtualMachine) execCreateStaticCallable(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get class name from operand 1
+	classType, classOp := decodeOperand(inst, 1)
+	if classType != opcodes.IS_CONST {
+		return false, fmt.Errorf("static callable creation requires const class name")
+	}
+	if int(classOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", classOp)
+	}
+	className := frame.Constants[classOp].ToString()
+
+	// Get method name from operand 2
+	methodType, methodOp := decodeOperand(inst, 2)
+	if methodType != opcodes.IS_CONST {
+		return false, fmt.Errorf("static callable creation requires const method name")
+	}
+	if int(methodOp) >= len(frame.Constants) {
+		return false, fmt.Errorf("constant index %d out of range", methodOp)
+	}
+	methodName := frame.Constants[methodOp].ToString()
+
+	// Create a static method callable
+	// We'll store the class and method name in the closure
+	boundVars := map[string]*values.Value{
+		"class":  values.NewString(className),
+		"method": values.NewString(methodName),
+	}
+
+	closure := values.NewClosure("static_method", boundVars, fmt.Sprintf("%s::%s", className, methodName))
+
+	// Store result
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, closure); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (vm *VirtualMachine) execInclude(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	if vm.CompilerCallback == nil {
 		return false, errors.New("include executed without compiler callback")
@@ -3195,3 +3358,4 @@ func (vm *VirtualMachine) checkReadonlyProperty(ctx *ExecutionContext, obj *valu
 	// First assignment to readonly property is allowed
 	return nil
 }
+
