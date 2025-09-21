@@ -2240,6 +2240,43 @@ func (vm *VirtualMachine) execEcho(ctx *ExecutionContext, frame *CallFrame, inst
 	return true, err
 }
 
+func (vm *VirtualMachine) execExit(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the exit status/message from operand 1 (if provided)
+	opType1, op1 := decodeOperand(inst, 1)
+	val, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	var exitCode int
+	var message string
+
+	if val != nil && !val.IsNull() {
+		if val.IsString() {
+			// String argument: print message and exit with code 0
+			message = val.ToString()
+			exitCode = 0
+		} else {
+			// Numeric argument: exit with this code
+			exitCode = int(val.ToInt())
+		}
+	} else {
+		// No argument: exit with code 0
+		exitCode = 0
+	}
+
+	// Print message if provided
+	if message != "" && ctx.OutputWriter != nil {
+		fmt.Fprint(ctx.OutputWriter, message)
+	}
+
+	// Set exit code and halt execution
+	ctx.ExitCode = exitCode
+	ctx.Halted = true
+
+	return true, nil
+}
+
 func (vm *VirtualMachine) execInitFCall(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	opType1, op1 := decodeOperand(inst, 1)
 	callee, err := vm.readOperand(ctx, frame, opType1, op1)

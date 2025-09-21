@@ -213,6 +213,11 @@ func parseAndExecuteCodeWithFile(code string, inScript bool, filename string) er
 	// Call destructors on all remaining objects at script end
 	vmachine.CallAllDestructors(vmCtx)
 
+	// Check if exit() or die() was called
+	if vmCtx.Halted {
+		os.Exit(vmCtx.ExitCode)
+	}
+
 	return err
 }
 
@@ -321,6 +326,11 @@ func parseAndExecuteCode(code string, inScript bool) error {
 
 	// Call destructors on all remaining objects at script end
 	vmachine.CallAllDestructors(vmCtx)
+
+	// Check if exit() or die() was called
+	if vmCtx.Halted {
+		os.Exit(vmCtx.ExitCode)
+	}
 
 	return err
 }

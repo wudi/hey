@@ -379,6 +379,8 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execUnsetVar(ctx, frame, inst)
 	case opcodes.OP_ISSET_ISEMPTY_VAR:
 		return vm.execIssetIsEmptyVar(ctx, frame, inst)
+	case opcodes.OP_EXIT:
+		return vm.execExit(ctx, frame, inst)
 	case opcodes.OP_ECHO:
 		return vm.execEcho(ctx, frame, inst)
 	case opcodes.OP_FE_RESET:

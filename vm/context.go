@@ -26,6 +26,7 @@ type ExecutionContext struct {
 	IncludedFiles map[string]bool
 
 	Halted bool
+	ExitCode int
 
 	CallStack []*CallFrame
 

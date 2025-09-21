@@ -64,3 +64,22 @@ func (b *builtinContext) LookupUserClass(name string) (*registry.Class, bool) {
 	}
 	return nil, false
 }
+
+func (b *builtinContext) Halt(exitCode int, message string) error {
+	if b.ctx == nil {
+		return fmt.Errorf("no execution context available")
+	}
+
+	// Print message if provided
+	if message != "" {
+		if b.ctx.OutputWriter != nil {
+			fmt.Fprint(b.ctx.OutputWriter, message)
+		}
+	}
+
+	// Set exit code and halt execution
+	b.ctx.ExitCode = exitCode
+	b.ctx.Halted = true
+
+	return nil
+}

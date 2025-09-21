@@ -32,6 +32,8 @@ type BuiltinCallContext interface {
 	// LookupUserClass returns a user-defined class registered inside the active
 	// execution context, if available.
 	LookupUserClass(name string) (*Class, bool)
+	// Halt stops execution with the given exit code and optional message.
+	Halt(exitCode int, message string) error
 }
 
 // Function describes a PHP function that can either be user-defined (bytecode)

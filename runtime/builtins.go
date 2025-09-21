@@ -2377,6 +2377,70 @@ var builtinFunctionSpecs = []*registry.Function{
 			return values.NewInt(int64(len(str))), nil
 		},
 	},
+	{
+		Name: "exit",
+		Parameters: []*registry.Parameter{
+			{Name: "status", Type: "mixed", HasDefault: true, DefaultValue: values.NewInt(0)},
+		},
+		ReturnType: "void",
+		MinArgs:    0,
+		MaxArgs:    1,
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			var exitCode int
+			var message string
+
+			if len(args) > 0 && args[0] != nil {
+				if args[0].IsString() {
+					// String argument: print message and exit with code 0
+					message = args[0].ToString()
+					exitCode = 0
+				} else {
+					// Numeric argument: exit with this code
+					exitCode = int(args[0].ToInt())
+				}
+			} else {
+				// No argument: exit with code 0
+				exitCode = 0
+			}
+
+			// Halt execution
+			ctx.Halt(exitCode, message)
+			return values.NewNull(), nil
+		},
+	},
+	{
+		Name: "die",
+		Parameters: []*registry.Parameter{
+			{Name: "status", Type: "mixed", HasDefault: true, DefaultValue: values.NewInt(0)},
+		},
+		ReturnType: "void",
+		MinArgs:    0,
+		MaxArgs:    1,
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			var exitCode int
+			var message string
+
+			if len(args) > 0 && args[0] != nil {
+				if args[0].IsString() {
+					// String argument: print message and exit with code 0
+					message = args[0].ToString()
+					exitCode = 0
+				} else {
+					// Numeric argument: exit with this code
+					exitCode = int(args[0].ToInt())
+				}
+			} else {
+				// No argument: exit with code 0
+				exitCode = 0
+			}
+
+			// Halt execution (die is an alias of exit)
+			ctx.Halt(exitCode, message)
+			return values.NewNull(), nil
+		},
+	},
 }
 
 var builtinConstants = []*registry.ConstantDescriptor{
