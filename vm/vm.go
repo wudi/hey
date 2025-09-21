@@ -612,13 +612,34 @@ func (vm *VirtualMachine) execYieldFrom(ctx *ExecutionContext, frame *CallFrame,
 	}
 
 	// The delegation will be handled by the generator's Next() method
-	// We don't suspend here - the current yield from instruction completes
+	// We suspend here just like a regular yield would
 	return true, nil
 }
 
 // CreateExecutionContext creates a new execution context for generator execution
 func (vm *VirtualMachine) CreateExecutionContext() interface{} {
-	return NewExecutionContext()
+	ctx := NewExecutionContext()
+
+	// Copy user functions from the last context to ensure generators can access global functions
+	vm.mu.Lock()
+	if vm.lastContext != nil {
+		for name, fn := range vm.lastContext.UserFunctions {
+			ctx.UserFunctions[name] = fn
+		}
+		// Also copy user classes, interfaces, and traits for completeness
+		for name, class := range vm.lastContext.UserClasses {
+			ctx.UserClasses[name] = class
+		}
+		for name, iface := range vm.lastContext.UserInterfaces {
+			ctx.UserInterfaces[name] = iface
+		}
+		for name, trait := range vm.lastContext.UserTraits {
+			ctx.UserTraits[name] = trait
+		}
+	}
+	vm.mu.Unlock()
+
+	return ctx
 }
 
 // CreateCallFrame creates a new call frame for generator function execution

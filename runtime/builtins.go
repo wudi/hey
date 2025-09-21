@@ -227,28 +227,39 @@ func (g *Generator) StartDelegation(iterable *values.Value) error {
 	g.delegating = true
 	g.delegateIterable = iterable
 	g.delegateIndex = 0
+	g.suspended = true // Mark as suspended so Next() will handle delegation
 
 	if iterable.IsArray() {
 		// Prepare array keys for iteration
-		if arrayData, ok := iterable.Data.(map[string]*values.Value); ok {
-			g.delegateKeys = make([]string, 0, len(arrayData))
-			for key := range arrayData {
-				g.delegateKeys = append(g.delegateKeys, key)
+		if arr, ok := iterable.Data.(*values.Array); ok {
+			g.delegateKeys = make([]string, 0, len(arr.Elements))
+			for key := range arr.Elements {
+				keyStr := fmt.Sprintf("%v", key)
+				g.delegateKeys = append(g.delegateKeys, keyStr)
 			}
 		}
 
 		// Set the first value immediately if array is not empty
 		if len(g.delegateKeys) > 0 {
-			key := g.delegateKeys[0]
-			arrayData := g.delegateIterable.Data.(map[string]*values.Value)
-			value := arrayData[key]
+			keyStr := g.delegateKeys[0]
+			arr := g.delegateIterable.Data.(*values.Array)
 
-			// Convert string key to appropriate type
+			// Convert string back to interface{} key for lookup
+			var key interface{}
+			if intKey, err := strconv.Atoi(keyStr); err == nil {
+				key = int64(intKey)
+			} else {
+				key = keyStr
+			}
+
+			value := arr.Elements[key]
+
+			// Convert to appropriate Value type
 			var keyValue *values.Value
-			if intKey, err := strconv.Atoi(key); err == nil {
+			if intKey, err := strconv.Atoi(keyStr); err == nil {
 				keyValue = values.NewInt(int64(intKey))
 			} else {
-				keyValue = values.NewString(key)
+				keyValue = values.NewString(keyStr)
 			}
 
 			// Set current values and advance index
@@ -266,8 +277,10 @@ func (g *Generator) StartDelegation(iterable *values.Value) error {
 				if g.delegateGenerator.Next() {
 					g.currentKey = g.delegateGenerator.Key()
 					g.currentValue = g.delegateGenerator.Current()
+				} else {
 				}
 			} else {
+				fmt.Printf("DEBUG: Invalid generator type\n")
 				return fmt.Errorf("invalid generator for delegation")
 			}
 		} else {
@@ -291,16 +304,25 @@ func (g *Generator) handleDelegateNext() bool {
 		}
 
 		// Get current array item
-		key := g.delegateKeys[g.delegateIndex]
-		arrayData := g.delegateIterable.Data.(map[string]*values.Value)
-		value := arrayData[key]
+		keyStr := g.delegateKeys[g.delegateIndex]
+		arr := g.delegateIterable.Data.(*values.Array)
 
-		// Convert string key to appropriate type
+		// Convert string back to interface{} key for lookup
+		var key interface{}
+		if intKey, err := strconv.Atoi(keyStr); err == nil {
+			key = int64(intKey)
+		} else {
+			key = keyStr
+		}
+
+		value := arr.Elements[key]
+
+		// Convert to appropriate Value type
 		var keyValue *values.Value
-		if intKey, err := strconv.Atoi(key); err == nil {
+		if intKey, err := strconv.Atoi(keyStr); err == nil {
 			keyValue = values.NewInt(int64(intKey))
 		} else {
-			keyValue = values.NewString(key)
+			keyValue = values.NewString(keyStr)
 		}
 
 		// Set current values and advance index
