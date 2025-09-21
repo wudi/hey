@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 
@@ -1808,6 +1809,112 @@ var builtinFunctionSpecs = []builtinSpec{
 				}
 			}
 			return result, nil
+		},
+	},
+	{
+		Name: "file_get_contents",
+		Parameters: []*registry.Parameter{
+			{Name: "filename", Type: "string"},
+		},
+		ReturnType: "string|false",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			filename := args[0].ToString()
+
+			content, err := os.ReadFile(filename)
+			if err != nil {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewString(string(content)), nil
+		},
+	},
+	{
+		Name: "file_put_contents",
+		Parameters: []*registry.Parameter{
+			{Name: "filename", Type: "string"},
+			{Name: "data", Type: "mixed"},
+		},
+		ReturnType: "int|false",
+		MinArgs:    2,
+		MaxArgs:    2,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 || args[0] == nil || args[1] == nil {
+				return values.NewBool(false), nil
+			}
+
+			filename := args[0].ToString()
+			data := args[1].ToString()
+
+			err := os.WriteFile(filename, []byte(data), 0644)
+			if err != nil {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewInt(int64(len(data))), nil
+		},
+	},
+	{
+		Name: "unlink",
+		Parameters: []*registry.Parameter{
+			{Name: "filename", Type: "string"},
+		},
+		ReturnType: "bool",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewBool(false), nil
+			}
+			filename := args[0].ToString()
+
+			err := os.Remove(filename)
+			if err != nil {
+				return values.NewBool(false), nil
+			}
+
+			return values.NewBool(true), nil
+		},
+	},
+	{
+		Name: "sprintf",
+		Parameters: []*registry.Parameter{
+			{Name: "format", Type: "string"},
+		},
+		ReturnType: "string",
+		IsVariadic: true,
+		MinArgs:    1,
+		MaxArgs:    -1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewString(""), nil
+			}
+
+			format := args[0].ToString()
+			var goArgs []interface{}
+
+			// Convert PHP values to Go interface{} for fmt.Sprintf
+			for i := 1; i < len(args); i++ {
+				if args[i] == nil {
+					goArgs = append(goArgs, nil)
+				} else if args[i].IsInt() {
+					goArgs = append(goArgs, args[i].ToInt())
+				} else if args[i].IsFloat() {
+					goArgs = append(goArgs, args[i].ToFloat())
+				} else if args[i].IsBool() {
+					goArgs = append(goArgs, args[i].ToBool())
+				} else {
+					goArgs = append(goArgs, args[i].ToString())
+				}
+			}
+
+			// Use Go's fmt.Sprintf which supports similar format specifiers
+			result := fmt.Sprintf(format, goArgs...)
+			return values.NewString(result), nil
 		},
 	},
 }
