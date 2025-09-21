@@ -1917,6 +1917,85 @@ var builtinFunctionSpecs = []builtinSpec{
 			return values.NewString(result), nil
 		},
 	},
+	{
+		Name: "array_filter",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+
+			// Filter truthy values (simplified version without callback support)
+			for key, val := range arr.Elements {
+				if val != nil && val.ToBool() {
+					resultArr.Elements[key] = val
+				}
+			}
+
+			return result, nil
+		},
+	},
+	{
+		Name: "array_values",
+		Parameters: []*registry.Parameter{
+			{Name: "array", Type: "array"},
+		},
+		ReturnType: "array",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil || !args[0].IsArray() {
+				return values.NewArray(), nil
+			}
+
+			arr := args[0].Data.(*values.Array)
+			result := values.NewArray()
+			resultArr := result.Data.(*values.Array)
+
+			// Re-index array with numeric keys starting from 0
+			index := int64(0)
+			for _, val := range arr.Elements {
+				if val != nil {
+					resultArr.Elements[index] = val
+					index++
+				}
+			}
+			resultArr.NextIndex = index
+
+			return result, nil
+		},
+	},
+	{
+		Name: "count",
+		Parameters: []*registry.Parameter{
+			{Name: "array_or_countable", Type: "mixed"},
+		},
+		ReturnType: "int",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 || args[0] == nil {
+				return values.NewInt(0), nil
+			}
+
+			if args[0].IsArray() {
+				arr := args[0].Data.(*values.Array)
+				return values.NewInt(int64(len(arr.Elements))), nil
+			}
+
+			// For non-arrays, return 1 (PHP behavior)
+			return values.NewInt(1), nil
+		},
+	},
 }
 
 var builtinConstants = []*registry.ConstantDescriptor{
