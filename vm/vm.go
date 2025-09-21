@@ -369,6 +369,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execCatch(ctx, frame, inst)
 	case opcodes.OP_FINALLY:
 		return vm.execFinally(ctx, frame, inst)
+	case opcodes.OP_EXCEPTION_MATCH:
+		return vm.execExceptionMatch(ctx, frame, inst)
+	case opcodes.OP_CLEAR_EXCEPTION:
+		return vm.execClearException(ctx, frame, inst)
+	case opcodes.OP_RETHROW:
+		return vm.execRethrow(ctx, frame, inst)
 	case opcodes.OP_UNSET_VAR:
 		return vm.execUnsetVar(ctx, frame, inst)
 	case opcodes.OP_ISSET_ISEMPTY_VAR:

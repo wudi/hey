@@ -2554,10 +2554,51 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 	// Exception dispatch logic - this is where all exceptions first land
 	c.placeLabel(catchDispatchLabel)
 
-	// For now, simplified exception handling - jump to first catch block
-	// TODO: implement proper exception type checking
+	// Implement proper exception type checking
+	// For each catch clause, check if exception matches the type
 	if len(stmt.CatchClauses) > 0 {
-		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, catchLabels[0])
+		for i, catchClause := range stmt.CatchClauses {
+			// Get exception type names from the catch clause
+			if len(catchClause.Types) > 0 {
+				for _, typeExpr := range catchClause.Types {
+					// Extract type name
+					var typeName string
+					switch t := typeExpr.(type) {
+					case *ast.IdentifierNode:
+						typeName = t.Name
+					case *ast.NamespaceNameExpression:
+						// For namespaced names, get the last part
+						if len(t.Parts) > 0 {
+							typeName = t.Parts[len(t.Parts)-1]
+						}
+					}
+
+					if typeName != "" {
+						// Emit instruction to check if exception matches this type
+						typeConstant := c.addConstant(values.NewString(typeName))
+						matchTemp := c.allocateTemp()
+						c.emit(opcodes.OP_EXCEPTION_MATCH,
+							opcodes.IS_CONST, typeConstant,
+							opcodes.IS_UNUSED, 0,
+							opcodes.IS_TMP_VAR, matchTemp)
+
+						// If match, jump to this catch block
+						c.emitJumpNZ(opcodes.IS_TMP_VAR, matchTemp, catchLabels[i])
+					}
+				}
+			} else {
+				// No type specified - catches all exceptions (like catch(Exception $e) without type)
+				c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, catchLabels[i])
+			}
+		}
+
+		// If no catch matched, jump to finally or re-throw
+		if len(stmt.FinallyBlock) > 0 {
+			c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, finallyLabel)
+		} else {
+			// Re-throw the exception (no matching catch)
+			c.emit(opcodes.OP_RETHROW, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0)
+		}
 	} else if len(stmt.FinallyBlock) > 0 {
 		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, finallyLabel)
 	} else {
@@ -2576,6 +2617,9 @@ func (c *Compiler) compileTry(stmt *ast.TryStatement) error {
 				c.emit(opcodes.OP_ASSIGN_EXCEPTION, opcodes.IS_CV, slot, 0, 0, 0, 0)
 			}
 		}
+
+		// Clear the exception after assignment
+		c.emit(opcodes.OP_CLEAR_EXCEPTION, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0, opcodes.IS_UNUSED, 0)
 
 		// Compile catch block body
 		for _, s := range catchClause.Body {

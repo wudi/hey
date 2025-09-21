@@ -74,12 +74,6 @@ const (
 	OP_SWITCH_LONG   // Integer switch case
 	OP_SWITCH_STRING // String switch case
 
-	// Exception handling
-	OP_THROW
-	OP_CATCH
-	OP_FINALLY
-	OP_ASSIGN_EXCEPTION // Assign caught exception to variable
-
 	// Loop operations
 	OP_FE_RESET // foreach reset
 	OP_FE_FETCH // foreach fetch
@@ -302,6 +296,17 @@ const (
 	OP_TICKS     // Ticks directive (declare(ticks=N))
 )
 
+// Exception Operations (230-239)
+const (
+	OP_THROW            Opcode = iota + 230
+	OP_CATCH
+	OP_FINALLY
+	OP_ASSIGN_EXCEPTION // Assign caught exception to variable
+	OP_EXCEPTION_MATCH  // Check if exception matches type
+	OP_CLEAR_EXCEPTION  // Clear exception state
+	OP_RETHROW          // Re-throw current exception
+)
+
 // Closure Operations (240-249)
 const (
 	OP_CREATE_CLOSURE Opcode = iota + 240 // Create a closure
@@ -428,12 +433,6 @@ var opcodeNames = map[Opcode]string{
 	OP_CASE_STRICT:   "CASE_STRICT",
 	OP_SWITCH_LONG:   "SWITCH_LONG",
 	OP_SWITCH_STRING: "SWITCH_STRING",
-
-	// Exception handling
-	OP_THROW:   "THROW",
-	OP_CATCH:   "CATCH",
-	OP_FINALLY:          "FINALLY",
-	OP_ASSIGN_EXCEPTION: "ASSIGN_EXCEPTION",
 
 	// Loop operations
 	OP_FE_RESET: "FE_RESET",
@@ -617,6 +616,15 @@ var opcodeNames = map[Opcode]string{
 	OP_LABEL:   "LABEL",
 	OP_DECLARE: "DECLARE",
 	OP_TICKS:   "TICKS",
+
+	// Exception operations
+	OP_THROW:            "THROW",
+	OP_CATCH:            "CATCH",
+	OP_FINALLY:          "FINALLY",
+	OP_ASSIGN_EXCEPTION: "ASSIGN_EXCEPTION",
+	OP_EXCEPTION_MATCH:  "EXCEPTION_MATCH",
+	OP_CLEAR_EXCEPTION:  "CLEAR_EXCEPTION",
+	OP_RETHROW:          "RETHROW",
 
 	// Closure operations
 	OP_CREATE_CLOSURE: "CREATE_CLOSURE",

@@ -383,6 +383,65 @@ func (vm *VirtualMachine) execAssignException(ctx *ExecutionContext, frame *Call
 	return true, nil
 }
 
+func (vm *VirtualMachine) execExceptionMatch(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the exception type name to match
+	opType1, op1 := decodeOperand(inst, 1)
+	typeName, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Check if exception matches the type
+	var isMatch bool
+	if frame.pendingException == nil {
+		// No exception, return false
+		isMatch = false
+	} else {
+		isMatch = vm.exceptionMatchesType(frame.pendingException, typeName.ToString())
+	}
+
+	// Store result in the specified target location (like comparison operations)
+	result := values.NewBool(isMatch)
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, result); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execClearException(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Clear the pending exception when entering a catch block
+	frame.pendingException = nil
+	return true, nil
+}
+
+func (vm *VirtualMachine) execRethrow(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Re-throw the current pending exception
+	if frame.pendingException != nil {
+		return vm.raiseException(ctx, frame, frame.pendingException)
+	}
+	// If no exception to rethrow, continue
+	return true, nil
+}
+
+func (vm *VirtualMachine) exceptionMatchesType(exception *values.Value, typeName string) bool {
+	// Check if the exception object matches the given type name
+	if exception == nil || exception.Type != values.TypeObject {
+		return false
+	}
+
+	obj := exception.Data.(*values.Object)
+	if obj == nil {
+		return false
+	}
+
+	// Check for exact match or inheritance chain
+	if registry.GlobalRegistry != nil {
+		return registry.GlobalRegistry.IsInstanceOf(obj.ClassName, typeName)
+	}
+	return false
+}
 
 func (vm *VirtualMachine) execInstanceof(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	// Get the object to check (left operand)

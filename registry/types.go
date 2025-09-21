@@ -396,3 +396,103 @@ func (r *Registry) GetTrait(name string) (*Trait, bool) {
 	trait, ok := r.traits[keyFor(name)]
 	return trait, ok
 }
+
+// IsInstanceOf checks if className is an instance of typeName
+// This includes checking for exact match, parent classes, and interfaces
+func (r *Registry) IsInstanceOf(className, typeName string) bool {
+	if r == nil {
+		return false
+	}
+
+	// Normalize names to lowercase for case-insensitive comparison
+	className = keyFor(className)
+	typeName = keyFor(typeName)
+
+	// Special case for built-in types
+	if typeName == "throwable" {
+		// All exceptions implement Throwable
+		return r.isExceptionType(className)
+	}
+
+	// Check for exact match
+	if className == typeName {
+		return true
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Check class hierarchy
+	class, ok := r.classes[className]
+	if !ok {
+		return false
+	}
+
+	// Check parent classes recursively
+	if class.Parent != "" {
+		if r.IsInstanceOf(class.Parent, typeName) {
+			return true
+		}
+	}
+
+	// Check implemented interfaces
+	for _, iface := range class.Interfaces {
+		if keyFor(iface) == typeName {
+			return true
+		}
+		// Check interface inheritance
+		if r.isInterfaceExtends(iface, typeName) {
+			return true
+		}
+	}
+	return false
+}
+
+// isExceptionType checks if a class is an exception type
+func (r *Registry) isExceptionType(className string) bool {
+	// Built-in exception types
+	exceptionTypes := []string{"exception", "error", "errorexception", "typeerror", "parseerror", "arithmeticerror"}
+	for _, exType := range exceptionTypes {
+		if className == exType {
+			return true
+		}
+	}
+
+	// Check if it extends Exception or Error
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	class, ok := r.classes[className]
+	if ok {
+		parent := keyFor(class.Parent)
+		if parent == "exception" || parent == "error" {
+			return true
+		}
+		// Recursively check parent
+		if parent != "" {
+			return r.isExceptionType(parent)
+		}
+	}
+
+	return false
+}
+
+// isInterfaceExtends checks if an interface extends another interface
+func (r *Registry) isInterfaceExtends(ifaceName, parentName string) bool {
+	iface, ok := r.interfaces[keyFor(ifaceName)]
+	if !ok {
+		return false
+	}
+
+	for _, extends := range iface.Extends {
+		if keyFor(extends) == parentName {
+			return true
+		}
+		// Recursive check
+		if r.isInterfaceExtends(extends, parentName) {
+			return true
+		}
+	}
+
+	return false
+}
