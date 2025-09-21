@@ -455,6 +455,68 @@ var builtinFunctionSpecs = []builtinSpec{
 		},
 	},
 	{
+		Name: "get_class",
+		Parameters: []*registry.Parameter{
+			{Name: "object", Type: "object"},
+		},
+		ReturnType: "string",
+		MinArgs:    0,
+		MaxArgs:    1,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) == 0 {
+				// Called without arguments - return current class name if in class context
+				// For now, return false (which would be an error in real PHP)
+				return values.NewBool(false), nil
+			}
+
+			if args[0] == nil || !args[0].IsObject() {
+				return values.NewBool(false), nil
+			}
+
+			obj := args[0].Data.(*values.Object)
+			return values.NewString(obj.ClassName), nil
+		},
+	},
+	{
+		Name: "func_num_args",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "int",
+		MinArgs:    0,
+		MaxArgs:    0,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// func_num_args() returns the number of arguments passed to the calling function
+			// We need to access the calling function's arguments
+			// For now, return -1 to indicate it's not implemented correctly
+			return values.NewInt(-1), nil
+		},
+	},
+	{
+		Name: "func_get_args",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "array",
+		MinArgs:    0,
+		MaxArgs:    0,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// func_get_args() returns an array of all arguments passed to the calling function
+			// For now, return empty array
+			return values.NewArray(), nil
+		},
+	},
+	{
+		Name: "func_get_arg",
+		Parameters: []*registry.Parameter{
+			{Name: "arg_num", Type: "int"},
+		},
+		ReturnType: "mixed",
+		MinArgs:    1,
+		MaxArgs:    1,
+		Impl: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// func_get_arg(n) returns the nth argument passed to the calling function
+			// For now, return null
+			return values.NewNull(), nil
+		},
+	},
+	{
 		Name: "method_exists",
 		Parameters: []*registry.Parameter{
 			{Name: "object_or_class", Type: "mixed"},
