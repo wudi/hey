@@ -1572,7 +1572,7 @@ func (vm *VirtualMachine) execJump(ctx *ExecutionContext, frame *CallFrame, inst
 		}
 	}
 	frame.IP = target
-	return false, nil
+	return false, nil  // IP manually set, don't auto-increment
 }
 
 func (vm *VirtualMachine) execBitwiseNot(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
@@ -1628,7 +1628,7 @@ func (vm *VirtualMachine) execConditionalJump(ctx *ExecutionContext, frame *Call
 
 	if jump {
 		frame.IP = int(targetVal.ToInt())
-		return false, nil
+		return false, nil  // IP manually set, don't auto-increment
 	}
 	return true, nil
 }

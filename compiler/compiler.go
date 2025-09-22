@@ -2937,6 +2937,16 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	function.Instructions = c.instructions
 	function.Constants = c.constants
 
+	// Store variable slot mapping for proper local variable allocation in goroutines
+	currentScope := c.currentScope()
+	if currentScope != nil {
+		function.VariableSlots = make(map[string]uint32)
+		for varName, slot := range currentScope.variables {
+			function.VariableSlots[varName] = slot
+		}
+		function.MaxLocalSlot = currentScope.nextSlot
+	}
+
 	// Store the function in the appropriate location
 	if c.currentClass != nil {
 		// Store as a class method
@@ -3105,6 +3115,16 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	// Store compiled function
 	function.Instructions = c.instructions
 	function.Constants = c.constants
+
+	// Store variable slot mapping for proper local variable allocation in goroutines
+	currentScope := c.currentScope()
+	if currentScope != nil {
+		function.VariableSlots = make(map[string]uint32)
+		for varName, slot := range currentScope.variables {
+			function.VariableSlots[varName] = slot
+		}
+		function.MaxLocalSlot = currentScope.nextSlot
+	}
 
 	// Store the function
 	c.functions[anonName] = function
@@ -5478,6 +5498,16 @@ func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpress
 	function.Instructions = c.instructions
 	function.Constants = c.constants
 
+	// Store variable slot mapping for proper local variable allocation in goroutines
+	currentScope := c.currentScope()
+	if currentScope != nil {
+		function.VariableSlots = make(map[string]uint32)
+		for varName, slot := range currentScope.variables {
+			function.VariableSlots[varName] = slot
+		}
+		function.MaxLocalSlot = currentScope.nextSlot
+	}
+
 	// Pop function scope
 	c.popScope()
 
@@ -7029,6 +7059,16 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 	// Store compiled method
 	function.Instructions = c.instructions
 	function.Constants = c.constants
+
+	// Store variable slot mapping for proper local variable allocation in goroutines
+	currentScope := c.currentScope()
+	if currentScope != nil {
+		function.VariableSlots = make(map[string]uint32)
+		for varName, slot := range currentScope.variables {
+			function.VariableSlots[varName] = slot
+		}
+		function.MaxLocalSlot = currentScope.nextSlot
+	}
 
 	// Store the method in the trait
 	trait.Methods[methodName] = function

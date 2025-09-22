@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"sync"
 
@@ -61,6 +60,15 @@ type VMGoroutineExecutor struct {
 // ExecuteFunction executes a function in an isolated VM context for goroutines
 // The boundVarsMap parameter contains the closure's bound variables by name
 func (e *VMGoroutineExecutor) ExecuteFunction(fn *registry.Function, boundVarsMap map[string]*values.Value) (*values.Value, error) {
+	// Create a minimal VM instance for this goroutine to avoid race conditions
+	// We create a fresh VM without the goroutine executor to prevent recursion
+	goroutineVM := &VirtualMachine{
+		lastContext: nil,
+		watchVars:   make(map[string]struct{}),
+		profile:     newProfileState(),
+		DebugMode:   false,
+	}
+
 	// Create a new execution context for the goroutine
 	ctx := NewExecutionContext()
 
@@ -70,52 +78,70 @@ func (e *VMGoroutineExecutor) ExecuteFunction(fn *registry.Function, boundVarsMa
 		for k, v := range e.vm.lastContext.ClassTable {
 			ctx.ClassTable[k] = v
 		}
-		// Create isolated global variables for goroutine - do not share with main thread
-		// This eliminates race conditions and ensures proper isolation
+		// Create completely isolated global variables for goroutine
+		// Deep copy all global variables to prevent race conditions
 		ctx.GlobalVars = make(map[string]*values.Value)
+		for k, v := range e.vm.lastContext.GlobalVars {
+			ctx.GlobalVars[k] = copyValue(v)
+		}
+	} else {
+		// Create fresh execution context
+		ctx.GlobalVars = make(map[string]*values.Value)
+		ctx.ClassTable = make(map[string]*classRuntime)
 	}
 
 	// Create a call frame for the function
 	frame := newCallFrame(fn.Name, fn, fn.Instructions, fn.Constants)
 
-	// Set up bound variables by name in the frame's slot names and locals
-	// We need to map variables to the slots that the compiled function expects
-	slotIndex := uint32(0)
+	// Set up local variables based on the function's compiled variable slot mapping
+	// This ensures proper slot allocation for loop variables and other locals
+	if fn.VariableSlots != nil {
+		// Initialize all local variable slots as defined by the compiler
+		for varName, slot := range fn.VariableSlots {
+			frame.bindSlotName(slot, varName)
+			frame.setLocal(slot, values.NewNull()) // Initialize with null
+		}
+	} else {
+		// Fallback for functions without slot mapping (older compiled functions)
+		slotIndex := uint32(0)
 
-	// First, set up function parameters (if any)
-	for i, param := range fn.Parameters {
-		frame.bindSlotName(uint32(i), param.Name)
-		frame.setLocal(uint32(i), values.NewNull()) // Initialize with null
-		slotIndex++
-	}
-
-	// Then set up bound variables (use clause variables)
-	// Sort variable names to ensure deterministic slot assignment
-	var sortedVarNames []string
-	for varName := range boundVarsMap {
-		sortedVarNames = append(sortedVarNames, varName)
-	}
-	sort.Strings(sortedVarNames)
-
-	for _, varName := range sortedVarNames {
-		boundVar := boundVarsMap[varName]
-		// Make a deep copy to avoid race conditions between goroutines
-		varCopy := copyValue(boundVar)
-
-		// Find if this variable name already has a slot
-		if existingSlot, exists := frame.NameSlots[varName]; exists {
-			// Variable already has a slot, use it
-			frame.setLocal(existingSlot, varCopy)
-		} else {
-			// Create new slot for this variable
-			frame.bindSlotName(slotIndex, varName)
-			frame.setLocal(slotIndex, varCopy)
+		// First, set up function parameters (if any)
+		for i, param := range fn.Parameters {
+			frame.bindSlotName(uint32(i), param.Name)
+			frame.setLocal(uint32(i), values.NewNull()) // Initialize with null
 			slotIndex++
 		}
 	}
 
-	// Execute the function
-	err := e.vm.ExecuteFunction(ctx, frame)
+	// Set bound variables (use clause variables) to their proper values
+	for varName, boundVar := range boundVarsMap {
+		// Make a deep copy to avoid race conditions between goroutines
+		varCopy := copyValue(boundVar)
+
+		// Find the slot for this variable
+		if slot, exists := frame.NameSlots[varName]; exists {
+			// Variable has a slot, set its value
+			frame.setLocal(slot, varCopy)
+		} else {
+			// This shouldn't happen with proper slot mapping, but handle gracefully
+			// Find next available slot
+			maxSlot := uint32(0)
+			if fn.MaxLocalSlot > 0 {
+				maxSlot = fn.MaxLocalSlot
+			} else {
+				for _, s := range frame.NameSlots {
+					if s >= maxSlot {
+						maxSlot = s + 1
+					}
+				}
+			}
+			frame.bindSlotName(maxSlot, varName)
+			frame.setLocal(maxSlot, varCopy)
+		}
+	}
+
+	// Execute the function using the isolated VM instance
+	err := goroutineVM.ExecuteFunction(ctx, frame)
 	if err != nil {
 		return nil, err
 	}
@@ -774,12 +800,18 @@ func (vm *VirtualMachine) ExecuteFunction(ctxInterface, frameInterface interface
 			return err
 		}
 
-		if !continued {
-			// Function returned or yielded
-			break
+		if continued {
+			// Normal instruction - advance IP
+			frame.IP++
+		} else {
+			// Instruction handled IP manually (jump, return, etc.)
+			// Check if this was a return instruction
+			if inst.Opcode == opcodes.OP_RETURN || inst.Opcode == opcodes.OP_RETURN_BY_REF || inst.Opcode == opcodes.OP_GENERATOR_RETURN {
+				// Function returned
+				break
+			}
+			// For jumps, continue execution at new IP without incrementing
 		}
-
-		frame.IP++
 	}
 
 	return nil

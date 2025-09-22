@@ -54,6 +54,9 @@ type Function struct {
 	MinArgs      int
 	MaxArgs      int
 	Attributes   []*Attribute
+	// Variable slot mapping for proper local variable allocation in goroutines
+	VariableSlots map[string]uint32 // variable name -> slot number
+	MaxLocalSlot  uint32            // highest slot number used + 1
 }
 
 // Clone creates a shallow copy of the function metadata. Instructions and
