@@ -1,13 +1,13 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
+	"github.com/chzyer/readline"
 	"github.com/urfave/cli/v3"
 	"github.com/wudi/hey/compiler"
 	"github.com/wudi/hey/compiler/ast"
@@ -403,22 +403,71 @@ func runInteractiveShell() error {
 	vmachine := vm.NewVirtualMachine()
 	setupCompilerCallback(vmachine)
 
-	scanner := bufio.NewScanner(os.Stdin)
+	// Get history file path
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		homeDir = "/tmp"
+	}
+	historyFile := homeDir + "/.hey_history"
+
+	// Create readline instance with configuration
+	config := &readline.Config{
+		Prompt:            "hey > ",
+		HistoryFile:       historyFile,
+		HistoryLimit:      1000,
+		InterruptPrompt:   "^C",
+		EOFPrompt:         "exit",
+		HistorySearchFold: true, // Case-insensitive history search
+
+		// Enable vi mode keys (can be toggled by user preference)
+		VimMode: false,
+
+		// Custom key bindings (these are defaults but we specify them explicitly)
+		// Ctrl+A: move to beginning of line
+		// Ctrl+E: move to end of line
+		// Ctrl+W: delete word before cursor
+		// Ctrl+K: delete from cursor to end of line
+		// Ctrl+U: delete from cursor to beginning of line
+		// Arrow keys: move cursor left/right
+		// Ctrl+D: exit if line is empty
+		// Ctrl+R: reverse history search
+		// Tab: auto-completion (could be enhanced with PHP function names)
+	}
+
+	rl, err := readline.NewEx(config)
+	if err != nil {
+		return err
+	}
+	defer rl.Close()
+
 	multilineBuffer := ""
 	inMultiline := false
 
 	for {
+		// Set the appropriate prompt
 		if inMultiline {
-			fmt.Print("... ")
+			rl.SetPrompt("... ")
 		} else {
-			fmt.Print("hey > ")
+			rl.SetPrompt("hey > ")
 		}
 
-		if !scanner.Scan() {
-			break
+		line, err := rl.Readline()
+		if err != nil {
+			if err == readline.ErrInterrupt {
+				if multilineBuffer != "" {
+					// Clear multiline buffer on interrupt
+					multilineBuffer = ""
+					inMultiline = false
+					fmt.Println("^C")
+					continue
+				}
+				// Exit on second interrupt
+				break
+			} else if err == io.EOF {
+				break
+			}
+			return err
 		}
-
-		line := scanner.Text()
 
 		// Handle exit commands
 		if !inMultiline && (line == "exit" || line == "quit" || line == "exit()" || line == "quit()") {
@@ -459,7 +508,7 @@ func runInteractiveShell() error {
 		}
 	}
 
-	return scanner.Err()
+	return nil
 }
 
 func needsMoreInput(code string) bool {
