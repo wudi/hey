@@ -5066,6 +5066,107 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("rawurlencode", func(t *testing.T) {
+		// Find the rawurlencode function
+		var rawurlencodeFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "rawurlencode" {
+				rawurlencodeFunc = f
+				break
+			}
+		}
+		if rawurlencodeFunc == nil {
+			t.Fatal("rawurlencode function not found")
+		}
+
+		tests := []struct {
+			name     string
+			input    string
+			expected string
+		}{
+			// Basic tests
+			{"basic space encoding", "hello world", "hello%20world"},
+			{"plus sign", "hello+world", "hello%2Bworld"},
+			{"ampersand", "hello&world", "hello%26world"},
+			{"equals sign", "hello=world", "hello%3Dworld"},
+			{"question mark", "hello?world", "hello%3Fworld"},
+
+			// Special characters
+			{"special symbols", "!@#$%^&*()", "%21%40%23%24%25%5E%26%2A%28%29"},
+			{"brackets and backslash", "[]{}|\\", "%5B%5D%7B%7D%7C%5C"},
+			{"quotes and comparison", "\";:<>", "%22%3B%3A%3C%3E"},
+			{"forward slash", "/", "%2F"},
+			{"percent sign", "%", "%25"},
+
+			// RFC 3986 reserved characters
+			{"colon", ":", "%3A"},
+			{"slash", "/", "%2F"},
+			{"question mark", "?", "%3F"},
+			{"hash", "#", "%23"},
+			{"left bracket", "[", "%5B"},
+			{"right bracket", "]", "%5D"},
+			{"at sign", "@", "%40"},
+			{"exclamation", "!", "%21"},
+			{"dollar sign", "$", "%24"},
+			{"ampersand", "&", "%26"},
+			{"single quote", "'", "%27"},
+			{"left parenthesis", "(", "%28"},
+			{"right parenthesis", ")", "%29"},
+			{"asterisk", "*", "%2A"},
+			{"plus sign", "+", "%2B"},
+			{"comma", ",", "%2C"},
+			{"semicolon", ";", "%3B"},
+			{"equals", "=", "%3D"},
+
+			// RFC 3986 unreserved characters (should not be encoded)
+			{"all unreserved", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"},
+
+			// Unicode characters
+			{"accented characters", "café", "caf%C3%A9"},
+			{"chinese characters", "你好", "%E4%BD%A0%E5%A5%BD"},
+			{"mixed accents", "naïve résumé", "na%C3%AFve%20r%C3%A9sum%C3%A9"},
+			{"german umlaut", "München", "M%C3%BCnchen"},
+
+			// Edge cases
+			{"empty string", "", ""},
+			{"single character", "a", "a"},
+			{"numbers only", "123", "123"},
+			{"uppercase letters", "ABC", "ABC"},
+			{"lowercase letters", "abc", "abc"},
+
+			// Real-world scenarios
+			{"full URL", "https://example.com/path?query=value", "https%3A%2F%2Fexample.com%2Fpath%3Fquery%3Dvalue"},
+			{"email address", "user@domain.com", "user%40domain.com"},
+			{"windows path", "C:\\Program Files\\App", "C%3A%5CProgram%20Files%5CApp"},
+			{"unix path", "/usr/local/bin", "%2Fusr%2Flocal%2Fbin"},
+
+			// Comparison with urlencode behavior differences
+			{"space vs plus", "hello world", "hello%20world"}, // urlencode would be "hello+world"
+			{"space in complex", "hello world+test", "hello%20world%2Btest"}, // urlencode would be "hello+world%2Btest"
+			{"percent with space", "50% off", "50%25%20off"}, // urlencode would be "50%25+off"
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{values.NewString(tt.input)}
+
+				result, err := rawurlencodeFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("rawurlencode failed: %v", err)
+				}
+
+				if result.Type != values.TypeString {
+					t.Fatalf("Expected string result, got %s", result.Type)
+				}
+
+				resultStr := result.Data.(string)
+				if resultStr != tt.expected {
+					t.Errorf("Expected %q, got %q", tt.expected, resultStr)
+				}
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers

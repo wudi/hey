@@ -2379,6 +2379,22 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewInt(int64(len(formatted))), nil
 			},
 		},
+		// rawurlencode() - URL encode according to RFC 3986
+		{
+			Name: "rawurlencode",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				result := rawUrlEncode(str)
+				return values.NewString(result), nil
+			},
+		},
 	}
 }
 
@@ -2954,4 +2970,37 @@ func decodeHTMLEntity(entity string, flags int64) string {
 var htmlDecodeMap = map[string]rune{
 	// This would be populated with the reverse mapping of htmlEntityMap
 	// For now, we handle the most common ones in the switch statement above
+}
+
+// rawUrlEncode encodes a string according to RFC 3986
+func rawUrlEncode(str string) string {
+	if str == "" {
+		return str
+	}
+
+	var result strings.Builder
+	result.Grow(len(str) * 2) // Estimate for growth
+
+	for _, b := range []byte(str) {
+		if shouldEncodeRFC3986(b) {
+			result.WriteString(fmt.Sprintf("%%%02X", b))
+		} else {
+			result.WriteByte(b)
+		}
+	}
+
+	return result.String()
+}
+
+// shouldEncodeRFC3986 determines if a byte should be percent-encoded according to RFC 3986
+func shouldEncodeRFC3986(b byte) bool {
+	// RFC 3986 unreserved characters: A-Z a-z 0-9 - . _ ~
+	if (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') {
+		return false
+	}
+	if b == '-' || b == '.' || b == '_' || b == '~' {
+		return false
+	}
+	// Everything else should be encoded
+	return true
 }
