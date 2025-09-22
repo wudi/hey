@@ -46,16 +46,11 @@ func main() {
 					return parseAndExecuteCode(s, true)
 				},
 			},
-			&cli.StringFlag{
-				Name:        "version",
-				Local:       true,
-				Aliases:     []string{"v"},
-				Usage:       "Show version",
-				Destination: nil,
-				Action: func(ctx context.Context, cmd *cli.Command, s string) error {
-					fmt.Println(version.Version())
-					return nil
-				},
+			&cli.BoolFlag{
+				Name:    "version",
+				Local:   true,
+				Aliases: []string{"v"},
+				Usage:   "Show version information",
 			},
 			&cli.StringFlag{
 				Name:    "file",
@@ -76,6 +71,14 @@ func main() {
 			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
+			// Check if version is requested
+			if cmd.Bool("version") {
+				fmt.Printf("Hey %s\n", version.FullVersion())
+				fmt.Printf("Build: %s\n", version.Build())
+				fmt.Printf("Commit: %s\n", version.Commit())
+				return nil
+			}
+
 			// Check if interactive mode is requested
 			if cmd.Bool("a") {
 				return runInteractiveShell()
@@ -374,7 +377,7 @@ func (tw *trackingWriter) Reset() {
 }
 
 func runInteractiveShell() error {
-	fmt.Printf("Welcome to Hey %s. Build: %s\n", version.Version(), version.Build())
+	fmt.Printf("Welcome to Hey %s. Build: %s\n", version.FullVersion(), version.Build())
 
 	// Initialize runtime and VM integration once
 	if err := runtime.Bootstrap(); err != nil {

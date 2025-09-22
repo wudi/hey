@@ -17,8 +17,12 @@ BUILD_DIR=build
 # Main package path
 MAIN_PATH=./cmd/hey
 
-# Build flags
-LDFLAGS=-ldflags "-s -w"
+# Build information
+BUILD_TIME=$(shell date -u '+%Y-%m-%d %H:%M:%S UTC')
+GIT_COMMIT=$(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+# Build flags with version information
+LDFLAGS=-ldflags "-s -w -X 'github.com/wudi/hey/version.BUILT=$(BUILD_TIME)' -X 'github.com/wudi/hey/version.COMMIT=$(GIT_COMMIT)'"
 
 # Default target
 .PHONY: all
@@ -101,10 +105,10 @@ lint:
 vet:
 	$(GOCMD) vet ./...
 
-# Quick build without optimizations (faster for development)
+# Quick build without optimizations and version injection (faster for development)
 .PHONY: dev
 dev:
-	$(GOBUILD) -o $(BINARY_NAME) $(MAIN_PATH)
+	$(GOBUILD) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 
 # Help target
 .PHONY: help
@@ -125,5 +129,5 @@ help:
 	@echo "  make fmt           - Format code"
 	@echo "  make lint          - Run linter (requires golangci-lint)"
 	@echo "  make vet           - Run go vet"
-	@echo "  make dev           - Quick build for development"
+	@echo "  make dev           - Quick build for development (no version injection)"
 	@echo "  make help          - Show this help message"
