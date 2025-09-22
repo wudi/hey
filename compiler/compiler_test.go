@@ -6830,6 +6830,228 @@ func TestGoFunctionWithWaitGroup(t *testing.T) {
 	}
 }
 
+// TestGoidFunction tests the goid() function
+func TestGoidFunction(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Test that goid() function is registered
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	assert.Contains(t, functions, "goid", "goid() function should be registered")
+
+	goidFunc := functions["goid"]
+	assert.NotNil(t, goidFunc, "goid() function should not be nil")
+	assert.Equal(t, "goid", goidFunc.Name)
+	assert.Equal(t, 0, goidFunc.MinArgs)
+	assert.Equal(t, 0, goidFunc.MaxArgs)
+	assert.False(t, goidFunc.IsVariadic, "goid() should not be variadic")
+}
+
+// TestGoidFunctionInMainThread tests that goid() fails when called from main thread
+func TestGoidFunctionInMainThread(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goidFunc := functions["goid"]
+
+	// Call goid() from main thread - should fail
+	_, err = goidFunc.Builtin(nil, []*values.Value{})
+	assert.Error(t, err, "goid() should error when called from main thread")
+	assert.Contains(t, err.Error(), "can only be called from within a goroutine", "Error message should mention goroutine requirement")
+}
+
+// TestGoidFunctionWithArguments tests that goid() rejects arguments
+func TestGoidFunctionWithArguments(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goidFunc := functions["goid"]
+
+	// Call goid() with arguments - should fail
+	arg := values.NewString("unexpected")
+	_, err = goidFunc.Builtin(nil, []*values.Value{arg})
+	assert.Error(t, err, "goid() should error when called with arguments")
+	assert.Contains(t, err.Error(), "expects no arguments", "Error message should mention argument requirement")
+}
+
+// TestGoidFunctionInGoroutine tests goid() functionality within goroutines
+func TestGoidFunctionInGoroutine(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Track collected goroutine IDs
+	var collectedIDs []int64
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	// Create a test function that calls goid()
+	testFunc := &registry.Function{
+		Name:       "goid_test_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "int",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// Get goid() function
+			functions := runtime2.GlobalRegistry.GetAllFunctions()
+			goidFunc := functions["goid"]
+
+			// Call goid() from within goroutine
+			result, err := goidFunc.Builtin(nil, []*values.Value{})
+			if err != nil {
+				t.Errorf("goid() failed in goroutine: %v", err)
+				return nil, err
+			}
+
+			// Collect the ID
+			goroutineID := result.ToInt()
+			mu.Lock()
+			collectedIDs = append(collectedIDs, goroutineID)
+			mu.Unlock()
+
+			wg.Done()
+			return result, nil
+		},
+	}
+
+	closure := &values.Closure{
+		Function:  testFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "goid_test_closure",
+	}
+	closureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: closure,
+	}
+
+	// Launch multiple goroutines to test different IDs
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	numGoroutines := 3
+	wg.Add(numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		result, err := goFunc.Builtin(nil, []*values.Value{closureVal})
+		require.NoError(t, err, "go() function should not error")
+		require.True(t, result.IsGoroutine(), "go() should return a goroutine")
+	}
+
+	// Wait for all goroutines to complete
+	done := make(chan bool, 1)
+	go func() {
+		wg.Wait()
+		done <- true
+	}()
+
+	select {
+	case <-done:
+		// All goroutines completed
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Goroutines did not complete in time")
+	}
+
+	// Verify we collected the expected number of IDs
+	mu.Lock()
+	defer mu.Unlock()
+
+	assert.Equal(t, numGoroutines, len(collectedIDs), "Should have collected %d goroutine IDs", numGoroutines)
+
+	// Verify all IDs are positive and unique
+	idSet := make(map[int64]bool)
+	for _, id := range collectedIDs {
+		assert.Greater(t, id, int64(0), "Goroutine ID should be positive")
+		assert.False(t, idSet[id], "Goroutine ID %d should be unique", id)
+		idSet[id] = true
+	}
+}
+
+// TestGoidFunctionConsistency tests that goid() returns consistent ID within same goroutine
+func TestGoidFunctionConsistency(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	var firstID, secondID int64
+	var mu sync.Mutex
+	executionCompleted := make(chan bool, 1)
+
+	// Create a test function that calls goid() twice
+	testFunc := &registry.Function{
+		Name:       "goid_consistency_test_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "int",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// Get goid() function
+			functions := runtime2.GlobalRegistry.GetAllFunctions()
+			goidFunc := functions["goid"]
+
+			// Call goid() first time
+			result1, err := goidFunc.Builtin(nil, []*values.Value{})
+			if err != nil {
+				t.Errorf("First goid() call failed: %v", err)
+				return nil, err
+			}
+
+			// Call goid() second time
+			result2, err := goidFunc.Builtin(nil, []*values.Value{})
+			if err != nil {
+				t.Errorf("Second goid() call failed: %v", err)
+				return nil, err
+			}
+
+			// Store results
+			mu.Lock()
+			firstID = result1.ToInt()
+			secondID = result2.ToInt()
+			mu.Unlock()
+
+			executionCompleted <- true
+			return result1, nil
+		},
+	}
+
+	closure := &values.Closure{
+		Function:  testFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "goid_consistency_test_closure",
+	}
+	closureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: closure,
+	}
+
+	// Launch goroutine
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	result, err := goFunc.Builtin(nil, []*values.Value{closureVal})
+	require.NoError(t, err, "go() function should not error")
+	require.True(t, result.IsGoroutine(), "go() should return a goroutine")
+
+	// Wait for execution to complete
+	select {
+	case <-executionCompleted:
+		// Execution completed
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Goroutine did not complete in time")
+	}
+
+	// Verify consistency
+	mu.Lock()
+	defer mu.Unlock()
+
+	assert.Greater(t, firstID, int64(0), "First goroutine ID should be positive")
+	assert.Greater(t, secondID, int64(0), "Second goroutine ID should be positive")
+	assert.Equal(t, firstID, secondID, "goid() should return the same ID within the same goroutine")
+}
+
 // TestGeneratorImplementation tests comprehensive generator functionality including loops
 func TestGeneratorImplementation(t *testing.T) {
 	tests := []struct {
