@@ -5631,6 +5631,90 @@ func TestStringFunctions(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("str_shuffle", func(t *testing.T) {
+		// Find the str_shuffle function
+		var strShuffleFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "str_shuffle" {
+				strShuffleFunc = f
+				break
+			}
+		}
+		if strShuffleFunc == nil {
+			t.Fatal("str_shuffle function not found")
+		}
+
+		tests := []struct {
+			name  string
+			input string
+		}{
+			{"simple string", "hello"},
+			{"another string", "world"},
+			{"string with space", "hello world"},
+			{"empty string", ""},
+			{"single character", "a"},
+			{"two identical characters", "aa"},
+			{"two different characters", "ab"},
+			{"digits", "1234567890"},
+			{"special symbols", "!@#$%^&*()"},
+			{"mixed with punctuation", "Hello, World!"},
+			{"accented characters", "café"},
+			{"chinese characters", "你好世界"},
+			{"mixed accents", "naïve résumé"},
+			{"emojis", "🌟✨💫⭐"},
+			{"pairs of repeated chars", "aabbcc"},
+			{"triplets of repeated chars", "aaabbbccc"},
+			{"many repeated chars", "mississippi"},
+			{"with newline", "line1\nline2"},
+			{"with tab", "word1\tword2"},
+			{"multiple spaces", "  spaces  "},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{values.NewString(tt.input)}
+				result, err := strShuffleFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("str_shuffle failed: %v", err)
+				}
+
+				if result.Type != values.TypeString {
+					t.Errorf("Expected string, got %s", result.Type)
+					return
+				}
+
+				shuffled := result.Data.(string)
+
+				// Check that length is preserved
+				if len(shuffled) != len(tt.input) {
+					t.Errorf("Length mismatch: input=%d, output=%d", len(tt.input), len(shuffled))
+				}
+
+				// Check that all characters are preserved (same character count)
+				if !sameCharacters(tt.input, shuffled) {
+					t.Errorf("Characters not preserved: input=%q, output=%q", tt.input, shuffled)
+				}
+
+				// For non-empty strings with more than 1 unique character,
+				// run multiple times to verify randomness (should get different results)
+				if len(tt.input) > 1 && hasMultipleUniqueChars(tt.input) {
+					results := make(map[string]bool)
+					for i := 0; i < 10; i++ {
+						result, err := strShuffleFunc.Builtin(nil, args)
+						if err != nil {
+							t.Fatalf("str_shuffle failed on iteration %d: %v", i, err)
+						}
+						results[result.Data.(string)] = true
+					}
+					// Should have some variety (allow for some duplicates due to randomness)
+					if len(results) < 2 && len(tt.input) > 2 {
+						t.Logf("Warning: str_shuffle may not be sufficiently random for %q (got %d unique results in 10 tries)", tt.input, len(results))
+					}
+				}
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers
@@ -5645,4 +5729,58 @@ func strPtr(s string) *string {
 // Helper function to create bool pointer for optional parameters
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// sameCharacters checks if two strings contain the same characters (ignoring order)
+func sameCharacters(s1, s2 string) bool {
+	if len(s1) != len(s2) {
+		return false
+	}
+
+	// Convert to runes to handle Unicode properly
+	runes1 := []rune(s1)
+	runes2 := []rune(s2)
+
+	// Count characters in each string
+	count1 := make(map[rune]int)
+	count2 := make(map[rune]int)
+
+	for _, r := range runes1 {
+		count1[r]++
+	}
+
+	for _, r := range runes2 {
+		count2[r]++
+	}
+
+	// Compare character counts
+	if len(count1) != len(count2) {
+		return false
+	}
+
+	for r, c := range count1 {
+		if count2[r] != c {
+			return false
+		}
+	}
+
+	return true
+}
+
+// hasMultipleUniqueChars checks if a string has more than one unique character
+func hasMultipleUniqueChars(s string) bool {
+	runes := []rune(s)
+	if len(runes) <= 1 {
+		return false
+	}
+
+	seen := make(map[rune]bool)
+	for _, r := range runes {
+		seen[r] = true
+		if len(seen) > 1 {
+			return true
+		}
+	}
+
+	return false
 }

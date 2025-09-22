@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -2465,6 +2467,19 @@ func GetStringFunctions() []*registry.Function {
 				return result, nil
 			},
 		},
+		{
+			Name: "str_shuffle",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs: 1, MaxArgs: 1, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				shuffled := shuffleString(str)
+				return values.NewString(shuffled), nil
+			},
+		},
 	}
 }
 
@@ -2490,6 +2505,27 @@ func quotemetaString(str string) string {
 	}
 
 	return result.String()
+}
+
+// shuffleString implements the str_shuffle() function logic
+func shuffleString(str string) string {
+	if str == "" {
+		return str
+	}
+
+	// Convert to runes to handle Unicode characters properly
+	runes := []rune(str)
+
+	// Use current time as seed for better randomness
+	rand.Seed(time.Now().UnixNano())
+
+	// Fisher-Yates shuffle algorithm
+	for i := len(runes) - 1; i > 0; i-- {
+		j := rand.Intn(i + 1)
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+
+	return string(runes)
 }
 
 // sscanfParse implements the sscanf() function logic
