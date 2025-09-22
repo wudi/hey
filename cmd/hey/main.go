@@ -536,6 +536,9 @@ func executeREPLCode(code string, vmCtx *vm.ExecutionContext, vmachine *vm.Virtu
 		return
 	}
 
+	// Reset Halted state from any previous execution
+	vmCtx.Halted = false
+
 	// Execute the code in the persistent context
 	err := vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(),
 	                        comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
