@@ -4083,4 +4083,173 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("mb_strlen", func(t *testing.T) {
+		// Find the mb_strlen function
+		var mbStrlenFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "mb_strlen" {
+				mbStrlenFunc = f
+				break
+			}
+		}
+
+		if mbStrlenFunc == nil {
+			t.Fatal("mb_strlen function not found")
+		}
+
+		tests := []struct {
+			name     string
+			args     []*values.Value
+			expected int64
+		}{
+			// ASCII strings (same as strlen)
+			{
+				name: "ascii string",
+				args: []*values.Value{
+					values.NewString("hello"),
+				},
+				expected: 5,
+			},
+			{
+				name: "empty string",
+				args: []*values.Value{
+					values.NewString(""),
+				},
+				expected: 0,
+			},
+			{
+				name: "single character",
+				args: []*values.Value{
+					values.NewString("a"),
+				},
+				expected: 1,
+			},
+			{
+				name: "numbers",
+				args: []*values.Value{
+					values.NewString("123"),
+				},
+				expected: 3,
+			},
+
+			// UTF-8 characters (different from strlen)
+			{
+				name: "accented characters",
+				args: []*values.Value{
+					values.NewString("café"),
+				},
+				expected: 4, // strlen would be 5
+			},
+			{
+				name: "multiple accents",
+				args: []*values.Value{
+					values.NewString("naïve"),
+				},
+				expected: 5, // strlen would be 6
+			},
+			{
+				name: "german umlaut",
+				args: []*values.Value{
+					values.NewString("München"),
+				},
+				expected: 7, // strlen would be 8
+			},
+
+			// Asian characters
+			{
+				name: "chinese characters",
+				args: []*values.Value{
+					values.NewString("你好"),
+				},
+				expected: 2, // strlen would be 6
+			},
+			{
+				name: "japanese hiragana",
+				args: []*values.Value{
+					values.NewString("こんにちは"),
+				},
+				expected: 5, // strlen would be 15
+			},
+
+			// Emoji
+			{
+				name: "single emoji",
+				args: []*values.Value{
+					values.NewString("🌟"),
+				},
+				expected: 1, // strlen would be 4
+			},
+			{
+				name: "mixed text and emoji",
+				args: []*values.Value{
+					values.NewString("Hello 🌍 World"),
+				},
+				expected: 13, // strlen would be 16
+			},
+
+			// Mixed content
+			{
+				name: "mixed ascii and chinese",
+				args: []*values.Value{
+					values.NewString("Hello 世界"),
+				},
+				expected: 8, // strlen would be 12
+			},
+
+			// Edge cases
+			{
+				name: "newline character",
+				args: []*values.Value{
+					values.NewString("\n"),
+				},
+				expected: 1,
+			},
+			{
+				name: "tab character",
+				args: []*values.Value{
+					values.NewString("\t"),
+				},
+				expected: 1,
+			},
+			{
+				name: "string with newline",
+				args: []*values.Value{
+					values.NewString("Hello\nWorld"),
+				},
+				expected: 11,
+			},
+
+			// Special Unicode
+			{
+				name: "copyright symbols",
+				args: []*values.Value{
+					values.NewString("©®™"),
+				},
+				expected: 3, // strlen would be 7
+			},
+			{
+				name: "greek letters",
+				args: []*values.Value{
+					values.NewString("αβγδε"),
+				},
+				expected: 5, // strlen would be 10
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := mbStrlenFunc.Builtin(nil, tt.args)
+				if err != nil {
+					t.Fatalf("mb_strlen() error = %v", err)
+				}
+				if result.Type != values.TypeInt {
+					t.Fatalf("mb_strlen() returned %s, want int", result.Type)
+				}
+				if result.Data.(int64) != tt.expected {
+					t.Errorf("mb_strlen() = %d, want %d", result.Data.(int64), tt.expected)
+				}
+			})
+		}
+	})
 }

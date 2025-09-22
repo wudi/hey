@@ -2563,6 +2563,19 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(result), nil
 			},
 		},
+		{
+			Name: "mb_strlen",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "int",
+			MinArgs: 1, MaxArgs: 1, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				length := utf8.RuneCountInString(str)
+				return values.NewInt(int64(length)), nil
+			},
+		},
 	}
 }
 
