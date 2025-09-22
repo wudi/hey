@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"hash/crc32"
 	"math"
 	"strconv"
 	"strings"
@@ -2411,7 +2412,67 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(result), nil
 			},
 		},
+		// crc32() - Calculate CRC32 checksum
+		{
+			Name: "crc32",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "int",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+
+				// Calculate CRC32 using IEEE polynomial (standard CRC32)
+				checksum := crc32.ChecksumIEEE([]byte(str))
+
+				// PHP returns CRC32 as unsigned 32-bit value stored in int64
+				// to handle values that exceed signed 32-bit range
+				result := int64(checksum)
+
+				return values.NewInt(result), nil
+			},
+		},
+		{
+			Name: "quotemeta",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs: 1, MaxArgs: 1, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				result := quotemetaString(str)
+				return values.NewString(result), nil
+			},
+		},
 	}
+}
+
+// quotemetaString implements the quotemeta() function logic
+// Escapes regex metacharacters with backslashes: . ^ $ * + ? [ ] ( ) \
+// Does NOT escape: { } |
+func quotemetaString(str string) string {
+	if str == "" {
+		return str
+	}
+
+	var result strings.Builder
+	result.Grow(len(str) * 2) // Pre-allocate, assume worst case
+
+	for _, char := range str {
+		switch char {
+		case '.', '^', '$', '*', '+', '?', '[', ']', '(', ')', '\\':
+			result.WriteByte('\\')
+			result.WriteRune(char)
+		default:
+			result.WriteRune(char)
+		}
+	}
+
+	return result.String()
 }
 
 // wordwrapText implements the word wrapping logic

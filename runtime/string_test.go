@@ -5268,6 +5268,228 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("crc32", func(t *testing.T) {
+		// Find the crc32 function
+		var crc32Func *registry.Function
+		for _, f := range functions {
+			if f.Name == "crc32" {
+				crc32Func = f
+				break
+			}
+		}
+		if crc32Func == nil {
+			t.Fatal("crc32 function not found")
+		}
+
+		tests := []struct {
+			name     string
+			input    string
+			expected int64
+		}{
+			// Basic tests
+			{"simple string", "hello", 907060870},
+			{"another string", "world", 980881731},
+			{"string with space", "hello world", 222957957},
+			{"mixed case", "Hello World", 1243066710},
+			{"uppercase", "HELLO WORLD", 2279966299},
+
+			// Edge cases
+			{"empty string", "", 0},
+			{"single character", "a", 3904355907},
+			{"single uppercase", "A", 3554254475},
+			{"single digit", "0", 4108050209},
+			{"single space", " ", 3916222277},
+
+			// Numbers and special characters
+			{"numbers", "123", 2286445522},
+			{"longer numbers", "123456789", 3421780262},
+			{"special characters", "!@#$%^&*()", 2929892248},
+			{"brackets and symbols", "[]{}|\\", 373859670},
+
+			// Unicode characters
+			{"accented characters", "café", 2561491637},
+			{"chinese characters", "你好", 1352841281},
+			{"mixed accents", "naïve résumé", 2692303052},
+			{"german umlaut", "München", 3163719337},
+			{"emoji", "🌟", 2800447460},
+
+			// Longer strings
+			{"pangram", "The quick brown fox jumps over the lazy dog", 1095738169},
+			{"lorem ipsum", "Lorem ipsum dolor sit amet, consectetur adipiscing elit", 1821039217},
+
+			// Similar strings (case sensitivity test)
+			{"original", "test", 3632233996},
+			{"capitalized", "Test", 2018365746},
+			{"with trailing space", "test ", 3758291984},
+			{"with leading space", " test", 4275599625},
+			{"plural", "tests", 308345950},
+
+			// Newlines and whitespace
+			{"unix newline", "line1\nline2", 929491277},
+			{"windows newline", "line1\r\nline2", 2770183355},
+			{"mac newline", "line1\rline2", 711186933},
+			{"multiple spaces", "  spaces  ", 151956333},
+			{"tabs", "\t\ttabs\t\t", 3029498583},
+
+			// Known test vectors
+			{"empty", "", 0},
+			{"single a", "a", 3904355907},
+			{"abc", "abc", 891568578},
+			{"message digest", "message digest", 538287487},
+			{"alphabet", "abcdefghijklmnopqrstuvwxyz", 1277644989},
+			{"alphanumeric", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789", 532866770},
+
+			// Binary-like sequences (represented as strings)
+			{"null bytes", "\x00\x01\x02\x03\x04\x05", 820760394},
+			{"high bytes", "\xff\xfe\xfd\xfc\xfb\xfa", 3236987881},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{values.NewString(tt.input)}
+
+				result, err := crc32Func.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("crc32 failed: %v", err)
+				}
+
+				if result.Type != values.TypeInt {
+					t.Fatalf("Expected int result, got %s", result.Type)
+				}
+
+				resultInt := result.Data.(int64)
+				if resultInt != tt.expected {
+					t.Errorf("Expected %d (0x%08X), got %d (0x%08X)", tt.expected, uint32(tt.expected), resultInt, uint32(resultInt))
+				}
+			})
+		}
+
+		// Test consistency (same input should always give same output)
+		t.Run("consistency", func(t *testing.T) {
+			testStr := "consistency test"
+			args := []*values.Value{values.NewString(testStr)}
+
+			result1, err1 := crc32Func.Builtin(nil, args)
+			if err1 != nil {
+				t.Fatalf("First crc32 call failed: %v", err1)
+			}
+
+			result2, err2 := crc32Func.Builtin(nil, args)
+			if err2 != nil {
+				t.Fatalf("Second crc32 call failed: %v", err2)
+			}
+
+			if result1.Data.(int64) != result2.Data.(int64) {
+				t.Errorf("CRC32 not consistent: first=%d, second=%d", result1.Data.(int64), result2.Data.(int64))
+			}
+		})
+	})
+
+	t.Run("quotemeta", func(t *testing.T) {
+		// Find the quotemeta function
+		var quotemetaFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "quotemeta" {
+				quotemetaFunc = f
+				break
+			}
+		}
+		if quotemetaFunc == nil {
+			t.Fatal("quotemeta function not found")
+		}
+
+		tests := []struct {
+			name     string
+			input    string
+			expected string
+		}{
+			// Basic tests
+			{"simple string", "hello", "hello"},
+			{"another string", "world", "world"},
+			{"string with space", "Hello World", "Hello World"},
+
+			// Individual metacharacters that should be escaped
+			{"dot", ".", "\\."},
+			{"caret", "^", "\\^"},
+			{"dollar", "$", "\\$"},
+			{"asterisk", "*", "\\*"},
+			{"plus", "+", "\\+"},
+			{"question mark", "?", "\\?"},
+			{"left bracket", "[", "\\["},
+			{"right bracket", "]", "\\]"},
+			{"left parenthesis", "(", "\\("},
+			{"right parenthesis", ")", "\\)"},
+			{"backslash", "\\", "\\\\"},
+
+			// Metacharacters that should NOT be escaped
+			{"left brace", "{", "{"},
+			{"right brace", "}", "}"},
+			{"pipe", "|", "|"},
+
+			// Combinations
+			{"multiple metacharacters", ".*+?^$", "\\.\\*\\+\\?\\^\\$"},
+			{"character class", "[abc]", "\\[abc\\]"},
+			{"alternation", "(hello|world)", "\\(hello|world\\)"},
+			{"quantifier", "{2,5}", "{2,5}"},
+			{"mixed with literal", "hello.world", "hello\\.world"},
+
+			// Edge cases
+			{"empty string", "", ""},
+			{"single letter", "a", "a"},
+			{"single digit", "1", "1"},
+			{"single space", " ", " "},
+			{"newline", "\n", "\n"},
+			{"tab", "\t", "\t"},
+
+			// Non-metacharacters
+			{"letters and numbers", "abc123", "abc123"},
+			{"other special chars", "!@#%&", "!@#%&"},
+			{"dash underscore equals", "-_=", "-_="},
+			{"colon", ":", ":"},
+			{"semicolon", ";", ";"},
+			{"comma", ",", ","},
+			{"double quote", "\"", "\""},
+			{"single quote", "'", "'"},
+
+			// Longer strings
+			{"pangram with dot", "The quick brown fox jumps over the lazy dog.", "The quick brown fox jumps over the lazy dog\\."},
+			{"email address", "Email: user@domain.com", "Email: user@domain\\.com"},
+			{"file path with wildcard", "/path/to/file.*", "/path/to/file\\.\\*"},
+			{"price with parentheses", "Price: $19.99 (USD)", "Price: \\$19\\.99 \\(USD\\)"},
+
+			// Unicode characters (should not be escaped)
+			{"accented characters", "café", "café"},
+			{"chinese characters", "你好", "你好"},
+			{"mixed accents", "naïve résumé", "naïve résumé"},
+			{"german umlaut", "München", "München"},
+			{"emoji", "🌟", "🌟"},
+
+			// Regex pattern examples
+			{"basic regex", "/^hello.*world$/", "/\\^hello\\.\\*world\\$/"},
+			{"digit pattern", "\\d{2,4}", "\\\\d{2,4}"},
+			{"character range", "[a-zA-Z0-9]", "\\[a-zA-Z0-9\\]"},
+			{"non-capturing group", "(?:foo|bar)", "\\(\\?:foo|bar\\)"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{values.NewString(tt.input)}
+				result, err := quotemetaFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("quotemeta failed: %v", err)
+				}
+
+				if result.Type != values.TypeString {
+					t.Errorf("Expected string, got %s", result.Type)
+				}
+
+				if result.Data.(string) != tt.expected {
+					t.Errorf("quotemeta(%q) = %q, expected %q", tt.input, result.Data.(string), tt.expected)
+				}
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers
