@@ -9,5 +9,12 @@ const (
 )
 
 func Version() string {
-	return fmt.Sprintf("%s (%s)", VERSION, BUILT)
+	return fmt.Sprintf("v%s", VERSION)
+}
+
+func Build() string {
+	if BUILT != "" {
+		return BUILT
+	}
+	return "unknown"
 }

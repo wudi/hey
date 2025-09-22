@@ -13,7 +13,7 @@ import (
 	"github.com/wudi/hey/compiler/ast"
 	"github.com/wudi/hey/compiler/lexer"
 	"github.com/wudi/hey/compiler/parser"
-	runtime2 "github.com/wudi/hey/runtime"
+	"github.com/wudi/hey/runtime"
 	"github.com/wudi/hey/values"
 	"github.com/wudi/hey/version"
 	"github.com/wudi/hey/vm"
@@ -33,9 +33,9 @@ func main() {
 		},
 		Flags: []cli.Flag{
 			&cli.BoolFlag{
-				Name:    "a",
-				Local:   true,
-				Usage:   "Run as interactive shell",
+				Name:  "a",
+				Local: true,
+				Usage: "Run as interactive shell",
 			},
 			&cli.StringFlag{
 				Name:    "code",
@@ -129,7 +129,7 @@ func parseAndExecuteCodeWithFile(code string, inScript bool, filename string) er
 	}
 
 	// Initialize runtime first so constants are registered
-	if err := runtime2.Bootstrap(); err != nil {
+	if err := runtime.Bootstrap(); err != nil {
 		fmt.Println("Failed to bootstrap runtime:", err)
 		os.Exit(1)
 	}
@@ -145,7 +145,7 @@ func parseAndExecuteCodeWithFile(code string, inScript bool, filename string) er
 	}
 
 	// Initialize VM integration
-	if err := runtime2.InitializeVMIntegration(); err != nil {
+	if err := runtime.InitializeVMIntegration(); err != nil {
 		fmt.Println("Failed to initialize VM integration:", err)
 		os.Exit(1)
 	}
@@ -156,7 +156,7 @@ func parseAndExecuteCodeWithFile(code string, inScript bool, filename string) er
 		vmCtx.GlobalVars = make(map[string]*values.Value)
 	}
 
-	variables := runtime2.GlobalVMIntegration.GetAllVariables()
+	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
 		vmCtx.GlobalVars[name] = value
 	}
@@ -251,7 +251,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 	}
 
 	// Initialize runtime first so constants are registered
-	if err := runtime2.Bootstrap(); err != nil {
+	if err := runtime.Bootstrap(); err != nil {
 		fmt.Println("Failed to bootstrap runtime:", err)
 		os.Exit(1)
 	}
@@ -263,7 +263,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 	}
 
 	// Initialize VM integration
-	if err := runtime2.InitializeVMIntegration(); err != nil {
+	if err := runtime.InitializeVMIntegration(); err != nil {
 		fmt.Println("Failed to initialize VM integration:", err)
 		os.Exit(1)
 	}
@@ -274,7 +274,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 		vmCtx.GlobalVars = make(map[string]*values.Value)
 	}
 
-	variables := runtime2.GlobalVMIntegration.GetAllVariables()
+	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
 		vmCtx.GlobalVars[name] = value
 	}
@@ -355,8 +355,8 @@ func runWebServer(addr string) error {
 
 // trackingWriter wraps io.Writer and tracks if output was written
 type trackingWriter struct {
-	w           io.Writer
-	hasOutput   bool
+	w              io.Writer
+	hasOutput      bool
 	lastWasNewline bool
 }
 
@@ -374,14 +374,14 @@ func (tw *trackingWriter) Reset() {
 }
 
 func runInteractiveShell() error {
-	fmt.Println("Interactive mode enabled.")
+	fmt.Printf("Welcome to Hey %s. Build: %s\n", version.Version(), version.Build())
 
 	// Initialize runtime and VM integration once
-	if err := runtime2.Bootstrap(); err != nil {
+	if err := runtime.Bootstrap(); err != nil {
 		return fmt.Errorf("Failed to bootstrap runtime: %v", err)
 	}
 
-	if err := runtime2.InitializeVMIntegration(); err != nil {
+	if err := runtime.InitializeVMIntegration(); err != nil {
 		return fmt.Errorf("Failed to initialize VM integration: %v", err)
 	}
 
@@ -395,7 +395,7 @@ func runInteractiveShell() error {
 	outputTracker := &trackingWriter{w: os.Stdout}
 	vmCtx.OutputWriter = outputTracker
 
-	variables := runtime2.GlobalVMIntegration.GetAllVariables()
+	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
 		vmCtx.GlobalVars[name] = value
 	}
@@ -412,7 +412,7 @@ func runInteractiveShell() error {
 
 	// Create readline instance with configuration
 	config := &readline.Config{
-		Prompt:            "hey > ",
+		Prompt:            ">",
 		HistoryFile:       historyFile,
 		HistoryLimit:      1000,
 		InterruptPrompt:   "^C",
@@ -448,7 +448,7 @@ func runInteractiveShell() error {
 		if inMultiline {
 			rl.SetPrompt("... ")
 		} else {
-			rl.SetPrompt("hey > ")
+			rl.SetPrompt("> ")
 		}
 
 		line, err := rl.Readline()
@@ -559,7 +559,7 @@ func needsMoreInput(code string) bool {
 
 	// Need more input if we have unclosed constructs
 	return openBraces > 0 || openParens > 0 || openBrackets > 0 ||
-	       inSingleQuote || inDoubleQuote
+		inSingleQuote || inDoubleQuote
 }
 
 func executeREPLCode(code string, vmCtx *vm.ExecutionContext, vmachine *vm.VirtualMachine) {
@@ -590,7 +590,7 @@ func executeREPLCode(code string, vmCtx *vm.ExecutionContext, vmachine *vm.Virtu
 
 	// Execute the code in the persistent context
 	err := vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(),
-	                        comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
+		comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
 
 	if err != nil {
 		fmt.Printf("Runtime error: %v\n", err)
@@ -629,7 +629,7 @@ func setupCompilerCallback(vmachine *vm.VirtualMachine) {
 		includeCtx.OutputWriter = ctx.OutputWriter
 
 		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(),
-		                        comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
+			comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
 		if err != nil {
 			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
 		}
