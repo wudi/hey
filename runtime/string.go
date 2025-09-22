@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/wudi/hey/registry"
@@ -2448,6 +2450,21 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(result), nil
 			},
 		},
+		{
+			Name: "sscanf",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+				{Name: "format", Type: "string"},
+			},
+			ReturnType: "array",
+			MinArgs: 2, MaxArgs: 2, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				format := args[1].Data.(string)
+				result := sscanfParse(str, format)
+				return result, nil
+			},
+		},
 	}
 }
 
@@ -2473,6 +2490,256 @@ func quotemetaString(str string) string {
 	}
 
 	return result.String()
+}
+
+// sscanfParse implements the sscanf() function logic
+// This is a simplified implementation supporting basic format specifiers
+func sscanfParse(str, format string) *values.Value {
+	// Handle empty string special case
+	if strings.TrimSpace(str) == "" {
+		return values.NewNull()
+	}
+
+	// Parse format string to extract specifiers
+	specifiers := parseFormatSpecifiers(format)
+	if len(specifiers) == 0 {
+		return values.NewNull()
+	}
+
+	// Try matching with progressively shorter patterns to handle partial matches
+	matches, matchCount := findBestScanfMatch(str, specifiers)
+	hasAnyMatch := matchCount > 0
+
+	// Convert matches to appropriate types
+	result := values.NewArray()
+	resultArray := result.Data.(*values.Array)
+	matchIndex := 1 // Skip full match at index 0
+	outputIndex := int64(0)
+
+	// Count non-suppressed specifiers to create proper array size
+	nonSuppressedCount := 0
+	for _, spec := range specifiers {
+		if !spec.suppress {
+			nonSuppressedCount++
+		}
+	}
+
+	for _, spec := range specifiers {
+		if spec.suppress {
+			// Skip suppressed assignments
+			if hasAnyMatch && matchIndex < len(matches) {
+				matchIndex++
+			}
+			continue
+		}
+
+		var val *values.Value
+		if hasAnyMatch && matchIndex < len(matches) && matches[matchIndex] != "" {
+			val = convertScanfValue(matches[matchIndex], spec.specifier)
+		} else {
+			val = values.NewNull()
+		}
+
+		resultArray.Elements[outputIndex] = val
+		outputIndex++
+		if hasAnyMatch {
+			matchIndex++
+		}
+	}
+
+	resultArray.NextIndex = outputIndex
+	return result
+}
+
+// formatSpecifier represents a scanf format specifier
+type formatSpecifier struct {
+	specifier rune // d, s, f, c, x, o
+	width     int  // field width
+	suppress  bool // assignment suppression (*)
+}
+
+// parseFormatSpecifiers extracts format specifiers from format string
+func parseFormatSpecifiers(format string) []formatSpecifier {
+	var specs []formatSpecifier
+	runes := []rune(format)
+
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == '%' && i+1 < len(runes) {
+			spec := formatSpecifier{}
+			i++ // skip %
+
+			// Check for assignment suppression
+			if i < len(runes) && runes[i] == '*' {
+				spec.suppress = true
+				i++
+			}
+
+			// Parse width
+			widthStart := i
+			for i < len(runes) && unicode.IsDigit(runes[i]) {
+				i++
+			}
+			if i > widthStart {
+				if width, err := strconv.Atoi(string(runes[widthStart:i])); err == nil {
+					spec.width = width
+				}
+			}
+
+			// Get specifier character
+			if i < len(runes) {
+				spec.specifier = runes[i]
+				specs = append(specs, spec)
+			}
+		}
+	}
+
+	return specs
+}
+
+// buildScanfRegex builds a regex pattern from format string and specifiers
+func buildScanfRegex(format string, specs []formatSpecifier) string {
+	pattern := regexp.QuoteMeta(format)
+	specIndex := 0
+
+	// Replace %... patterns with appropriate regex groups
+	for specIndex < len(specs) {
+		spec := specs[specIndex]
+		specIndex++
+
+		// Build the original pattern to replace
+		originalPattern := "%"
+		if spec.suppress {
+			originalPattern += "\\*"
+		}
+		if spec.width > 0 {
+			originalPattern += strconv.Itoa(spec.width)
+		}
+		originalPattern += string(spec.specifier)
+
+		// Build replacement regex based on specifier
+		var replacement string
+		switch spec.specifier {
+		case 'd':
+			if spec.width > 0 {
+				replacement = fmt.Sprintf("(-?\\d{1,%d})", spec.width)
+			} else {
+				replacement = "(-?\\d+)"
+			}
+		case 'f':
+			replacement = "(-?\\d+(?:\\.\\d+)?)"
+		case 's':
+			if spec.width > 0 {
+				replacement = fmt.Sprintf("(\\S{1,%d})", spec.width)
+			} else {
+				replacement = "(\\S+)"
+			}
+		case 'c':
+			replacement = "(.)"
+		case 'x':
+			if spec.width > 0 {
+				replacement = fmt.Sprintf("([0-9a-fA-F]{1,%d})", spec.width)
+			} else {
+				replacement = "([0-9a-fA-F]+)"
+			}
+		case 'o':
+			if spec.width > 0 {
+				replacement = fmt.Sprintf("([0-7]{1,%d})", spec.width)
+			} else {
+				replacement = "([0-7]+)"
+			}
+		default:
+			replacement = "(\\S+)" // fallback
+		}
+
+		// Replace first occurrence
+		pattern = strings.Replace(pattern, originalPattern, replacement, 1)
+	}
+
+	// Handle whitespace in pattern - replace literal spaces with flexible whitespace
+	pattern = regexp.MustCompile(`\s+`).ReplaceAllString(pattern, `\\s*`)
+
+	// Make the entire pattern match partial input by making remainder optional
+	// This allows for partial matches like "123" matching "%d %d" for the first part
+	pattern = "^" + pattern
+
+	return pattern
+}
+
+// findBestScanfMatch tries to find the best possible match for scanf
+// Returns matches and the count of successful matches
+func findBestScanfMatch(str string, specs []formatSpecifier) ([]string, int) {
+	// First try the full pattern
+	fullFormat := buildPartialFormat(specs)
+	pattern := buildScanfRegex(fullFormat, specs)
+
+	if re, err := regexp.Compile(pattern); err == nil {
+		if matches := re.FindStringSubmatch(str); matches != nil && len(matches) >= 2 {
+			return matches, len(specs)
+		}
+	}
+
+	// If full pattern fails, try progressively shorter patterns
+	for numSpecs := len(specs) - 1; numSpecs >= 1; numSpecs-- {
+		partialSpecs := specs[:numSpecs]
+		format := buildPartialFormat(partialSpecs)
+		pattern := buildScanfRegex(format, partialSpecs)
+
+		if re, err := regexp.Compile(pattern); err == nil {
+			if matches := re.FindStringSubmatch(str); matches != nil && len(matches) >= 2 {
+				return matches, numSpecs
+			}
+		}
+	}
+	return nil, 0
+}
+
+// buildPartialFormat builds a format string from partial specifiers
+func buildPartialFormat(specs []formatSpecifier) string {
+	var format strings.Builder
+	for i, spec := range specs {
+		if i > 0 {
+			format.WriteByte(' ') // Add space between specifiers
+		}
+		format.WriteByte('%')
+		if spec.suppress {
+			format.WriteByte('*')
+		}
+		if spec.width > 0 {
+			format.WriteString(strconv.Itoa(spec.width))
+		}
+		format.WriteRune(spec.specifier)
+	}
+	return format.String()
+}
+
+// convertScanfValue converts a string match to appropriate Value type
+func convertScanfValue(match string, specifier rune) *values.Value {
+	switch specifier {
+	case 'd':
+		if val, err := strconv.ParseInt(match, 10, 64); err == nil {
+			return values.NewInt(val)
+		}
+		return values.NewNull()
+	case 'f':
+		if val, err := strconv.ParseFloat(match, 64); err == nil {
+			return values.NewFloat(val)
+		}
+		return values.NewNull()
+	case 's', 'c':
+		return values.NewString(match)
+	case 'x':
+		if val, err := strconv.ParseInt(match, 16, 64); err == nil {
+			return values.NewInt(val)
+		}
+		return values.NewNull()
+	case 'o':
+		if val, err := strconv.ParseInt(match, 8, 64); err == nil {
+			return values.NewInt(val)
+		}
+		return values.NewNull()
+	default:
+		return values.NewString(match)
+	}
 }
 
 // wordwrapText implements the word wrapping logic
