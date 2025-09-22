@@ -5167,6 +5167,107 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("rawurldecode", func(t *testing.T) {
+		// Find the rawurldecode function
+		var rawurldecodeFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "rawurldecode" {
+				rawurldecodeFunc = f
+				break
+			}
+		}
+		if rawurldecodeFunc == nil {
+			t.Fatal("rawurldecode function not found")
+		}
+
+		tests := []struct {
+			name     string
+			input    string
+			expected string
+		}{
+			// Basic tests
+			{"space decoding", "hello%20world", "hello world"},
+			{"plus sign", "hello%2Bworld", "hello+world"},
+			{"ampersand", "hello%26world", "hello&world"},
+			{"equals sign", "hello%3Dworld", "hello=world"},
+			{"question mark", "hello%3Fworld", "hello?world"},
+
+			// Percent-encoded characters
+			{"exclamation mark", "%21", "!"},
+			{"at sign", "%40", "@"},
+			{"hash", "%23", "#"},
+			{"dollar sign", "%24", "$"},
+			{"percent sign", "%25", "%"},
+			{"caret", "%5E", "^"},
+			{"ampersand", "%26", "&"},
+			{"asterisk", "%2A", "*"},
+			{"left parenthesis", "%28", "("},
+			{"right parenthesis", "%29", ")"},
+
+			// Case insensitive hex
+			{"lowercase asterisk", "%2a", "*"},
+			{"uppercase asterisk", "%2A", "*"},
+			{"lowercase question mark", "%3f", "?"},
+			{"uppercase question mark", "%3F", "?"},
+
+			// UTF-8 sequences
+			{"UTF-8 é", "%C3%A9", "é"},
+			{"UTF-8 你好", "%E4%BD%A0%E5%A5%BD", "你好"},
+			{"UTF-8 ü", "%C3%BC", "ü"},
+			{"UTF-8 ç", "%C3%A7", "ç"},
+			{"lowercase UTF-8 é", "%c3%a9", "é"},
+
+			// Edge cases
+			{"empty string", "", ""},
+			{"no encoding", "hello", "hello"},
+			{"multiple encodings", "hello%20world%21", "hello world!"},
+			{"lone percent", "%", "%"},
+			{"incomplete encoding", "%2", "%2"},
+			{"invalid hex", "%G0", "%G0"},
+			{"double percent", "%%20", "% "},
+
+			// Real-world scenarios
+			{"encoded URL", "https%3A%2F%2Fexample.com%2Fpath%3Fquery%3Dvalue", "https://example.com/path?query=value"},
+			{"encoded email", "user%40domain.com", "user@domain.com"},
+			{"encoded windows path", "C%3A%5CProgram%20Files%5CApp", "C:\\Program Files\\App"},
+			{"encoded unix path", "%2Fusr%2Flocal%2Fbin", "/usr/local/bin"},
+
+			// Comparison with urldecode behavior differences
+			{"plus literal", "hello+world", "hello+world"}, // urldecode would be "hello world"
+			{"plus vs space", "50%25+off", "50%+off"}, // urldecode would be "50% off"
+
+			// Mixed encoded/unencoded
+			{"mixed content", "hello%20world", "hello world"},
+			{"path separators", "path%2Fto%2Ffile.txt", "path/to/file.txt"},
+			{"query string", "name%3DJohn%26age%3D25", "name=John&age=25"},
+
+			// Round-trip test samples (these should work with our rawurlencode)
+			{"round-trip space", "hello%20world", "hello world"},
+			{"round-trip special", "%21%40%23%24%25%5E%26%2A%28%29", "!@#$%^&*()"},
+			{"round-trip unicode", "caf%C3%A9", "café"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{values.NewString(tt.input)}
+
+				result, err := rawurldecodeFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("rawurldecode failed: %v", err)
+				}
+
+				if result.Type != values.TypeString {
+					t.Fatalf("Expected string result, got %s", result.Type)
+				}
+
+				resultStr := result.Data.(string)
+				if resultStr != tt.expected {
+					t.Errorf("Expected %q, got %q", tt.expected, resultStr)
+				}
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers

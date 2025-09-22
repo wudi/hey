@@ -2395,6 +2395,22 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(result), nil
 			},
 		},
+		// rawurldecode() - Decode URL encoded string according to RFC 3986
+		{
+			Name: "rawurldecode",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				result := rawUrlDecode(str)
+				return values.NewString(result), nil
+			},
+		},
 	}
 }
 
@@ -3003,4 +3019,52 @@ func shouldEncodeRFC3986(b byte) bool {
 	}
 	// Everything else should be encoded
 	return true
+}
+
+// rawUrlDecode decodes a URL encoded string according to RFC 3986
+func rawUrlDecode(str string) string {
+	if str == "" {
+		return str
+	}
+
+	var result strings.Builder
+	result.Grow(len(str)) // Decoded string is typically shorter
+
+	for i := 0; i < len(str); i++ {
+		if str[i] == '%' && i+2 < len(str) {
+			// Try to decode the percent-encoded sequence
+			hex1, hex2 := str[i+1], str[i+2]
+			if isValidHexDigit(hex1) && isValidHexDigit(hex2) {
+				// Convert hex digits to byte value
+				val := hexDigitValue(hex1)*16 + hexDigitValue(hex2)
+				result.WriteByte(val)
+				i += 2 // Skip the hex digits
+			} else {
+				// Invalid hex sequence, keep the percent sign
+				result.WriteByte(str[i])
+			}
+		} else {
+			// Regular character (including lone % at end)
+			result.WriteByte(str[i])
+		}
+	}
+
+	return result.String()
+}
+
+// isValidHexDigit checks if a character is a valid hexadecimal digit
+func isValidHexDigit(c byte) bool {
+	return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f')
+}
+
+// hexDigitValue converts a hex digit character to its numeric value
+func hexDigitValue(c byte) byte {
+	if c >= '0' && c <= '9' {
+		return c - '0'
+	} else if c >= 'A' && c <= 'F' {
+		return c - 'A' + 10
+	} else if c >= 'a' && c <= 'f' {
+		return c - 'a' + 10
+	}
+	return 0 // Should not happen if isValidHexDigit was called first
 }
