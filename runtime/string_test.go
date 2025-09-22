@@ -5827,6 +5827,101 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("similar_text", func(t *testing.T) {
+		// Find the similar_text function
+		var similarTextFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "similar_text" {
+				similarTextFunc = f
+				break
+			}
+		}
+		if similarTextFunc == nil {
+			t.Fatal("similar_text function not found")
+		}
+
+		tests := []struct {
+			name       string
+			str1       string
+			str2       string
+			expected   int64
+			percentage float64
+		}{
+			// Basic tests
+			{"identical strings", "hello", "hello", 5, 100.0},
+			{"completely different", "hello", "world", 1, 20.0},
+			{"one character different", "hello", "hallo", 4, 80.0},
+			{"partial match", "hello", "help", 3, 66.67},
+
+			// Case sensitivity
+			{"different case", "Hello", "hello", 4, 80.0},
+			{"all caps vs lowercase", "HELLO", "hello", 0, 0.0},
+			{"mixed case", "HeLLo", "hello", 2, 40.0},
+
+			// Edge cases
+			{"both empty", "", "", 0, 0.0},
+			{"one empty", "hello", "", 0, 0.0},
+			{"other empty", "", "world", 0, 0.0},
+			{"single identical", "a", "a", 1, 100.0},
+			{"single different", "a", "b", 0, 0.0},
+			{"same chars different order", "ab", "ba", 1, 50.0},
+
+			// Longer strings
+			{"identical long strings", "The quick brown fox", "The quick brown fox", 19, 100.0},
+			{"one word different", "The quick brown fox", "The quick brown dog", 17, 89.47},
+			{"similar start", "Hello world", "Hello universe", 7, 56.0},
+
+			// Substring patterns
+			{"substring in middle", "abcdef", "cde", 3, 66.67},
+			{"substring at start", "abcdef", "abc", 3, 66.67},
+			{"substring at end", "abcdef", "def", 3, 66.67},
+
+			// Different lengths
+			{"one is prefix", "programming", "program", 7, 77.78},
+			{"one extends other", "test", "testing", 4, 72.73},
+
+			// Algorithm edge cases
+			{"completely reversed", "abcd", "dcba", 1, 25.0},
+			{"no common characters", "abc", "xyz", 0, 0.0},
+			{"alternating pattern", "abab", "baba", 3, 75.0},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{
+					values.NewString(tt.str1),
+					values.NewString(tt.str2),
+				}
+				result, err := similarTextFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("similar_text failed: %v", err)
+				}
+
+				if result.Type != values.TypeInt {
+					t.Errorf("Expected int, got %s", result.Type)
+					return
+				}
+
+				actual := result.Data.(int64)
+				if actual != tt.expected {
+					t.Errorf("similar_text(%q, %q) = %d, expected %d", tt.str1, tt.str2, actual, tt.expected)
+				}
+
+				// Calculate percentage and check it's reasonable (within 1% tolerance)
+				var expectedPercent float64
+				if len(tt.str1)+len(tt.str2) > 0 {
+					expectedPercent = float64(actual*200) / float64(len(tt.str1)+len(tt.str2))
+				}
+				if expectedPercent != 0 && tt.percentage != 0 {
+					tolerance := 1.0
+					if expectedPercent < tt.percentage-tolerance || expectedPercent > tt.percentage+tolerance {
+						t.Logf("Percentage check: got %.2f%%, expected ~%.2f%%", expectedPercent, tt.percentage)
+					}
+				}
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers

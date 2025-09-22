@@ -2494,6 +2494,21 @@ func GetStringFunctions() []*registry.Function {
 				return result, nil
 			},
 		},
+		{
+			Name: "similar_text",
+			Parameters: []*registry.Parameter{
+				{Name: "first", Type: "string"},
+				{Name: "second", Type: "string"},
+			},
+			ReturnType: "int",
+			MinArgs: 2, MaxArgs: 2, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				first := args[0].Data.(string)
+				second := args[1].Data.(string)
+				similarity := calculateSimilarText(first, second)
+				return values.NewInt(int64(similarity)), nil
+			},
+		},
 	}
 }
 
@@ -2616,6 +2631,57 @@ func urlDecode(s string) string {
 		return s // Return original if decoding fails
 	}
 	return decoded
+}
+
+// calculateSimilarText implements the similar_text() algorithm
+// This is a recursive algorithm that finds the longest common subsequence
+func calculateSimilarText(first, second string) int {
+	if first == "" || second == "" {
+		return 0
+	}
+
+	if first == second {
+		return len(first)
+	}
+
+	return similarTextRecursive(first, second, len(first), len(second))
+}
+
+// similarTextRecursive implements the core recursive algorithm used by PHP's similar_text
+func similarTextRecursive(first, second string, firstLen, secondLen int) int {
+	if firstLen == 0 || secondLen == 0 {
+		return 0
+	}
+
+	var max, pos1, pos2 int
+
+	// Find the longest common substring
+	for i := 0; i < firstLen; i++ {
+		for j := 0; j < secondLen; j++ {
+			// Count matching characters starting from position i, j
+			l := 0
+			for k := 0; i+k < firstLen && j+k < secondLen && first[i+k] == second[j+k]; k++ {
+				l++
+			}
+
+			// Keep track of the longest match
+			if l > max {
+				max = l
+				pos1 = i
+				pos2 = j
+			}
+		}
+	}
+
+	if max == 0 {
+		return 0
+	}
+
+	// Recursively calculate similarity for the parts before and after the common substring
+	before := similarTextRecursive(first[:pos1], second[:pos2], pos1, pos2)
+	after := similarTextRecursive(first[pos1+max:], second[pos2+max:], firstLen-pos1-max, secondLen-pos2-max)
+
+	return max + before + after
 }
 
 // sscanfParse implements the sscanf() function logic
