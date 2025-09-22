@@ -2509,6 +2509,21 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewInt(int64(similarity)), nil
 			},
 		},
+		{
+			Name: "levenshtein",
+			Parameters: []*registry.Parameter{
+				{Name: "str1", Type: "string"},
+				{Name: "str2", Type: "string"},
+			},
+			ReturnType: "int",
+			MinArgs: 2, MaxArgs: 2, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str1 := args[0].Data.(string)
+				str2 := args[1].Data.(string)
+				distance := calculateLevenshteinDistance(str1, str2)
+				return values.NewInt(int64(distance)), nil
+			},
+		},
 	}
 }
 
@@ -3587,4 +3602,75 @@ func hexDigitValue(c byte) byte {
 		return c - 'a' + 10
 	}
 	return 0 // Should not happen if isValidHexDigit was called first
+}
+
+// calculateLevenshteinDistance implements the Levenshtein distance algorithm
+// Returns the minimum number of single-character edits (insertions, deletions, or substitutions)
+// required to change one string into the other
+// Note: PHP's levenshtein() works on byte level, not Unicode character level
+func calculateLevenshteinDistance(str1, str2 string) int {
+	// Convert strings to bytes for PHP compatibility
+	bytes1 := []byte(str1)
+	bytes2 := []byte(str2)
+
+	len1 := len(bytes1)
+	len2 := len(bytes2)
+
+	// Special cases
+	if len1 == 0 {
+		return len2
+	}
+	if len2 == 0 {
+		return len1
+	}
+
+	// Create a matrix to store distances
+	// dp[i][j] represents the distance between the first i characters of str1 and first j characters of str2
+	dp := make([][]int, len1+1)
+	for i := range dp {
+		dp[i] = make([]int, len2+1)
+	}
+
+	// Initialize base cases
+	// Distance from empty string to any prefix
+	for i := 0; i <= len1; i++ {
+		dp[i][0] = i
+	}
+	for j := 0; j <= len2; j++ {
+		dp[0][j] = j
+	}
+
+	// Fill the matrix using dynamic programming
+	for i := 1; i <= len1; i++ {
+		for j := 1; j <= len2; j++ {
+			// Cost of substitution (0 if bytes are same, 1 if different)
+			substitutionCost := 1
+			if bytes1[i-1] == bytes2[j-1] {
+				substitutionCost = 0
+			}
+
+			// Calculate minimum of three operations:
+			// 1. Deletion: dp[i-1][j] + 1
+			// 2. Insertion: dp[i][j-1] + 1
+			// 3. Substitution: dp[i-1][j-1] + substitutionCost
+			dp[i][j] = min(
+				dp[i-1][j]+1,           // deletion
+				dp[i][j-1]+1,           // insertion
+				dp[i-1][j-1]+substitutionCost, // substitution
+			)
+		}
+	}
+
+	return dp[len1][len2]
+}
+
+// min returns the minimum of three integers
+func min(a, b, c int) int {
+	if a <= b && a <= c {
+		return a
+	}
+	if b <= c {
+		return b
+	}
+	return c
 }
