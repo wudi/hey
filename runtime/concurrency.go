@@ -12,6 +12,44 @@ import (
 	"github.com/wudi/hey/values"
 )
 
+// copyValue creates a deep copy of a value to avoid race conditions
+func copyValue(val *values.Value) *values.Value {
+	if val == nil {
+		return nil
+	}
+
+	// For basic types, create a new value with the same data
+	switch val.Type {
+	case values.TypeNull:
+		return values.NewNull()
+	case values.TypeBool:
+		return values.NewBool(val.ToBool())
+	case values.TypeInt:
+		return values.NewInt(val.ToInt())
+	case values.TypeFloat:
+		return values.NewFloat(val.ToFloat())
+	case values.TypeString:
+		return values.NewString(val.ToString())
+	default:
+		// For complex types (objects, arrays, etc.), return the same reference
+		// This is a simplified copy - full deep copy would be more complex
+		return val
+	}
+}
+
+// GoroutineExecutor is an interface for executing functions in goroutines
+type GoroutineExecutor interface {
+	ExecuteFunction(fn *registry.Function, boundVars map[string]*values.Value) (*values.Value, error)
+}
+
+// Global executor that will be set by the VM
+var globalGoroutineExecutor GoroutineExecutor
+
+// SetGoroutineExecutor sets the global executor for goroutine bytecode execution
+func SetGoroutineExecutor(executor GoroutineExecutor) {
+	globalGoroutineExecutor = executor
+}
+
 // Global goroutine manager and context tracking
 var (
 	goroutineManager = &GoroutineManager{
@@ -115,19 +153,10 @@ func (gm *GoroutineManager) ExecuteGoroutine(gor *values.Value) {
 		// Execute the closure
 		closure := goroutineData.Function
 
-		// For compiled closures, we need to execute them properly
-		// This is a simplified version - for now just mark as completed
+		// Handle different types of closures
 		if fn, ok := closure.Function.(*registry.Function); ok {
-			if fn.Handler != nil {
-				result, err := fn.Handler(nil, []*values.Value{})
-				if err != nil {
-					goroutineData.Status = "error"
-					goroutineData.Error = err
-				} else {
-					goroutineData.Status = "completed"
-					goroutineData.Result = result
-				}
-			} else if fn.Builtin != nil {
+			if fn.IsBuiltin && fn.Builtin != nil {
+				// Built-in function
 				result, err := fn.Builtin(nil, []*values.Value{})
 				if err != nil {
 					goroutineData.Status = "error"
@@ -136,14 +165,62 @@ func (gm *GoroutineManager) ExecuteGoroutine(gor *values.Value) {
 					goroutineData.Status = "completed"
 					goroutineData.Result = result
 				}
+			} else if fn.Instructions != nil {
+				// User-defined function with bytecode - need VM execution
+				err := gm.executeUserFunction(fn, goroutineData)
+				if err != nil {
+					goroutineData.Status = "error"
+					goroutineData.Error = err
+				} else {
+					goroutineData.Status = "completed"
+				}
+			} else {
+				goroutineData.Status = "error"
+				goroutineData.Error = fmt.Errorf("function has no implementation")
 			}
 		} else {
-			// For bytecode functions, we need VM integration
-			// For now, just mark as completed
-			goroutineData.Status = "completed"
-			goroutineData.Result = values.NewNull()
+			// Unknown closure type
+			goroutineData.Status = "error"
+			goroutineData.Error = fmt.Errorf("unsupported closure type: %T", closure.Function)
 		}
 	}()
+}
+
+// executeUserFunction executes a user-defined PHP function in a goroutine context
+func (gm *GoroutineManager) executeUserFunction(fn *registry.Function, goroutineData *values.Goroutine) error {
+	if globalGoroutineExecutor == nil {
+		return fmt.Errorf("no goroutine executor registered - VM integration not available")
+	}
+
+	// Prepare bound variables map from closure
+	boundVars := make(map[string]*values.Value)
+
+	// Add bound variables from closure (these are the 'use' variables)
+	// Make deep copies to avoid race conditions between goroutines
+	if goroutineData.Function.BoundVars != nil {
+		for varName, boundVar := range goroutineData.Function.BoundVars {
+			// Create a deep copy for this goroutine
+			boundVars[varName] = copyValue(boundVar)
+		}
+	}
+
+	// Add use variables from goroutine (additional variables)
+	if goroutineData.UseVars != nil {
+		for varName, useVar := range goroutineData.UseVars {
+			// Create a deep copy for this goroutine
+			boundVars[varName] = copyValue(useVar)
+		}
+	}
+
+	// Execute the function using the global executor
+	result, err := globalGoroutineExecutor.ExecuteFunction(fn, boundVars)
+	if err != nil {
+		return err
+	}
+
+	// Store the result
+	goroutineData.Result = result
+	return nil
 }
 
 // GetConcurrencyFunctions returns concurrency-related PHP functions
@@ -175,13 +252,28 @@ func GetConcurrencyFunctions() []*registry.Function {
 				if closure == nil {
 					return nil, fmt.Errorf("go() invalid closure")
 				}
+
+				// Create a copy of the closure for this goroutine to avoid shared state
+				closureCopy := &values.Closure{
+					Function:  closure.Function, // Function can be shared
+					BoundVars: make(map[string]*values.Value), // But BoundVars must be separate
+					Name:      closure.Name,
+				}
+
+				// Copy the bound variables to the new closure
+				if closure.BoundVars != nil {
+					for k, v := range closure.BoundVars {
+						closureCopy.BoundVars[k] = copyValue(v)
+					}
+				}
+
 				useVars := make(map[string]*values.Value)
 				for i, arg := range args[1:] {
 					useVars[fmt.Sprintf("var_%d", i)] = arg
 				}
 
-				// Create goroutine value
-				gor := values.NewGoroutine(closure, useVars)
+				// Create goroutine value with the isolated closure copy
+				gor := values.NewGoroutine(closureCopy, useVars)
 
 				// Execute immediately in real Go goroutine
 				goroutineManager.ExecuteGoroutine(gor)
@@ -214,117 +306,10 @@ func GetConcurrencyFunctions() []*registry.Function {
 	}
 }
 
-// GetConcurrencyClasses returns WaitGroup class
+// GetConcurrencyClasses returns concurrency-related classes
+// Note: WaitGroup class is now defined in exception.go
 func GetConcurrencyClasses() []*registry.ClassDescriptor {
 	return []*registry.ClassDescriptor{
-		{
-			Name:       "WaitGroup",
-			Parent:     "",
-			Interfaces: []string{},
-			Traits:     []string{},
-			Methods: map[string]*registry.MethodDescriptor{
-				"__construct": {
-					Name:           "__construct",
-					Visibility:     "public",
-					IsStatic:       false,
-					IsAbstract:     false,
-					IsFinal:        false,
-					IsVariadic:     false,
-					Parameters:     []*registry.ParameterDescriptor{},
-					Implementation: NewBuiltinMethodImpl(createWaitGroupConstructor()),
-				},
-				"Add": {
-					Name:       "Add",
-					Visibility: "public",
-					IsStatic:   false,
-					IsAbstract: false,
-					IsFinal:    false,
-					IsVariadic: false,
-					Parameters: []*registry.ParameterDescriptor{
-						{Name: "delta", Type: "int"},
-					},
-					Implementation: NewBuiltinMethodImpl(createWaitGroupAddMethod()),
-				},
-				"Done": {
-					Name:           "Done",
-					Visibility:     "public",
-					IsStatic:       false,
-					IsAbstract:     false,
-					IsFinal:        false,
-					IsVariadic:     false,
-					Parameters:     []*registry.ParameterDescriptor{},
-					Implementation: NewBuiltinMethodImpl(createWaitGroupDoneMethod()),
-				},
-				"Wait": {
-					Name:           "Wait",
-					Visibility:     "public",
-					IsStatic:       false,
-					IsAbstract:     false,
-					IsFinal:        false,
-					IsVariadic:     false,
-					Parameters:     []*registry.ParameterDescriptor{},
-					Implementation: NewBuiltinMethodImpl(createWaitGroupWaitMethod()),
-				},
-			},
-			Properties: make(map[string]*registry.PropertyDescriptor),
-			Constants:  make(map[string]*registry.ConstantDescriptor),
-			IsAbstract: false,
-			IsFinal:    false,
-		},
-	}
-}
-
-// Helper functions to create WaitGroup method implementations
-func createWaitGroupConstructor() *registry.Function {
-	return &registry.Function{
-		Name:       "__construct",
-		Parameters: []*registry.Parameter{},
-		ReturnType: "void",
-		IsBuiltin:  true,
-		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-			return values.NewNull(), nil
-		},
-	}
-}
-
-func createWaitGroupAddMethod() *registry.Function {
-	return &registry.Function{
-		Name:       "Add",
-		Parameters: []*registry.Parameter{{Name: "delta", Type: "int"}},
-		ReturnType: "void",
-		IsBuiltin:  true,
-		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-			// This would need proper method context handling
-			// For now, this is a placeholder implementation
-			return values.NewNull(), nil
-		},
-	}
-}
-
-func createWaitGroupDoneMethod() *registry.Function {
-	return &registry.Function{
-		Name:       "Done",
-		Parameters: []*registry.Parameter{},
-		ReturnType: "void",
-		IsBuiltin:  true,
-		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-			// This would need proper method context handling
-			// For now, this is a placeholder implementation
-			return values.NewNull(), nil
-		},
-	}
-}
-
-func createWaitGroupWaitMethod() *registry.Function {
-	return &registry.Function{
-		Name:       "Wait",
-		Parameters: []*registry.Parameter{},
-		ReturnType: "void",
-		IsBuiltin:  true,
-		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-			// This would need proper method context handling
-			// For now, this is a placeholder implementation
-			return values.NewNull(), nil
-		},
+		// Add other concurrency-related classes here if needed
 	}
 }

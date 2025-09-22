@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -48,8 +49,83 @@ type VirtualMachine struct {
 
 	CompilerCallback CompilerCallback
 
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	lastContext *ExecutionContext
+}
+
+// VMGoroutineExecutor implements the GoroutineExecutor interface for executing functions in goroutines
+type VMGoroutineExecutor struct {
+	vm *VirtualMachine
+}
+
+// ExecuteFunction executes a function in an isolated VM context for goroutines
+// The boundVarsMap parameter contains the closure's bound variables by name
+func (e *VMGoroutineExecutor) ExecuteFunction(fn *registry.Function, boundVarsMap map[string]*values.Value) (*values.Value, error) {
+	// Create a new execution context for the goroutine
+	ctx := NewExecutionContext()
+
+	// Copy global state (classes, functions, etc.) from the main VM context
+	if e.vm.lastContext != nil {
+		ctx.ClassTable = make(map[string]*classRuntime)
+		for k, v := range e.vm.lastContext.ClassTable {
+			ctx.ClassTable[k] = v
+		}
+		// Create isolated global variables for goroutine - do not share with main thread
+		// This eliminates race conditions and ensures proper isolation
+		ctx.GlobalVars = make(map[string]*values.Value)
+	}
+
+	// Create a call frame for the function
+	frame := newCallFrame(fn.Name, fn, fn.Instructions, fn.Constants)
+
+	// Set up bound variables by name in the frame's slot names and locals
+	// We need to map variables to the slots that the compiled function expects
+	slotIndex := uint32(0)
+
+	// First, set up function parameters (if any)
+	for i, param := range fn.Parameters {
+		frame.bindSlotName(uint32(i), param.Name)
+		frame.setLocal(uint32(i), values.NewNull()) // Initialize with null
+		slotIndex++
+	}
+
+	// Then set up bound variables (use clause variables)
+	// Sort variable names to ensure deterministic slot assignment
+	var sortedVarNames []string
+	for varName := range boundVarsMap {
+		sortedVarNames = append(sortedVarNames, varName)
+	}
+	sort.Strings(sortedVarNames)
+
+	for _, varName := range sortedVarNames {
+		boundVar := boundVarsMap[varName]
+		// Make a deep copy to avoid race conditions between goroutines
+		varCopy := copyValue(boundVar)
+
+		// Find if this variable name already has a slot
+		if existingSlot, exists := frame.NameSlots[varName]; exists {
+			// Variable already has a slot, use it
+			frame.setLocal(existingSlot, varCopy)
+		} else {
+			// Create new slot for this variable
+			frame.bindSlotName(slotIndex, varName)
+			frame.setLocal(slotIndex, varCopy)
+			slotIndex++
+		}
+	}
+
+	// Execute the function
+	err := e.vm.ExecuteFunction(ctx, frame)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the return value from the execution context stack
+	if len(ctx.Stack) > 0 {
+		return ctx.Stack[len(ctx.Stack)-1], nil
+	}
+
+	return values.NewNull(), nil
 }
 
 var (
@@ -113,13 +189,19 @@ func mergeClassDefinitions(target, source *registry.Class) {
 
 // NewVirtualMachine constructs a VM with basic instrumentation disabled.
 func NewVirtualMachine() *VirtualMachine {
-	return &VirtualMachine{
+	vm := &VirtualMachine{
 		debugLevel:  DebugLevelNone,
 		breakpoints: make(map[int]struct{}),
 		watchVars:   make(map[string]struct{}),
 		profile:     newProfileState(),
 		DebugMode:   false,
 	}
+
+	// Register the goroutine executor
+	executor := &VMGoroutineExecutor{vm: vm}
+	runtime2.SetGoroutineExecutor(executor)
+
+	return vm
 }
 
 // NewVirtualMachineWithProfiling constructs a VM with the specified debug level.

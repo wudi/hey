@@ -374,6 +374,20 @@ func instantiateObject(ctx *ExecutionContext, className string) (*values.Value, 
 			}
 		}
 	}
+
+	// Auto-call constructor if it exists
+	if cls != nil && cls.Descriptor != nil && cls.Descriptor.Methods != nil {
+		if constructorMethod, exists := cls.Descriptor.Methods["__construct"]; exists {
+			// Call the constructor with the object as first argument
+			if constructorMethod.IsBuiltin && constructorMethod.Builtin != nil {
+				_, err := constructorMethod.Builtin(nil, []*values.Value{obj})
+				if err != nil {
+					return nil, fmt.Errorf("constructor failed: %v", err)
+				}
+			}
+		}
+	}
+
 	return obj, nil
 }
 
@@ -2882,7 +2896,54 @@ func (vm *VirtualMachine) execCreateClosure(ctx *ExecutionContext, frame *CallFr
 }
 
 func (vm *VirtualMachine) execBindUseVar(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
-	// For now closures capture values eagerly during creation, so this is a no-op.
+	// OP_BIND_USE_VAR closure_tmp, var_name_const, var_value_tmp
+
+	// Get the closure
+	closureType, closureOp := decodeOperand(inst, 1)
+	closureVal, err := vm.readOperand(ctx, frame, closureType, closureOp)
+	if err != nil {
+		return false, err
+	}
+
+	if !closureVal.IsCallable() {
+		return false, fmt.Errorf("BIND_USE_VAR: target is not a closure")
+	}
+
+	// Get the variable name
+	varNameType, varNameOp := decodeOperand(inst, 2)
+	varNameVal, err := vm.readOperand(ctx, frame, varNameType, varNameOp)
+	if err != nil {
+		return false, err
+	}
+	varName := varNameVal.ToString()
+
+	// Get the variable value (stored in Result field)
+	varValueType, varValueOp := decodeResult(inst)
+	varValue, err := vm.readOperand(ctx, frame, varValueType, varValueOp)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the closure data and bind the variable
+	closure := closureVal.ClosureGet()
+	if closure == nil {
+		return false, fmt.Errorf("BIND_USE_VAR: invalid closure")
+	}
+
+	// Initialize BoundVars if nil
+	if closure.BoundVars == nil {
+		closure.BoundVars = make(map[string]*values.Value)
+	}
+
+	// Bind the variable to the closure
+	// Remove the $ prefix if present, as closures use variable names without $
+	cleanVarName := varName
+	if len(varName) > 0 && varName[0] == '$' {
+		cleanVarName = varName[1:]
+	}
+
+	closure.BoundVars[cleanVarName] = copyValue(varValue)
+
 	return true, nil
 }
 

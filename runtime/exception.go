@@ -17,26 +17,145 @@ func GetClasses() []*registry.ClassDescriptor {
 }
 
 func getWaitGroupClass() *registry.ClassDescriptor {
+	// Create method implementations that properly call WaitGroup value methods
+	constructorImpl := &registry.Function{
+		Name:      "__construct",
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 1 {
+				return values.NewNull(), nil
+			}
+			thisObj := args[0]
+			if !thisObj.IsObject() {
+				return values.NewNull(), fmt.Errorf("__construct called on non-object")
+			}
+
+			// Initialize the object with a WaitGroup value as internal data
+			obj := thisObj.Data.(*values.Object)
+			if obj.Properties == nil {
+				obj.Properties = make(map[string]*values.Value)
+			}
+			// Store a WaitGroup value as internal property
+			wgVal := values.NewWaitGroup()
+			if wgVal == nil {
+				return values.NewNull(), fmt.Errorf("failed to create WaitGroup value")
+			}
+			obj.Properties["__waitgroup_internal"] = wgVal
+
+			return values.NewNull(), nil
+		},
+	}
+
+	addImpl := &registry.Function{
+		Name:      "Add",
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 2 {
+				return nil, fmt.Errorf("Add() expects 2 arguments (this, delta)")
+			}
+			thisObj := args[0]
+			deltaArg := args[1]
+
+			if !thisObj.IsObject() {
+				return nil, fmt.Errorf("Add() called on non-object")
+			}
+
+			obj := thisObj.Data.(*values.Object)
+			wgVal, ok := obj.Properties["__waitgroup_internal"]
+			if !ok {
+				return nil, fmt.Errorf("WaitGroup not properly initialized")
+			}
+
+			delta := deltaArg.ToInt()
+			err := wgVal.WaitGroupAdd(delta)
+			if err != nil {
+				return nil, err
+			}
+
+			return values.NewNull(), nil
+		},
+	}
+
+	doneImpl := &registry.Function{
+		Name:      "Done",
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf("Done() expects 1 argument (this)")
+			}
+			thisObj := args[0]
+
+			if !thisObj.IsObject() {
+				return nil, fmt.Errorf("Done() called on non-object")
+			}
+
+			obj := thisObj.Data.(*values.Object)
+			wgVal, ok := obj.Properties["__waitgroup_internal"]
+			if !ok {
+				return nil, fmt.Errorf("WaitGroup not properly initialized")
+			}
+
+			err := wgVal.WaitGroupDone()
+			if err != nil {
+				return nil, err
+			}
+
+			return values.NewNull(), nil
+		},
+	}
+
+	waitImpl := &registry.Function{
+		Name:      "Wait",
+		IsBuiltin: true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			if len(args) < 1 {
+				return nil, fmt.Errorf("Wait() expects 1 argument (this)")
+			}
+			thisObj := args[0]
+
+			if !thisObj.IsObject() {
+				return nil, fmt.Errorf("Wait() called on non-object")
+			}
+
+			obj := thisObj.Data.(*values.Object)
+			wgVal, ok := obj.Properties["__waitgroup_internal"]
+			if !ok {
+				return nil, fmt.Errorf("WaitGroup not properly initialized")
+			}
+
+			err := wgVal.WaitGroupWait()
+			if err != nil {
+				return nil, err
+			}
+
+			return values.NewNull(), nil
+		},
+	}
+
 	methods := map[string]*registry.MethodDescriptor{
 		"__construct": {
-			Name:       "__construct",
-			Visibility: "public",
-			Parameters: []*registry.ParameterDescriptor{},
+			Name:           "__construct",
+			Visibility:     "public",
+			Parameters:     []*registry.ParameterDescriptor{},
+			Implementation: NewBuiltinMethodImpl(constructorImpl),
 		},
 		"Add": {
 			Name:       "Add",
 			Visibility: "public",
 			Parameters: []*registry.ParameterDescriptor{{Name: "delta", Type: "int"}},
+			Implementation: NewBuiltinMethodImpl(addImpl),
 		},
 		"Done": {
-			Name:       "Done",
-			Visibility: "public",
-			Parameters: []*registry.ParameterDescriptor{},
+			Name:           "Done",
+			Visibility:     "public",
+			Parameters:     []*registry.ParameterDescriptor{},
+			Implementation: NewBuiltinMethodImpl(doneImpl),
 		},
 		"Wait": {
-			Name:       "Wait",
-			Visibility: "public",
-			Parameters: []*registry.ParameterDescriptor{},
+			Name:           "Wait",
+			Visibility:     "public",
+			Parameters:     []*registry.ParameterDescriptor{},
+			Implementation: NewBuiltinMethodImpl(waitImpl),
 		},
 	}
 
