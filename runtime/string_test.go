@@ -3933,4 +3933,154 @@ func TestStringFunctions(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("money_format", func(t *testing.T) {
+		// Find the money_format function
+		var moneyFormatFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "money_format" {
+				moneyFormatFunc = f
+				break
+			}
+		}
+
+		if moneyFormatFunc == nil {
+			t.Fatal("money_format function not found")
+		}
+
+		tests := []struct {
+			name     string
+			args     []*values.Value
+			expected string
+		}{
+			// Basic formatting
+			{
+				name: "basic national format",
+				args: []*values.Value{
+					values.NewString("%.2n"),
+					values.NewFloat(1234.56),
+				},
+				expected: "$1,234.56",
+			},
+			{
+				name: "basic international format",
+				args: []*values.Value{
+					values.NewString("%.2i"),
+					values.NewFloat(1234.56),
+				},
+				expected: "USD 1,234.56",
+			},
+			{
+				name: "no precision national",
+				args: []*values.Value{
+					values.NewString("%n"),
+					values.NewFloat(1234.56),
+				},
+				expected: "$1,235",
+			},
+			{
+				name: "no precision international",
+				args: []*values.Value{
+					values.NewString("%i"),
+					values.NewFloat(1234.56),
+				},
+				expected: "USD 1,235",
+			},
+
+			// Different precision
+			{
+				name: "zero decimal places",
+				args: []*values.Value{
+					values.NewString("%.0n"),
+					values.NewFloat(1234.56),
+				},
+				expected: "$1,235",
+			},
+			{
+				name: "one decimal place",
+				args: []*values.Value{
+					values.NewString("%.1n"),
+					values.NewFloat(1234.56),
+				},
+				expected: "$1,234.6",
+			},
+			{
+				name: "three decimal places",
+				args: []*values.Value{
+					values.NewString("%.3n"),
+					values.NewFloat(1234.56),
+				},
+				expected: "$1,234.560",
+			},
+
+			// Negative numbers
+			{
+				name: "negative amount",
+				args: []*values.Value{
+					values.NewString("%.2n"),
+					values.NewFloat(-1234.56),
+				},
+				expected: "-$1,234.56",
+			},
+
+			// Edge cases
+			{
+				name: "zero amount",
+				args: []*values.Value{
+					values.NewString("%.2n"),
+					values.NewFloat(0),
+				},
+				expected: "$0.00",
+			},
+			{
+				name: "one cent",
+				args: []*values.Value{
+					values.NewString("%.2n"),
+					values.NewFloat(0.01),
+				},
+				expected: "$0.01",
+			},
+			{
+				name: "large number",
+				args: []*values.Value{
+					values.NewString("%.2n"),
+					values.NewFloat(1000000),
+				},
+				expected: "$1,000,000.00",
+			},
+
+			// Width formatting
+			{
+				name: "right aligned",
+				args: []*values.Value{
+					values.NewString("%10.2n"),
+					values.NewFloat(123.45),
+				},
+				expected: "   $123.45",
+			},
+			{
+				name: "left aligned",
+				args: []*values.Value{
+					values.NewString("%-10.2n"),
+					values.NewFloat(123.45),
+				},
+				expected: "$123.45   ",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := moneyFormatFunc.Builtin(nil, tt.args)
+				if err != nil {
+					t.Fatalf("money_format() error = %v", err)
+				}
+				if result.Type != values.TypeString {
+					t.Fatalf("money_format() returned %s, want string", result.Type)
+				}
+				if result.Data.(string) != tt.expected {
+					t.Errorf("money_format() = %q, want %q", result.Data.(string), tt.expected)
+				}
+			})
+		}
+	})
 }

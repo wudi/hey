@@ -2545,6 +2545,24 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(result), nil
 			},
 		},
+		{
+			Name: "money_format",
+			Parameters: []*registry.Parameter{
+				{Name: "format", Type: "string"},
+				{Name: "number", Type: "float"},
+			},
+			ReturnType: "string",
+			MinArgs: 2, MaxArgs: 2, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				format := args[0].Data.(string)
+				number := args[1].ToFloat()
+				result, err := formatMoney(format, number)
+				if err != nil {
+					return nil, err
+				}
+				return values.NewString(result), nil
+			},
+		},
 	}
 }
 
@@ -3731,4 +3749,181 @@ func calculateHash(algo, data string) (string, error) {
 
 	// Return as lowercase hexadecimal string
 	return hex.EncodeToString(hashBytes), nil
+}
+
+// formatMoney implements the money_format() function
+// Provides basic money formatting with US locale defaults
+func formatMoney(format string, number float64) (string, error) {
+	// Parse the format string to extract components
+	formatSpec, err := parseMoneyFormat(format)
+	if err != nil {
+		return "", err
+	}
+
+	// Apply precision (rounding)
+	var rounded float64
+	if formatSpec.Precision >= 0 {
+		rounded = math.Round(number*math.Pow(10, float64(formatSpec.Precision))) / math.Pow(10, float64(formatSpec.Precision))
+	} else {
+		// No precision specified, round to nearest integer
+		rounded = math.Round(number)
+	}
+
+	// Handle negative numbers
+	isNegative := rounded < 0
+	if isNegative {
+		rounded = -rounded
+	}
+
+	// Format the number with precision
+	var formattedNumber string
+	if formatSpec.Precision >= 0 {
+		formattedNumber = fmt.Sprintf("%."+strconv.Itoa(formatSpec.Precision)+"f", rounded)
+	} else {
+		// No precision specified, round to nearest integer
+		formattedNumber = fmt.Sprintf("%.0f", math.Round(rounded))
+	}
+
+	// Add thousands separators (commas)
+	formattedNumber = addThousandsSeparators(formattedNumber)
+
+	// Add currency symbol based on format type
+	var result string
+	switch formatSpec.Type {
+	case 'n': // national format
+		if isNegative {
+			result = "-$" + formattedNumber
+		} else {
+			result = "$" + formattedNumber
+		}
+	case 'i': // international format
+		if isNegative {
+			result = "-USD " + formattedNumber
+		} else {
+			result = "USD " + formattedNumber
+		}
+	default:
+		return "", fmt.Errorf("money_format: unsupported format type '%c'", formatSpec.Type)
+	}
+
+	// Apply width and alignment
+	if formatSpec.Width > 0 {
+		if formatSpec.LeftAlign {
+			// Left align with padding on the right
+			result = result + strings.Repeat(" ", formatSpec.Width-len(result))
+		} else {
+			// Right align with padding on the left
+			if len(result) < formatSpec.Width {
+				padding := formatSpec.Width - len(result)
+				result = strings.Repeat(" ", padding) + result
+			}
+		}
+	}
+
+	return result, nil
+}
+
+// moneyFormatSpec holds parsed format specification
+type moneyFormatSpec struct {
+	Width     int
+	Precision int
+	Type      rune
+	LeftAlign bool
+}
+
+// parseMoneyFormat parses a money_format format string
+func parseMoneyFormat(format string) (*moneyFormatSpec, error) {
+	spec := &moneyFormatSpec{
+		Width:     0,
+		Precision: -1, // Default: no precision specified
+		Type:      'n', // Default: national
+		LeftAlign: false,
+	}
+
+	if len(format) == 0 {
+		return nil, fmt.Errorf("money_format: empty format string")
+	}
+
+	i := 0
+	if format[i] != '%' {
+		return nil, fmt.Errorf("money_format: format must start with %%")
+	}
+	i++
+
+	// Parse flags
+	for i < len(format) {
+		switch format[i] {
+		case '-':
+			spec.LeftAlign = true
+			i++
+		case '0':
+			// Zero padding - for now we'll treat as regular padding
+			i++
+		default:
+			goto parseWidth
+		}
+	}
+
+parseWidth:
+	// Parse width
+	widthStart := i
+	for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+		i++
+	}
+	if i > widthStart {
+		width, err := strconv.Atoi(format[widthStart:i])
+		if err == nil {
+			spec.Width = width
+		}
+	}
+
+	// Parse precision
+	if i < len(format) && format[i] == '.' {
+		i++
+		precisionStart := i
+		for i < len(format) && format[i] >= '0' && format[i] <= '9' {
+			i++
+		}
+		if i > precisionStart {
+			precision, err := strconv.Atoi(format[precisionStart:i])
+			if err == nil {
+				spec.Precision = precision
+			}
+		} else {
+			spec.Precision = 0 // "." with no digits means 0 precision
+		}
+	}
+
+	// Parse type
+	if i < len(format) {
+		spec.Type = rune(format[i])
+		if spec.Type != 'n' && spec.Type != 'i' {
+			return nil, fmt.Errorf("money_format: unsupported format type '%c'", spec.Type)
+		}
+	}
+
+	return spec, nil
+}
+
+// addThousandsSeparators adds commas to separate thousands
+func addThousandsSeparators(s string) string {
+	// Find decimal point if it exists
+	parts := strings.Split(s, ".")
+	intPart := parts[0]
+
+	// Add commas to integer part
+	result := ""
+	for i, digit := range intPart {
+		if i > 0 && (len(intPart)-i)%3 == 0 {
+			result += ","
+		}
+		result += string(digit)
+	}
+
+	// Add decimal part back if it exists
+	if len(parts) > 1 {
+		result += "." + parts[1]
+	}
+
+	return result
 }
