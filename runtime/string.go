@@ -2638,6 +2638,28 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(result), nil
 			},
 		},
+		{
+			Name: "mb_strtolower",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs: 1, MaxArgs: 1, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+
+				// Convert string to runes for proper Unicode handling
+				runes := []rune(str)
+				result := make([]rune, len(runes))
+
+				// Convert each rune to lowercase using Unicode rules
+				for i, r := range runes {
+					result[i] = unicode.ToLower(r)
+				}
+
+				return values.NewString(string(result)), nil
+			},
+		},
 	}
 }
 
