@@ -28,6 +28,7 @@ func GetAllBuiltinFunctions() []*registry.Function {
 	functions = append(functions, GetEncodingFunctions()...)
 	functions = append(functions, GetFilesystemFunctions()...)
 	functions = append(functions, GetSystemFunctions()...)
+	functions = append(functions, GetTimeFunctions()...)
 	functions = append(functions, GetMathFunctions()...)
 	functions = append(functions, GetOutputFunctions()...)
 	functions = append(functions, GetReflectionFunctions()...)
