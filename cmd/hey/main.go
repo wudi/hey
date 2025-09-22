@@ -353,6 +353,26 @@ func runWebServer(addr string) error {
 	return nil
 }
 
+// trackingWriter wraps io.Writer and tracks if output was written
+type trackingWriter struct {
+	w           io.Writer
+	hasOutput   bool
+	lastWasNewline bool
+}
+
+func (tw *trackingWriter) Write(p []byte) (n int, err error) {
+	tw.hasOutput = true
+	if len(p) > 0 {
+		tw.lastWasNewline = p[len(p)-1] == '\n'
+	}
+	return tw.w.Write(p)
+}
+
+func (tw *trackingWriter) Reset() {
+	tw.hasOutput = false
+	tw.lastWasNewline = false
+}
+
 func runInteractiveShell() error {
 	fmt.Println("Interactive mode enabled.")
 
@@ -370,6 +390,10 @@ func runInteractiveShell() error {
 	if vmCtx.GlobalVars == nil {
 		vmCtx.GlobalVars = make(map[string]*values.Value)
 	}
+
+	// Create tracking writer for output
+	outputTracker := &trackingWriter{w: os.Stdout}
+	vmCtx.OutputWriter = outputTracker
 
 	variables := runtime2.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
@@ -426,7 +450,13 @@ func runInteractiveShell() error {
 		}
 
 		// Execute the code
+		outputTracker.Reset()
 		executeREPLCode(code, vmCtx, vmachine)
+
+		// Add newline after output if needed
+		if outputTracker.hasOutput && !outputTracker.lastWasNewline {
+			fmt.Println()
+		}
 	}
 
 	return scanner.Err()
