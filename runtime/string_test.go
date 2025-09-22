@@ -4760,4 +4760,255 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("mb_strtoupper", func(t *testing.T) {
+		// Find the mb_strtoupper function
+		var mbStrtoupperFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "mb_strtoupper" {
+				mbStrtoupperFunc = f
+				break
+			}
+		}
+
+		if mbStrtoupperFunc == nil {
+			t.Fatal("mb_strtoupper function not found")
+		}
+
+		tests := []struct {
+			name     string
+			args     []*values.Value
+			expected string
+		}{
+			// Basic ASCII tests
+			{
+				name: "simple lowercase",
+				args: []*values.Value{
+					values.NewString("hello"),
+				},
+				expected: "HELLO",
+			},
+			{
+				name: "mixed case",
+				args: []*values.Value{
+					values.NewString("Hello"),
+				},
+				expected: "HELLO",
+			},
+			{
+				name: "already uppercase",
+				args: []*values.Value{
+					values.NewString("HELLO"),
+				},
+				expected: "HELLO",
+			},
+			{
+				name: "multiple words",
+				args: []*values.Value{
+					values.NewString("hello world"),
+				},
+				expected: "HELLO WORLD",
+			},
+			{
+				name: "mixed case words",
+				args: []*values.Value{
+					values.NewString("heLLo WoRLd"),
+				},
+				expected: "HELLO WORLD",
+			},
+
+			// Empty string
+			{
+				name: "empty string",
+				args: []*values.Value{
+					values.NewString(""),
+				},
+				expected: "",
+			},
+
+			// Numbers and special characters
+			{
+				name: "numbers only",
+				args: []*values.Value{
+					values.NewString("123"),
+				},
+				expected: "123",
+			},
+			{
+				name: "mixed letters and numbers",
+				args: []*values.Value{
+					values.NewString("hello123"),
+				},
+				expected: "HELLO123",
+			},
+			{
+				name: "special characters",
+				args: []*values.Value{
+					values.NewString("hello!@#$"),
+				},
+				expected: "HELLO!@#$",
+			},
+
+			// Accented characters (basic Latin)
+			{
+				name: "café lowercase",
+				args: []*values.Value{
+					values.NewString("café"),
+				},
+				expected: "CAFÉ",
+			},
+			{
+				name: "naïve lowercase",
+				args: []*values.Value{
+					values.NewString("naïve"),
+				},
+				expected: "NAÏVE",
+			},
+			{
+				name: "résumé lowercase",
+				args: []*values.Value{
+					values.NewString("résumé"),
+				},
+				expected: "RÉSUMÉ",
+			},
+
+			// German umlauts
+			{
+				name: "german umlaut",
+				args: []*values.Value{
+					values.NewString("münchen"),
+				},
+				expected: "MÜNCHEN",
+			},
+
+			// Nordic characters
+			{
+				name: "nordic characters",
+				args: []*values.Value{
+					values.NewString("øæå"),
+				},
+				expected: "ØÆÅ",
+			},
+
+			// Greek alphabet
+			{
+				name: "greek letters",
+				args: []*values.Value{
+					values.NewString("αβγδ"),
+				},
+				expected: "ΑΒΓΔ",
+			},
+
+			// Cyrillic
+			{
+				name: "cyrillic russian",
+				args: []*values.Value{
+					values.NewString("привет"),
+				},
+				expected: "ПРИВЕТ",
+			},
+
+			// Single characters
+			{
+				name: "single lowercase a",
+				args: []*values.Value{
+					values.NewString("a"),
+				},
+				expected: "A",
+			},
+			{
+				name: "single lowercase z",
+				args: []*values.Value{
+					values.NewString("z"),
+				},
+				expected: "Z",
+			},
+			{
+				name: "single accented",
+				args: []*values.Value{
+					values.NewString("ñ"),
+				},
+				expected: "Ñ",
+			},
+
+			// Whitespace preservation
+			{
+				name: "spaces preserved",
+				args: []*values.Value{
+					values.NewString("  hello  "),
+				},
+				expected: "  HELLO  ",
+			},
+			{
+				name: "newline preserved",
+				args: []*values.Value{
+					values.NewString("hello\nworld"),
+				},
+				expected: "HELLO\nWORLD",
+			},
+			{
+				name: "tab preserved",
+				args: []*values.Value{
+					values.NewString("hello\tworld"),
+				},
+				expected: "HELLO\tWORLD",
+			},
+
+			// Real world examples
+			{
+				name: "mixed content with numbers",
+				args: []*values.Value{
+					values.NewString("hello 123 world!"),
+				},
+				expected: "HELLO 123 WORLD!",
+			},
+			{
+				name: "restaurant example",
+				args: []*values.Value{
+					values.NewString("café & restaurant"),
+				},
+				expected: "CAFÉ & RESTAURANT",
+			},
+			{
+				name: "technical terms",
+				args: []*values.Value{
+					values.NewString("html & css"),
+				},
+				expected: "HTML & CSS",
+			},
+
+			// Longer strings
+			{
+				name: "pangram",
+				args: []*values.Value{
+					values.NewString("the quick brown fox jumps over the lazy dog"),
+				},
+				expected: "THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG",
+			},
+
+			// Special Unicode case: German sharp s conversion
+			{
+				name: "german sharp s conversion",
+				args: []*values.Value{
+					values.NewString("ß"),
+				},
+				expected: "SS",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := mbStrtoupperFunc.Builtin(nil, tt.args)
+				if err != nil {
+					t.Fatalf("mb_strtoupper() error = %v", err)
+				}
+				if result.Type != values.TypeString {
+					t.Fatalf("mb_strtoupper() returned %s, want string", result.Type)
+				}
+				if result.Data.(string) != tt.expected {
+					t.Errorf("mb_strtoupper() = %q, want %q", result.Data.(string), tt.expected)
+				}
+			})
+		}
+	})
 }

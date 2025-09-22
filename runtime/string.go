@@ -2660,6 +2660,33 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(string(result)), nil
 			},
 		},
+		{
+			Name: "mb_strtoupper",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs: 1, MaxArgs: 1, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+
+				// Convert string to runes for proper Unicode handling
+				runes := []rune(str)
+				var result []rune
+
+				// Convert each rune to uppercase using Unicode rules
+				for _, r := range runes {
+					// Special case: German sharp s (ß) converts to SS
+					if r == 'ß' {
+						result = append(result, 'S', 'S')
+					} else {
+						result = append(result, unicode.ToUpper(r))
+					}
+				}
+
+				return values.NewString(string(result)), nil
+			},
+		},
 	}
 }
 
