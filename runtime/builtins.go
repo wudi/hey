@@ -61,6 +61,9 @@ func GetAllBuiltinClasses() []*registry.ClassDescriptor {
 	// Add classes from iterator module
 	classes = append(classes, GetIteratorClasses()...)
 
+	// Add classes from concurrency module
+	classes = append(classes, GetConcurrencyClasses()...)
+
 	return classes
 }
 

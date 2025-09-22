@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -6344,6 +6345,489 @@ func BenchmarkWaitGroupOperations(b *testing.B) {
 			}
 		})
 	})
+}
+
+// TestGoFunctionRealExecution tests that go() function actually executes goroutines concurrently
+func TestGoFunctionRealExecution(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Create a test function that modifies a shared counter
+	counter := int64(0)
+	var mu sync.Mutex
+
+	testFunc := &registry.Function{
+		Name:       "test_goroutine_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "void",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			mu.Lock()
+			counter++
+			mu.Unlock()
+			return values.NewNull(), nil
+		},
+	}
+
+	// Create closure
+	closure := &values.Closure{
+		Function:  testFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "test_closure",
+	}
+	closureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: closure,
+	}
+
+	// Get the go() function
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+	require.NotNil(t, goFunc, "go() function should be registered")
+
+	// Launch multiple goroutines
+	numGoroutines := 5
+	for i := 0; i < numGoroutines; i++ {
+		result, err := goFunc.Builtin(nil, []*values.Value{closureVal})
+		require.NoError(t, err, "go() function should not error")
+		require.True(t, result.IsGoroutine(), "go() should return a goroutine")
+	}
+
+	// Wait a bit for goroutines to execute
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify the counter was incremented by all goroutines
+	mu.Lock()
+	finalCounter := counter
+	mu.Unlock()
+
+	assert.Equal(t, int64(numGoroutines), finalCounter, "All goroutines should have executed")
+}
+
+// TestGoFunctionErrorHandling tests error scenarios in goroutine execution
+func TestGoFunctionErrorHandling(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	// Test 1: No arguments
+	_, err = goFunc.Builtin(nil, []*values.Value{})
+	assert.Error(t, err, "go() should error with no arguments")
+	assert.Contains(t, err.Error(), "at least one argument")
+
+	// Test 2: Non-callable argument
+	nonCallable := values.NewString("not_callable")
+	_, err = goFunc.Builtin(nil, []*values.Value{nonCallable})
+	assert.Error(t, err, "go() should error with non-callable argument")
+	assert.Contains(t, err.Error(), "callable")
+
+	// Test 3: Nil closure
+	nilClosure := &values.Value{
+		Type: values.TypeCallable,
+		Data: nil,
+	}
+	_, err = goFunc.Builtin(nil, []*values.Value{nilClosure})
+	assert.Error(t, err, "go() should error with nil closure data")
+}
+
+// TestGoFunctionWithCapture tests variable capture in goroutines
+func TestGoFunctionWithCapture(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Create test data
+	testString := values.NewString("captured_value")
+	testInt := values.NewInt(42)
+
+	// Create a simple test closure
+	testFunc := &registry.Function{
+		Name:       "test_capture_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "void",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// This function doesn't use the captured variables directly
+			// but the go() function should store them in the goroutine
+			return values.NewString("execution_result"), nil
+		},
+	}
+
+	closure := &values.Closure{
+		Function:  testFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "capture_test_closure",
+	}
+	closureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: closure,
+	}
+
+	// Get the go() function
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	// Call go() with captured variables
+	args := []*values.Value{closureVal, testString, testInt}
+	result, err := goFunc.Builtin(nil, args)
+	require.NoError(t, err, "go() should not error with captured variables")
+	require.True(t, result.IsGoroutine(), "go() should return a goroutine")
+
+	// Verify captured variables are stored
+	gor := result.Data.(*values.Goroutine)
+	assert.Equal(t, 2, len(gor.UseVars), "Should have 2 captured variables")
+	assert.Equal(t, "captured_value", gor.UseVars["var_0"].ToString())
+	assert.Equal(t, int64(42), gor.UseVars["var_1"].ToInt())
+}
+
+// TestGoroutineStatusTracking tests goroutine status changes during execution
+func TestGoroutineStatusTracking(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	executionStarted := make(chan bool, 1)
+	executionCompleted := make(chan bool, 1)
+
+	// Create a test function that signals execution stages
+	testFunc := &registry.Function{
+		Name:       "status_test_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "string",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			executionStarted <- true
+			time.Sleep(50 * time.Millisecond) // Simulate work
+			executionCompleted <- true
+			return values.NewString("completed"), nil
+		},
+	}
+
+	closure := &values.Closure{
+		Function:  testFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "status_test_closure",
+	}
+	closureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: closure,
+	}
+
+	// Launch goroutine
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+	result, err := goFunc.Builtin(nil, []*values.Value{closureVal})
+	require.NoError(t, err)
+	require.True(t, result.IsGoroutine())
+
+	gor := result.Data.(*values.Goroutine)
+
+	// Initially should be running
+	assert.Equal(t, "running", gor.Status)
+
+	// Wait for execution to start
+	select {
+	case <-executionStarted:
+		// Good, execution started
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Goroutine execution did not start in time")
+	}
+
+	// Wait for completion
+	select {
+	case <-executionCompleted:
+		// Good, execution completed
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Goroutine execution did not complete in time")
+	}
+
+	// Wait for Done channel to be closed
+	select {
+	case <-gor.Done:
+		// Goroutine completed
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Goroutine Done channel was not closed")
+	}
+
+	// Status should be updated to completed
+	assert.Equal(t, "completed", gor.Status)
+	assert.Equal(t, "completed", gor.Result.ToString())
+}
+
+// TestGoroutineErrorRecovery tests error handling and panic recovery in goroutines
+func TestGoroutineErrorRecovery(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Test 1: Function that returns an error
+	errorFunc := &registry.Function{
+		Name:       "error_test_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "void",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			return nil, fmt.Errorf("test error from goroutine")
+		},
+	}
+
+	errorClosure := &values.Closure{
+		Function:  errorFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "error_test_closure",
+	}
+	errorClosureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: errorClosure,
+	}
+
+	// Launch goroutine that will error
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+	result, err := goFunc.Builtin(nil, []*values.Value{errorClosureVal})
+	require.NoError(t, err)
+	require.True(t, result.IsGoroutine())
+
+	gor := result.Data.(*values.Goroutine)
+
+	// Wait for goroutine to complete
+	select {
+	case <-gor.Done:
+		// Goroutine completed
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Goroutine did not complete in time")
+	}
+
+	// Should have error status
+	assert.Equal(t, "error", gor.Status)
+	assert.NotNil(t, gor.Error)
+	assert.Contains(t, gor.Error.Error(), "test error from goroutine")
+
+	// Test 2: Function that panics (simulated)
+	panicFunc := &registry.Function{
+		Name:       "panic_test_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "void",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// Simulate a panic by triggering a runtime error
+			panic("test panic from goroutine")
+		},
+	}
+
+	panicClosure := &values.Closure{
+		Function:  panicFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "panic_test_closure",
+	}
+	panicClosureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: panicClosure,
+	}
+
+	// Launch goroutine that will panic
+	result2, err := goFunc.Builtin(nil, []*values.Value{panicClosureVal})
+	require.NoError(t, err)
+	require.True(t, result2.IsGoroutine())
+
+	gor2 := result2.Data.(*values.Goroutine)
+
+	// Wait for goroutine to complete
+	select {
+	case <-gor2.Done:
+		// Goroutine completed with panic recovery
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("Goroutine did not complete in time")
+	}
+
+	// Should have error status from panic recovery
+	assert.Equal(t, "error", gor2.Status)
+	assert.NotNil(t, gor2.Error)
+	assert.Contains(t, gor2.Error.Error(), "goroutine panic")
+}
+
+// TestConcurrentGoroutineExecution tests multiple goroutines running concurrently
+func TestConcurrentGoroutineExecution(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	numGoroutines := 10
+	results := make(chan int, numGoroutines)
+	var startTime time.Time
+
+	// Create a test function that records execution time
+	testFunc := &registry.Function{
+		Name:       "concurrent_test_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "int",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// Record that this goroutine started
+			elapsed := time.Since(startTime)
+			results <- int(elapsed.Milliseconds())
+			time.Sleep(50 * time.Millisecond) // Simulate work
+			return values.NewInt(1), nil
+		},
+	}
+
+	closure := &values.Closure{
+		Function:  testFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "concurrent_test_closure",
+	}
+	closureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: closure,
+	}
+
+	// Launch multiple goroutines concurrently
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	startTime = time.Now()
+	var goroutines []*values.Value
+
+	for i := 0; i < numGoroutines; i++ {
+		result, err := goFunc.Builtin(nil, []*values.Value{closureVal})
+		require.NoError(t, err)
+		require.True(t, result.IsGoroutine())
+		goroutines = append(goroutines, result)
+	}
+
+	// Collect start times
+	startTimes := make([]int, 0, numGoroutines)
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case startTime := <-results:
+			startTimes = append(startTimes, startTime)
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("Not all goroutines started in time")
+		}
+	}
+
+	// Verify that goroutines started concurrently (within a reasonable timeframe)
+	// All should start within 50ms of each other if truly concurrent
+	maxStartTime := 0
+	for _, st := range startTimes {
+		if st > maxStartTime {
+			maxStartTime = st
+		}
+	}
+
+	assert.Less(t, maxStartTime, 50, "All goroutines should start within 50ms (concurrent execution)")
+
+	// Wait for all goroutines to complete
+	for _, gor := range goroutines {
+		gorData := gor.Data.(*values.Goroutine)
+		select {
+		case <-gorData.Done:
+			// Goroutine completed
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("Goroutine did not complete in time")
+		}
+	}
+}
+
+// TestGoFunctionWithWaitGroup tests integration between go() function and WaitGroup
+func TestGoFunctionWithWaitGroup(t *testing.T) {
+	// Initialize runtime
+	err := runtime2.Bootstrap()
+	require.NoError(t, err, "Failed to bootstrap runtime")
+
+	// Create a WaitGroup
+	wg := values.NewWaitGroup()
+	err = wg.WaitGroupAdd(3)
+	require.NoError(t, err)
+
+	// Counter to track goroutine executions
+	counter := int64(0)
+	var mu sync.Mutex
+
+	// Create a test function that uses WaitGroup
+	testFunc := &registry.Function{
+		Name:       "waitgroup_test_func",
+		Parameters: []*registry.Parameter{},
+		ReturnType: "void",
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// Simulate work
+			time.Sleep(10 * time.Millisecond)
+
+			// Update counter
+			mu.Lock()
+			counter++
+			mu.Unlock()
+
+			// Signal completion to WaitGroup
+			err := wg.WaitGroupDone()
+			if err != nil {
+				return nil, err
+			}
+
+			return values.NewNull(), nil
+		},
+	}
+
+	closure := &values.Closure{
+		Function:  testFunc,
+		BoundVars: make(map[string]*values.Value),
+		Name:      "waitgroup_test_closure",
+	}
+	closureVal := &values.Value{
+		Type: values.TypeCallable,
+		Data: closure,
+	}
+
+	// Launch 3 goroutines
+	functions := runtime2.GlobalRegistry.GetAllFunctions()
+	goFunc := functions["go"]
+
+	var goroutines []*values.Value
+	for i := 0; i < 3; i++ {
+		result, err := goFunc.Builtin(nil, []*values.Value{closureVal})
+		require.NoError(t, err)
+		require.True(t, result.IsGoroutine())
+		goroutines = append(goroutines, result)
+	}
+
+	// Wait for all goroutines to complete using WaitGroup
+	waitCompleted := make(chan bool, 1)
+	go func() {
+		err := wg.WaitGroupWait()
+		assert.NoError(t, err)
+		waitCompleted <- true
+	}()
+
+	// Verify WaitGroup completes within reasonable time
+	select {
+	case <-waitCompleted:
+		// All goroutines completed successfully
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("WaitGroup.Wait() timed out - goroutines may not have executed properly")
+	}
+
+	// Verify all goroutines actually executed
+	mu.Lock()
+	finalCounter := counter
+	mu.Unlock()
+
+	assert.Equal(t, int64(3), finalCounter, "All 3 goroutines should have executed")
+
+	// Verify all goroutines are marked as completed
+	for i, gor := range goroutines {
+		gorData := gor.Data.(*values.Goroutine)
+		select {
+		case <-gorData.Done:
+			// Goroutine completed
+		case <-time.After(100 * time.Millisecond):
+			t.Fatalf("Goroutine %d did not complete", i)
+		}
+	}
 }
 
 // TestGeneratorImplementation tests comprehensive generator functionality including loops
