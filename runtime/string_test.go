@@ -3774,4 +3774,163 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("hash", func(t *testing.T) {
+		// Find the hash function
+		var hashFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "hash" {
+				hashFunc = f
+				break
+			}
+		}
+
+		if hashFunc == nil {
+			t.Fatal("hash function not found")
+		}
+
+		tests := []struct {
+			name     string
+			args     []*values.Value
+			expected string
+		}{
+			// MD5 tests
+			{
+				name: "md5 hello",
+				args: []*values.Value{
+					values.NewString("md5"),
+					values.NewString("hello"),
+				},
+				expected: "5d41402abc4b2a76b9719d911017c592",
+			},
+			{
+				name: "md5 empty string",
+				args: []*values.Value{
+					values.NewString("md5"),
+					values.NewString(""),
+				},
+				expected: "d41d8cd98f00b204e9800998ecf8427e",
+			},
+			{
+				name: "md5 single char",
+				args: []*values.Value{
+					values.NewString("md5"),
+					values.NewString("a"),
+				},
+				expected: "0cc175b9c0f1b6a831c399e269772661",
+			},
+
+			// SHA1 tests
+			{
+				name: "sha1 hello",
+				args: []*values.Value{
+					values.NewString("sha1"),
+					values.NewString("hello"),
+				},
+				expected: "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d",
+			},
+			{
+				name: "sha1 empty string",
+				args: []*values.Value{
+					values.NewString("sha1"),
+					values.NewString(""),
+				},
+				expected: "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+			},
+
+			// SHA256 tests
+			{
+				name: "sha256 hello",
+				args: []*values.Value{
+					values.NewString("sha256"),
+					values.NewString("hello"),
+				},
+				expected: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+			},
+			{
+				name: "sha256 empty string",
+				args: []*values.Value{
+					values.NewString("sha256"),
+					values.NewString(""),
+				},
+				expected: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+			},
+
+			// SHA512 tests
+			{
+				name: "sha512 hello",
+				args: []*values.Value{
+					values.NewString("sha512"),
+					values.NewString("hello"),
+				},
+				expected: "9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043",
+			},
+
+			// Case sensitivity
+			{
+				name: "md5 case sensitive",
+				args: []*values.Value{
+					values.NewString("md5"),
+					values.NewString("Hello"),
+				},
+				expected: "8b1a9953c4611296a827abf8c47804d7",
+			},
+
+			// Special characters
+			{
+				name: "md5 special chars",
+				args: []*values.Value{
+					values.NewString("md5"),
+					values.NewString("!@#$%^&*()"),
+				},
+				expected: "05b28d17a7b6e7024b6e5d8cc43a8bf7",
+			},
+
+			// Unicode characters
+			{
+				name: "md5 unicode",
+				args: []*values.Value{
+					values.NewString("md5"),
+					values.NewString("café"),
+				},
+				expected: "07117fe4a1ebd544965dc19573183da2",
+			},
+
+			// Longer strings
+			{
+				name: "md5 pangram",
+				args: []*values.Value{
+					values.NewString("md5"),
+					values.NewString("The quick brown fox jumps over the lazy dog"),
+				},
+				expected: "9e107d9d372bb6826bd81d3542a419d6",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := hashFunc.Builtin(nil, tt.args)
+				if err != nil {
+					t.Fatalf("hash() error = %v", err)
+				}
+				if result.Type != values.TypeString {
+					t.Fatalf("hash() returned %s, want string", result.Type)
+				}
+				if result.Data.(string) != tt.expected {
+					t.Errorf("hash() = %q, want %q", result.Data.(string), tt.expected)
+				}
+			})
+		}
+
+		// Test invalid algorithm
+		t.Run("invalid algorithm", func(t *testing.T) {
+			_, err := hashFunc.Builtin(nil, []*values.Value{
+				values.NewString("invalid_algo"),
+				values.NewString("test"),
+			})
+			if err == nil {
+				t.Error("Expected error for invalid algorithm, got nil")
+			}
+		})
+	})
 }

@@ -3,9 +3,12 @@ package runtime
 import (
 	"crypto/md5"
 	"crypto/sha1"
+	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"hash/crc32"
 	"math"
 	"math/rand"
@@ -2524,6 +2527,24 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewInt(int64(distance)), nil
 			},
 		},
+		{
+			Name: "hash",
+			Parameters: []*registry.Parameter{
+				{Name: "algo", Type: "string"},
+				{Name: "data", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs: 2, MaxArgs: 2, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				algo := args[0].Data.(string)
+				data := args[1].Data.(string)
+				result, err := calculateHash(algo, data)
+				if err != nil {
+					return nil, err
+				}
+				return values.NewString(result), nil
+			},
+		},
 	}
 }
 
@@ -3673,4 +3694,41 @@ func min(a, b, c int) int {
 		return b
 	}
 	return c
+}
+
+// calculateHash implements the hash() function with support for multiple algorithms
+func calculateHash(algo, data string) (string, error) {
+	var hasher hash.Hash
+
+	// Convert algorithm name to lowercase for case-insensitive matching
+	algo = strings.ToLower(algo)
+
+	// Select the appropriate hash algorithm
+	switch algo {
+	case "md5":
+		hasher = md5.New()
+	case "sha1":
+		hasher = sha1.New()
+	case "sha224":
+		hasher = sha256.New224()
+	case "sha256":
+		hasher = sha256.New()
+	case "sha384":
+		hasher = sha512.New384()
+	case "sha512":
+		hasher = sha512.New()
+	case "sha512/224":
+		hasher = sha512.New512_224()
+	case "sha512/256":
+		hasher = sha512.New512_256()
+	default:
+		return "", fmt.Errorf("hash(): Unknown hashing algorithm: %s", algo)
+	}
+
+	// Hash the data
+	hasher.Write([]byte(data))
+	hashBytes := hasher.Sum(nil)
+
+	// Return as lowercase hexadecimal string
+	return hex.EncodeToString(hashBytes), nil
 }
