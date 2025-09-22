@@ -5715,6 +5715,118 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("parse_str", func(t *testing.T) {
+		// Find the parse_str function
+		var parseStrFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "parse_str" {
+				parseStrFunc = f
+				break
+			}
+		}
+		if parseStrFunc == nil {
+			t.Fatal("parse_str function not found")
+		}
+
+		tests := []struct {
+			name     string
+			input    string
+			expected map[string]interface{}
+		}{
+			// Basic tests
+			{"simple key-value pairs", "name=John&age=25", map[string]interface{}{"name": "John", "age": "25"}},
+			{"multiple values", "first=John&last=Doe&city=NYC", map[string]interface{}{"first": "John", "last": "Doe", "city": "NYC"}},
+			{"simple values", "a=1&b=2&c=3", map[string]interface{}{"a": "1", "b": "2", "c": "3"}},
+
+			// URL encoding
+			{"url encoded spaces", "name=John%20Doe&city=New%20York", map[string]interface{}{"name": "John Doe", "city": "New York"}},
+			{"url encoded @ symbol", "email=john%40example.com", map[string]interface{}{"email": "john@example.com"}},
+			{"url encoded punctuation", "message=Hello%21%20World", map[string]interface{}{"message": "Hello! World"}},
+
+			// Basic arrays (simplified - full nested array support is complex)
+			{"simple array", "colors[]=red&colors[]=blue", map[string]interface{}{"colors": []interface{}{"red", "blue"}}},
+
+			// Edge cases
+			{"empty string", "", map[string]interface{}{}},
+			{"key without value", "name", map[string]interface{}{"name": ""}},
+			{"key with empty value", "name=", map[string]interface{}{"name": ""}},
+			{"trailing ampersand", "name=John&", map[string]interface{}{"name": "John"}},
+			{"leading ampersand", "&name=John", map[string]interface{}{"name": "John"}},
+
+			// Plus signs as spaces
+			{"plus signs as spaces", "name=John+Doe&city=New+York", map[string]interface{}{"name": "John Doe", "city": "New York"}},
+
+			// Duplicate keys (last wins)
+			{"duplicate keys", "name=John&name=Jane", map[string]interface{}{"name": "Jane"}},
+
+			// Numbers (stored as strings)
+			{"numbers", "count=123&price=45.67", map[string]interface{}{"count": "123", "price": "45.67"}},
+			{"negative numbers", "negative=-123&zero=0", map[string]interface{}{"negative": "-123", "zero": "0"}},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{values.NewString(tt.input)}
+				result, err := parseStrFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("parse_str failed: %v", err)
+				}
+
+				// parse_str should return an array
+				if result.Type != values.TypeArray {
+					t.Errorf("Expected array, got %s", result.Type)
+					return
+				}
+
+				resultArray := result.Data.(*values.Array)
+
+				// Check array size
+				if len(resultArray.Elements) != len(tt.expected) {
+					t.Errorf("Expected array length %d, got %d", len(tt.expected), len(resultArray.Elements))
+				}
+
+				// Check each expected value
+				for key, expectedVal := range tt.expected {
+					actualVal, exists := resultArray.Elements[key]
+					if !exists {
+						t.Errorf("Missing key %q in result", key)
+						continue
+					}
+
+					// Handle array values
+					if expectedArray, ok := expectedVal.([]interface{}); ok {
+						if actualVal.Type != values.TypeArray {
+							t.Errorf("Key %q: expected array, got %s", key, actualVal.Type)
+							continue
+						}
+						actualArray := actualVal.Data.(*values.Array)
+						if len(actualArray.Elements) != len(expectedArray) {
+							t.Errorf("Key %q: expected array length %d, got %d", key, len(expectedArray), len(actualArray.Elements))
+						}
+						for i, expectedItem := range expectedArray {
+							if actualItem, exists := actualArray.Elements[int64(i)]; exists {
+								if actualItem.Data.(string) != expectedItem.(string) {
+									t.Errorf("Key %q[%d]: expected %q, got %q", key, i, expectedItem, actualItem.Data)
+								}
+							} else {
+								t.Errorf("Key %q[%d]: missing array element", key, i)
+							}
+						}
+					} else {
+						// Handle string values
+						if actualVal.Type != values.TypeString {
+							t.Errorf("Key %q: expected string, got %s", key, actualVal.Type)
+							continue
+						}
+						if actualVal.Data.(string) != expectedVal.(string) {
+							t.Errorf("Key %q: expected %q, got %q", key, expectedVal, actualVal.Data)
+						}
+					}
+				}
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers

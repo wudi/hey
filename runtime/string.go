@@ -9,6 +9,7 @@ import (
 	"hash/crc32"
 	"math"
 	"math/rand"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -2480,6 +2481,19 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(shuffled), nil
 			},
 		},
+		{
+			Name: "parse_str",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "array",
+			MinArgs: 1, MaxArgs: 1, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				result := parseQueryString(str)
+				return result, nil
+			},
+		},
 	}
 }
 
@@ -2526,6 +2540,82 @@ func shuffleString(str string) string {
 	}
 
 	return string(runes)
+}
+
+// parseQueryString implements the parse_str() function logic
+func parseQueryString(queryStr string) *values.Value {
+	result := values.NewArray()
+	resultArray := result.Data.(*values.Array)
+
+	if queryStr == "" {
+		return result
+	}
+
+	// Split by & and process each pair
+	pairs := strings.Split(queryStr, "&")
+	for _, pair := range pairs {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+
+		// Split by = to get key and value
+		var key, value string
+		if idx := strings.Index(pair, "="); idx >= 0 {
+			key = pair[:idx]
+			value = pair[idx+1:]
+		} else {
+			key = pair
+			value = ""
+		}
+
+		// Skip empty keys
+		if key == "" {
+			continue
+		}
+
+		// URL decode key and value
+		key = urlDecode(key)
+		value = urlDecode(value)
+
+		// Handle array notation (simplified)
+		if strings.HasSuffix(key, "[]") {
+			// Simple array: key[] = value
+			arrayKey := key[:len(key)-2]
+			if existing, exists := resultArray.Elements[arrayKey]; exists && existing.Type == values.TypeArray {
+				// Append to existing array
+				existingArray := existing.Data.(*values.Array)
+				nextIndex := existingArray.NextIndex
+				existingArray.Elements[nextIndex] = values.NewString(value)
+				existingArray.NextIndex++
+			} else {
+				// Create new array
+				newArray := values.NewArray()
+				newArrayData := newArray.Data.(*values.Array)
+				newArrayData.Elements[int64(0)] = values.NewString(value)
+				newArrayData.NextIndex = 1
+				resultArray.Elements[arrayKey] = newArray
+			}
+		} else {
+			// Simple key-value pair
+			resultArray.Elements[key] = values.NewString(value)
+		}
+	}
+
+	return result
+}
+
+// urlDecode decodes URL-encoded strings (like PHP's parse_str)
+func urlDecode(s string) string {
+	// First replace + with spaces (application/x-www-form-urlencoded format)
+	s = strings.ReplaceAll(s, "+", " ")
+
+	// Then URL decode
+	decoded, err := url.QueryUnescape(s)
+	if err != nil {
+		return s // Return original if decoding fails
+	}
+	return decoded
 }
 
 // sscanfParse implements the sscanf() function logic
