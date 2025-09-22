@@ -4853,6 +4853,127 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("html_entity_decode", func(t *testing.T) {
+		// Find the html_entity_decode function
+		var htmlEntityDecodeFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "html_entity_decode" {
+				htmlEntityDecodeFunc = f
+				break
+			}
+		}
+		if htmlEntityDecodeFunc == nil {
+			t.Fatal("html_entity_decode function not found")
+		}
+
+		tests := []struct {
+			name     string
+			input    string
+			flags    *int
+			charset  *string
+			expected string
+		}{
+			// Basic HTML entities
+			{"ampersand entity", "&amp;", nil, nil, "&"},
+			{"less than entity", "&lt;", nil, nil, "<"},
+			{"greater than entity", "&gt;", nil, nil, ">"},
+			{"quote entity", "&quot;", nil, nil, "\""},
+			{"apostrophe entity default", "&apos;", nil, nil, "&apos;"}, // Not decoded with ENT_COMPAT
+
+			// Numeric entities
+			{"decimal A", "&#65;", nil, nil, "A"},
+			{"hex A", "&#x41;", nil, nil, "A"},
+			{"euro symbol decimal", "&#8364;", nil, nil, "€"},
+			{"euro symbol hex", "&#x20AC;", nil, nil, "€"},
+
+			// Named entities
+			{"copyright", "&copy;", nil, nil, "©"},
+			{"registered", "&reg;", nil, nil, "®"},
+			{"trademark", "&trade;", nil, nil, "™"},
+			{"non-breaking space", "&nbsp;", nil, nil, "\u00a0"},
+			{"euro symbol", "&euro;", nil, nil, "€"},
+
+			// Multiple entities
+			{"HTML tag", "&lt;tag&gt;", nil, nil, "<tag>"},
+			{"quoted text", "&quot;Hello&quot;", nil, nil, "\"Hello\""},
+			{"multiple ampersands", "A&amp;B&amp;C", nil, nil, "A&B&C"},
+
+			// Mixed content
+			{"mixed text", "Hello &amp; goodbye", nil, nil, "Hello & goodbye"},
+			{"price with euro", "Price: &euro;100", nil, nil, "Price: €100"},
+
+			// Edge cases
+			{"empty string", "", nil, nil, ""},
+			{"no entities", "no entities here", nil, nil, "no entities here"},
+			{"lone ampersand", "&", nil, nil, "&"},
+			{"invalid entity", "&invalid;", nil, nil, "&invalid;"},
+			{"incomplete entity", "&amp", nil, nil, "&amp"},
+
+			// HTML5 entities
+			{"ellipsis", "&hellip;", nil, nil, "…"},
+			{"em dash", "&mdash;", nil, nil, "—"},
+			{"en dash", "&ndash;", nil, nil, "–"},
+			{"left angle quote", "&laquo;", nil, nil, "«"},
+			{"right angle quote", "&raquo;", nil, nil, "»"},
+
+			// Case sensitivity
+			{"uppercase AMP", "&AMP;", nil, nil, "&AMP;"},
+			{"mixed case Lt", "&Lt;", nil, nil, "&Lt;"},
+
+			// Double encoding
+			{"double encoded ampersand", "&amp;amp;", nil, nil, "&amp;"},
+			{"double encoded less than", "&amp;lt;", nil, nil, "&lt;"},
+
+			// Partial entities
+			{"entity with extra text", "&amp;extra", nil, nil, "&extra"},
+			{"entity in middle", "start&amp;end", nil, nil, "start&end"},
+
+			// Additional Unicode entities
+			{"acute accent", "&aacute;", nil, nil, "á"},
+			{"grave accent", "&agrave;", nil, nil, "à"},
+			{"circumflex", "&acirc;", nil, nil, "â"},
+			{"tilde", "&atilde;", nil, nil, "ã"},
+			{"umlaut", "&auml;", nil, nil, "ä"},
+			{"ring", "&aring;", nil, nil, "å"},
+			{"cedilla", "&ccedil;", nil, nil, "ç"},
+			{"eszett", "&szlig;", nil, nil, "ß"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				args := []*values.Value{values.NewString(tt.input)}
+
+				// Add flags parameter if specified
+				if tt.flags != nil {
+					args = append(args, values.NewInt(int64(*tt.flags)))
+				}
+
+				// Add charset parameter if specified
+				if tt.charset != nil {
+					if len(args) == 1 {
+						// Add default flags if charset is specified but flags is not
+						args = append(args, values.NewInt(0)) // ENT_COMPAT
+					}
+					args = append(args, values.NewString(*tt.charset))
+				}
+
+				result, err := htmlEntityDecodeFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("html_entity_decode failed: %v", err)
+				}
+
+				if result.Type != values.TypeString {
+					t.Fatalf("Expected string result, got %s", result.Type)
+				}
+
+				resultStr := result.Data.(string)
+				if resultStr != tt.expected {
+					t.Errorf("Expected %q, got %q", tt.expected, resultStr)
+				}
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers

@@ -2303,6 +2303,37 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(result), nil
 			},
 		},
+		// html_entity_decode() - Decode HTML entities
+		{
+			Name: "html_entity_decode",
+			Parameters: []*registry.Parameter{
+				{Name: "string", Type: "string"},
+				{Name: "flags", Type: "int", HasDefault: true, DefaultValue: values.NewInt(0)}, // ENT_COMPAT is default (0)
+				{Name: "encoding", Type: "string", HasDefault: true, DefaultValue: values.NewString("UTF-8")},
+			},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    3,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+
+				// Get optional parameters
+				flags := int64(0) // ENT_COMPAT
+				if len(args) > 1 {
+					flags = args[1].Data.(int64)
+				}
+
+				encoding := "UTF-8"
+				if len(args) > 2 {
+					encoding = args[2].Data.(string)
+				}
+				_ = encoding // Ignore encoding for now, assume UTF-8
+
+				result := htmlEntityDecodeString(str, flags)
+				return values.NewString(result), nil
+			},
+		},
 	}
 }
 
@@ -2737,4 +2768,145 @@ func hexToNibble(r rune) byte {
 		return byte(r - 'a' + 10)
 	}
 	return 0
+}
+
+// htmlEntityDecodeString decodes HTML entities in a string
+func htmlEntityDecodeString(str string, flags int64) string {
+	if str == "" {
+		return str
+	}
+
+	var result strings.Builder
+	result.Grow(len(str))
+
+	runes := []rune(str)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == '&' {
+			// Look for entity
+			entityEnd := -1
+			for j := i + 1; j < len(runes) && j < i+10; j++ { // Max entity length around 10
+				if runes[j] == ';' {
+					entityEnd = j
+					break
+				}
+				if runes[j] == '&' || runes[j] == ' ' {
+					break // Invalid entity
+				}
+			}
+
+			if entityEnd > i+1 {
+				entity := string(runes[i:entityEnd+1])
+				decoded := decodeHTMLEntity(entity, flags)
+				if decoded != entity {
+					// Successfully decoded
+					result.WriteString(decoded)
+					i = entityEnd
+					continue
+				}
+			}
+		}
+
+		// Not an entity or failed to decode, keep original character
+		result.WriteRune(runes[i])
+	}
+
+	return result.String()
+}
+
+// decodeHTMLEntity decodes a single HTML entity
+func decodeHTMLEntity(entity string, flags int64) string {
+	if len(entity) < 3 || entity[0] != '&' || entity[len(entity)-1] != ';' {
+		return entity
+	}
+
+	entityBody := entity[1 : len(entity)-1]
+
+	// Handle numeric entities
+	if len(entityBody) > 0 && entityBody[0] == '#' {
+		if len(entityBody) == 1 {
+			return entity
+		}
+
+		numStr := entityBody[1:]
+		var codePoint int64
+		var err error
+
+		if len(numStr) > 1 && (numStr[0] == 'x' || numStr[0] == 'X') {
+			// Hexadecimal entity
+			codePoint, err = strconv.ParseInt(numStr[1:], 16, 32)
+		} else {
+			// Decimal entity
+			codePoint, err = strconv.ParseInt(numStr, 10, 32)
+		}
+
+		if err == nil && codePoint >= 0 && codePoint <= 0x10FFFF {
+			return string(rune(codePoint))
+		}
+		return entity
+	}
+
+	// Handle named entities
+	switch entityBody {
+	case "amp":
+		return "&"
+	case "lt":
+		return "<"
+	case "gt":
+		return ">"
+	case "quot":
+		return "\""
+	case "apos":
+		// apos is only decoded with ENT_QUOTES flag (not in PHP's default ENT_COMPAT)
+		return entity // Default behavior doesn't decode apos
+	case "nbsp":
+		return "\u00a0"
+	case "copy":
+		return "©"
+	case "reg":
+		return "®"
+	case "trade":
+		return "™"
+	case "euro":
+		return "€"
+	case "hellip":
+		return "…"
+	case "mdash":
+		return "—"
+	case "ndash":
+		return "–"
+	case "laquo":
+		return "«"
+	case "raquo":
+		return "»"
+	case "aacute":
+		return "á"
+	case "agrave":
+		return "à"
+	case "acirc":
+		return "â"
+	case "atilde":
+		return "ã"
+	case "auml":
+		return "ä"
+	case "aring":
+		return "å"
+	case "ccedil":
+		return "ç"
+	case "szlig":
+		return "ß"
+	}
+
+	// Check against the reverse entity map
+	if char, exists := htmlDecodeMap[entityBody]; exists {
+		return string(char)
+	}
+
+	// Unknown entity, return as-is
+	return entity
+}
+
+// htmlDecodeMap maps entity names to their Unicode characters (reverse of htmlEntityMap)
+var htmlDecodeMap = map[string]rune{
+	// This would be populated with the reverse mapping of htmlEntityMap
+	// For now, we handle the most common ones in the switch statement above
 }
