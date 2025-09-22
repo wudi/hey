@@ -287,6 +287,147 @@ func (v *Value) ToBool() bool {
 	}
 }
 
+// phpStringToInt implements PHP's string to integer conversion rules
+// It parses the leading numeric part of a string, following PHP's exact behavior:
+// - Leading whitespace is ignored
+// - Parses optional sign (+/-)
+// - Parses digits and decimal point
+// - Stops at first non-numeric character
+// - Returns integer part of the parsed number
+func phpStringToInt(s string) int64 {
+	if s == "" {
+		return 0
+	}
+
+	// Skip leading whitespace
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+		i++
+	}
+
+	if i >= len(s) {
+		return 0 // Empty after trimming whitespace
+	}
+
+	// Parse sign
+	sign := int64(1)
+	if s[i] == '+' || s[i] == '-' {
+		if s[i] == '-' {
+			sign = -1
+		}
+		i++
+	}
+
+	if i >= len(s) {
+		return 0 // Only sign, no digits
+	}
+
+	// Parse digits and decimal point
+	var intPart int64
+	var fracPart int64
+	var fracDivisor int64 = 1
+	inFraction := false
+
+	for i < len(s) {
+		ch := s[i]
+		if ch >= '0' && ch <= '9' {
+			digit := int64(ch - '0')
+			if inFraction {
+				fracPart = fracPart*10 + digit
+				fracDivisor *= 10
+			} else {
+				// Check for overflow
+				if intPart > (9223372036854775807-digit)/10 {
+					// Would overflow, stop parsing
+					break
+				}
+				intPart = intPart*10 + digit
+			}
+		} else if ch == '.' && !inFraction {
+			inFraction = true
+		} else if ch == 'e' || ch == 'E' {
+			// For scientific notation like "1.23e2", we parse up to 'e' and ignore the rest
+			break
+		} else {
+			// Any other character stops parsing
+			break
+		}
+		i++
+	}
+
+	// Convert to integer (truncate decimal part, don't round)
+	result := intPart
+	return sign * result
+}
+
+// phpStringToFloat implements PHP's string to float conversion rules
+// Similar to phpStringToInt but returns float64 and handles scientific notation
+func phpStringToFloat(s string) float64 {
+	if s == "" {
+		return 0.0
+	}
+
+	// Skip leading whitespace
+	i := 0
+	for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r') {
+		i++
+	}
+
+	if i >= len(s) {
+		return 0.0
+	}
+
+	// Parse sign
+	sign := 1.0
+	if s[i] == '+' || s[i] == '-' {
+		if s[i] == '-' {
+			sign = -1.0
+		}
+		i++
+	}
+
+	if i >= len(s) {
+		return 0.0
+	}
+
+	// Find the end of the numeric part (including decimals and scientific notation)
+	start := i
+	hasDecimal := false
+	hasExponent := false
+
+	for i < len(s) {
+		ch := s[i]
+		if ch >= '0' && ch <= '9' {
+			// Digit is always valid
+		} else if ch == '.' && !hasDecimal && !hasExponent {
+			hasDecimal = true
+		} else if (ch == 'e' || ch == 'E') && !hasExponent && i > start {
+			hasExponent = true
+			// Look ahead to see if there's a sign after 'e'
+			if i+1 < len(s) && (s[i+1] == '+' || s[i+1] == '-') {
+				i++ // Skip the sign
+			}
+		} else {
+			// Any other character stops parsing
+			break
+		}
+		i++
+	}
+
+	// Extract the numeric part
+	numericPart := s[start:i]
+	if numericPart == "" {
+		return 0.0
+	}
+
+	// Try to parse as float
+	if f, err := strconv.ParseFloat(numericPart, 64); err == nil {
+		return sign * f
+	}
+
+	return 0.0
+}
+
 func (v *Value) ToInt() int64 {
 	switch v.Type {
 	case TypeNull:
@@ -301,18 +442,7 @@ func (v *Value) ToInt() int64 {
 	case TypeFloat:
 		return int64(v.Data.(float64))
 	case TypeString:
-		s := strings.TrimSpace(v.Data.(string))
-		if s == "" {
-			return 0
-		}
-		// PHP-style string to int conversion
-		if i, err := strconv.ParseInt(s, 10, 64); err == nil {
-			return i
-		}
-		if f, err := strconv.ParseFloat(s, 64); err == nil {
-			return int64(f)
-		}
-		return 0
+		return phpStringToInt(v.Data.(string))
 	case TypeArray:
 		arr := v.Data.(*Array)
 		return int64(len(arr.Elements))
@@ -337,14 +467,7 @@ func (v *Value) ToFloat() float64 {
 	case TypeFloat:
 		return v.Data.(float64)
 	case TypeString:
-		s := strings.TrimSpace(v.Data.(string))
-		if s == "" {
-			return 0.0
-		}
-		if f, err := strconv.ParseFloat(s, 64); err == nil {
-			return f
-		}
-		return 0.0
+		return phpStringToFloat(v.Data.(string))
 	case TypeArray:
 		arr := v.Data.(*Array)
 		return float64(len(arr.Elements))

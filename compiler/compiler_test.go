@@ -5594,23 +5594,128 @@ func TestInstanceofExpression(t *testing.T) {
 	}
 }
 
-// TestCastExpression tests the compilation of cast expressions
+// TestCastExpression tests the compilation and execution of cast expressions
+// All expected outputs are validated against native PHP behavior
 func TestCastExpression(t *testing.T) {
 	tests := []struct {
-		name    string
-		phpCode string
+		name     string
+		phpCode  string
+		expected string
 	}{
+		// String to int casting - PHP parses leading numeric part
 		{
-			name:    "Cast string to int",
-			phpCode: `<?php $result = (int)"123"; ?>`,
+			name:     "Cast numeric string to int",
+			phpCode:  `<?php echo (int)"123"; ?>`,
+			expected: "123",
 		},
 		{
-			name:    "Cast int to string",
-			phpCode: `<?php $result = (string)456; ?>`,
+			name:     "Cast string with suffix to int",
+			phpCode:  `<?php echo (int)"123abc"; ?>`,
+			expected: "123",
 		},
 		{
-			name:    "Cast to bool",
-			phpCode: `<?php $result = (bool)0; ?>`,
+			name:     "Cast string with decimal to int",
+			phpCode:  `<?php echo (int)"456.789def"; ?>`,
+			expected: "456",
+		},
+		{
+			name:     "Cast whitespace prefixed string to int",
+			phpCode:  `<?php echo (int)" 789xyz"; ?>`,
+			expected: "789",
+		},
+		{
+			name:     "Cast signed string to int",
+			phpCode:  `<?php echo (int)"-123abc"; ?>`,
+			expected: "-123",
+		},
+		{
+			name:     "Cast positive signed string to int",
+			phpCode:  `<?php echo (int)"+456def"; ?>`,
+			expected: "456",
+		},
+		{
+			name:     "Cast empty string to int",
+			phpCode:  `<?php echo (int)""; ?>`,
+			expected: "0",
+		},
+		{
+			name:     "Cast non-numeric string to int",
+			phpCode:  `<?php echo (int)"abc"; ?>`,
+			expected: "0",
+		},
+		{
+			name:     "Cast decimal string to int",
+			phpCode:  `<?php echo (int)"0.5"; ?>`,
+			expected: "0",
+		},
+		{
+			name:     "Cast hex string to int (not parsed as hex)",
+			phpCode:  `<?php echo (int)"0x123"; ?>`,
+			expected: "0",
+		},
+		{
+			name:     "Cast scientific notation to int",
+			phpCode:  `<?php echo (int)"1.23e2abc"; ?>`,
+			expected: "1",
+		},
+
+		// String to float casting
+		{
+			name:     "Cast numeric string to float",
+			phpCode:  `<?php echo (float)"123.45"; ?>`,
+			expected: "123.45",
+		},
+		{
+			name:     "Cast string with suffix to float",
+			phpCode:  `<?php echo (float)"123.45abc"; ?>`,
+			expected: "123.45",
+		},
+		{
+			name:     "Cast scientific notation to float",
+			phpCode:  `<?php echo (float)"1.5e3xyz"; ?>`,
+			expected: "1500",
+		},
+		{
+			name:     "Cast negative exponent to float",
+			phpCode:  `<?php echo (float)"2e-2abc"; ?>`,
+			expected: "0.02",
+		},
+		{
+			name:     "Cast positive exponent to float",
+			phpCode:  `<?php echo (float)"3.14e+1def"; ?>`,
+			expected: "31.4",
+		},
+
+		// Other casting types
+		{
+			name:     "Cast int to string",
+			phpCode:  `<?php echo (string)456; ?>`,
+			expected: "456",
+		},
+		{
+			name:     "Cast bool true to int",
+			phpCode:  `<?php echo (int)true; ?>`,
+			expected: "1",
+		},
+		{
+			name:     "Cast bool false to int",
+			phpCode:  `<?php echo (int)false; ?>`,
+			expected: "0",
+		},
+		{
+			name:     "Cast non-zero string to bool to int",
+			phpCode:  `<?php echo (int)(bool)"123abc"; ?>`,
+			expected: "1",
+		},
+		{
+			name:     "Cast zero string to bool to int",
+			phpCode:  `<?php echo (int)(bool)"0"; ?>`,
+			expected: "0",
+		},
+		{
+			name:     "Cast empty string to bool to int",
+			phpCode:  `<?php echo (int)(bool)""; ?>`,
+			expected: "0",
 		},
 	}
 
@@ -5624,8 +5729,10 @@ func TestCastExpression(t *testing.T) {
 			err := comp.Compile(prog)
 			require.NoError(t, err, "Compilation failed for test: %s", tt.name)
 
-			err = executeWithRuntime(t, comp)
+			// Execute and capture output
+			output, err := executeAndCaptureOutput(t, comp)
 			require.NoError(t, err, "Execution failed for test: %s", tt.name)
+			require.Equal(t, tt.expected, output, "Output mismatch for test: %s", tt.name)
 		})
 	}
 }
@@ -7316,6 +7423,32 @@ func compileAndExecute(t *testing.T, code string) (string, error) {
 	// Execute
 	vmachine := vm.NewVirtualMachine()
 	err = vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
+
+	return buf.String(), err
+}
+
+// executeAndCaptureOutput executes pre-compiled bytecode and captures output
+func executeAndCaptureOutput(t *testing.T, comp *Compiler) (string, error) {
+	// Execute with output capture
+	var buf bytes.Buffer
+	vmCtx := vm.NewExecutionContext()
+	vmCtx.SetOutputWriter(&buf)
+
+	// Initialize runtime if not already done
+	if runtime2.GlobalRegistry == nil {
+		err := runtime2.Bootstrap()
+		require.NoError(t, err, "Failed to bootstrap runtime")
+	}
+
+	// Initialize VM integration
+	if runtime2.GlobalVMIntegration == nil {
+		err := runtime2.InitializeVMIntegration()
+		require.NoError(t, err, "Failed to initialize VM integration")
+	}
+
+	// Execute
+	vmachine := vm.NewVirtualMachine()
+	err := vmachine.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
 
 	return buf.String(), err
 }
