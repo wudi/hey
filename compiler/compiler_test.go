@@ -7791,3 +7791,81 @@ echo $concat("Hello", "World") . "\n";
 		})
 	}
 }
+
+// Test JSON encoding functions
+func TestJSONFunctions(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		{
+			name: "Sequential array to JSON array",
+			code: `<?php
+echo json_encode([1, 2, 3]);
+`,
+			expectedOutput: "[1,2,3]",
+		},
+		{
+			name: "Associative array to JSON object",
+			code: `<?php
+echo json_encode(["a" => 1, "b" => 2]);
+`,
+			expectedOutput: `{"a":1,"b":2}`,
+		},
+		{
+			name: "Empty array to JSON array",
+			code: `<?php
+echo json_encode([]);
+`,
+			expectedOutput: "[]",
+		},
+		{
+			name: "Mixed array to JSON object",
+			code: `<?php
+echo json_encode([0 => "zero", 2 => "two"]);
+`,
+			expectedOutput: `{"0":"zero","2":"two"}`,
+		},
+		{
+			name: "Nested sequential arrays",
+			code: `<?php
+echo json_encode([[1, 2], [3, 4]]);
+`,
+			expectedOutput: "[[1,2],[3,4]]",
+		},
+		{
+			name: "String values",
+			code: `<?php
+echo json_encode(["hello", "world"]);
+`,
+			expectedOutput: `["hello","world"]`,
+		},
+		{
+			name: "Boolean and null values",
+			code: `<?php
+echo json_encode([true, false, null]);
+`,
+			expectedOutput: "[true,false,null]",
+		},
+		{
+			name: "JSON decode and encode roundtrip",
+			code: `<?php
+$original = [1, 2, 3];
+$json = json_encode($original);
+$decoded = json_decode($json);
+echo json_encode($decoded);
+`,
+			expectedOutput: "[1,2,3]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tt.code)
+
+			require.NoError(t, err, "Test failed with error")
+			assert.Equal(t, tt.expectedOutput, output, "Output mismatch")
+		})
+	}
+}

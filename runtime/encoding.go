@@ -8,6 +8,34 @@ import (
 	"github.com/wudi/hey/values"
 )
 
+// isSequentialArray checks if a PHP array is sequential (list-like)
+// A sequential array has integer keys starting from 0 with no gaps
+func isSequentialArray(arr *values.Array) bool {
+	if len(arr.Elements) == 0 {
+		return true // Empty arrays are considered sequential
+	}
+
+	// Check if all keys are integers and sequential from 0
+	for i := 0; i < len(arr.Elements); i++ {
+		if _, exists := arr.Elements[int64(i)]; !exists {
+			return false
+		}
+	}
+
+	// Check there are no additional non-integer keys
+	for key := range arr.Elements {
+		if _, ok := key.(int64); !ok {
+			return false
+		}
+		intKey := key.(int64)
+		if intKey < 0 || intKey >= int64(len(arr.Elements)) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // phpValueToGoValue converts PHP value to Go value for JSON encoding
 func phpValueToGoValue(val *values.Value) interface{} {
 	if val == nil {
@@ -27,12 +55,24 @@ func phpValueToGoValue(val *values.Value) interface{} {
 		return val.Data.(string)
 	case values.TypeArray:
 		arr := val.Data.(*values.Array)
-		result := make(map[string]interface{})
-		for key, value := range arr.Elements {
-			keyStr := fmt.Sprintf("%v", key)
-			result[keyStr] = phpValueToGoValue(value)
+
+		// Check if this is a sequential array (should be JSON array)
+		if isSequentialArray(arr) {
+			// Convert to slice for JSON array encoding
+			result := make([]interface{}, len(arr.Elements))
+			for i := 0; i < len(arr.Elements); i++ {
+				result[i] = phpValueToGoValue(arr.Elements[int64(i)])
+			}
+			return result
+		} else {
+			// Convert to map for JSON object encoding
+			result := make(map[string]interface{})
+			for key, value := range arr.Elements {
+				keyStr := fmt.Sprintf("%v", key)
+				result[keyStr] = phpValueToGoValue(value)
+			}
+			return result
 		}
-		return result
 	case values.TypeObject:
 		obj := val.Data.(*values.Object)
 		result := make(map[string]interface{})
