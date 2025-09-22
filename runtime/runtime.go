@@ -135,28 +135,22 @@ func registerBuiltinSymbols() error {
 		}
 	}
 
-	if err := registerWaitGroupClass(); err != nil {
-		return err
+	// Register classes
+	for _, class := range GetAllBuiltinClasses() {
+		if err := registry.GlobalRegistry.RegisterClass(class); err != nil {
+			return fmt.Errorf("register class %s: %w", class.Name, err)
+		}
 	}
 
-	if err := registerExceptionClass(); err != nil {
-		return err
-	}
-
-	if err := registerTraversableInterface(); err != nil {
-		return err
-	}
-
-	if err := registerIteratorInterface(); err != nil {
-		return err
-	}
-
-	if err := registerGeneratorClass(); err != nil {
-		return err
+	// Register interfaces
+	for _, iface := range GetAllBuiltinInterfaces() {
+		if err := registry.GlobalRegistry.RegisterInterface(iface); err != nil {
+			return fmt.Errorf("register interface %s: %w", iface.Name, err)
+		}
 	}
 
 	// Register builtin constants.
-	for _, v := range builtinConstants {
+	for _, v := range GetAllBuiltinConstants() {
 		if err := registry.GlobalRegistry.RegisterConstant(v); err != nil {
 			return fmt.Errorf("register constant %s: %w", v.Name, err)
 		}
