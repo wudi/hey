@@ -4974,6 +4974,98 @@ func TestStringFunctions(t *testing.T) {
 			})
 		}
 	})
+
+	t.Run("printf", func(t *testing.T) {
+		// Find the printf function
+		var printfFunc *registry.Function
+		for _, f := range functions {
+			if f.Name == "printf" {
+				printfFunc = f
+				break
+			}
+		}
+		if printfFunc == nil {
+			t.Fatal("printf function not found")
+		}
+
+		tests := []struct {
+			name           string
+			format         string
+			args           []interface{}
+			expectedLength int64
+			expectedOutput string
+		}{
+			// Basic tests
+			{"simple string", "Hello World", []interface{}{}, 11, "Hello World"},
+			{"string placeholder", "Hello %s", []interface{}{"World"}, 11, "Hello World"},
+			{"integer placeholder", "Number: %d", []interface{}{42}, 10, "Number: 42"},
+			{"float placeholder", "Float: %f", []interface{}{3.14159}, 15, "Float: 3.141590"},
+			{"float precision", "Float: %.2f", []interface{}{3.14159}, 11, "Float: 3.14"},
+
+			// Multiple parameters
+			{"multiple placeholders", "Name: %s, Age: %d, Score: %.1f", []interface{}{"Alice", 25, 95.5}, 33, "Name: Alice, Age: 25, Score: 95.5"},
+
+			// Edge cases
+			{"empty string", "", []interface{}{}, 0, ""},
+			{"no placeholders", "No placeholders here", []interface{}{}, 20, "No placeholders here"},
+			{"literal percent", "Discount: 50%% off", []interface{}{}, 17, "Discount: 50% off"},
+
+			// Various format specifiers
+			{"hex lowercase", "Hex: %x", []interface{}{255}, 7, "Hex: ff"},
+			{"hex uppercase", "Hex: %X", []interface{}{255}, 7, "Hex: FF"},
+			{"octal", "Octal: %o", []interface{}{64}, 10, "Octal: 100"},
+			{"character", "Char: %c", []interface{}{65}, 7, "Char: A"},
+			{"binary", "Binary: %b", []interface{}{15}, 12, "Binary: 1111"},
+
+			// Width and padding
+			{"width", "[%5d]", []interface{}{42}, 7, "[   42]"},
+			{"left align", "[%-5d]", []interface{}{42}, 7, "[42   ]"},
+			{"zero padding", "[%05d]", []interface{}{42}, 7, "[00042]"},
+			{"sign", "%+d", []interface{}{42}, 3, "+42"},
+
+			// Special values (these would need conversion in the test)
+			{"null value", "%s", []interface{}{""}, 0, ""}, // Simulating null as empty string
+			{"boolean true", "%s", []interface{}{"1"}, 1, "1"}, // Simulating true as "1"
+			{"boolean false", "%s", []interface{}{""}, 0, ""}, // Simulating false as empty string
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// Build args array for the function call
+				args := []*values.Value{values.NewString(tt.format)}
+				for _, arg := range tt.args {
+					switch v := arg.(type) {
+					case string:
+						args = append(args, values.NewString(v))
+					case int:
+						args = append(args, values.NewInt(int64(v)))
+					case float64:
+						args = append(args, values.NewFloat(v))
+					}
+				}
+
+				// Note: printf should output to stdout and return length
+				// For testing, we'll capture what it would output
+				result, err := printfFunc.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("printf failed: %v", err)
+				}
+
+				if result.Type != values.TypeInt {
+					t.Fatalf("Expected int result, got %s", result.Type)
+				}
+
+				resultLength := result.Data.(int64)
+				if resultLength != tt.expectedLength {
+					t.Errorf("Expected length %d, got %d", tt.expectedLength, resultLength)
+				}
+
+				// Note: In a real implementation, printf would output to stdout
+				// For testing purposes, we're only checking the return value
+				// The actual output testing would require capturing stdout
+			})
+		}
+	})
 }
 
 // Helper functions for test pointers
