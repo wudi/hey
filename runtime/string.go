@@ -2576,6 +2576,68 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewInt(int64(length)), nil
 			},
 		},
+		{
+			Name: "mb_substr",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+				{Name: "start", Type: "int"},
+				{Name: "length", Type: "int", DefaultValue: values.NewNull()},
+			},
+			ReturnType: "string",
+			MinArgs: 2, MaxArgs: 3, IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].Data.(string)
+				start := int(args[1].Data.(int64))
+
+				// Convert string to runes for proper Unicode handling
+				runes := []rune(str)
+				strLen := len(runes)
+
+				// Handle negative start position
+				if start < 0 {
+					start = strLen + start
+				}
+
+				// If start is still negative or beyond string, return empty string
+				if start < 0 || start >= strLen {
+					return values.NewString(""), nil
+				}
+
+				// Determine end position
+				var end int
+				if len(args) == 3 && !args[2].IsNull() {
+					length := int(args[2].Data.(int64))
+					if length < 0 {
+						// Negative length: from start to (end - |length|)
+						end = strLen + length
+						if end <= start {
+							return values.NewString(""), nil
+						}
+					} else if length == 0 {
+						return values.NewString(""), nil
+					} else {
+						// Positive length
+						end = start + length
+					}
+				} else {
+					// No length specified, go to end of string
+					end = strLen
+				}
+
+				// Ensure end doesn't exceed string length
+				if end > strLen {
+					end = strLen
+				}
+
+				// Extract substring using rune slice
+				if start >= end {
+					return values.NewString(""), nil
+				}
+
+				result := string(runes[start:end])
+				return values.NewString(result), nil
+			},
+		},
 	}
 }
 
