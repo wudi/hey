@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/wudi/hey/registry"
-	"github.com/wudi/hey/values"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/values"
 )
 
 func TestExecutionContextConcurrentMapAccess(t *testing.T) {
@@ -158,7 +158,7 @@ func TestVMGoroutineExecutorIsolation(t *testing.T) {
 	vm.lastContext.SetGlobalVar("shared_var", values.NewString("original_value"))
 	vm.lastContext.ensureClass("SharedClass")
 
-	executor := &VMGoroutineExecutor{vm: vm}
+	executor := &GoroutineExecutor{vm: vm}
 
 	// Create a simple function that modifies global state
 	fn := &registry.Function{

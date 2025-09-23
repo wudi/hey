@@ -52,14 +52,14 @@ type VirtualMachine struct {
 	lastContext *ExecutionContext
 }
 
-// VMGoroutineExecutor implements the GoroutineExecutor interface for executing functions in goroutines
-type VMGoroutineExecutor struct {
+// GoroutineExecutor implements the runtime.GoroutineExecutor interface for executing functions in goroutines
+type GoroutineExecutor struct {
 	vm *VirtualMachine
 }
 
 // ExecuteFunction executes a function in an isolated VM context for goroutines
 // The boundVarsMap parameter contains the closure's bound variables by name
-func (e *VMGoroutineExecutor) ExecuteFunction(fn *registry.Function, boundVarsMap map[string]*values.Value) (*values.Value, error) {
+func (e *GoroutineExecutor) ExecuteFunction(fn *registry.Function, boundVarsMap map[string]*values.Value) (*values.Value, error) {
 	// Create a minimal VM instance for this goroutine to avoid race conditions
 	// We create a fresh VM without the goroutine executor to prevent recursion
 	goroutineVM := &VirtualMachine{
@@ -234,7 +234,7 @@ func NewVirtualMachine() *VirtualMachine {
 	}
 
 	// Register the goroutine executor
-	executor := &VMGoroutineExecutor{vm: vm}
+	executor := &GoroutineExecutor{vm: vm}
 	runtime2.SetGoroutineExecutor(executor)
 
 	return vm
@@ -744,48 +744,6 @@ func (vm *VirtualMachine) execYieldFrom(ctx *ExecutionContext, frame *CallFrame,
 	return true, nil
 }
 
-// CreateExecutionContext creates a new execution context for generator execution
-func (vm *VirtualMachine) CreateExecutionContext() interface{} {
-	ctx := NewExecutionContext()
-
-	// Copy user functions from the last context to ensure generators can access global functions
-	vm.mu.Lock()
-	if vm.lastContext != nil {
-		for name, fn := range vm.lastContext.UserFunctions {
-			ctx.UserFunctions[name] = fn
-		}
-		// Also copy user classes, interfaces, and traits for completeness
-		for name, class := range vm.lastContext.UserClasses {
-			ctx.UserClasses[name] = class
-		}
-		for name, iface := range vm.lastContext.UserInterfaces {
-			ctx.UserInterfaces[name] = iface
-		}
-		for name, trait := range vm.lastContext.UserTraits {
-			ctx.UserTraits[name] = trait
-		}
-	}
-	vm.mu.Unlock()
-
-	return ctx
-}
-
-// CreateCallFrame creates a new call frame for generator function execution
-func (vm *VirtualMachine) CreateCallFrame(fn *registry.Function, args []*values.Value) interface{} {
-	frame := newCallFrame(fn.Name, fn, fn.Instructions, fn.Constants)
-
-	// Set up arguments in the frame's locals
-	for i, arg := range args {
-		if i < len(fn.Parameters) {
-			// Map argument to parameter slot
-			slot := uint32(i)
-			frame.Locals[slot] = arg
-		}
-	}
-
-	return frame
-}
-
 // ExecuteFunction executes a function in the given context and frame
 func (vm *VirtualMachine) ExecuteFunction(ctxInterface, frameInterface interface{}) error {
 	ctx, ok := ctxInterface.(*ExecutionContext)
@@ -831,124 +789,4 @@ func (vm *VirtualMachine) ExecuteFunction(ctxInterface, frameInterface interface
 	}
 
 	return nil
-}
-
-// ExecuteUntilYield executes a function until first yield or completion
-func (vm *VirtualMachine) ExecuteUntilYield(ctxInterface, frameInterface interface{}) (bool, error) {
-	ctx, ok := ctxInterface.(*ExecutionContext)
-	if !ok {
-		return false, fmt.Errorf("invalid execution context type")
-	}
-
-	frame, ok := frameInterface.(*CallFrame)
-	if !ok {
-		return false, fmt.Errorf("invalid call frame type")
-	}
-
-	// Push frame onto call stack
-	ctx.CallStack = append(ctx.CallStack, frame)
-	defer func() {
-		// Pop frame when done
-		if len(ctx.CallStack) > 0 {
-			ctx.CallStack = ctx.CallStack[:len(ctx.CallStack)-1]
-		}
-	}()
-
-	// Execute function instructions until yield or completion
-	for frame.IP < len(frame.Instructions) {
-		inst := frame.Instructions[frame.IP]
-
-		// Check if this is a yield instruction
-		if inst.Opcode == opcodes.OP_YIELD || inst.Opcode == opcodes.OP_YIELD_FROM {
-			// Execute the yield instruction
-			_, err := vm.executeInstruction(ctx, frame, inst)
-			if err != nil {
-				return false, err
-			}
-			// Yield suspends execution - don't advance IP
-			// The IP will be advanced when resuming
-			return true, nil // true = yielded
-		}
-
-		continued, err := vm.executeInstruction(ctx, frame, inst)
-		if err != nil {
-			return false, err
-		}
-
-		if continued {
-			// Normal instruction - advance IP
-			frame.IP++
-		} else {
-			// Instruction handled IP manually (jump, return, etc.)
-			// Check if this was a return instruction
-			if inst.Opcode == opcodes.OP_RETURN || inst.Opcode == opcodes.OP_RETURN_BY_REF || inst.Opcode == opcodes.OP_GENERATOR_RETURN {
-				// Function returned
-				return false, nil // false = completed
-			}
-			// Otherwise it was a jump - continue execution from new IP
-		}
-	}
-
-	return false, nil // false = completed
-}
-
-// ResumeFromYield resumes generator execution from suspended state
-func (vm *VirtualMachine) ResumeFromYield(ctxInterface, frameInterface interface{}) (bool, error) {
-	ctx, ok := ctxInterface.(*ExecutionContext)
-	if !ok {
-		return false, fmt.Errorf("invalid execution context type")
-	}
-
-	frame, ok := frameInterface.(*CallFrame)
-	if !ok {
-		return false, fmt.Errorf("invalid call frame type")
-	}
-
-	// Push frame onto call stack
-	ctx.CallStack = append(ctx.CallStack, frame)
-	defer func() {
-		// Pop frame when done
-		if len(ctx.CallStack) > 0 {
-			ctx.CallStack = ctx.CallStack[:len(ctx.CallStack)-1]
-		}
-	}()
-
-	// Advance IP past the yield instruction
-	frame.IP++
-
-	// Continue execution until next yield or completion
-	for frame.IP < len(frame.Instructions) {
-		inst := frame.Instructions[frame.IP]
-
-		// Check if this is a yield instruction
-		if inst.Opcode == opcodes.OP_YIELD || inst.Opcode == opcodes.OP_YIELD_FROM {
-			// Execute the yield instruction
-			_, err := vm.executeInstruction(ctx, frame, inst)
-			if err != nil {
-				return false, err
-			}
-			// Yield suspends execution - don't advance IP
-			return true, nil // true = yielded
-		}
-
-		continued, err := vm.executeInstruction(ctx, frame, inst)
-		if err != nil {
-			return false, err
-		}
-
-		if continued {
-			// Normal instruction - advance IP
-			frame.IP++
-		} else {
-			// Instruction handled IP manually (jump, return, etc.)
-			// Check if this was a return instruction by seeing if we're at end
-			if inst.Opcode == opcodes.OP_RETURN || inst.Opcode == opcodes.OP_RETURN_BY_REF || inst.Opcode == opcodes.OP_GENERATOR_RETURN {
-				// Function returned
-				return false, nil // false = completed
-			}
-			// Otherwise it was a jump - continue execution from new IP
-		}
-	}
-
-	return false, nil // false = completed
 }
