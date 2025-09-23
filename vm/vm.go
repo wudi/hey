@@ -48,6 +48,9 @@ type VirtualMachine struct {
 
 	CompilerCallback CompilerCallback
 
+	// Instruction factory for the new executor pattern
+	instructionFactory *InstructionFactory
+
 	mu          sync.RWMutex
 	lastContext *ExecutionContext
 }
@@ -63,10 +66,11 @@ func (e *VMGoroutineExecutor) ExecuteFunction(fn *registry.Function, boundVarsMa
 	// Create a minimal VM instance for this goroutine to avoid race conditions
 	// We create a fresh VM without the goroutine executor to prevent recursion
 	goroutineVM := &VirtualMachine{
-		lastContext: nil,
-		watchVars:   make(map[string]struct{}),
-		profile:     newProfileState(),
-		DebugMode:   false,
+		lastContext:        nil,
+		watchVars:          make(map[string]struct{}),
+		profile:            newProfileState(),
+		DebugMode:          false,
+		instructionFactory: NewInstructionFactory(),
 	}
 
 	// Create a new execution context for the goroutine
@@ -226,11 +230,12 @@ func mergeClassDefinitions(target, source *registry.Class) {
 // NewVirtualMachine constructs a VM with basic instrumentation disabled.
 func NewVirtualMachine() *VirtualMachine {
 	vm := &VirtualMachine{
-		debugLevel:  DebugLevelNone,
-		breakpoints: make(map[int]struct{}),
-		watchVars:   make(map[string]struct{}),
-		profile:     newProfileState(),
-		DebugMode:   false,
+		debugLevel:         DebugLevelNone,
+		breakpoints:        make(map[int]struct{}),
+		watchVars:          make(map[string]struct{}),
+		profile:            newProfileState(),
+		DebugMode:          false,
+		instructionFactory: NewInstructionFactory(),
 	}
 
 	// Register the goroutine executor
@@ -374,36 +379,40 @@ func (vm *VirtualMachine) decorateError(frame *CallFrame, inst *opcodes.Instruct
 }
 
 func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Try instruction factory first for new executor pattern
+	if vm.instructionFactory.IsSupported(inst.Opcode) {
+		executor, err := vm.instructionFactory.CreateExecutor(ctx, frame, inst)
+		if err != nil {
+			return false, err
+		}
+
+		result, err := executor.Execute()
+		if err != nil {
+			return false, err
+		}
+
+		if result.JumpTo >= 0 {
+			frame.IP = result.JumpTo
+			return false, nil
+		}
+		return result.ShouldAdvanceIP, nil
+	}
+
+	// Fall back to legacy switch for unsupported opcodes
 	switch inst.Opcode {
-	case opcodes.OP_NOP:
-		return true, nil
 	case opcodes.OP_QM_ASSIGN:
 		return vm.execAssign(ctx, frame, inst, false)
-	case opcodes.OP_ASSIGN:
-		return vm.execAssign(ctx, frame, inst, true)
-	case opcodes.OP_ASSIGN_REF:
-		return vm.execAssignRef(ctx, frame, inst)
 	case opcodes.OP_ASSIGN_OP:
 		return vm.execAssignOp(ctx, frame, inst)
 	case opcodes.OP_ASSIGN_DIM:
 		return vm.execAssignDim(ctx, frame, inst)
-	case opcodes.OP_THROW:
-		return vm.execThrow(ctx, frame, inst)
 	case opcodes.OP_PLUS, opcodes.OP_MINUS, opcodes.OP_NOT:
 		return vm.execUnary(ctx, frame, inst)
-	case opcodes.OP_ADD, opcodes.OP_SUB, opcodes.OP_MUL, opcodes.OP_DIV, opcodes.OP_MOD, opcodes.OP_POW:
-		return vm.execArithmetic(ctx, frame, inst)
 	case opcodes.OP_BW_AND, opcodes.OP_BW_OR, opcodes.OP_BW_XOR, opcodes.OP_SL, opcodes.OP_SR:
 		return vm.execBitwise(ctx, frame, inst)
-	case opcodes.OP_CONCAT:
-		return vm.execConcat(ctx, frame, inst)
-	case opcodes.OP_NEW:
-		return vm.execNew(ctx, frame, inst)
 	case opcodes.OP_CLONE:
 		return vm.execClone(ctx, frame, inst)
-	case opcodes.OP_IS_EQUAL, opcodes.OP_IS_NOT_EQUAL, opcodes.OP_IS_IDENTICAL, opcodes.OP_IS_NOT_IDENTICAL,
-		opcodes.OP_IS_SMALLER, opcodes.OP_IS_SMALLER_OR_EQUAL, opcodes.OP_IS_GREATER, opcodes.OP_IS_GREATER_OR_EQUAL,
-		opcodes.OP_SPACESHIP:
+	case opcodes.OP_IS_GREATER, opcodes.OP_IS_GREATER_OR_EQUAL, opcodes.OP_SPACESHIP:
 		return vm.execComparison(ctx, frame, inst)
 	case opcodes.OP_BOOLEAN_AND, opcodes.OP_BOOLEAN_OR:
 		return vm.execBoolean(ctx, frame, inst)
@@ -551,6 +560,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execYield(ctx, frame, inst)
 	case opcodes.OP_YIELD_FROM:
 		return vm.execYieldFrom(ctx, frame, inst)
+	case opcodes.OP_NEW:
+		return vm.execNew(ctx, frame, inst)
+	case opcodes.OP_THROW:
+		return vm.execThrow(ctx, frame, inst)
 	default:
 		return false, fmt.Errorf("opcode %s not implemented", inst.Opcode)
 	}
