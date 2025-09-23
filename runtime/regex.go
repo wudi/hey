@@ -159,28 +159,42 @@ func GetRegexFunctions() []*registry.Function {
 				}
 
 				// If matches parameter is provided, populate it
-				if len(args) > 2 && args[2] != nil {
+				if len(args) > 2 {
 					var targetValue *values.Value
 
-					// Handle reference parameters
-					if args[2].Type == values.TypeReference {
-						ref := args[2].Data.(*values.Reference)
-						targetValue = ref.Target
-					} else {
-						targetValue = args[2]
-					}
-
-					// Ensure target is an array
-					if targetValue.Type != values.TypeArray {
-						// Replace with new array
+					// Handle nil or undefined reference parameters
+					if args[2] == nil {
+						// Create new array for undefined reference parameter
 						newArray := values.NewArray()
-						if args[2].Type == values.TypeReference {
-							ref := args[2].Data.(*values.Reference)
-							ref.Target = newArray
-							targetValue = newArray
+						args[2] = newArray
+						targetValue = newArray
+					} else if args[2].Type == values.TypeReference {
+						ref := args[2].Data.(*values.Reference)
+						if ref.Target == nil || ref.Target.Type != values.TypeArray {
+							// Convert the existing null value to an array in-place
+							if ref.Target == nil {
+								ref.Target = values.NewArray()
+							} else {
+								// Transform the existing value to array type
+								ref.Target.Type = values.TypeArray
+								ref.Target.Data = &values.Array{
+									Elements:  make(map[interface{}]*values.Value),
+									NextIndex: 0,
+									IsIndexed: true,
+								}
+							}
+							targetValue = ref.Target
 						} else {
+							targetValue = ref.Target
+						}
+					} else {
+						// Direct value - ensure it's an array
+						if args[2].Type != values.TypeArray {
+							newArray := values.NewArray()
 							args[2] = newArray
 							targetValue = newArray
+						} else {
+							targetValue = args[2]
 						}
 					}
 
@@ -188,11 +202,19 @@ func GetRegexFunctions() []*registry.Function {
 					arr := targetValue.Data.(*values.Array)
 					// Clear existing elements
 					arr.Elements = make(map[interface{}]*values.Value)
-					// Populate with new matches
-					for i, match := range matches {
+
+					// Trim trailing empty strings to match PHP behavior
+					// PHP omits unmatched optional capture groups from the end
+					trimmedMatches := matches
+					for len(trimmedMatches) > 1 && trimmedMatches[len(trimmedMatches)-1] == "" {
+						trimmedMatches = trimmedMatches[:len(trimmedMatches)-1]
+					}
+
+					// Populate with trimmed matches
+					for i, match := range trimmedMatches {
 						arr.Elements[int64(i)] = values.NewString(match)
 					}
-					arr.NextIndex = int64(len(matches))
+					arr.NextIndex = int64(len(trimmedMatches))
 				}
 
 				return values.NewInt(1), nil
@@ -230,28 +252,33 @@ func GetRegexFunctions() []*registry.Function {
 				}
 
 				// If matches parameter is provided, populate it
-				if len(args) > 2 && args[2] != nil {
+				if len(args) > 2 {
 					var targetValue *values.Value
 
-					// Handle reference parameters
-					if args[2].Type == values.TypeReference {
-						ref := args[2].Data.(*values.Reference)
-						targetValue = ref.Target
-					} else {
-						targetValue = args[2]
-					}
-
-					// Ensure target is an array
-					if targetValue.Type != values.TypeArray {
-						// Replace with new array
+					// Handle nil or undefined reference parameters
+					if args[2] == nil {
+						// Create new array for undefined reference parameter
 						newArray := values.NewArray()
-						if args[2].Type == values.TypeReference {
-							ref := args[2].Data.(*values.Reference)
+						args[2] = newArray
+						targetValue = newArray
+					} else if args[2].Type == values.TypeReference {
+						ref := args[2].Data.(*values.Reference)
+						if ref.Target == nil || ref.Target.Type != values.TypeArray {
+							// Create new array for reference to undefined/non-array
+							newArray := values.NewArray()
 							ref.Target = newArray
 							targetValue = newArray
 						} else {
+							targetValue = ref.Target
+						}
+					} else {
+						// Direct value - ensure it's an array
+						if args[2].Type != values.TypeArray {
+							newArray := values.NewArray()
 							args[2] = newArray
 							targetValue = newArray
+						} else {
+							targetValue = args[2]
 						}
 					}
 

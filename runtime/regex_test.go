@@ -69,6 +69,41 @@ func TestPregMatch(t *testing.T) {
 			expectedResult:  1,
 			expectedMatches: []string{"123-4567"},
 		},
+		{
+			name:            "Optional group not present",
+			pattern:         "/(foo)(bar)?/i",
+			subject:         "FooXYZ",
+			expectedResult:  1,
+			expectedMatches: []string{"Foo", "Foo"}, // Note: only 2 elements, not 3
+		},
+		{
+			name:            "Alternation - second branch",
+			pattern:         "/(foo)|(bar)/i",
+			subject:         "BAR",
+			expectedResult:  1,
+			expectedMatches: []string{"BAR", "", "BAR"}, // Empty string for first group
+		},
+		{
+			name:            "Multiple optional groups",
+			pattern:         "/(first)(second)?(third)?/",
+			subject:         "firstthird",
+			expectedResult:  1,
+			expectedMatches: []string{"firstthird", "first", "", "third"}, // Middle empty preserved
+		},
+		{
+			name:            "Empty capture group",
+			pattern:         "/()/",
+			subject:         "test",
+			expectedResult:  1,
+			expectedMatches: []string{""}, // Only one element for empty match
+		},
+		{
+			name:            "Nested capture groups",
+			pattern:         "/((inner)outer)/",
+			subject:         "innerouter",
+			expectedResult:  1,
+			expectedMatches: []string{"innerouter", "innerouter", "inner"},
+		},
 	}
 
 	for _, tt := range tests {
