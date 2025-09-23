@@ -24,6 +24,7 @@ func GetAllBuiltinFunctions() []*registry.Function {
 	// Add functions from each module
 	functions = append(functions, GetArrayFunctions()...)
 	functions = append(functions, GetStringFunctions()...)
+	functions = append(functions, GetRegexFunctions()...)
 	functions = append(functions, GetTypeFunctions()...)
 	functions = append(functions, GetEncodingFunctions()...)
 	functions = append(functions, GetFilesystemFunctions()...)
