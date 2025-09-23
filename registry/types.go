@@ -44,12 +44,13 @@ type Function struct {
 	ReturnType   string
 	Instructions []*opcodes.Instruction
 	Constants    []*values.Value
-	IsVariadic   bool
-	IsGenerator  bool
-	IsAnonymous  bool
-	IsBuiltin    bool
-	IsAbstract   bool
-	Builtin      BuiltinImplementation
+	IsVariadic        bool
+	IsGenerator       bool
+	IsAnonymous       bool
+	IsBuiltin         bool
+	IsAbstract        bool
+	ReturnsByReference bool
+	Builtin           BuiltinImplementation
 	Handler      func(interface{}, []*values.Value) (*values.Value, error)
 	MinArgs      int
 	MaxArgs      int

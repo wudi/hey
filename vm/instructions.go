@@ -18,11 +18,14 @@ import (
 )
 
 type foreachIterator struct {
-	keys      []*values.Value
-	values    []*values.Value
-	index     int
-	generator *values.Value // For Generator objects
-	isFirst   bool         // For generators, track if this is the first iteration
+	keys         []*values.Value
+	values       []*values.Value
+	index        int
+	generator    *values.Value // For Generator objects
+	isFirst      bool         // For generators, track if this is the first iteration
+	byReference  bool         // Whether this is a foreach by reference
+	sourceArray  *values.Array // Reference to original array for reference foreach
+	orderedKeys  []interface{} // Original keys for reference foreach
 }
 
 func decodeOperand(inst *opcodes.Instruction, idx int) (opcodes.OpType, uint32) {
@@ -41,6 +44,9 @@ func decodeResult(inst *opcodes.Instruction) (opcodes.OpType, uint32) {
 }
 
 func (vm *VirtualMachine) readOperand(ctx *ExecutionContext, frame *CallFrame, opType opcodes.OpType, operand uint32) (*values.Value, error) {
+	var val *values.Value
+	var err error
+
 	switch opType {
 	case opcodes.IS_UNUSED:
 		return values.NewNull(), nil
@@ -48,14 +54,22 @@ func (vm *VirtualMachine) readOperand(ctx *ExecutionContext, frame *CallFrame, o
 		if int(operand) >= len(frame.Constants) {
 			return nil, fmt.Errorf("constant index %d out of range", operand)
 		}
-		return frame.Constants[operand], nil
+		val = frame.Constants[operand]
 	case opcodes.IS_TMP_VAR:
-		return frame.getTemp(operand), nil
+		val = frame.getTemp(operand)
 	case opcodes.IS_VAR, opcodes.IS_CV:
-		return frame.getLocal(operand), nil
+		val = frame.getLocal(operand)
 	default:
 		return nil, fmt.Errorf("unsupported operand type %d", opType)
 	}
+
+	// Automatically dereference when reading (except for reference assignments)
+	if val != nil && val.IsReference() {
+		ref := val.Data.(*values.Reference)
+		return ref.Target, nil
+	}
+
+	return val, err
 }
 
 func (vm *VirtualMachine) writeOperand(ctx *ExecutionContext, frame *CallFrame, opType opcodes.OpType, operand uint32, value *values.Value) error {
@@ -67,7 +81,19 @@ func (vm *VirtualMachine) writeOperand(ctx *ExecutionContext, frame *CallFrame, 
 		ctx.setTemporary(operand, value)
 		return nil
 	case opcodes.IS_VAR, opcodes.IS_CV:
-		frame.setLocal(operand, value)
+		// Check if the current value is a reference
+		currentVal := frame.getLocal(operand)
+		if currentVal != nil && currentVal.IsReference() && !value.IsReference() {
+			// If writing a non-reference value to a reference variable,
+			// update the target instead of replacing the reference
+			ref := currentVal.Data.(*values.Reference)
+			ref.Target.Type = value.Type
+			ref.Target.Data = value.Data
+		} else {
+			// Normal assignment
+			frame.setLocal(operand, value)
+		}
+
 		if globalName, ok := frame.globalSlotName(operand); ok {
 			ctx.bindGlobalValue(globalName, value)
 		}
@@ -1222,16 +1248,288 @@ func (vm *VirtualMachine) execAssign(ctx *ExecutionContext, frame *CallFrame, in
 }
 
 func (vm *VirtualMachine) execAssignRef(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the source variable (right side) - need raw value without dereferencing
 	opType1, op1 := decodeOperand(inst, 1)
-	val, err := vm.readOperand(ctx, frame, opType1, op1)
+
+	// Read the raw value directly without automatic dereferencing
+	var sourceVal *values.Value
+	switch opType1 {
+	case opcodes.IS_CONST:
+		if int(op1) >= len(frame.Constants) {
+			return false, fmt.Errorf("constant index %d out of range", op1)
+		}
+		sourceVal = frame.Constants[op1]
+	case opcodes.IS_TMP_VAR:
+		sourceVal = frame.getTemp(op1)
+	case opcodes.IS_VAR, opcodes.IS_CV:
+		sourceVal = frame.getLocal(op1)
+	default:
+		return false, fmt.Errorf("unsupported operand type %d", opType1)
+	}
+
+	// Check if sourceVal is nil
+	if sourceVal == nil {
+		return false, fmt.Errorf("source value is nil for reference assignment")
+	}
+
+
+	// Get source variable slot information from operand 2 (if available)
+	sourceOpType, sourceSlot := decodeOperand(inst, 2)
+
+	// For reference assignment, we need to create a shared reference object
+	var sharedRef *values.Value
+
+	if sourceVal != nil && sourceVal.IsReference() {
+		// Source is already a reference - we need to create a NEW shared reference
+		// that ALL variables in the chain will point to
+		sourceRef := sourceVal.Data.(*values.Reference)
+
+		// Create a completely new shared reference object that all variables will use
+		sharedRef = values.NewReference(sourceRef.Target)
+
+		// Find ALL variables that should be part of this reference chain
+		// This includes the source variable and any variables that reference the same value tree
+		for slot, localVal := range frame.Locals {
+			if localVal != nil && localVal.IsReference() {
+				localRef := localVal.Data.(*values.Reference)
+				// Check if this variable is part of the same reference chain
+				// This is true if it points to the same target OR if it points to the source reference
+				if localRef.Target == sourceRef.Target || localRef == sourceRef {
+					frame.Locals[slot] = sharedRef
+					// Also update global bindings for this slot
+					if globalName, ok := frame.globalSlotName(slot); ok {
+						ctx.bindGlobalValue(globalName, sharedRef)
+					}
+				}
+			}
+		}
+	} else {
+		// Create a new shared container with the source value
+		sharedContainer := copyValue(sourceVal)
+		// Create a reference to the shared container
+		sharedRef = values.NewReference(sharedContainer)
+
+		// Make the source variable also point to this reference
+		if sourceOpType == opcodes.IS_VAR || sourceOpType == opcodes.IS_CV {
+			frame.setLocal(sourceSlot, sharedRef)
+		} else if opType1 == opcodes.IS_VAR || opType1 == opcodes.IS_CV {
+			frame.setLocal(op1, sharedRef)
+		}
+	}
+
+	// Assign the same reference object to the destination variable (left side)
+	_, resSlot := decodeResult(inst)
+	frame.setLocal(resSlot, sharedRef)
+
+	// Handle global bindings for both source and destination to ensure proper propagation
+	if sourceOpType == opcodes.IS_VAR || sourceOpType == opcodes.IS_CV {
+		if globalName, ok := frame.globalSlotName(sourceSlot); ok {
+			ctx.bindGlobalValue(globalName, sharedRef)
+		}
+	}
+	if globalName, ok := frame.globalSlotName(resSlot); ok {
+		ctx.bindGlobalValue(globalName, sharedRef)
+	}
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execAssignDimRef(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the array
+	opType1, op1 := decodeOperand(inst, 1)
+	arrayVal, err := vm.readOperand(ctx, frame, opType1, op1)
 	if err != nil {
 		return false, err
 	}
-	ref := values.NewReference(val)
-	resType, resSlot := decodeResult(inst)
-	if err := vm.writeOperand(ctx, frame, resType, resSlot, ref); err != nil {
+
+	// Dereference if needed
+	arrayVal = arrayVal.Deref()
+
+	// Ensure it's an array
+	if !arrayVal.IsArray() {
+		if arrayVal.IsNull() {
+			arrayVal = values.NewArray()
+		} else {
+			return false, fmt.Errorf("cannot use [] operator on %s", arrayVal.Type)
+		}
+	}
+
+	// Get the index
+	opType2, op2 := decodeOperand(inst, 2)
+	indexVal, err := vm.readOperand(ctx, frame, opType2, op2)
+	if err != nil {
 		return false, err
 	}
+
+	// Get the value to reference
+	resType, resSlot := decodeOperand(inst, 3)
+	sourceVal, err := vm.readOperand(ctx, frame, resType, resSlot)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the target value to share
+	var target *values.Value
+	if sourceVal.IsReference() {
+		ref := sourceVal.Data.(*values.Reference)
+		target = ref.Target
+	} else {
+		target = sourceVal
+		// Make source a reference too
+		sourceRef := values.NewReference(target)
+		if err := vm.writeOperand(ctx, frame, resType, resSlot, sourceRef); err != nil {
+			return false, err
+		}
+	}
+
+	// Create reference for array element
+	ref := values.NewReference(target)
+
+	// Set array element as reference
+	arrayData := arrayVal.Data.(*values.Array)
+	if indexVal.IsNull() {
+		// Append to array with auto-increment index
+		arrayData.Elements[arrayData.NextIndex] = ref
+		arrayData.NextIndex++
+	} else {
+		// Set at specific index
+		key := indexVal.ToString()
+		// Try to convert to integer if possible
+		if intKey, err := strconv.ParseInt(key, 10, 64); err == nil {
+			arrayData.Elements[intKey] = ref
+			if intKey >= arrayData.NextIndex {
+				arrayData.NextIndex = intKey + 1
+			}
+		} else {
+			// Use string key
+			arrayData.Elements[key] = ref
+			arrayData.IsIndexed = false
+		}
+	}
+
+	return true, nil
+}
+
+func (vm *VirtualMachine) execFetchDimRef(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the array
+	opType1, op1 := decodeOperand(inst, 1)
+	arrayVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Dereference if needed
+	arrayVal = arrayVal.Deref()
+
+	// Ensure it's an array
+	if !arrayVal.IsArray() {
+		if arrayVal.IsNull() {
+			arrayVal = values.NewArray()
+		} else {
+			return false, fmt.Errorf("cannot use [] operator on %s", arrayVal.Type)
+		}
+	}
+
+	// Get the index
+	opType2, op2 := decodeOperand(inst, 2)
+	indexVal, err := vm.readOperand(ctx, frame, opType2, op2)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the array element and create a reference to it
+	arrayData := arrayVal.Data.(*values.Array)
+	var elementVal *values.Value
+
+	if indexVal.IsNull() {
+		return false, fmt.Errorf("cannot fetch reference to array element with null index")
+	} else {
+		// Get at specific index
+		key := indexVal.ToString()
+		// Try to convert to integer if possible
+		if intKey, err := strconv.ParseInt(key, 10, 64); err == nil {
+			if element, exists := arrayData.Elements[intKey]; exists {
+				elementVal = element
+			} else {
+				// Create a new element if it doesn't exist
+				elementVal = values.NewNull()
+				arrayData.Elements[intKey] = elementVal
+				if intKey >= arrayData.NextIndex {
+					arrayData.NextIndex = intKey + 1
+				}
+			}
+		} else {
+			// Use string key
+			if element, exists := arrayData.Elements[key]; exists {
+				elementVal = element
+			} else {
+				// Create a new element if it doesn't exist
+				elementVal = values.NewNull()
+				arrayData.Elements[key] = elementVal
+				arrayData.IsIndexed = false
+			}
+		}
+	}
+
+	// Create a reference to the array element
+	ref := values.NewReference(elementVal)
+
+	// Store the result
+	resType, resSlot := decodeResult(inst)
+	return vm.writeOperand(ctx, frame, resType, resSlot, ref) == nil, nil
+}
+
+func (vm *VirtualMachine) execAssignObjRef(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Get the object
+	opType1, op1 := decodeOperand(inst, 1)
+	objVal, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Dereference if needed
+	objVal = objVal.Deref()
+
+	// Ensure it's an object
+	if !objVal.IsObject() {
+		return false, fmt.Errorf("cannot assign property to non-object")
+	}
+
+	// Get property name
+	opType2, op2 := decodeOperand(inst, 2)
+	propName, err := vm.readOperand(ctx, frame, opType2, op2)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the value to reference
+	resType, resSlot := decodeOperand(inst, 3)
+	sourceVal, err := vm.readOperand(ctx, frame, resType, resSlot)
+	if err != nil {
+		return false, err
+	}
+
+	// Get the target value to share
+	var target *values.Value
+	if sourceVal.IsReference() {
+		ref := sourceVal.Data.(*values.Reference)
+		target = ref.Target
+	} else {
+		target = sourceVal
+		// Make source a reference too
+		sourceRef := values.NewReference(target)
+		if err := vm.writeOperand(ctx, frame, resType, resSlot, sourceRef); err != nil {
+			return false, err
+		}
+	}
+
+	// Create reference for property
+	ref := values.NewReference(target)
+
+	// Set object property as reference
+	objData := objVal.Data.(*values.Object)
+	objData.Properties[propName.ToString()] = ref
+
 	return true, nil
 }
 
@@ -1778,6 +2076,10 @@ func (vm *VirtualMachine) execFeReset(ctx *ExecutionContext, frame *CallFrame, i
 		return false, err
 	}
 
+	// Check if this is a reference foreach (second operand is CONST 1)
+	opType2, op2 := decodeOperand(inst, 2)
+	byReference := opType2 == opcodes.IS_CONST && op2 == 1
+
 	resType, resSlot := decodeResult(inst)
 	iteratorID := op1
 	if resType != opcodes.IS_UNUSED {
@@ -1788,11 +2090,12 @@ func (vm *VirtualMachine) execFeReset(ctx *ExecutionContext, frame *CallFrame, i
 	}
 
 	iterator := &foreachIterator{
-		keys:      make([]*values.Value, 0),
-		values:    make([]*values.Value, 0),
-		index:     0,
-		generator: nil,
-		isFirst:   true,
+		keys:        make([]*values.Value, 0),
+		values:      make([]*values.Value, 0),
+		index:       0,
+		generator:   nil,
+		isFirst:     true,
+		byReference: byReference,
 	}
 
 	if iterable != nil && iterable.IsArray() {
@@ -1824,10 +2127,23 @@ func (vm *VirtualMachine) execFeReset(ctx *ExecutionContext, frame *CallFrame, i
 		orderedKeys := append(intKeys, stringKeys...)
 		orderedKeys = append(orderedKeys, otherKeys...)
 
-		for _, key := range orderedKeys {
-			if val, ok := arr.Elements[key]; ok {
-				iterator.keys = append(iterator.keys, makeKeyValue(key))
-				iterator.values = append(iterator.values, copyValue(val))
+		if byReference {
+			// For reference foreach, store array reference and keys
+			iterator.sourceArray = arr
+			iterator.orderedKeys = orderedKeys
+			// Still populate keys for key access
+			for _, key := range orderedKeys {
+				if _, ok := arr.Elements[key]; ok {
+					iterator.keys = append(iterator.keys, makeKeyValue(key))
+				}
+			}
+		} else {
+			// For normal foreach, copy values as before
+			for _, key := range orderedKeys {
+				if val, ok := arr.Elements[key]; ok {
+					iterator.keys = append(iterator.keys, makeKeyValue(key))
+					iterator.values = append(iterator.values, copyValue(val))
+				}
 			}
 		}
 	} else if iterable != nil && iterable.IsObject() {
@@ -1893,11 +2209,47 @@ func (vm *VirtualMachine) execFeFetch(ctx *ExecutionContext, frame *CallFrame, i
 				}
 			}
 		}
-	} else if iterator != nil && iterator.index < len(iterator.values) {
+	} else if iterator != nil && ((iterator.byReference && iterator.sourceArray != nil && iterator.index < len(iterator.orderedKeys)) || (!iterator.byReference && iterator.index < len(iterator.values))) {
 		// Handle array iteration
-		nextValue = copyValue(iterator.values[iterator.index])
-		if iterator.index < len(iterator.keys) {
-			nextKey = copyValue(iterator.keys[iterator.index])
+		if iterator.byReference && iterator.sourceArray != nil {
+			// For reference foreach, create a shared reference container
+			if iterator.index < len(iterator.orderedKeys) {
+				key := iterator.orderedKeys[iterator.index]
+				if val, ok := iterator.sourceArray.Elements[key]; ok {
+					// Create a shared container for bidirectional updates between
+					// the array element and the foreach variable
+					var sharedContainer *values.Value
+					if val.IsReference() {
+						// If array element is already a reference, use its target
+						ref := val.Data.(*values.Reference)
+						sharedContainer = ref.Target
+					} else {
+						// Create a shared container with the element's value
+						sharedContainer = copyValue(val)
+					}
+
+					// Create references for both array element and foreach variable
+					arrayElemRef := values.NewReference(sharedContainer)
+					foreachVarRef := values.NewReference(sharedContainer)
+
+					// Update the array element to point to shared container
+					iterator.sourceArray.Elements[key] = arrayElemRef
+
+					// Return reference for foreach variable assignment
+					nextValue = foreachVarRef
+				} else {
+					nextValue = values.NewNull()
+				}
+				if iterator.index < len(iterator.keys) {
+					nextKey = copyValue(iterator.keys[iterator.index])
+				}
+			}
+		} else {
+			// For normal foreach, copy value as before
+			nextValue = copyValue(iterator.values[iterator.index])
+			if iterator.index < len(iterator.keys) {
+				nextKey = copyValue(iterator.keys[iterator.index])
+			}
 		}
 		iterator.index++
 	} else {
@@ -2519,13 +2871,123 @@ func (vm *VirtualMachine) execSendArg(ctx *ExecutionContext, frame *CallFrame, i
 		return false, errors.New("argument sent without pending call")
 	}
 	opType2, op2 := decodeOperand(inst, 2)
-	val, err := vm.readOperand(ctx, frame, opType2, op2)
-	if err != nil {
-		return false, err
+
+	// Handle different send opcodes
+	switch inst.Opcode {
+	case opcodes.OP_SEND_REF:
+		// For explicit reference arguments, we need to pass the reference, not a copy
+		var val *values.Value
+		switch opType2 {
+		case opcodes.IS_CONST:
+			if int(op2) >= len(frame.Constants) {
+				return false, fmt.Errorf("constant index %d out of range", op2)
+			}
+			val = frame.Constants[op2]
+		case opcodes.IS_TMP_VAR:
+			val = frame.getTemp(op2)
+		case opcodes.IS_VAR, opcodes.IS_CV:
+			val = frame.getLocal(op2)
+		default:
+			return false, fmt.Errorf("unsupported operand type %d", opType2)
+		}
+
+		// If not already a reference, make it one
+		if val != nil && !val.IsReference() {
+			val = values.NewReference(val)
+			// Update the original location with the reference
+			switch opType2 {
+			case opcodes.IS_TMP_VAR:
+				frame.setTemp(op2, val)
+			case opcodes.IS_VAR, opcodes.IS_CV:
+				frame.setLocal(op2, val)
+			}
+		}
+
+		pending.Args = append(pending.Args, val)
+		pending.ArgNames = append(pending.ArgNames, "")
+		return true, nil
+
+	case opcodes.OP_SEND_VAR:
+		// Check if the target function parameter expects a reference
+		argIndex := len(pending.Args) // Current argument index
+		needsReference := false
+
+		// Check if we know the target function and if this parameter is by reference
+		if pending.Function != nil && argIndex < len(pending.Function.Parameters) {
+			needsReference = pending.Function.Parameters[argIndex].IsReference
+		}
+
+		var val *values.Value
+		if needsReference {
+			// Get the temporary value
+			var tempVal *values.Value
+			switch opType2 {
+			case opcodes.IS_CONST:
+				if int(op2) >= len(frame.Constants) {
+					return false, fmt.Errorf("constant index %d out of range", op2)
+				}
+				tempVal = frame.Constants[op2]
+			case opcodes.IS_TMP_VAR:
+				tempVal = frame.getTemp(op2)
+			case opcodes.IS_VAR, opcodes.IS_CV:
+				tempVal = frame.getLocal(op2)
+			default:
+				return false, fmt.Errorf("unsupported operand type %d", opType2)
+			}
+
+			// Get original variable information from result operands
+			origVarOpType, origVarSlot := decodeResult(inst)
+
+			if tempVal != nil {
+				if origVarOpType == opcodes.IS_VAR || origVarOpType == opcodes.IS_CV {
+					// We have the original variable slot - create bidirectional reference
+					var sharedContainer *values.Value
+					if tempVal.IsReference() {
+						ref := tempVal.Data.(*values.Reference)
+						sharedContainer = ref.Target
+					} else {
+						sharedContainer = copyValue(tempVal)
+					}
+
+					// Create references for both the original variable and function parameter
+					originalRef := values.NewReference(sharedContainer)
+					paramRef := values.NewReference(sharedContainer)
+
+					// Update the original variable to point to the shared container
+					frame.setLocal(origVarSlot, originalRef)
+					val = paramRef
+				} else {
+					// No original variable info - pass by reference but no bidirectional update
+					if tempVal.IsReference() {
+						val = tempVal
+					} else {
+						val = values.NewReference(tempVal)
+					}
+				}
+			}
+			pending.Args = append(pending.Args, val)
+		} else {
+			// Pass by value
+			val, err := vm.readOperand(ctx, frame, opType2, op2)
+			if err != nil {
+				return false, err
+			}
+			pending.Args = append(pending.Args, copyValue(val))
+		}
+
+		pending.ArgNames = append(pending.ArgNames, "")
+		return true, nil
+
+	default: // OP_SEND_VAL
+		// Normal value passing
+		val, err := vm.readOperand(ctx, frame, opType2, op2)
+		if err != nil {
+			return false, err
+		}
+		pending.Args = append(pending.Args, copyValue(val))
+		pending.ArgNames = append(pending.ArgNames, "")
+		return true, nil
 	}
-	pending.Args = append(pending.Args, copyValue(val))
-	pending.ArgNames = append(pending.ArgNames, "") // Empty string for positional argument
-	return true, nil
 }
 
 func (vm *VirtualMachine) execSendNamedArg(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
@@ -2821,7 +3283,14 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 			}
 			arg = variadicArray
 		} else if i < len(functionArgs) {
-			arg = copyValue(functionArgs[i])
+			// Check if parameter is by reference and argument is a reference
+			if param.IsReference && i < len(functionArgs) {
+				// Pass the reference directly without copying
+				arg = functionArgs[i]
+			} else {
+				// Normal parameter - copy the value
+				arg = copyValue(functionArgs[i])
+			}
 		} else if param.HasDefault {
 			arg = copyValue(param.DefaultValue)
 		} else {
@@ -2830,7 +3299,13 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 
 		// Validate parameter type
 		if param.Type != "" {
-			if err := vm.validateParameterType(param, arg, pending.Function.Name, i); err != nil {
+			// For reference parameters, validate the dereferenced value
+			validateArg := arg
+			if param.IsReference && arg != nil && arg.IsReference() {
+				ref := arg.Data.(*values.Reference)
+				validateArg = ref.Target
+			}
+			if err := vm.validateParameterType(param, validateArg, pending.Function.Name, i); err != nil {
 				return false, err
 			}
 		}
@@ -2857,11 +3332,51 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 
 func (vm *VirtualMachine) execReturn(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	opType1, op1 := decodeOperand(inst, 1)
-	val, err := vm.readOperand(ctx, frame, opType1, op1)
-	if err != nil {
-		return false, err
+
+	var returnVal *values.Value
+	var err error
+
+	if inst.Opcode == opcodes.OP_RETURN_BY_REF {
+		// For return by reference, we need to return the reference, not a copy
+		switch opType1 {
+		case opcodes.IS_CONST:
+			if int(op1) >= len(frame.Constants) {
+				return false, fmt.Errorf("constant index %d out of range", op1)
+			}
+			val := frame.Constants[op1]
+			// Create a reference to the constant (this is unusual but possible)
+			returnVal = values.NewReference(val)
+		case opcodes.IS_TMP_VAR:
+			val := frame.getTemp(op1)
+			if val != nil && val.IsReference() {
+				// Already a reference, return it
+				returnVal = val
+			} else {
+				// Create a reference to the temp value
+				returnVal = values.NewReference(val)
+			}
+		case opcodes.IS_VAR, opcodes.IS_CV:
+			val := frame.getLocal(op1)
+			if val != nil && val.IsReference() {
+				// Already a reference, return it
+				returnVal = val
+			} else {
+				// Create a reference to the local variable
+				returnVal = values.NewReference(val)
+			}
+		default:
+			return false, fmt.Errorf("unsupported operand type %d", opType1)
+		}
+	} else {
+		// Normal return - copy the value
+		returnVal, err = vm.readOperand(ctx, frame, opType1, op1)
+		if err != nil {
+			return false, err
+		}
+		returnVal = copyValue(returnVal)
 	}
-	if err := vm.handleReturn(ctx, copyValue(val)); err != nil {
+
+	if err := vm.handleReturn(ctx, returnVal); err != nil {
 		return false, err
 	}
 	return false, nil

@@ -95,6 +95,9 @@ const (
 	OP_ASSIGN_OBJ_OP                // $obj->prop += value
 	OP_ASSIGN_STATIC_PROP_OP        // Class::$prop += value
 	OP_ASSIGN_REF                   // =& reference assignment
+	OP_ASSIGN_DIM_REF               // $arr[$key] =& reference assignment
+	OP_FETCH_DIM_REF                // &$arr[$key] get reference to array element
+	OP_ASSIGN_OBJ_REF               // $obj->prop =& reference assignment
 	OP_QM_ASSIGN                    // Ternary assignment
 
 	// Variable fetching
@@ -457,6 +460,9 @@ var opcodeNames = map[Opcode]string{
 	OP_ASSIGN_OBJ_OP:         "ASSIGN_OBJ_OP",
 	OP_ASSIGN_STATIC_PROP_OP: "ASSIGN_STATIC_PROP_OP",
 	OP_ASSIGN_REF:            "ASSIGN_REF",
+	OP_ASSIGN_DIM_REF:        "ASSIGN_DIM_REF",
+	OP_FETCH_DIM_REF:         "FETCH_DIM_REF",
+	OP_ASSIGN_OBJ_REF:        "ASSIGN_OBJ_REF",
 	OP_QM_ASSIGN:             "QM_ASSIGN",
 
 	// Variable operations

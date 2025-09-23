@@ -8657,3 +8657,78 @@ echo json_encode($decoded);
 		})
 	}
 }
+
+// Test Reference assignment and operations
+func TestReferences(t *testing.T) {
+	tests := []struct {
+		name           string
+		code           string
+		expectedOutput string
+	}{
+		{
+			name: "Basic reference assignment",
+			code: `<?php
+$a = 10;
+$b = &$a;
+echo "a=$a, b=$b\n";
+$b = 20;
+echo "a=$a, b=$b\n";
+`,
+			expectedOutput: "a=10, b=10\na=20, b=20\n",
+		},
+		{
+			name: "Reference chain",
+			code: `<?php
+$a = 1;
+$b = &$a;
+$c = &$b;
+echo "a=$a, b=$b, c=$c\n";
+$c = 2;
+echo "a=$a, b=$b, c=$c\n";
+`,
+			expectedOutput: "a=1, b=1, c=1\na=2, b=2, c=2\n",
+		},
+		{
+			name: "Reference with modification",
+			code: `<?php
+$x = 5;
+$y = &$x;
+$x = $x + 10;
+echo "x=$x, y=$y\n";
+`,
+			expectedOutput: "x=15, y=15\n",
+		},
+		{
+			name: "Reference in array",
+			code: `<?php
+$arr = [1, 2, 3];
+$ref = &$arr[1];
+echo "arr[1]={$arr[1]}, ref=$ref\n";
+$ref = 99;
+echo "arr[1]={$arr[1]}, ref=$ref\n";
+`,
+			expectedOutput: "arr[1]=2, ref=2\narr[1]=99, ref=99\n",
+		},
+		{
+			name: "Multiple references to same value",
+			code: `<?php
+$original = 100;
+$ref1 = &$original;
+$ref2 = &$original;
+echo "original=$original, ref1=$ref1, ref2=$ref2\n";
+$ref1 = 200;
+echo "original=$original, ref1=$ref1, ref2=$ref2\n";
+`,
+			expectedOutput: "original=100, ref1=100, ref2=100\noriginal=200, ref1=200, ref2=200\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tt.code)
+
+			require.NoError(t, err, "Test failed with error")
+			assert.Equal(t, tt.expectedOutput, output, "Output mismatch")
+		})
+	}
+}

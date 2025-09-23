@@ -3108,10 +3108,11 @@ func (dw *DoWhileStatement) String() string {
 // ForeachStatement foreach 循环语句
 type ForeachStatement struct {
 	BaseNode
-	Iterable Expression `json:"iterable"`
-	Key      Expression `json:"key,omitempty"`
-	Value    Expression `json:"value"`
-	Body     Statement  `json:"body"`
+	Iterable    Expression `json:"iterable"`
+	Key         Expression `json:"key,omitempty"`
+	Value       Expression `json:"value"`
+	Body        Statement  `json:"body"`
+	ByReference bool       `json:"byReference,omitempty"` // foreach ($arr as &$val)
 }
 
 func NewForeachStatement(pos lexer.Position, iterable, key, value Expression, body Statement) *ForeachStatement {
@@ -3121,10 +3122,26 @@ func NewForeachStatement(pos lexer.Position, iterable, key, value Expression, bo
 			Position: pos,
 			LineNo:   uint32(pos.Line),
 		},
-		Iterable: iterable,
-		Key:      key,
-		Value:    value,
-		Body:     body,
+		Iterable:    iterable,
+		Key:         key,
+		Value:       value,
+		Body:        body,
+		ByReference: false,
+	}
+}
+
+func NewForeachStatementWithRef(pos lexer.Position, iterable, key, value Expression, body Statement, byRef bool) *ForeachStatement {
+	return &ForeachStatement{
+		BaseNode: BaseNode{
+			Kind:     ASTForeach,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Iterable:    iterable,
+		Key:         key,
+		Value:       value,
+		Body:        body,
+		ByReference: byRef,
 	}
 }
 
@@ -5967,10 +5984,11 @@ func (afs *AlternativeForStatement) String() string {
 // AlternativeForeachStatement 表示替代语法的foreach语句 (foreach: ... endforeach;)
 type AlternativeForeachStatement struct {
 	BaseNode
-	Iterable Expression  `json:"iterable"`
-	Key      Expression  `json:"key,omitempty"`
-	Value    Expression  `json:"value"`
-	Body     []Statement `json:"body"`
+	Iterable    Expression  `json:"iterable"`
+	Key         Expression  `json:"key,omitempty"`
+	Value       Expression  `json:"value"`
+	Body        []Statement `json:"body"`
+	ByReference bool        `json:"by_reference"`
 }
 
 func NewAlternativeForeachStatement(pos lexer.Position, iterable, value Expression) *AlternativeForeachStatement {
@@ -6289,3 +6307,73 @@ func (se *SpreadExpression) String() string {
 }
 
 func (se *SpreadExpression) expressionNode() {}
+
+// ReferenceExpression 引用表达式 &$var
+type ReferenceExpression struct {
+	BaseNode
+	Expression Expression `json:"expression"`
+}
+
+func NewReferenceExpression(pos lexer.Position, expr Expression) *ReferenceExpression {
+	return &ReferenceExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTRef,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Expression: expr,
+	}
+}
+
+func (re *ReferenceExpression) GetChildren() []Node {
+	if re.Expression != nil {
+		return []Node{re.Expression}
+	}
+	return []Node{}
+}
+
+func (re *ReferenceExpression) Accept(visitor Visitor) {
+	visitor.Visit(re)
+}
+
+func (re *ReferenceExpression) String() string {
+	return "&" + re.Expression.String()
+}
+
+func (re *ReferenceExpression) expressionNode() {}
+
+// AssignRefExpression 引用赋值表达式 $a =& $b
+type AssignRefExpression struct {
+	BaseNode
+	Left  Expression `json:"left"`
+	Right Expression `json:"right"`
+}
+
+func NewAssignRefExpression(pos lexer.Position, left Expression, right Expression) *AssignRefExpression {
+	return &AssignRefExpression{
+		BaseNode: BaseNode{
+			Kind:     ASTAssignRef,
+			Position: pos,
+			LineNo:   uint32(pos.Line),
+		},
+		Left:  left,
+		Right: right,
+	}
+}
+
+func (are *AssignRefExpression) GetChildren() []Node {
+	return []Node{are.Left, are.Right}
+}
+
+func (are *AssignRefExpression) Accept(visitor Visitor) {
+	if visitor.Visit(are) {
+		are.Left.Accept(visitor)
+		are.Right.Accept(visitor)
+	}
+}
+
+func (are *AssignRefExpression) String() string {
+	return are.Left.String() + " =& " + are.Right.String()
+}
+
+func (are *AssignRefExpression) expressionNode() {}

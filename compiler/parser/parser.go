@@ -3163,6 +3163,14 @@ func parseAssignmentExpression(p *Parser, left ast.Expression) ast.Expression {
 	p.nextToken()
 	right := parseExpression(p, LOWEST)
 
+	// 检查是否为引用赋值 $a = &$b
+	if operator == "=" {
+		if refExpr, ok := right.(*ast.ReferenceExpression); ok {
+			// 转换为引用赋值
+			return ast.NewAssignRefExpression(pos, left, refExpr.Expression)
+		}
+	}
+
 	return ast.NewAssignmentExpression(pos, left, operator, right)
 }
 
@@ -3479,6 +3487,7 @@ func parseForeachStatement(p *Parser) ast.Statement {
 
 	p.nextToken()
 	var key, value ast.Expression
+	var byReference bool
 
 	// 解析第一个变量
 	firstVar := parseExpression(p, LOWEST)
@@ -3488,13 +3497,49 @@ func parseForeachStatement(p *Parser) ast.Statement {
 	if p.currentToken.Type == lexer.T_DOUBLE_ARROW {
 		key = firstVar
 		p.nextToken()
-		value = parseExpression(p, LOWEST)
+
+		// Check if the value is a reference (&$var)
+		if p.currentToken.Type == lexer.T_AMPERSAND_FOLLOWED_BY_VAR_OR_VARARG {
+			byReference = true
+			p.nextToken()
+			// After consuming &, parse just the variable
+			if p.currentToken.Type == lexer.T_VARIABLE {
+				pos := p.currentToken.Position
+				varName := p.currentToken.Value
+				value = ast.NewVariable(pos, varName)
+			} else {
+				// Fallback to expression parsing
+				value = parseExpression(p, LOWEST)
+				// Check if parseExpression created a ReferenceExpression
+				if refExpr, ok := value.(*ast.ReferenceExpression); ok {
+					byReference = true
+					value = refExpr.Expression
+				}
+			}
+		} else {
+			// No reference, parse normal expression
+			value = parseExpression(p, LOWEST)
+			// Check if parseExpression created a ReferenceExpression
+			if refExpr, ok := value.(*ast.ReferenceExpression); ok {
+				byReference = true
+				value = refExpr.Expression
+			}
+		}
 		p.nextToken()
 	} else {
-		// Check if firstVar is an ArrayElementExpression (key => value)
-		if arrayElem, ok := firstVar.(*ast.ArrayElementExpression); ok {
+		// Check if firstVar is a reference expression
+		if refExpr, ok := firstVar.(*ast.ReferenceExpression); ok {
+			byReference = true
+			value = refExpr.Expression
+		} else if arrayElem, ok := firstVar.(*ast.ArrayElementExpression); ok {
+			// Check if firstVar is an ArrayElementExpression (key => value)
 			key = arrayElem.Key
 			value = arrayElem.Value
+			// Check if the value is a reference expression
+			if refExpr, ok := value.(*ast.ReferenceExpression); ok {
+				byReference = true
+				value = refExpr.Expression
+			}
 		} else {
 			value = firstVar
 		}
@@ -3509,20 +3554,21 @@ func parseForeachStatement(p *Parser) ast.Statement {
 	// 检查是否为Alternative语法 (foreach (...):)
 	if p.peekToken.Type == lexer.TOKEN_COLON {
 		p.nextToken() // 移动到 :
-		return parseAlternativeForeachStatement(p, pos, iterable, key, value)
+		return parseAlternativeForeachStatement(p, pos, iterable, key, value, byReference)
 	}
 
 	// 普通语法 (foreach (...) { ... })
 	p.nextToken()
 	body := parseStatement(p)
 
-	return ast.NewForeachStatement(pos, iterable, key, value, body)
+	return ast.NewForeachStatementWithRef(pos, iterable, key, value, body, byReference)
 }
 
 // parseAlternativeForeachStatement 解析Alternative语法的foreach语句 (foreach: ... endforeach;)
-func parseAlternativeForeachStatement(p *Parser, pos lexer.Position, iterable, key, value ast.Expression) *ast.AlternativeForeachStatement {
+func parseAlternativeForeachStatement(p *Parser, pos lexer.Position, iterable, key, value ast.Expression, byReference bool) *ast.AlternativeForeachStatement {
 	altForeachStmt := ast.NewAlternativeForeachStatement(pos, iterable, value)
 	altForeachStmt.Key = key
+	altForeachStmt.ByReference = byReference
 
 	// 解析foreach块的语句列表
 	for p.peekToken.Type != lexer.T_ENDFOREACH {
@@ -4890,7 +4936,7 @@ func parseReferenceExpression(p *Parser) ast.Expression {
 	p.nextToken()
 	operand := parseExpression(p, PREFIX)
 
-	return ast.NewUnaryExpression(pos, "&", operand, true)
+	return ast.NewReferenceExpression(pos, operand)
 }
 
 // parseCaseExpression 解析 case 表达式（switch 语句中的 case）

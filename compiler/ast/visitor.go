@@ -115,6 +115,11 @@ func Walk(visitor Visitor, node Node) {
 		for _, arg := range n.Arguments {
 			Walk(visitor, arg)
 		}
+	case *ReferenceExpression:
+		Walk(visitor, n.Expression)
+	case *AssignRefExpression:
+		Walk(visitor, n.Left)
+		Walk(visitor, n.Right)
 		// 对于叶子节点（Variable, StringLiteral, NumberLiteral等），不需要进一步遍历
 	}
 }
@@ -244,6 +249,11 @@ func Transform(node Node, transformer Transformer) Node {
 		if n.Arguments != nil {
 			n.Arguments = Transform(n.Arguments, transformer).(*ArgumentList)
 		}
+	case *ReferenceExpression:
+		n.Expression = Transform(n.Expression, transformer).(Expression)
+	case *AssignRefExpression:
+		n.Left = Transform(n.Left, transformer).(Expression)
+		n.Right = Transform(n.Right, transformer).(Expression)
 	}
 
 	// 然后转换当前节点

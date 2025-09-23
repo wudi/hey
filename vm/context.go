@@ -807,7 +807,20 @@ func (ctx *ExecutionContext) updateGlobalBindings(names []string, value *values.
 		for slot, bound := range frame.GlobalSlots {
 			for _, candidate := range names {
 				if bound == candidate {
-					frame.Locals[slot] = value
+					// Check if the current local is a reference - if so, don't overwrite it
+					currentLocal := frame.Locals[slot]
+					if currentLocal != nil && currentLocal.IsReference() {
+						// If the local is a reference, update its target instead of replacing it
+						ref := currentLocal.Data.(*values.Reference)
+						if !value.IsReference() {
+							ref.Target.Type = value.Type
+							ref.Target.Data = value.Data
+						}
+						// If value is also a reference, we could link them, but for now skip the update
+					} else {
+						// Normal global binding - replace the local value
+						frame.Locals[slot] = value
+					}
 					break
 				}
 			}

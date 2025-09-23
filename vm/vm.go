@@ -383,6 +383,12 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execAssign(ctx, frame, inst, true)
 	case opcodes.OP_ASSIGN_REF:
 		return vm.execAssignRef(ctx, frame, inst)
+	case opcodes.OP_ASSIGN_DIM_REF:
+		return vm.execAssignDimRef(ctx, frame, inst)
+	case opcodes.OP_FETCH_DIM_REF:
+		return vm.execFetchDimRef(ctx, frame, inst)
+	case opcodes.OP_ASSIGN_OBJ_REF:
+		return vm.execAssignObjRef(ctx, frame, inst)
 	case opcodes.OP_ASSIGN_OP:
 		return vm.execAssignOp(ctx, frame, inst)
 	case opcodes.OP_ASSIGN_DIM:

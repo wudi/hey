@@ -211,6 +211,10 @@ func (c *Compiler) compileNode(node ast.Node) error {
 		return c.compileCommaExpression(n)
 	case *ast.SpreadExpression:
 		return c.compileSpreadExpression(n)
+	case *ast.ReferenceExpression:
+		return c.compileReferenceExpression(n)
+	case *ast.AssignRefExpression:
+		return c.compileAssignRef(n)
 	case *ast.ArrowFunctionExpression:
 		return c.compileArrowFunctionExpression(n)
 	case *ast.FirstClassCallable:
@@ -691,6 +695,12 @@ func (c *Compiler) compileArrayIncDec(expr *ast.UnaryExpression, arrayAccess *as
 }
 
 func (c *Compiler) compileAssign(expr *ast.AssignmentExpression) error {
+	// Check if this is a reference assignment ($a = &$b)
+	if refExpr, ok := expr.Right.(*ast.ReferenceExpression); ok && expr.Operator == "=" {
+		// This is a reference assignment - handle it specially
+		return c.compileReferenceAssignment(expr.Left, refExpr.Expression)
+	}
+
 	// Compile right-hand side first
 	err := c.compileNode(expr.Right)
 	if err != nil {
@@ -1360,15 +1370,6 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 
 	// Compile and send arguments
 	if expr.Arguments != nil {
-		// Check if we have any named arguments
-		hasNamedArgs := false
-		for _, arg := range expr.Arguments.Arguments {
-			if _, isNamed := arg.(*ast.NamedArgument); isNamed {
-				hasNamedArgs = true
-				break
-			}
-		}
-
 		for i, arg := range expr.Arguments.Arguments {
 			if namedArg, isNamed := arg.(*ast.NamedArgument); isNamed {
 				// Handle named argument
@@ -1384,22 +1385,43 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 				c.emit(opcodes.OP_SEND_VAL_NAMED, opcodes.IS_CONST, argName, opcodes.IS_TMP_VAR, argResult, 0, 0)
 			} else {
 				// Handle positional argument
-				err := c.compileNode(arg)
-				if err != nil {
-					return err
+				// Check if this is a reference expression (&$var) for explicit references
+				isExplicitReference := false
+				var origVarSlot uint32 = 0
+				var origVarOpType opcodes.OpType = opcodes.IS_UNUSED
+
+				if refExpr, ok := arg.(*ast.ReferenceExpression); ok {
+					// Compile the referenced expression
+					err := c.compileNode(refExpr.Expression)
+					if err != nil {
+						return err
+					}
+					isExplicitReference = true
+				} else {
+					// Check if this is a simple variable that we can track for reference passing
+					if variable, ok := arg.(*ast.Variable); ok {
+						// This is a simple variable - get its slot for potential reference updates
+						origVarSlot = c.getVariableSlot(variable.Name)
+						origVarOpType = opcodes.IS_VAR
+					}
+
+					// Normal argument
+					err := c.compileNode(arg)
+					if err != nil {
+						return err
+					}
 				}
+
 				argResult := c.allocateTemp()
 				c.emitMove(argResult)
 
-				if hasNamedArgs {
-					// If we have named args mixed with positional, we need to handle this specially
-					// For now, we'll send positional args with their index as the name
-					argNum := c.addConstant(values.NewInt(int64(i)))
-					c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+				// Send the argument - we'll check at runtime if parameter expects reference
+				argNum := c.addConstant(values.NewInt(int64(i)))
+				if isExplicitReference {
+					c.emit(opcodes.OP_SEND_REF, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
 				} else {
-					// Pure positional arguments - use existing logic
-					argNum := c.addConstant(values.NewInt(int64(i)))
-					c.emit(opcodes.OP_SEND_VAL, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, 0, 0)
+					// For normal arguments, include original variable info in result operands if available
+					c.emit(opcodes.OP_SEND_VAR, opcodes.IS_CONST, argNum, opcodes.IS_TMP_VAR, argResult, origVarOpType, origVarSlot)
 				}
 			}
 		}
@@ -1639,17 +1661,47 @@ func (c *Compiler) compileEcho(stmt *ast.EchoStatement) error {
 }
 
 func (c *Compiler) compileReturn(stmt *ast.ReturnStatement) error {
+	// Check if current function returns by reference
+	returnsByRef := false
+	if c.currentFunction != nil {
+		returnsByRef = c.currentFunction.ReturnsByReference
+	}
+
 	if stmt.Argument != nil {
-		err := c.compileNode(stmt.Argument)
-		if err != nil {
-			return err
+		if returnsByRef {
+			// For return by reference, we need to return the variable directly, not a temporary copy
+			// Check if the argument is a simple variable
+			if variable, ok := stmt.Argument.(*ast.Variable); ok {
+				// Direct variable return - get the variable slot
+				varSlot := c.getVariableSlot(variable.Name)
+				c.emit(opcodes.OP_RETURN_BY_REF, opcodes.IS_VAR, varSlot, 0, 0, 0, 0)
+			} else {
+				// Complex expression - compile normally but still try to return by reference
+				err := c.compileNode(stmt.Argument)
+				if err != nil {
+					return err
+				}
+				result := c.allocateTemp()
+				c.emitMove(result)
+				c.emit(opcodes.OP_RETURN_BY_REF, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
+			}
+		} else {
+			// Normal return - copy the value
+			err := c.compileNode(stmt.Argument)
+			if err != nil {
+				return err
+			}
+			result := c.allocateTemp()
+			c.emitMove(result)
+			c.emit(opcodes.OP_RETURN, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
 		}
-		result := c.allocateTemp()
-		c.emitMove(result)
-		c.emit(opcodes.OP_RETURN, opcodes.IS_TMP_VAR, result, 0, 0, 0, 0)
 	} else {
 		nullConstant := c.addConstant(values.NewNull())
-		c.emit(opcodes.OP_RETURN, opcodes.IS_CONST, nullConstant, 0, 0, 0, 0)
+		if returnsByRef {
+			c.emit(opcodes.OP_RETURN_BY_REF, opcodes.IS_CONST, nullConstant, 0, 0, 0, 0)
+		} else {
+			c.emit(opcodes.OP_RETURN, opcodes.IS_CONST, nullConstant, 0, 0, 0, 0)
+		}
 	}
 	return nil
 }
@@ -2401,7 +2453,12 @@ func (c *Compiler) compileForeach(stmt *ast.ForeachStatement) error {
 
 	// Initialize foreach iterator
 	iteratorTemp := c.allocateTemp()
-	c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, iteratorTemp)
+	if stmt.ByReference {
+		// Use extended operand to signal reference foreach
+		c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_CONST, 1, opcodes.IS_TMP_VAR, iteratorTemp)
+	} else {
+		c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, iteratorTemp)
+	}
 
 	// Start of loop
 	c.placeLabel(startLabel)
@@ -2433,7 +2490,12 @@ func (c *Compiler) compileForeach(stmt *ast.ForeachStatement) error {
 	// Assign value to value variable
 	if valueVar, ok := stmt.Value.(*ast.Variable); ok {
 		valueSlot := c.getOrCreateVariable(valueVar.Name)
-		c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+		if stmt.ByReference {
+			// For foreach (&$value), assign by reference
+			c.emit(opcodes.OP_ASSIGN_REF, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+		} else {
+			c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+		}
 	}
 
 	// Compile body
@@ -2799,13 +2861,14 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 
 	// Create new function
 	function := &registry.Function{
-		Name:         funcName,
-		Instructions: make([]*opcodes.Instruction, 0),
-		Constants:    make([]*values.Value, 0),
-		Parameters:   make([]*registry.Parameter, 0),
-		IsVariadic:   false,
-		IsGenerator:  false,
-		IsAbstract:   decl.IsAbstract,
+		Name:              funcName,
+		Instructions:      make([]*opcodes.Instruction, 0),
+		Constants:         make([]*values.Value, 0),
+		Parameters:        make([]*registry.Parameter, 0),
+		IsVariadic:        false,
+		IsGenerator:       false,
+		IsAbstract:        decl.IsAbstract,
+		ReturnsByReference: decl.ByReference,
 	}
 
 	// Set current function for generator detection
@@ -3155,9 +3218,9 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 				// Bind the variable to the closure
 				varNameConstant := c.addConstant(values.NewString(varExpr.Name))
 				c.emit(opcodes.OP_BIND_USE_VAR, opcodes.IS_TMP_VAR, closureResult, opcodes.IS_CONST, varNameConstant, opcodes.IS_TMP_VAR, varResult)
-			} else if refExpr, ok := useVar.(*ast.UnaryExpression); ok && refExpr.Operator == "&" {
+			} else if refExpr, ok := useVar.(*ast.ReferenceExpression); ok {
 				// Reference variable binding (&$var)
-				if varExpr, ok := refExpr.Operand.(*ast.Variable); ok {
+				if varExpr, ok := refExpr.Expression.(*ast.Variable); ok {
 					// Get the variable value from current scope
 					err := c.compileNode(varExpr)
 					if err != nil {
@@ -5390,6 +5453,249 @@ func (c *Compiler) compileSpreadExpression(expr *ast.SpreadExpression) error {
 	return nil
 }
 
+// ReferenceExpression compilation (&$var)
+func (c *Compiler) compileReferenceExpression(expr *ast.ReferenceExpression) error {
+	// Compile the expression being referenced
+	if err := c.compileNode(expr.Expression); err != nil {
+		return err
+	}
+
+	// The reference expression itself doesn't generate any opcodes
+	// It's handled by the parent context (e.g., assignment or function parameter)
+	// The result is already in the last temp from compiling the expression
+
+	return nil
+}
+
+// compileReferenceAssignment handles reference assignments like $a = &$b
+func (c *Compiler) compileReferenceAssignment(left ast.Expression, right ast.Expression) error {
+
+	// For reference assignment, we need to handle the right side differently
+	// We don't want to dereference the variable, we want the raw reference object
+	var rightTemp uint32
+	var sourceSlot uint32 = 0
+	var sourceOpType opcodes.OpType = opcodes.IS_UNUSED
+
+	if rightVar, ok := right.(*ast.Variable); ok {
+		// Right side is a variable - we want to get the raw reference object
+		// Don't call compileNode() as that would dereference it
+		sourceSlot = c.getVariableSlot(rightVar.Name)
+		sourceOpType = opcodes.IS_VAR
+
+		// Emit variable name binding for the source variable too
+		sourceNameConstant := c.addConstant(values.NewString(rightVar.Name))
+		c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, sourceSlot, opcodes.IS_CONST, sourceNameConstant, 0, 0)
+
+		// For the operand, we'll use the variable slot directly instead of a temp
+		rightTemp = sourceSlot
+	} else {
+		// For non-variable expressions, compile normally
+		if err := c.compileNode(right); err != nil {
+			return err
+		}
+		rightTemp = c.nextTemp - 1
+	}
+
+	// Handle different left-hand side types
+	switch leftExpr := left.(type) {
+	case *ast.Variable:
+		// Get or create variable slot (keep full name like normal assignments)
+		varSlot := c.getVariableSlot(leftExpr.Name)
+
+		// Emit variable name binding for variable variables support
+		nameConstant := c.addConstant(values.NewString(leftExpr.Name))
+		c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, varSlot, opcodes.IS_CONST, nameConstant, 0, 0)
+
+		// Generate reference assignment opcode with source slot information
+		// Choose the right operand type based on whether we have a variable or compiled expression
+		var rightOpType opcodes.OpType
+		if sourceOpType == opcodes.IS_VAR {
+			// Right side is a variable, use variable operand type
+			rightOpType = opcodes.IS_VAR
+		} else {
+			// Right side is a compiled expression, use temp var
+			rightOpType = opcodes.IS_TMP_VAR
+		}
+
+		c.emit(opcodes.OP_ASSIGN_REF,
+			rightOpType, rightTemp,
+			sourceOpType, sourceSlot,
+			opcodes.IS_VAR, varSlot)
+
+	case *ast.ArrayAccessExpression:
+		// Handle array element reference assignment
+		// $arr[$key] = &$value
+		if err := c.compileNode(leftExpr.Array); err != nil {
+			return err
+		}
+		arrayTemp := c.nextTemp - 1
+
+		if leftExpr.Index != nil {
+			if err := c.compileNode(*leftExpr.Index); err != nil {
+				return err
+			}
+		} else {
+			// No index provided, append to array
+			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, c.addConstant(values.NewNull()), opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, c.allocateTemp())
+		}
+		indexTemp := c.nextTemp - 1
+
+		c.emit(opcodes.OP_ASSIGN_DIM_REF,
+			opcodes.IS_TMP_VAR, arrayTemp,     // Array
+			opcodes.IS_TMP_VAR, indexTemp,     // Index
+			opcodes.IS_TMP_VAR, rightTemp)     // Source value
+
+	default:
+		return fmt.Errorf("unsupported left-hand side type for reference assignment: %T", left)
+	}
+
+	return nil
+}
+
+// AssignRef compilation ($a =& $b)
+func (c *Compiler) compileAssignRef(expr *ast.AssignRefExpression) error {
+
+	// For reference assignment, we need to handle the right side differently
+	// We don't want to dereference the variable, we want the raw reference object
+	var rightTemp uint32
+	var sourceSlot uint32 = 0
+	var sourceOpType opcodes.OpType = opcodes.IS_UNUSED
+
+	if rightVar, ok := expr.Right.(*ast.Variable); ok {
+		// Right side is a variable - we want to get the raw reference object
+		// Don't call compileNode() as that would dereference it
+		sourceSlot = c.getVariableSlot(rightVar.Name)
+		sourceOpType = opcodes.IS_VAR
+
+		// Emit variable name binding for the source variable too
+		sourceNameConstant := c.addConstant(values.NewString(rightVar.Name))
+		c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, sourceSlot, opcodes.IS_CONST, sourceNameConstant, 0, 0)
+
+		// For the operand, we'll use the variable slot directly instead of a temp
+		rightTemp = sourceSlot
+	} else if arrayAccess, ok := expr.Right.(*ast.ArrayAccessExpression); ok {
+		// Right side is array access - we need to create a reference to the array element
+		// First compile the array and index
+		if err := c.compileNode(arrayAccess.Array); err != nil {
+			return err
+		}
+		arrayTemp := c.nextTemp - 1
+
+		if arrayAccess.Index != nil {
+			if err := c.compileNode(*arrayAccess.Index); err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("array access without index in reference context is not supported")
+		}
+		indexTemp := c.nextTemp - 1
+
+		// Use the new OP_FETCH_DIM_REF opcode to get a reference to the array element
+		rightTemp = c.allocateTemp()
+		c.emit(opcodes.OP_FETCH_DIM_REF,
+			opcodes.IS_TMP_VAR, arrayTemp,
+			opcodes.IS_TMP_VAR, indexTemp,
+			opcodes.IS_TMP_VAR, rightTemp)
+	} else {
+		// For other expressions, compile normally
+		if err := c.compileNode(expr.Right); err != nil {
+			return err
+		}
+		rightTemp = c.nextTemp - 1
+	}
+
+	// For reference assignment, we need the address/location, not the value
+	// This depends on what the left side is
+	switch left := expr.Left.(type) {
+	case *ast.Variable:
+		// Get or create variable slot (keep full name like normal assignments)
+		varSlot := c.getVariableSlot(left.Name)
+
+		// Emit variable name binding for variable variables support
+		nameConstant := c.addConstant(values.NewString(left.Name))
+		c.emit(opcodes.OP_BIND_VAR_NAME, opcodes.IS_VAR, varSlot, opcodes.IS_CONST, nameConstant, 0, 0)
+
+		// Generate reference assignment opcode with source slot information
+		// Choose the right operand type based on whether we have a variable or compiled expression
+		var rightOpType opcodes.OpType
+		if sourceOpType == opcodes.IS_VAR {
+			// Right side is a variable, use variable operand type
+			rightOpType = opcodes.IS_VAR
+		} else {
+			// Right side is a compiled expression, use temp var
+			rightOpType = opcodes.IS_TMP_VAR
+		}
+
+		c.emit(opcodes.OP_ASSIGN_REF,
+			rightOpType, rightTemp,
+			sourceOpType, sourceSlot,
+			opcodes.IS_VAR, varSlot)
+
+	case *ast.ArrayAccessExpression:
+		// Handle array element reference assignment
+		// $arr[$key] =& $value
+		if err := c.compileNode(left.Array); err != nil {
+			return err
+		}
+		arrayTemp := c.nextTemp - 1
+
+		if left.Index != nil {
+			if err := c.compileNode(*left.Index); err != nil {
+				return err
+			}
+		} else {
+			// No index, use null to indicate append
+			nullConst := c.addConstant(values.NewNull())
+			tempSlot := c.allocateTemp()
+			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, nullConst, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, tempSlot)
+		}
+		indexTemp := c.nextTemp - 1
+
+		result := c.allocateTemp()
+
+		// Emit array element reference assignment
+		c.emit(opcodes.OP_ASSIGN_DIM_REF,
+			opcodes.IS_TMP_VAR, arrayTemp,
+			opcodes.IS_TMP_VAR, indexTemp,
+			opcodes.IS_TMP_VAR, rightTemp)
+
+		c.emit(opcodes.OP_QM_ASSIGN,
+			opcodes.IS_TMP_VAR, rightTemp,
+			opcodes.IS_UNUSED, 0,
+			opcodes.IS_TMP_VAR, result)
+
+	case *ast.PropertyAccessExpression:
+		// Handle object property reference assignment
+		// $obj->prop =& $value
+		if err := c.compileNode(left.Object); err != nil {
+			return err
+		}
+		objTemp := c.nextTemp - 1
+
+		// Get property name
+		propName := ""
+		switch prop := left.Property.(type) {
+		case *ast.IdentifierNode:
+			propName = prop.Name
+		default:
+			return fmt.Errorf("dynamic property reference assignment not yet supported")
+		}
+
+		propConst := c.addConstant(values.NewString(propName))
+
+		// Emit object property reference assignment
+		c.emit(opcodes.OP_ASSIGN_OBJ_REF,
+			opcodes.IS_TMP_VAR, objTemp,
+			opcodes.IS_CONST, propConst,
+			opcodes.IS_TMP_VAR, rightTemp)
+
+	default:
+		return fmt.Errorf("reference assignment to %T not yet supported", left)
+	}
+
+	return nil
+}
+
 // ArrowFunctionExpression compilation (fn() => expr)
 func (c *Compiler) compileArrowFunctionExpression(expr *ast.ArrowFunctionExpression) error {
 	// Generate a unique name for the arrow function using the counter
@@ -6322,7 +6628,12 @@ func (c *Compiler) compileAlternativeForeachStatement(stmt *ast.AlternativeForea
 
 	// Initialize foreach iterator
 	iteratorTemp := c.allocateTemp()
-	c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, iteratorTemp)
+	if stmt.ByReference {
+		// Use extended operand to signal reference foreach
+		c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_CONST, 1, opcodes.IS_TMP_VAR, iteratorTemp)
+	} else {
+		c.emit(opcodes.OP_FE_RESET, opcodes.IS_TMP_VAR, iterableTemp, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, iteratorTemp)
+	}
 
 	// Start of loop
 	c.placeLabel(startLabel)
@@ -6354,7 +6665,12 @@ func (c *Compiler) compileAlternativeForeachStatement(stmt *ast.AlternativeForea
 	// Assign value to value variable
 	if valueVar, ok := stmt.Value.(*ast.Variable); ok {
 		valueSlot := c.getOrCreateVariable(valueVar.Name)
-		c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+		if stmt.ByReference {
+			// For foreach (&$value), assign by reference
+			c.emit(opcodes.OP_ASSIGN_REF, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+		} else {
+			c.emit(opcodes.OP_ASSIGN, opcodes.IS_TMP_VAR, valueTemp, opcodes.IS_UNUSED, 0, opcodes.IS_VAR, valueSlot)
+		}
 	}
 
 	// Compile body statements (this is the main difference from regular foreach)
