@@ -12,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wudi/hey/compiler/ast"
 	"github.com/wudi/hey/compiler/lexer"
 	"github.com/wudi/hey/compiler/parser"
 	"github.com/wudi/hey/opcodes"
@@ -20,6 +19,7 @@ import (
 	runtime2 "github.com/wudi/hey/runtime"
 	"github.com/wudi/hey/values"
 	"github.com/wudi/hey/vm"
+	"github.com/wudi/hey/vmfactory"
 )
 
 // Helper function to execute compiled bytecode with runtime initialization
@@ -3966,58 +3966,11 @@ echo "Include 3 executed\n";`,
 		require.NoError(t, err, "Failed to create test file: %s", filename)
 	}
 
-	// Create VM and set up compiler callback
-	vmachine := vm.NewVirtualMachine()
-
-	// Set up the compiler callback for include functionality
-	vmachine.CompilerCallback = func(ctx *vm.ExecutionContext, program *ast.Program, filePath string, isRequired bool) (*values.Value, error) {
-		// Create a new compiler for the included file
-		comp := NewCompiler()
-		if err := comp.Compile(program); err != nil {
-			return nil, fmt.Errorf("compilation error in %s: %v", filePath, err)
-		}
-
-		// Create a new execution context for the included file but copy the variables
-		// This allows variable sharing while preserving the main script's instruction state
-		includeCtx := vm.NewExecutionContext()
-		includeCtx.Variables = ctx.Variables         // Share variables
-		includeCtx.Stack = ctx.Stack                 // Share stack
-		includeCtx.IncludedFiles = ctx.IncludedFiles // Share included files tracking
-		includeCtx.OutputWriter = ctx.OutputWriter   // Share output writer
-
-		// Execute the compiled bytecode in the separate context
-		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
-		if err != nil {
-			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
-		}
-
-		// Copy back any changes to the shared state
-		ctx.Variables = includeCtx.Variables
-		ctx.Stack = includeCtx.Stack
-		ctx.IncludedFiles = includeCtx.IncludedFiles
-		// Output merging is now handled automatically by shared OutputWriter
-
-		// Check if the included file executed an explicit return statement
-		if includeCtx.Halted && len(includeCtx.Stack) > 0 {
-			// Get the return value from the stack
-			returnValue := includeCtx.Stack[len(includeCtx.Stack)-1]
-
-			// Check if this is an explicit return (not just end of file)
-			// In PHP, if a file ends without explicit return, it should return 1, not null
-			if returnValue.IsNull() {
-				// This is likely end-of-file, not an explicit return null
-				return values.NewInt(1), nil
-			}
-
-			// Remove the return value from the stack and update both contexts
-			includeCtx.Stack = includeCtx.Stack[:len(includeCtx.Stack)-1]
-			ctx.Stack = includeCtx.Stack
-			return returnValue, nil
-		}
-
-		// Return 1 on successful inclusion (PHP convention when no return statement)
-		return values.NewInt(1), nil
-	}
+	// Create VM with pre-configured compiler callback
+	factory := vmfactory.NewVMFactory(func() vmfactory.Compiler {
+		return NewCompiler()
+	})
+	vmachine := factory.CreateVM()
 
 	testCases := []struct {
 		name           string
