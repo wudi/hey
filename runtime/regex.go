@@ -264,10 +264,19 @@ func GetRegexFunctions() []*registry.Function {
 					} else if args[2].Type == values.TypeReference {
 						ref := args[2].Data.(*values.Reference)
 						if ref.Target == nil || ref.Target.Type != values.TypeArray {
-							// Create new array for reference to undefined/non-array
-							newArray := values.NewArray()
-							ref.Target = newArray
-							targetValue = newArray
+							// Convert the existing null value to an array in-place
+							if ref.Target == nil {
+								ref.Target = values.NewArray()
+							} else {
+								// Transform the existing value to array type
+								ref.Target.Type = values.TypeArray
+								ref.Target.Data = &values.Array{
+									Elements:  make(map[interface{}]*values.Value),
+									NextIndex: 0,
+									IsIndexed: true,
+								}
+							}
+							targetValue = ref.Target
 						} else {
 							targetValue = ref.Target
 						}
