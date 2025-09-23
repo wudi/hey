@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/wudi/hey/opcodes"
 	"github.com/wudi/hey/optimizer"
@@ -224,10 +225,20 @@ func demo3() {
 	}
 
 	// Show memory usage
+	// Helper function to count sync.Map entries
+	countSyncMap := func(m *sync.Map) int {
+		count := 0
+		m.Range(func(key, value interface{}) bool {
+			count++
+			return true
+		})
+		return count
+	}
+
 	fmt.Printf("\nMemory Usage:\n")
 	fmt.Printf("- Constants: %d\n", len(ctx.Constants))
-	fmt.Printf("- Variables: %d\n", len(ctx.Variables))
-	fmt.Printf("- Temporaries: %d\n", len(ctx.Temporaries))
+	fmt.Printf("- Variables: %d\n", countSyncMap(ctx.Variables))
+	fmt.Printf("- Temporaries: %d\n", countSyncMap(ctx.Temporaries))
 	fmt.Printf("- Call stack depth: %d\n", len(ctx.CallStack))
 }
 

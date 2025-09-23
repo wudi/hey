@@ -27,15 +27,14 @@ func (b *builtinContext) GetGlobal(name string) (*values.Value, bool) {
 	if b.ctx == nil {
 		return nil, false
 	}
-	v, ok := b.ctx.GlobalVars[name]
-	return v, ok
+	return b.ctx.GetGlobalVar(name)
 }
 
 func (b *builtinContext) SetGlobal(name string, val *values.Value) {
 	if b.ctx == nil {
 		return
 	}
-	b.ctx.GlobalVars[name] = val
+	b.ctx.SetGlobalVar(name, val)
 }
 
 func (b *builtinContext) SymbolRegistry() *registry.Registry {
@@ -43,24 +42,21 @@ func (b *builtinContext) SymbolRegistry() *registry.Registry {
 }
 
 func (b *builtinContext) LookupUserFunction(name string) (*registry.Function, bool) {
-	if b.ctx == nil || b.ctx.UserFunctions == nil {
+	if b.ctx == nil {
 		return nil, false
 	}
-	fn, ok := b.ctx.UserFunctions[strings.ToLower(name)]
-	return fn, ok
+	return b.ctx.GetUserFunction(strings.ToLower(name))
 }
 
 func (b *builtinContext) LookupUserClass(name string) (*registry.Class, bool) {
-	if b.ctx == nil || b.ctx.UserClasses == nil {
+	if b.ctx == nil {
 		return nil, false
 	}
-	if class, ok := b.ctx.UserClasses[strings.ToLower(name)]; ok {
+	if class, ok := b.ctx.GetUserClass(strings.ToLower(name)); ok {
 		return class, true
 	}
-	if b.ctx.ClassTable != nil {
-		if runtimeCls, ok := b.ctx.ClassTable[strings.ToLower(name)]; ok && runtimeCls != nil {
-			return runtimeCls.Descriptor, runtimeCls.Descriptor != nil
-		}
+	if runtimeCls, ok := b.ctx.getClass(strings.ToLower(name)); ok && runtimeCls != nil {
+		return runtimeCls.Descriptor, runtimeCls.Descriptor != nil
 	}
 	return nil, false
 }

@@ -74,20 +74,30 @@ func (e *VMGoroutineExecutor) ExecuteFunction(fn *registry.Function, boundVarsMa
 
 	// Copy global state (classes, functions, etc.) from the main VM context
 	if e.vm.lastContext != nil {
-		ctx.ClassTable = make(map[string]*classRuntime)
-		for k, v := range e.vm.lastContext.ClassTable {
-			ctx.ClassTable[k] = v
+		// Copy ClassTable from main context (sync.Map is thread-safe for reads)
+		e.vm.lastContext.ClassTable.Range(func(key, value interface{}) bool {
+			// Create a deep copy of the class runtime to avoid shared state
+			ctx.ClassTable.Store(key, copyClassRuntime(value.(*classRuntime)))
+			return true
+		})
+
+		// Copy GlobalVars from main context
+		e.vm.lastContext.GlobalVars.Range(func(key, value interface{}) bool {
+			// Deep copy all global variables to prevent race conditions
+			ctx.GlobalVars.Store(key, copyValue(value.(*values.Value)))
+			return true
+		})
+	}
+	// Fresh sync.Maps are already initialized in NewExecutionContext()
+
+	// Handle builtin functions directly with proper context
+	if fn.IsBuiltin && fn.Builtin != nil {
+		// Create a builtin context for the goroutine
+		builtinCtx := &builtinContext{
+			vm:  goroutineVM,
+			ctx: ctx,
 		}
-		// Create completely isolated global variables for goroutine
-		// Deep copy all global variables to prevent race conditions
-		ctx.GlobalVars = make(map[string]*values.Value)
-		for k, v := range e.vm.lastContext.GlobalVars {
-			ctx.GlobalVars[k] = copyValue(v)
-		}
-	} else {
-		// Create fresh execution context
-		ctx.GlobalVars = make(map[string]*values.Value)
-		ctx.ClassTable = make(map[string]*classRuntime)
+		return fn.Builtin(builtinCtx, []*values.Value{})
 	}
 
 	// Create a call frame for the function

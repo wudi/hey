@@ -155,13 +155,11 @@ func parseAndExecuteCodeWithFile(code string, inScript bool, filename string) er
 
 	vmCtx := vm.NewExecutionContext()
 
-	if vmCtx.GlobalVars == nil {
-		vmCtx.GlobalVars = make(map[string]*values.Value)
-	}
+	// GlobalVars is already initialized as sync.Map in NewExecutionContext()
 
 	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
-		vmCtx.GlobalVars[name] = value
+		vmCtx.GlobalVars.Store(name, value)
 	}
 
 	// Create VM and set up compiler callback
@@ -273,13 +271,11 @@ func parseAndExecuteCode(code string, inScript bool) error {
 
 	vmCtx := vm.NewExecutionContext()
 
-	if vmCtx.GlobalVars == nil {
-		vmCtx.GlobalVars = make(map[string]*values.Value)
-	}
+	// GlobalVars is already initialized as sync.Map in NewExecutionContext()
 
 	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
-		vmCtx.GlobalVars[name] = value
+		vmCtx.GlobalVars.Store(name, value)
 	}
 
 	// Create VM and set up compiler callback
@@ -390,9 +386,7 @@ func runInteractiveShell() error {
 
 	// Create persistent VM context and machine
 	vmCtx := vm.NewExecutionContext()
-	if vmCtx.GlobalVars == nil {
-		vmCtx.GlobalVars = make(map[string]*values.Value)
-	}
+	// GlobalVars is already initialized as sync.Map in NewExecutionContext()
 
 	// Create tracking writer for output
 	outputTracker := &trackingWriter{w: os.Stdout}
@@ -400,7 +394,7 @@ func runInteractiveShell() error {
 
 	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
-		vmCtx.GlobalVars[name] = value
+		vmCtx.GlobalVars.Store(name, value)
 	}
 
 	vmachine := vm.NewVirtualMachine()

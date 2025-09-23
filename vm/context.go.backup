@@ -15,20 +15,13 @@ import (
 // ExecutionContext carries the mutable state associated with executing a single
 // PHP script (and its nested function calls) inside the virtual machine.
 type ExecutionContext struct {
-	// Use sync.Map for thread-safe concurrent access without locking issues
-	GlobalVars    *sync.Map // map[string]*values.Value
-	IncludedFiles *sync.Map // map[string]bool
-	Variables     *sync.Map // map[string]*values.Value
-	Temporaries   *sync.Map // map[uint32]*values.Value
-	ClassTable    *sync.Map // map[string]*classRuntime
-
-	// User symbols can use regular maps with RWMutex since they're mostly read-only after setup
-	userSymbolsMu    sync.RWMutex
-	UserFunctions    map[string]*registry.Function
-	UserClasses      map[string]*registry.Class
-	UserInterfaces   map[string]*registry.Interface
-	UserTraits       map[string]*registry.Trait
-
+	// Individual mutexes for each map to prevent deadlocks
+	globalVarsMu     sync.RWMutex
+	includedFilesMu  sync.RWMutex
+	userSymbolsMu    sync.RWMutex // For UserFunctions, UserClasses, UserInterfaces, UserTraits
+	variablesMu      sync.RWMutex
+	temporariesMu    sync.RWMutex
+	classTableMu     sync.RWMutex
 	// Mutex for stack and frame operations
 	frameMu sync.Mutex
 
@@ -36,12 +29,24 @@ type ExecutionContext struct {
 
 	OutputWriter io.Writer
 
+	GlobalVars map[string]*values.Value
+
+	IncludedFiles map[string]bool
+
 	Halted bool
 	ExitCode int
 
 	CallStack []*CallFrame
 
+	UserFunctions map[string]*registry.Function
+	UserClasses   map[string]*registry.Class
+	UserInterfaces map[string]*registry.Interface
+	UserTraits     map[string]*registry.Trait
+
 	Constants    []*values.Value
+	Variables    map[string]*values.Value
+	Temporaries  map[uint32]*values.Value
+	ClassTable   map[string]*classRuntime
 	currentClass *classRuntime
 
 	debugLog []string
@@ -50,19 +55,19 @@ type ExecutionContext struct {
 // NewExecutionContext constructs a fresh execution context with sane defaults.
 func NewExecutionContext() *ExecutionContext {
 	return &ExecutionContext{
-		Stack:          make([]*values.Value, 0, 16),
-		OutputWriter:   os.Stdout,
-		GlobalVars:     &sync.Map{},
-		IncludedFiles:  &sync.Map{},
-		Variables:      &sync.Map{},
-		Temporaries:    &sync.Map{},
-		ClassTable:     &sync.Map{},
-		CallStack:      make([]*CallFrame, 0, 8),
-		UserFunctions:  make(map[string]*registry.Function),
-		UserClasses:    make(map[string]*registry.Class),
+		Stack:         make([]*values.Value, 0, 16),
+		OutputWriter:  os.Stdout,
+		GlobalVars:    make(map[string]*values.Value),
+		IncludedFiles: make(map[string]bool),
+		CallStack:     make([]*CallFrame, 0, 8),
+		UserFunctions: make(map[string]*registry.Function),
+		UserClasses:   make(map[string]*registry.Class),
 		UserInterfaces: make(map[string]*registry.Interface),
 		UserTraits:     make(map[string]*registry.Trait),
-		debugLog:       make([]string, 0, 64),
+		Variables:     make(map[string]*values.Value),
+		Temporaries:   make(map[uint32]*values.Value),
+		ClassTable:    make(map[string]*classRuntime),
+		debugLog:      make([]string, 0, 64),
 	}
 }
 
@@ -468,26 +473,31 @@ func globalNameVariants(name string) []string {
 func (ctx *ExecutionContext) ensureClass(name string) *classRuntime {
 	key := classKey(name)
 
-	// Try to load existing class first
-	if val, ok := ctx.ClassTable.Load(key); ok {
-		return val.(*classRuntime)
+	// Try read lock first for common case
+	ctx.mapMu.RLock()
+	if cls, ok := ctx.ClassTable[key]; ok {
+		ctx.mapMu.RUnlock()
+		return cls
+	}
+	ctx.mapMu.RUnlock()
+
+	// Need write lock to create new class
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+
+	// Double-check in case another goroutine created it
+	if cls, ok := ctx.ClassTable[key]; ok {
+		return cls
 	}
 
-	// Create new class
 	cls := &classRuntime{
 		Name:        name,
 		Properties:  make(map[string]*propertyRuntime),
 		StaticProps: make(map[string]*values.Value),
 		Constants:   make(map[string]*values.Value),
 	}
-
-	// Get user class definition with proper locking
-	ctx.userSymbolsMu.RLock()
-	userClassDef, hasUserClass := ctx.UserClasses[strings.ToLower(name)]
-	ctx.userSymbolsMu.RUnlock()
-
-	if hasUserClass {
-		populateRuntimeFromClassDef(cls, userClassDef)
+	if def, ok := ctx.UserClasses[strings.ToLower(name)]; ok {
+		populateRuntimeFromClassDef(cls, def)
 	}
 	if cls.Descriptor == nil && registry.GlobalRegistry != nil {
 		if desc, err := registry.GlobalRegistry.GetClass(name); err == nil {
@@ -501,28 +511,20 @@ func (ctx *ExecutionContext) ensureClass(name string) *classRuntime {
 			populateRuntimeFromClassDef(cls, cached)
 		}
 	}
-
-	// Use LoadOrStore to handle race conditions
-	if actual, loaded := ctx.ClassTable.LoadOrStore(key, cls); loaded {
-		// Another goroutine created it first, use theirs
-		cls = actual.(*classRuntime)
-	}
-
-	// Handle parent class inheritance (recursive call is safe now)
+	ctx.ClassTable[key] = cls
 	if cls.Parent != "" {
 		if parent := ctx.ensureClass(cls.Parent); parent != nil {
 			inheritClassMetadata(cls, parent)
 		}
 	}
-
 	return cls
 }
 
 func (ctx *ExecutionContext) getClass(name string) (*classRuntime, bool) {
-	if val, ok := ctx.ClassTable.Load(classKey(name)); ok {
-		return val.(*classRuntime), true
-	}
-	return nil, false
+	ctx.mapMu.RLock()
+	defer ctx.mapMu.RUnlock()
+	cls, ok := ctx.ClassTable[classKey(name)]
+	return cls, ok
 }
 
 func inheritClassMetadata(target, parent *classRuntime) {
@@ -747,59 +749,79 @@ func descriptorFromClass(class *registry.Class) *registry.ClassDescriptor {
 }
 
 func (ctx *ExecutionContext) ensureGlobal(name string) *values.Value {
-	// First check GlobalVars
+	ctx.mapMu.RLock()
 	for _, variant := range globalNameVariants(name) {
-		if val, ok := ctx.GlobalVars.Load(variant); ok {
-			ctx.bindGlobalValue(name, val.(*values.Value))
-			return val.(*values.Value)
+		if val, ok := ctx.GlobalVars[variant]; ok {
+			ctx.mapMu.RUnlock()
+			ctx.bindGlobalValue(name, val)
+			return val
 		}
 	}
-
-	// Then check Variables
 	for _, variant := range globalNameVariants(name) {
-		if val, ok := ctx.Variables.Load(variant); ok {
-			ctx.bindGlobalValue(name, val.(*values.Value))
-			return val.(*values.Value)
+		if ctx.Variables != nil {
+			if val, ok := ctx.Variables[variant]; ok {
+				ctx.mapMu.RUnlock()
+				ctx.bindGlobalValue(name, val)
+				return val
+			}
 		}
 	}
-
-	// Create new null value
+	ctx.mapMu.RUnlock()
 	null := values.NewNull()
 	ctx.bindGlobalValue(name, null)
 	return null
 }
 
 func (ctx *ExecutionContext) setVariable(name string, value *values.Value) {
-	ctx.Variables.Store(name, value)
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+	if ctx.Variables == nil {
+		ctx.Variables = make(map[string]*values.Value)
+	}
+	ctx.Variables[name] = value
 	if sanitized := sanitizeVariableName(name); sanitized != "" && sanitized != name {
-		ctx.Variables.Store(sanitized, value)
+		ctx.Variables[sanitized] = value
 	}
 }
 
 func (ctx *ExecutionContext) unsetVariable(name string) {
-	ctx.Variables.Delete(name)
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+	if ctx.Variables == nil {
+		return
+	}
+	delete(ctx.Variables, name)
 	if sanitized := sanitizeVariableName(name); sanitized != "" && sanitized != name {
-		ctx.Variables.Delete(sanitized)
+		delete(ctx.Variables, sanitized)
 	}
 }
 
 func (ctx *ExecutionContext) bindGlobalValue(name string, value *values.Value) {
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+	if ctx.GlobalVars == nil {
+		ctx.GlobalVars = make(map[string]*values.Value)
+	}
 	variants := globalNameVariants(name)
 	for _, variant := range variants {
-		ctx.GlobalVars.Store(variant, value)
+		ctx.GlobalVars[variant] = value
 	}
 	ctx.updateGlobalBindings(variants, value)
 }
 
 func (ctx *ExecutionContext) unsetGlobal(name string) {
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+	if ctx.GlobalVars == nil {
+		return
+	}
 	for _, variant := range globalNameVariants(name) {
-		ctx.GlobalVars.Delete(variant)
+		delete(ctx.GlobalVars, variant)
 	}
 }
 
 func (ctx *ExecutionContext) updateGlobalBindings(names []string, value *values.Value) {
-	ctx.frameMu.Lock()
-	defer ctx.frameMu.Unlock()
+	// Note: caller must hold mapMu.Lock()
 	for _, frame := range ctx.CallStack {
 		if frame == nil || len(frame.GlobalSlots) == 0 {
 			continue
@@ -816,88 +838,98 @@ func (ctx *ExecutionContext) updateGlobalBindings(names []string, value *values.
 }
 
 func (ctx *ExecutionContext) setTemporary(slot uint32, value *values.Value) {
-	ctx.Temporaries.Store(slot, value)
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+	if ctx.Temporaries == nil {
+		ctx.Temporaries = make(map[uint32]*values.Value)
+	}
+	ctx.Temporaries[slot] = value
 }
 
 // GetGlobalVar safely retrieves a global variable
 func (ctx *ExecutionContext) GetGlobalVar(name string) (*values.Value, bool) {
-	if val, ok := ctx.GlobalVars.Load(name); ok {
-		return val.(*values.Value), true
-	}
-	return nil, false
+	ctx.mapMu.RLock()
+	defer ctx.mapMu.RUnlock()
+	val, ok := ctx.GlobalVars[name]
+	return val, ok
 }
 
 // SetGlobalVar safely sets a global variable
 func (ctx *ExecutionContext) SetGlobalVar(name string, val *values.Value) {
-	ctx.GlobalVars.Store(name, val)
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+	if ctx.GlobalVars == nil {
+		ctx.GlobalVars = make(map[string]*values.Value)
+	}
+	ctx.GlobalVars[name] = val
 }
 
 // GetUserFunction safely retrieves a user function
 func (ctx *ExecutionContext) GetUserFunction(name string) (*registry.Function, bool) {
-	ctx.userSymbolsMu.RLock()
-	defer ctx.userSymbolsMu.RUnlock()
+	ctx.mapMu.RLock()
+	defer ctx.mapMu.RUnlock()
 	fn, ok := ctx.UserFunctions[name]
 	return fn, ok
 }
 
 // GetUserClass safely retrieves a user class
 func (ctx *ExecutionContext) GetUserClass(name string) (*registry.Class, bool) {
-	ctx.userSymbolsMu.RLock()
-	defer ctx.userSymbolsMu.RUnlock()
+	ctx.mapMu.RLock()
+	defer ctx.mapMu.RUnlock()
 	cls, ok := ctx.UserClasses[name]
 	return cls, ok
 }
 
 // IsFileIncluded safely checks if a file is included
 func (ctx *ExecutionContext) IsFileIncluded(path string) bool {
-	if val, ok := ctx.IncludedFiles.Load(path); ok {
-		return val.(bool)
-	}
-	return false
+	ctx.mapMu.RLock()
+	defer ctx.mapMu.RUnlock()
+	return ctx.IncludedFiles[path]
 }
 
 // MarkFileIncluded safely marks a file as included
 func (ctx *ExecutionContext) MarkFileIncluded(path string) {
-	ctx.IncludedFiles.Store(path, true)
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
+	if ctx.IncludedFiles == nil {
+		ctx.IncludedFiles = make(map[string]bool)
+	}
+	ctx.IncludedFiles[path] = true
 }
 
 // GetVariable safely retrieves a variable
 func (ctx *ExecutionContext) GetVariable(name string) (*values.Value, bool) {
-	if val, ok := ctx.Variables.Load(name); ok {
-		return val.(*values.Value), true
-	}
-	return nil, false
+	ctx.mapMu.RLock()
+	defer ctx.mapMu.RUnlock()
+	val, ok := ctx.Variables[name]
+	return val, ok
 }
 
 // GetTemporary safely retrieves a temporary variable
 func (ctx *ExecutionContext) GetTemporary(slot uint32) (*values.Value, bool) {
-	if val, ok := ctx.Temporaries.Load(slot); ok {
-		return val.(*values.Value), true
-	}
-	return nil, false
+	ctx.mapMu.RLock()
+	defer ctx.mapMu.RUnlock()
+	val, ok := ctx.Temporaries[slot]
+	return val, ok
 }
 
 func (ctx *ExecutionContext) exportState(frame *CallFrame) {
 	if frame == nil {
 		return
 	}
-
-	// Export constants (no locking needed for slice)
+	ctx.mapMu.Lock()
+	defer ctx.mapMu.Unlock()
 	ctx.Constants = frame.cloneConstants()
-
-	// Clear and repopulate Temporaries
-	ctx.Temporaries = &sync.Map{}
+	ctx.Temporaries = make(map[uint32]*values.Value, len(frame.TempVars))
 	for slot, val := range frame.TempVars {
-		ctx.Temporaries.Store(slot, val)
+		ctx.Temporaries[slot] = val
 	}
-
-	// Clear and repopulate Variables
-	ctx.Variables = &sync.Map{}
+	ctx.Variables = make(map[string]*values.Value, len(frame.Locals))
 	for slot, val := range frame.Locals {
 		if name, ok := frame.SlotNames[slot]; ok && name != "" {
-			ctx.Variables.Store(name, val)
+			ctx.Variables[name] = val
 		} else {
-			ctx.Variables.Store(fmt.Sprintf("$%d", slot), val)
+			ctx.Variables[fmt.Sprintf("$%d", slot)] = val
 		}
 	}
 }

@@ -1015,9 +1015,10 @@ func (vm *VirtualMachine) execFetchClassConstant(ctx *ExecutionContext, frame *C
 				}
 			}
 		}
-		if !resolved && ctx.Variables != nil {
+		if !resolved {
 			for _, candidate := range candidates {
-				if val, ok := ctx.Variables[candidate]; ok && val != nil {
+				if val, ok := ctx.Variables.Load(candidate); ok && val != nil {
+					val := val.(*values.Value)
 					val = val.Deref()
 					if val.IsObject() {
 						rawClass = val.Data.(*values.Object).ClassName
@@ -1677,9 +1678,10 @@ func (vm *VirtualMachine) execFetchDynamic(ctx *ExecutionContext, frame *CallFra
 			break
 		}
 	}
-	if !found && ctx.Variables != nil {
+	if !found {
 		for candidate := range candidates {
-			if v, exists := ctx.Variables[candidate]; exists {
+			if v, exists := ctx.Variables.Load(candidate); exists {
+				v := v.(*values.Value)
 				val = v
 				found = true
 				break
@@ -1726,7 +1728,8 @@ func (vm *VirtualMachine) execBindVarName(ctx *ExecutionContext, frame *CallFram
 			frame.setLocal(op1, localVal)
 		}
 	}
-	if val, ok := ctx.Variables[name]; ok && !exists {
+	if val, ok := ctx.Variables.Load(name); ok && !exists {
+		val := val.(*values.Value)
 		localVal = val
 		exists = true
 		frame.setLocal(op1, val)
@@ -3079,7 +3082,7 @@ func (vm *VirtualMachine) execInclude(ctx *ExecutionContext, frame *CallFrame, i
 
 	once := inst.Opcode == opcodes.OP_INCLUDE_ONCE || inst.Opcode == opcodes.OP_REQUIRE_ONCE
 	if once {
-		if ctx.IncludedFiles[path] {
+		if ctx.IsFileIncluded(path) {
 			resType, resSlot := decodeResult(inst)
 			if err := vm.writeOperand(ctx, frame, resType, resSlot, values.NewInt(1)); err != nil {
 				return false, err
@@ -3121,7 +3124,7 @@ func (vm *VirtualMachine) execInclude(ctx *ExecutionContext, frame *CallFrame, i
 	}
 
 	if once {
-		ctx.IncludedFiles[path] = true
+		ctx.MarkFileIncluded(path)
 	}
 
 	resType, resSlot := decodeResult(inst)
@@ -3444,20 +3447,24 @@ func (vm *VirtualMachine) CallAllDestructors(ctx *ExecutionContext) {
 	}
 
 	// Call destructors on global variables
-	for _, val := range ctx.GlobalVars {
+	ctx.GlobalVars.Range(func(key, value interface{}) bool {
+		val := value.(*values.Value)
 		if val != nil && val.IsObject() {
 			// Call destructor (ignore errors at script end)
 			vm.callDestructor(ctx, val)
 		}
-	}
+		return true
+	})
 
 	// Call destructors on other variables in the context
-	for _, val := range ctx.Variables {
+	ctx.Variables.Range(func(key, value interface{}) bool {
+		val := value.(*values.Value)
 		if val != nil && val.IsObject() {
 			// Call destructor (ignore errors at script end)
 			vm.callDestructor(ctx, val)
 		}
-	}
+		return true
+	})
 }
 
 // checkReadonlyProperty validates that a property assignment is allowed based on readonly semantics
