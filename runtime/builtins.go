@@ -41,6 +41,7 @@ func GetAllBuiltinFunctions() []*registry.Function {
 	functions = append(functions, GetCtypeFunctions()...)
 	functions = append(functions, GetErrorFunctions()...)
 	functions = append(functions, GetFunctionFunctions()...)
+	functions = append(functions, GetWindowsFunctions()...)
 
 	return functions
 }
