@@ -20,12 +20,13 @@ import (
 
 // FileHandle represents an open file handle
 type FileHandle struct {
-	ID       int64
-	File     *os.File
-	Mode     string
-	Position int64
-	EOF      bool
-	mu       sync.RWMutex
+	ID        int64
+	File      *os.File
+	Mode      string
+	Position  int64
+	EOF       bool
+	mu        sync.RWMutex
+	csvReader *csv.Reader // CSV reader for fgetcsv operations
 }
 
 // ProcessHandle represents an open process handle for popen
@@ -1551,6 +1552,15 @@ func GetFilesystemFunctions() []*registry.Function {
 					}
 				}
 
+				// Handle special case for empty string with single flags
+				if path == "" {
+					if flags == 1 { // PATHINFO_DIRNAME - empty string has no dirname in PHP
+						return values.NewString(""), nil
+					} else if flags == 4 { // PATHINFO_EXTENSION - empty string has no extension in PHP
+						return values.NewString(""), nil
+					}
+				}
+
 				// Return specific component if flags specify only one
 				if flags == 1 { // PATHINFO_DIRNAME
 					return values.NewString(dirname), nil
@@ -1565,17 +1575,29 @@ func GetFilesystemFunctions() []*registry.Function {
 				// Return array with requested components
 				result := values.NewArray()
 
-				if flags&1 != 0 { // PATHINFO_DIRNAME
-					result.ArraySet(values.NewString("dirname"), values.NewString(dirname))
-				}
-				if flags&2 != 0 { // PATHINFO_BASENAME
-					result.ArraySet(values.NewString("basename"), values.NewString(basename))
-				}
-				if flags&4 != 0 && extension != "" { // PATHINFO_EXTENSION
-					result.ArraySet(values.NewString("extension"), values.NewString(extension))
-				}
-				if flags&8 != 0 { // PATHINFO_FILENAME
-					result.ArraySet(values.NewString("filename"), values.NewString(filename))
+				// Special handling for empty string - PHP only returns basename and filename
+				if path == "" {
+					if flags&2 != 0 { // PATHINFO_BASENAME
+						result.ArraySet(values.NewString("basename"), values.NewString(basename))
+					}
+					if flags&8 != 0 { // PATHINFO_FILENAME
+						result.ArraySet(values.NewString("filename"), values.NewString(filename))
+					}
+					// Note: dirname and extension are omitted for empty string
+				} else {
+					// Normal case - include all requested components
+					if flags&1 != 0 { // PATHINFO_DIRNAME
+						result.ArraySet(values.NewString("dirname"), values.NewString(dirname))
+					}
+					if flags&2 != 0 { // PATHINFO_BASENAME
+						result.ArraySet(values.NewString("basename"), values.NewString(basename))
+					}
+					if flags&4 != 0 { // PATHINFO_EXTENSION
+						result.ArraySet(values.NewString("extension"), values.NewString(extension))
+					}
+					if flags&8 != 0 { // PATHINFO_FILENAME
+						result.ArraySet(values.NewString("filename"), values.NewString(filename))
+					}
 				}
 
 				return result, nil
@@ -2496,22 +2518,36 @@ func GetFilesystemFunctions() []*registry.Function {
 				handle.mu.Lock()
 				defer handle.mu.Unlock()
 
-				// Get delimiter (default comma)
+				// Get CSV parameters
 				delimiter := ","
 				if len(args) > 2 && !args[2].IsNull() {
 					delimiter = args[2].ToString()
 				}
-
-				// Create CSV reader
-				reader := csv.NewReader(handle.File)
-				if len(delimiter) > 0 {
-					reader.Comma = rune(delimiter[0])
+				// Note: PHP has enclosure and escape parameters, but Go's csv package
+				// handles these differently. We acknowledge them for compatibility.
+				if len(args) > 3 && !args[3].IsNull() {
+					_ = args[3].ToString() // enclosure parameter
+				}
+				if len(args) > 4 && !args[4].IsNull() {
+					_ = args[4].ToString() // escape parameter
 				}
 
+				// Create or reuse CSV reader with consistent parameters
+				if handle.csvReader == nil {
+					handle.csvReader = csv.NewReader(handle.File)
+				}
+
+				// Set CSV reader parameters
+				if len(delimiter) > 0 {
+					handle.csvReader.Comma = rune(delimiter[0])
+				}
+				// Note: Go's csv.Reader uses fixed quote character (")
+
 				// Read one record
-				record, err := reader.Read()
+				record, err := handle.csvReader.Read()
 				if err != nil {
 					if err == io.EOF {
+						handle.EOF = true
 						return values.NewBool(false), nil
 					}
 					return values.NewBool(false), nil

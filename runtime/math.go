@@ -77,5 +77,37 @@ func GetMathFunctions() []*registry.Function {
 				return values.NewFloat(rounded), nil
 			},
 		},
+		{
+			Name:       "decoct",
+			Parameters: []*registry.Parameter{{Name: "number", Type: "mixed"}},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 || args[0] == nil {
+					return values.NewString("0"), nil
+				}
+
+				// Convert to integer first
+				var num int64
+				if args[0].IsInt() {
+					num = args[0].ToInt()
+				} else if args[0].IsFloat() {
+					num = int64(args[0].ToFloat())
+				} else if args[0].IsString() {
+					val, err := strconv.ParseFloat(args[0].ToString(), 64)
+					if err != nil {
+						return values.NewString("0"), nil
+					}
+					num = int64(val)
+				} else {
+					return values.NewString("0"), nil
+				}
+
+				// Convert to octal string (without 0 prefix)
+				return values.NewString(strconv.FormatInt(num, 8)), nil
+			},
+		},
 	}
 }

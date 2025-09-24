@@ -173,5 +173,20 @@ func GetTypeFunctions() []*registry.Function {
 				}
 			},
 		},
+		{
+			Name:       "is_resource",
+			Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 || args[0] == nil {
+					return values.NewBool(false), nil
+				}
+				// In Hey-Codex, resources are represented as integers
+				return values.NewBool(args[0].Type == values.TypeResource), nil
+			},
+		},
 	}
 }
