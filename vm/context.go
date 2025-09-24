@@ -48,6 +48,9 @@ type ExecutionContext struct {
 
 	debugLog []string
 
+	// Error reporting level for @ operator support
+	ErrorReportingLevel int
+
 	// Execution timeout support with Go context
 	ctx            context.Context
 	cancel         context.CancelFunc
@@ -72,6 +75,7 @@ func NewExecutionContext() *ExecutionContext {
 		UserInterfaces:   make(map[string]*registry.Interface),
 		UserTraits:       make(map[string]*registry.Trait),
 		debugLog:         make([]string, 0, 64),
+		ErrorReportingLevel: 1, // Default: show errors (1 = on, 0 = off/silenced)
 		ctx:              ctx,
 		cancel:           cancel,
 		maxExecutionTime: 0, // 0 means unlimited (default PHP behavior)

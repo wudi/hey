@@ -4012,3 +4012,34 @@ func (vm *VirtualMachine) checkReadonlyProperty(ctx *ExecutionContext, obj *valu
 	return nil
 }
 
+// execBeginSilence implements the BEGIN_SILENCE opcode for PHP's @ error suppression operator
+func (vm *VirtualMachine) execBeginSilence(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Save current error reporting level to the result slot (temporary variable)
+	currentLevel := values.NewInt(int64(ctx.ErrorReportingLevel))
+
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, currentLevel); err != nil {
+		return false, err
+	}
+
+	// Set error reporting to silent (0)
+	ctx.ErrorReportingLevel = 0
+
+	return true, nil
+}
+
+// execEndSilence implements the END_SILENCE opcode for PHP's @ error suppression operator
+func (vm *VirtualMachine) execEndSilence(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Restore previous error reporting level from Op1
+	opType1, op1 := decodeOperand(inst, 1)
+	previousLevel, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Convert the value to integer and restore error reporting level
+	ctx.ErrorReportingLevel = int(previousLevel.ToInt())
+
+	return true, nil
+}
+

@@ -562,6 +562,10 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execYield(ctx, frame, inst)
 	case opcodes.OP_YIELD_FROM:
 		return vm.execYieldFrom(ctx, frame, inst)
+	case opcodes.OP_BEGIN_SILENCE:
+		return vm.execBeginSilence(ctx, frame, inst)
+	case opcodes.OP_END_SILENCE:
+		return vm.execEndSilence(ctx, frame, inst)
 	default:
 		return false, fmt.Errorf("opcode %s not implemented", inst.Opcode)
 	}
