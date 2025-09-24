@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/wudi/hey/registry"
@@ -41,6 +42,14 @@ func (m *mockBuiltinContext) SymbolRegistry() *registry.Registry {
 
 func (m *mockBuiltinContext) LookupUserFunction(name string) (*registry.Function, bool) {
 	return nil, false
+}
+
+func (m *mockBuiltinContext) CallUserFunction(function *registry.Function, args []*values.Value) (*values.Value, error) {
+	return nil, fmt.Errorf("user function calls not supported in test mock")
+}
+
+func (m *mockBuiltinContext) SimpleCallUserFunction(function *registry.Function, args []*values.Value) (*values.Value, error) {
+	return nil, fmt.Errorf("user function calls not supported in test mock")
 }
 
 func (m *mockBuiltinContext) LookupUserClass(name string) (*registry.Class, bool) {

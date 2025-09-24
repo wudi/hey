@@ -29,6 +29,13 @@ type BuiltinCallContext interface {
 	// LookupUserFunction returns a user-defined function registered inside the
 	// active execution context, if available.
 	LookupUserFunction(name string) (*Function, bool)
+	// CallUserFunction executes a user-defined function with the given arguments
+	// and returns the result. This enables builtin functions to call user-defined
+	// functions and closures via the VM.
+	CallUserFunction(function *Function, args []*values.Value) (*values.Value, error)
+	// SimpleCallUserFunction provides lightweight user function calling for callbacks
+	// to avoid VM execution context interference
+	SimpleCallUserFunction(function *Function, args []*values.Value) (*values.Value, error)
 	// LookupUserClass returns a user-defined class registered inside the active
 	// execution context, if available.
 	LookupUserClass(name string) (*Class, bool)

@@ -377,6 +377,60 @@ func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
 			Name:  "UPLOAD_ERR_EXTENSION",
 			Value: values.NewInt(8),
 		},
+
+		// Array filter constants
+		{
+			Name:  "ARRAY_FILTER_USE_KEY",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "ARRAY_FILTER_USE_BOTH",
+			Value: values.NewInt(1),
+		},
+
+		// Count constants
+		{
+			Name:  "COUNT_NORMAL",
+			Value: values.NewInt(0),
+		},
+		{
+			Name:  "COUNT_RECURSIVE",
+			Value: values.NewInt(1),
+		},
+
+		// Extract constants
+		{
+			Name:  "EXTR_OVERWRITE",
+			Value: values.NewInt(0),
+		},
+		{
+			Name:  "EXTR_SKIP",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "EXTR_PREFIX_SAME",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "EXTR_PREFIX_ALL",
+			Value: values.NewInt(3),
+		},
+		{
+			Name:  "EXTR_PREFIX_INVALID",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "EXTR_PREFIX_IF_EXISTS",
+			Value: values.NewInt(5),
+		},
+		{
+			Name:  "EXTR_IF_EXISTS",
+			Value: values.NewInt(6),
+		},
+		{
+			Name:  "EXTR_REFS",
+			Value: values.NewInt(256),
+		},
 	}
 }
 
