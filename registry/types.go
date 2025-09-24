@@ -36,11 +36,32 @@ type BuiltinCallContext interface {
 	Halt(exitCode int, message string) error
 	// GetExecutionContext returns the execution context for timeout management
 	GetExecutionContext() ExecutionContextInterface
+	// GetOutputBufferStack returns the output buffer stack for output control
+	GetOutputBufferStack() OutputBufferStackInterface
 }
 
 // ExecutionContextInterface provides minimal interface for timeout management
 type ExecutionContextInterface interface {
 	SetTimeLimit(seconds int) bool
+}
+
+// OutputBufferStackInterface provides minimal interface for output buffer control
+type OutputBufferStackInterface interface {
+	Start(handler string, chunkSize int, flags int) bool
+	GetContents() string
+	GetLength() int
+	GetLevel() int
+	Clean() bool
+	EndClean() bool
+	Flush() bool
+	EndFlush() bool
+	GetClean() (string, bool)
+	GetFlush() (string, bool)
+	GetStatus() *values.Value
+	GetStatusFull() *values.Value
+	ListHandlers() []string
+	SetImplicitFlush(on bool)
+	FlushSystem()
 }
 
 // Function describes a PHP function that can either be user-defined (bytecode)

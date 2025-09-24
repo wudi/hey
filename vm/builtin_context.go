@@ -83,3 +83,10 @@ func (b *builtinContext) Halt(exitCode int, message string) error {
 func (b *builtinContext) GetExecutionContext() registry.ExecutionContextInterface {
 	return b.ctx
 }
+
+func (b *builtinContext) GetOutputBufferStack() registry.OutputBufferStackInterface {
+	if b.ctx == nil || b.ctx.OutputBufferStack == nil {
+		return nil
+	}
+	return b.ctx.OutputBufferStack
+}

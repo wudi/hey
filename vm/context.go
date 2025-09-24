@@ -37,6 +37,7 @@ type ExecutionContext struct {
 	Stack []*values.Value
 
 	OutputWriter io.Writer
+	OutputBufferStack *OutputBufferStack
 
 	Halted bool
 	ExitCode int
@@ -61,9 +62,10 @@ type ExecutionContext struct {
 // NewExecutionContext constructs a fresh execution context with sane defaults.
 func NewExecutionContext() *ExecutionContext {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &ExecutionContext{
+	baseWriter := os.Stdout
+	ec := &ExecutionContext{
 		Stack:            make([]*values.Value, 0, 16),
-		OutputWriter:     os.Stdout,
+		OutputWriter:     baseWriter,
 		GlobalVars:       &sync.Map{},
 		IncludedFiles:    &sync.Map{},
 		Variables:        &sync.Map{},
@@ -80,6 +82,11 @@ func NewExecutionContext() *ExecutionContext {
 		cancel:           cancel,
 		maxExecutionTime: 0, // 0 means unlimited (default PHP behavior)
 	}
+	// Initialize output buffer stack
+	ec.OutputBufferStack = NewOutputBufferStack(baseWriter)
+	// Set the output writer to use the buffer stack
+	ec.OutputWriter = ec.OutputBufferStack
+	return ec
 }
 
 // SetOutputWriter allows callers to redirect the script output stream.
@@ -87,7 +94,13 @@ func (ctx *ExecutionContext) SetOutputWriter(w io.Writer) {
 	if w == nil {
 		return
 	}
-	ctx.OutputWriter = w
+	// Update the base writer of the output buffer stack
+	if ctx.OutputBufferStack != nil {
+		ctx.OutputBufferStack.baseWriter = w
+		ctx.OutputWriter = ctx.OutputBufferStack
+	} else {
+		ctx.OutputWriter = w
+	}
 }
 
 type exceptionHandler struct {
