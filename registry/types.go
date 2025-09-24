@@ -45,6 +45,12 @@ type BuiltinCallContext interface {
 	GetExecutionContext() ExecutionContextInterface
 	// GetOutputBufferStack returns the output buffer stack for output control
 	GetOutputBufferStack() OutputBufferStackInterface
+	// GetCurrentFunctionArgCount returns the number of arguments passed to the current user function
+	GetCurrentFunctionArgCount() (int, error)
+	// GetCurrentFunctionArg returns a specific argument passed to the current user function
+	GetCurrentFunctionArg(index int) (*values.Value, error)
+	// GetCurrentFunctionArgs returns all arguments passed to the current user function
+	GetCurrentFunctionArgs() ([]*values.Value, error)
 }
 
 // ExecutionContextInterface provides minimal interface for timeout management

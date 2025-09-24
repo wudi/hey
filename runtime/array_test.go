@@ -68,6 +68,18 @@ func (m *mockBuiltinContext) GetOutputBufferStack() registry.OutputBufferStackIn
 	return nil
 }
 
+func (m *mockBuiltinContext) GetCurrentFunctionArgCount() (int, error) {
+	return 0, fmt.Errorf("cannot be called from the global scope")
+}
+
+func (m *mockBuiltinContext) GetCurrentFunctionArg(index int) (*values.Value, error) {
+	return nil, fmt.Errorf("cannot be called from the global scope")
+}
+
+func (m *mockBuiltinContext) GetCurrentFunctionArgs() ([]*values.Value, error) {
+	return nil, fmt.Errorf("cannot be called from the global scope")
+}
+
 // TestArrayFunctions tests all array functions using TDD approach
 func TestArrayFunctions(t *testing.T) {
 	functions := GetArrayFunctions()

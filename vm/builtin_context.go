@@ -196,3 +196,82 @@ func (b *builtinContext) GetOutputBufferStack() registry.OutputBufferStackInterf
 	}
 	return b.ctx.OutputBufferStack
 }
+
+func (b *builtinContext) GetCurrentFunctionArgCount() (int, error) {
+	if b.ctx == nil {
+		return 0, fmt.Errorf("no execution context available")
+	}
+
+	currentFrame := b.ctx.currentFrame()
+	if currentFrame == nil || currentFrame.Function == nil || currentFrame.Function.IsBuiltin {
+		return 0, fmt.Errorf("func_num_args() cannot be called from the global scope")
+	}
+
+	// Count the actual arguments passed by checking the function parameters
+	// Arguments are stored in local variables starting from slot 0
+	count := 0
+	for i := 0; i < len(currentFrame.Function.Parameters); i++ {
+		if _, exists := currentFrame.Locals[uint32(i)]; exists {
+			count++
+		} else {
+			break // No more arguments
+		}
+	}
+
+	// Also check for additional arguments beyond the formal parameters (variadic case)
+	for i := len(currentFrame.Function.Parameters); ; i++ {
+		if _, exists := currentFrame.Locals[uint32(i)]; exists {
+			count++
+		} else {
+			break
+		}
+	}
+
+	return count, nil
+}
+
+func (b *builtinContext) GetCurrentFunctionArg(index int) (*values.Value, error) {
+	if b.ctx == nil {
+		return nil, fmt.Errorf("no execution context available")
+	}
+
+	currentFrame := b.ctx.currentFrame()
+	if currentFrame == nil || currentFrame.Function == nil || currentFrame.Function.IsBuiltin {
+		return nil, fmt.Errorf("func_get_arg() cannot be called from the global scope")
+	}
+
+	if index < 0 {
+		return nil, fmt.Errorf("func_get_arg(): Argument number must be non-negative")
+	}
+
+	// Get the argument from the local variables
+	if arg, exists := currentFrame.Locals[uint32(index)]; exists {
+		return arg, nil
+	}
+
+	return nil, fmt.Errorf("func_get_arg(): Argument %d does not exist", index)
+}
+
+func (b *builtinContext) GetCurrentFunctionArgs() ([]*values.Value, error) {
+	if b.ctx == nil {
+		return nil, fmt.Errorf("no execution context available")
+	}
+
+	currentFrame := b.ctx.currentFrame()
+	if currentFrame == nil || currentFrame.Function == nil || currentFrame.Function.IsBuiltin {
+		return nil, fmt.Errorf("func_get_args() cannot be called from the global scope")
+	}
+
+	var args []*values.Value
+
+	// Collect arguments starting from slot 0
+	for i := 0; ; i++ {
+		if arg, exists := currentFrame.Locals[uint32(i)]; exists {
+			args = append(args, arg)
+		} else {
+			break
+		}
+	}
+
+	return args, nil
+}
