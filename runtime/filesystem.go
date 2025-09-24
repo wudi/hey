@@ -1592,7 +1592,7 @@ func GetFilesystemFunctions() []*registry.Function {
 					if flags&2 != 0 { // PATHINFO_BASENAME
 						result.ArraySet(values.NewString("basename"), values.NewString(basename))
 					}
-					if flags&4 != 0 { // PATHINFO_EXTENSION
+					if flags&4 != 0 && extension != "" { // PATHINFO_EXTENSION
 						result.ArraySet(values.NewString("extension"), values.NewString(extension))
 					}
 					if flags&8 != 0 { // PATHINFO_FILENAME
