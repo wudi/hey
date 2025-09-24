@@ -30,12 +30,15 @@ func GetAllBuiltinFunctions() []*registry.Function {
 	functions = append(functions, GetFilesystemFunctions()...)
 	functions = append(functions, GetSystemFunctions()...)
 	functions = append(functions, GetTimeFunctions()...)
+	functions = append(functions, GetDateTimeFunctions()...)
+	functions = append(functions, GetDateTimeObjectFunctions()...)
 	functions = append(functions, GetMathFunctions()...)
 	functions = append(functions, GetOutputFunctions()...)
 	functions = append(functions, GetReflectionFunctions()...)
 	functions = append(functions, GetVariableFunctions()...)
 	functions = append(functions, GetConcurrencyFunctions()...)
 	functions = append(functions, GetIniFunctions()...)
+	functions = append(functions, GetCtypeFunctions()...)
 
 	return functions
 }

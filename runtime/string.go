@@ -13,6 +13,7 @@ import (
 	"math"
 	"math/rand"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -2682,6 +2683,251 @@ func GetStringFunctions() []*registry.Function {
 					} else {
 						result = append(result, unicode.ToUpper(r))
 					}
+				}
+
+				return values.NewString(string(result)), nil
+			},
+		},
+
+		// parse_url - Parse URL and return its components
+		{
+			Name: "parse_url",
+			Parameters: []*registry.Parameter{
+				{Name: "url", Type: "string"},
+				{Name: "component", Type: "int", HasDefault: true, DefaultValue: values.NewInt(-1)},
+			},
+			ReturnType: "mixed",
+			MinArgs:    1,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				urlStr := args[0].ToString()
+				component := int64(-1)
+				if len(args) > 1 {
+					component = args[1].ToInt()
+				}
+
+				parsedURL, err := url.Parse(urlStr)
+				if err != nil {
+					return values.NewBool(false), nil
+				}
+
+				// PHP_URL constants
+				const (
+					PHP_URL_SCHEME   = 0
+					PHP_URL_HOST     = 1
+					PHP_URL_PORT     = 2
+					PHP_URL_USER     = 3
+					PHP_URL_PASS     = 4
+					PHP_URL_PATH     = 5
+					PHP_URL_QUERY    = 6
+					PHP_URL_FRAGMENT = 7
+				)
+
+				if component >= 0 {
+					// Return specific component
+					switch component {
+					case PHP_URL_SCHEME:
+						if parsedURL.Scheme == "" {
+							return values.NewNull(), nil
+						}
+						return values.NewString(parsedURL.Scheme), nil
+					case PHP_URL_HOST:
+						if parsedURL.Host == "" {
+							return values.NewNull(), nil
+						}
+						host := parsedURL.Hostname()
+						return values.NewString(host), nil
+					case PHP_URL_PORT:
+						port := parsedURL.Port()
+						if port == "" {
+							return values.NewNull(), nil
+						}
+						portInt, _ := strconv.Atoi(port)
+						return values.NewInt(int64(portInt)), nil
+					case PHP_URL_USER:
+						if parsedURL.User == nil {
+							return values.NewNull(), nil
+						}
+						return values.NewString(parsedURL.User.Username()), nil
+					case PHP_URL_PASS:
+						if parsedURL.User == nil {
+							return values.NewNull(), nil
+						}
+						pass, hasPass := parsedURL.User.Password()
+						if !hasPass {
+							return values.NewNull(), nil
+						}
+						return values.NewString(pass), nil
+					case PHP_URL_PATH:
+						if parsedURL.Path == "" {
+							return values.NewNull(), nil
+						}
+						return values.NewString(parsedURL.Path), nil
+					case PHP_URL_QUERY:
+						if parsedURL.RawQuery == "" {
+							return values.NewNull(), nil
+						}
+						return values.NewString(parsedURL.RawQuery), nil
+					case PHP_URL_FRAGMENT:
+						if parsedURL.Fragment == "" {
+							return values.NewNull(), nil
+						}
+						return values.NewString(parsedURL.Fragment), nil
+					default:
+						return values.NewBool(false), nil
+					}
+				} else {
+					// Return array with all components
+					result := values.NewArray()
+
+					if parsedURL.Scheme != "" {
+						result.ArraySet(values.NewString("scheme"), values.NewString(parsedURL.Scheme))
+					}
+					if parsedURL.Host != "" {
+						result.ArraySet(values.NewString("host"), values.NewString(parsedURL.Hostname()))
+					}
+					if parsedURL.Port() != "" {
+						port, _ := strconv.Atoi(parsedURL.Port())
+						result.ArraySet(values.NewString("port"), values.NewInt(int64(port)))
+					}
+					if parsedURL.User != nil {
+						result.ArraySet(values.NewString("user"), values.NewString(parsedURL.User.Username()))
+						if pass, hasPass := parsedURL.User.Password(); hasPass {
+							result.ArraySet(values.NewString("pass"), values.NewString(pass))
+						}
+					}
+					if parsedURL.Path != "" {
+						result.ArraySet(values.NewString("path"), values.NewString(parsedURL.Path))
+					}
+					if parsedURL.RawQuery != "" {
+						result.ArraySet(values.NewString("query"), values.NewString(parsedURL.RawQuery))
+					}
+					if parsedURL.Fragment != "" {
+						result.ArraySet(values.NewString("fragment"), values.NewString(parsedURL.Fragment))
+					}
+
+					return result, nil
+				}
+			},
+		},
+
+		// pathinfo - Return path information
+		{
+			Name: "pathinfo",
+			Parameters: []*registry.Parameter{
+				{Name: "path", Type: "string"},
+				{Name: "options", Type: "int", HasDefault: true, DefaultValue: values.NewInt(15)}, // PATHINFO_ALL
+			},
+			ReturnType: "mixed",
+			MinArgs:    1,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				pathStr := args[0].ToString()
+				options := int64(15) // PATHINFO_ALL by default
+				if len(args) > 1 {
+					options = args[1].ToInt()
+				}
+
+				// PATHINFO constants
+				const (
+					PATHINFO_DIRNAME   = 1
+					PATHINFO_BASENAME  = 2
+					PATHINFO_EXTENSION = 4
+					PATHINFO_FILENAME  = 8
+					PATHINFO_ALL       = 15
+				)
+
+				// Parse path components
+				dir := filepath.Dir(pathStr)
+				if dir == "." {
+					dir = ""
+				}
+				base := filepath.Base(pathStr)
+				ext := filepath.Ext(pathStr)
+				var filename string
+				if ext != "" {
+					filename = strings.TrimSuffix(base, ext)
+					ext = ext[1:] // Remove the dot
+				} else {
+					filename = base
+				}
+
+				if options != PATHINFO_ALL {
+					// Return specific component
+					switch options {
+					case PATHINFO_DIRNAME:
+						return values.NewString(dir), nil
+					case PATHINFO_BASENAME:
+						return values.NewString(base), nil
+					case PATHINFO_EXTENSION:
+						if ext == "" {
+							return values.NewString(""), nil
+						}
+						return values.NewString(ext), nil
+					case PATHINFO_FILENAME:
+						return values.NewString(filename), nil
+					default:
+						return values.NewNull(), nil
+					}
+				} else {
+					// Return array with all components
+					result := values.NewArray()
+					result.ArraySet(values.NewString("dirname"), values.NewString(dir))
+					result.ArraySet(values.NewString("basename"), values.NewString(base))
+					if ext != "" {
+						result.ArraySet(values.NewString("extension"), values.NewString(ext))
+					}
+					result.ArraySet(values.NewString("filename"), values.NewString(filename))
+
+					return result, nil
+				}
+			},
+		},
+
+		// bin2hex - Convert binary data to hexadecimal
+		{
+			Name: "bin2hex",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].ToString()
+				return values.NewString(fmt.Sprintf("%x", []byte(str))), nil
+			},
+		},
+
+		// hex2bin - Convert hexadecimal to binary data
+		{
+			Name: "hex2bin",
+			Parameters: []*registry.Parameter{
+				{Name: "data", Type: "string"},
+			},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				data := args[0].ToString()
+
+				// Remove spaces and validate hex string
+				data = strings.ReplaceAll(data, " ", "")
+				if len(data)%2 != 0 {
+					return values.NewBool(false), nil
+				}
+
+				result := make([]byte, len(data)/2)
+				for i := 0; i < len(data); i += 2 {
+					b, err := strconv.ParseUint(data[i:i+2], 16, 8)
+					if err != nil {
+						return values.NewBool(false), nil
+					}
+					result[i/2] = byte(b)
 				}
 
 				return values.NewString(string(result)), nil
