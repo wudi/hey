@@ -1834,6 +1834,172 @@ func TestCSVFunctions(t *testing.T) {
 	}
 }
 
+func TestNewFilesystemFunctions(t *testing.T) {
+	// Test the newly implemented functions for 100% coverage
+	tmpFile := "/tmp/test_new_functions.txt"
+	tmpLink := "/tmp/test_new_link.txt"
+	defer func() {
+		os.Remove(tmpFile)
+		os.Remove(tmpLink)
+	}()
+
+	functions := GetFilesystemFunctions()
+	callFunction := func(name string, args []*values.Value) *values.Value {
+		for _, fn := range functions {
+			if fn.Name == name {
+				result, err := fn.Builtin(nil, args)
+				if err != nil {
+					t.Fatalf("Error calling %s: %v", name, err)
+				}
+				return result
+			}
+		}
+		t.Fatalf("Function %s not found", name)
+		return nil
+	}
+
+	// Create test file
+	result := callFunction("file_put_contents", []*values.Value{values.NewString(tmpFile), values.NewString("test content")})
+	if result.ToInt() != 12 {
+		t.Fatalf("Failed to create test file")
+	}
+
+	// Test delete() function (alias of unlink)
+	result = callFunction("delete", []*values.Value{values.NewString(tmpFile)})
+	if !result.ToBool() {
+		t.Errorf("delete() should return true for successful deletion")
+	}
+
+	// Verify file was deleted
+	result = callFunction("file_exists", []*values.Value{values.NewString(tmpFile)})
+	if result.ToBool() {
+		t.Errorf("File should not exist after delete()")
+	}
+
+	// Test delete() with non-existent file
+	result = callFunction("delete", []*values.Value{values.NewString("/nonexistent/file.txt")})
+	if result.ToBool() {
+		t.Errorf("delete() should return false for non-existent file")
+	}
+
+	// Test is_uploaded_file() - should always return false in CLI context
+	result = callFunction("is_uploaded_file", []*values.Value{values.NewString(tmpFile)})
+	if result.ToBool() {
+		t.Errorf("is_uploaded_file() should always return false in CLI context")
+	}
+
+	// Test move_uploaded_file()
+	// First create a test file again
+	callFunction("file_put_contents", []*values.Value{values.NewString(tmpFile), values.NewString("test content")})
+
+	moveTarget := "/tmp/test_moved.txt"
+	defer os.Remove(moveTarget)
+
+	result = callFunction("move_uploaded_file", []*values.Value{values.NewString(tmpFile), values.NewString(moveTarget)})
+	if !result.ToBool() {
+		t.Errorf("move_uploaded_file() should return true for successful move")
+	}
+
+	// Verify file was moved
+	result = callFunction("file_exists", []*values.Value{values.NewString(moveTarget)})
+	if !result.ToBool() {
+		t.Errorf("Target file should exist after move_uploaded_file()")
+	}
+
+	result = callFunction("file_exists", []*values.Value{values.NewString(tmpFile)})
+	if result.ToBool() {
+		t.Errorf("Source file should not exist after move_uploaded_file()")
+	}
+
+	// Test move_uploaded_file() with non-existent source
+	result = callFunction("move_uploaded_file", []*values.Value{values.NewString("/nonexistent.txt"), values.NewString("/tmp/target.txt")})
+	if result.ToBool() {
+		t.Errorf("move_uploaded_file() should return false for non-existent source")
+	}
+
+	// Test realpath_cache_get() - should return empty array
+	result = callFunction("realpath_cache_get", []*values.Value{})
+	if result.Type != values.TypeArray {
+		t.Errorf("realpath_cache_get() should return array")
+	}
+	if result.ArrayCount() != 0 {
+		t.Errorf("realpath_cache_get() should return empty array")
+	}
+
+	// Test realpath_cache_size() - should return 0
+	result = callFunction("realpath_cache_size", []*values.Value{})
+	if result.Type != values.TypeInt || result.ToInt() != 0 {
+		t.Errorf("realpath_cache_size() should return 0")
+	}
+
+	// Test lchown and lchgrp (will likely fail due to permissions, but should not crash)
+	// Create a test file first
+	callFunction("file_put_contents", []*values.Value{values.NewString(tmpFile), values.NewString("test")})
+
+	// Create symlink
+	result = callFunction("symlink", []*values.Value{values.NewString(tmpFile), values.NewString(tmpLink)})
+	if !result.ToBool() {
+		t.Fatalf("Failed to create symlink for lchown/lchgrp tests")
+	}
+
+	// Test lchown (will likely fail without root permissions, but should not crash)
+	result = callFunction("lchown", []*values.Value{values.NewString(tmpLink), values.NewInt(1000)})
+	// Don't check result as it will likely fail due to permissions
+	if result.Type != values.TypeBool {
+		t.Errorf("lchown() should return boolean")
+	}
+
+	// Test lchgrp (will likely fail without root permissions, but should not crash)
+	result = callFunction("lchgrp", []*values.Value{values.NewString(tmpLink), values.NewInt(1000)})
+	// Don't check result as it will likely fail due to permissions
+	if result.Type != values.TypeBool {
+		t.Errorf("lchgrp() should return boolean")
+	}
+
+	// Test lchown/lchgrp with non-existent file
+	result = callFunction("lchown", []*values.Value{values.NewString("/nonexistent"), values.NewInt(1000)})
+	if result.ToBool() {
+		t.Errorf("lchown() should return false for non-existent file")
+	}
+
+	result = callFunction("lchgrp", []*values.Value{values.NewString("/nonexistent"), values.NewInt(1000)})
+	if result.ToBool() {
+		t.Errorf("lchgrp() should return false for non-existent file")
+	}
+
+	// Test fgetss() function
+	htmlContent := "<html><body><h1>Title</h1><p>Content</p></body></html>\nPlain text line\n"
+	htmlFile := "/tmp/test_html.txt"
+	defer os.Remove(htmlFile)
+
+	callFunction("file_put_contents", []*values.Value{values.NewString(htmlFile), values.NewString(htmlContent)})
+
+	fileHandle := callFunction("fopen", []*values.Value{values.NewString(htmlFile), values.NewString("r")})
+	if fileHandle.Type != values.TypeResource {
+		t.Fatalf("Failed to open HTML file for fgetss test")
+	}
+
+	// Test fgetss - should strip HTML tags
+	result = callFunction("fgetss", []*values.Value{fileHandle})
+	if result.Type != values.TypeString {
+		t.Errorf("fgetss() should return string")
+	} else {
+		stripped := result.ToString()
+		// Should not contain HTML tags
+		if strings.Contains(stripped, "<html>") || strings.Contains(stripped, "<body>") {
+			t.Errorf("fgetss() should strip HTML tags, got: %s", stripped)
+		}
+	}
+
+	callFunction("fclose", []*values.Value{fileHandle})
+
+	// Test fgetss with invalid handle
+	result = callFunction("fgetss", []*values.Value{values.NewBool(false)})
+	if result.ToBool() {
+		t.Errorf("fgetss() should return false for invalid handle")
+	}
+}
+
 func TestFilesystemConstants(t *testing.T) {
 	// Test that filesystem constants are defined correctly
 	// This will be implemented when constants are added

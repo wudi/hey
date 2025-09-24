@@ -3266,5 +3266,214 @@ func GetFilesystemFunctions() []*registry.Function {
 				return values.NewBool(true), nil
 			},
 		},
+		// Missing functions to achieve 100% coverage
+		{
+			Name: "delete",
+			Parameters: []*registry.Parameter{
+				{Name: "filename", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// delete() is an alias of unlink()
+				if len(args) == 0 || args[0] == nil {
+					return values.NewBool(false), nil
+				}
+
+				filename := args[0].ToString()
+				err := os.Remove(filename)
+				return values.NewBool(err == nil), nil
+			},
+		},
+		{
+			Name: "fgetss",
+			Parameters: []*registry.Parameter{
+				{Name: "handle", Type: "resource"},
+				{Name: "length", Type: "int", HasDefault: true, DefaultValue: values.NewNull()},
+				{Name: "allowable_tags", Type: "string", HasDefault: true, DefaultValue: values.NewString("")},
+			},
+			ReturnType: "string|false",
+			MinArgs:    1,
+			MaxArgs:    3,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// fgetss() was deprecated in PHP 7.3 and removed in PHP 8.0
+				// For compatibility, we implement a basic version that strips HTML/PHP tags
+				if len(args) == 0 || args[0] == nil || args[0].Type != values.TypeResource {
+					return values.NewBool(false), nil
+				}
+
+				handleID, ok := args[0].Data.(int64)
+				if !ok {
+					return values.NewBool(false), nil
+				}
+
+				handle, exists := getFileHandle(handleID)
+				if !exists {
+					return values.NewBool(false), nil
+				}
+
+				handle.mu.Lock()
+				defer handle.mu.Unlock()
+
+				// Read a line first
+				reader := bufio.NewReader(handle.File)
+				line, isPrefix, err := reader.ReadLine()
+				if err != nil {
+					if err == io.EOF {
+						handle.EOF = true
+					}
+					return values.NewBool(false), nil
+				}
+
+				// Handle long lines that don't fit in buffer
+				for isPrefix {
+					var moreLine []byte
+					moreLine, isPrefix, err = reader.ReadLine()
+					if err != nil {
+						break
+					}
+					line = append(line, moreLine...)
+				}
+
+				// Basic HTML tag stripping (simplified)
+				result := string(line)
+				// Remove HTML/XML tags: <tag>content</tag> or <tag/>
+				inTag := false
+				stripped := make([]byte, 0, len(result))
+				for i := 0; i < len(result); i++ {
+					if result[i] == '<' {
+						inTag = true
+					} else if result[i] == '>' {
+						inTag = false
+					} else if !inTag {
+						stripped = append(stripped, result[i])
+					}
+				}
+				result = string(stripped)
+
+				handle.Position += int64(len(line)) + 1 // +1 for newline
+				return values.NewString(result + "\n"), nil
+			},
+		},
+		{
+			Name: "is_uploaded_file",
+			Parameters: []*registry.Parameter{
+				{Name: "filename", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// In a CLI environment, files are never uploaded via HTTP POST
+				// This function checks if a file was uploaded via HTTP POST mechanism
+				// Since we're in CLI context, always return false
+				return values.NewBool(false), nil
+			},
+		},
+		{
+			Name: "move_uploaded_file",
+			Parameters: []*registry.Parameter{
+				{Name: "filename", Type: "string"},
+				{Name: "destination", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// In CLI environment, this would never succeed since files aren't uploaded via HTTP
+				// But for completeness, we implement basic file moving functionality
+				if len(args) < 2 || args[0] == nil || args[1] == nil {
+					return values.NewBool(false), nil
+				}
+
+				filename := args[0].ToString()
+				destination := args[1].ToString()
+
+				// Check if source file exists
+				if _, err := os.Stat(filename); os.IsNotExist(err) {
+					return values.NewBool(false), nil
+				}
+
+				// In CLI context, we can't verify if file was uploaded, so just do a move
+				err := os.Rename(filename, destination)
+				return values.NewBool(err == nil), nil
+			},
+		},
+		{
+			Name: "lchgrp",
+			Parameters: []*registry.Parameter{
+				{Name: "filename", Type: "string"},
+				{Name: "group", Type: "mixed"}, // Can be string or int
+			},
+			ReturnType: "bool",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 || args[0] == nil || args[1] == nil {
+					return values.NewBool(false), nil
+				}
+
+				filename := args[0].ToString()
+				group := args[1].ToInt() // Convert to int (GID)
+
+				// lchgrp changes group ownership of symbolic link itself, not target
+				err := os.Lchown(filename, -1, int(group)) // -1 means don't change user
+				return values.NewBool(err == nil), nil
+			},
+		},
+		{
+			Name: "lchown",
+			Parameters: []*registry.Parameter{
+				{Name: "filename", Type: "string"},
+				{Name: "user", Type: "mixed"}, // Can be string or int
+			},
+			ReturnType: "bool",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 || args[0] == nil || args[1] == nil {
+					return values.NewBool(false), nil
+				}
+
+				filename := args[0].ToString()
+				user := args[1].ToInt() // Convert to int (UID)
+
+				// lchown changes user ownership of symbolic link itself, not target
+				err := os.Lchown(filename, int(user), -1) // -1 means don't change group
+				return values.NewBool(err == nil), nil
+			},
+		},
+		{
+			Name: "realpath_cache_get",
+			Parameters: []*registry.Parameter{},
+			ReturnType: "array",
+			MinArgs:    0,
+			MaxArgs:    0,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// Return empty array - realpath cache is internal PHP optimization
+				// In our implementation, we don't maintain a separate cache
+				return values.NewArray(), nil
+			},
+		},
+		{
+			Name: "realpath_cache_size",
+			Parameters: []*registry.Parameter{},
+			ReturnType: "int",
+			MinArgs:    0,
+			MaxArgs:    0,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// Return 0 - we don't maintain a realpath cache
+				return values.NewInt(0), nil
+			},
+		},
 	}
 }
