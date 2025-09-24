@@ -144,6 +144,13 @@ func NewClosure(function interface{}, boundVars map[string]*Value, name string) 
 	}
 }
 
+func NewResource(data interface{}) *Value {
+	return &Value{
+		Type: TypeResource,
+		Data: data,
+	}
+}
+
 func NewCallable(closure *Closure) *Value {
 	return &Value{
 		Type: TypeCallable,
@@ -228,6 +235,10 @@ func (v *Value) IsArray() bool {
 
 func (v *Value) IsObject() bool {
 	return v.Type == TypeObject
+}
+
+func (v *Value) IsResource() bool {
+	return v.Type == TypeResource
 }
 
 func (v *Value) IsReference() bool {
