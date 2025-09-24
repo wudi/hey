@@ -30,11 +30,11 @@ type FileHandle struct {
 
 // ProcessHandle represents an open process handle for popen
 type ProcessHandle struct {
-	ID   int64
-	Cmd  *exec.Cmd
-	File io.Closer // stdin or stdout of the process (can be ReadCloser or WriteCloser)
-	Mode string
-	mu   sync.RWMutex
+	ID      int64
+	Cmd     *exec.Cmd
+	File    io.Closer // stdin or stdout of the process (can be ReadCloser or WriteCloser)
+	Mode    string
+	mu      sync.RWMutex
 }
 
 // Global file handle registry
@@ -999,7 +999,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "string|false",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1023,7 +1023,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "int|false",
 			MinArgs:    2,
 			MaxArgs:    2,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) < 2 || args[0] == nil || args[1] == nil {
 					return values.NewBool(false), nil
@@ -1048,7 +1048,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "array|false",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1079,7 +1079,7 @@ func GetFilesystemFunctions() []*registry.Function {
 					content, err := os.ReadFile(filename)
 					if err == nil && len(content) > 0 && content[len(content)-1] != '\n' {
 						// Remove newline from last element
-						lastElem := result.ArrayGet(values.NewInt(index - 1))
+						lastElem := result.ArrayGet(values.NewInt(index-1))
 						if lastElem.Type == values.TypeString {
 							lastLine := lastElem.ToString()
 							if len(lastLine) > 0 && lastLine[len(lastLine)-1] == '\n' {
@@ -1106,7 +1106,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1125,7 +1125,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1148,7 +1148,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1171,7 +1171,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1193,7 +1193,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1217,7 +1217,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				// Alias for is_writable
 				if len(args) == 0 || args[0] == nil {
@@ -1243,7 +1243,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "int|false",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1266,7 +1266,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "string|false",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1305,7 +1305,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "int|false",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1328,7 +1328,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "int|false",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1354,7 +1354,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "int|false",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1382,7 +1382,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1405,7 +1405,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -1430,7 +1430,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "string",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewString(""), nil
@@ -1449,7 +1449,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "string",
 			MinArgs:    1,
 			MaxArgs:    2,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewString(""), nil
@@ -1675,7 +1675,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			},
 		},
 		{
-			Name:       "sys_get_temp_dir",
+			Name: "sys_get_temp_dir",
 			Parameters: []*registry.Parameter{},
 			ReturnType: "string",
 			MinArgs:    0,
@@ -1759,7 +1759,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    2,
 			MaxArgs:    2,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) < 2 || args[0] == nil || args[1] == nil {
 					return values.NewBool(false), nil
@@ -1796,7 +1796,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    2,
 			MaxArgs:    2,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) < 2 || args[0] == nil || args[1] == nil {
 					return values.NewBool(false), nil
@@ -1822,7 +1822,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			ReturnType: "bool",
 			MinArgs:    1,
 			MaxArgs:    1,
-			IsBuiltin:  true,
+			IsBuiltin: true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewBool(false), nil
@@ -2059,8 +2059,8 @@ func GetFilesystemFunctions() []*registry.Function {
 						statArray.ArraySet(values.NewInt(6), values.NewInt(int64(unixStat.Rdev)))
 
 						// Access and change times
-						atime := unixStat.Atimespec.Sec
-						ctime := unixStat.Ctimespec.Sec
+						atime := int64(unixStat.Atim.Sec)
+						ctime := int64(unixStat.Ctim.Sec)
 
 						statArray.ArraySet(values.NewString("atime"), values.NewInt(atime))
 						statArray.ArraySet(values.NewInt(8), values.NewInt(atime))
@@ -2434,7 +2434,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			},
 		},
 		{
-			Name:       "tmpfile",
+			Name: "tmpfile",
 			Parameters: []*registry.Parameter{},
 			ReturnType: "resource|false",
 			MinArgs:    0,
@@ -2541,7 +2541,7 @@ func GetFilesystemFunctions() []*registry.Function {
 			IsBuiltin:  true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) < 2 || args[0] == nil || args[1] == nil ||
-					args[0].Type != values.TypeResource || args[1].Type != values.TypeArray {
+				   args[0].Type != values.TypeResource || args[1].Type != values.TypeArray {
 					return values.NewBool(false), nil
 				}
 
@@ -2833,10 +2833,10 @@ func GetFilesystemFunctions() []*registry.Function {
 				}
 
 				// Convert flags
-				caseFold := flags&16 != 0 // FNM_CASEFOLD
-				noEscape := flags&2 != 0  // FNM_NOESCAPE
-				pathname := flags&1 != 0  // FNM_PATHNAME
-				period := flags&4 != 0    // FNM_PERIOD
+				caseFold := flags&16 != 0    // FNM_CASEFOLD
+				noEscape := flags&2 != 0     // FNM_NOESCAPE
+				pathname := flags&1 != 0     // FNM_PATHNAME
+				period := flags&4 != 0       // FNM_PERIOD
 
 				// Apply case folding
 				if caseFold {
@@ -3222,8 +3222,8 @@ func GetFilesystemFunctions() []*registry.Function {
 				operation := args[1].ToInt()
 
 				// Extract lock type and flags
-				lockType := operation & 3         // LOCK_SH=1, LOCK_EX=2, LOCK_UN=3
-				isNonBlocking := operation&4 != 0 // LOCK_NB=4
+				lockType := operation & 3  // LOCK_SH=1, LOCK_EX=2, LOCK_UN=3
+				isNonBlocking := operation&4 != 0  // LOCK_NB=4
 
 				// Get file descriptor for syscall
 				fd := int(handle.File.Fd())
@@ -3244,15 +3244,15 @@ func GetFilesystemFunctions() []*registry.Function {
 				// Create flock structure
 				flock := syscall.Flock_t{
 					Type:   flockType,
-					Whence: 0, // SEEK_SET
-					Start:  0, // Start of file
-					Len:    0, // Whole file
+					Whence: 0,  // SEEK_SET
+					Start:  0,  // Start of file
+					Len:    0,  // Whole file
 				}
 
 				// Choose fcntl command based on blocking/non-blocking
 				var cmd int
 				if isNonBlocking {
-					cmd = syscall.F_SETLK // Non-blocking
+					cmd = syscall.F_SETLK  // Non-blocking
 				} else {
 					cmd = syscall.F_SETLKW // Blocking
 				}
