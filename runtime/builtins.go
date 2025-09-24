@@ -192,6 +192,191 @@ func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
 			Name:  "E_ALL",
 			Value: values.NewInt(30719),
 		},
+
+		// Filesystem constants
+		// File seek constants
+		{
+			Name:  "SEEK_SET",
+			Value: values.NewInt(0),
+		},
+		{
+			Name:  "SEEK_CUR",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "SEEK_END",
+			Value: values.NewInt(2),
+		},
+
+		// File lock constants
+		{
+			Name:  "LOCK_SH",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "LOCK_EX",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "LOCK_UN",
+			Value: values.NewInt(3),
+		},
+		{
+			Name:  "LOCK_NB",
+			Value: values.NewInt(4),
+		},
+
+		// File() function flags
+		{
+			Name:  "FILE_USE_INCLUDE_PATH",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "FILE_NO_DEFAULT_CONTEXT",
+			Value: values.NewInt(16),
+		},
+		{
+			Name:  "FILE_APPEND",
+			Value: values.NewInt(8),
+		},
+		{
+			Name:  "FILE_IGNORE_NEW_LINES",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "FILE_SKIP_EMPTY_LINES",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "FILE_BINARY",
+			Value: values.NewInt(0),
+		},
+		{
+			Name:  "FILE_TEXT",
+			Value: values.NewInt(0),
+		},
+
+		// Pathinfo constants
+		{
+			Name:  "PATHINFO_ALL",
+			Value: values.NewInt(15), // 1+2+4+8
+		},
+		{
+			Name:  "PATHINFO_DIRNAME",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "PATHINFO_BASENAME",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "PATHINFO_EXTENSION",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "PATHINFO_FILENAME",
+			Value: values.NewInt(8),
+		},
+
+		// Glob constants
+		{
+			Name:  "GLOB_AVAILABLE_FLAGS",
+			Value: values.NewInt(0),
+		},
+		{
+			Name:  "GLOB_BRACE",
+			Value: values.NewInt(1024),
+		},
+		{
+			Name:  "GLOB_ERR",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "GLOB_MARK",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "GLOB_NOCHECK",
+			Value: values.NewInt(16),
+		},
+		{
+			Name:  "GLOB_NOESCAPE",
+			Value: values.NewInt(64),
+		},
+		{
+			Name:  "GLOB_NOSORT",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "GLOB_ONLYDIR",
+			Value: values.NewInt(8),
+		},
+
+		// INI scanner modes
+		{
+			Name:  "INI_SCANNER_NORMAL",
+			Value: values.NewInt(0),
+		},
+		{
+			Name:  "INI_SCANNER_RAW",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "INI_SCANNER_TYPED",
+			Value: values.NewInt(2),
+		},
+
+		// fnmatch flags
+		{
+			Name:  "FNM_NOESCAPE",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "FNM_PATHNAME",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "FNM_PERIOD",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "FNM_CASEFOLD",
+			Value: values.NewInt(16),
+		},
+
+		// Upload error constants
+		{
+			Name:  "UPLOAD_ERR_OK",
+			Value: values.NewInt(0),
+		},
+		{
+			Name:  "UPLOAD_ERR_INI_SIZE",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "UPLOAD_ERR_FORM_SIZE",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "UPLOAD_ERR_PARTIAL",
+			Value: values.NewInt(3),
+		},
+		{
+			Name:  "UPLOAD_ERR_NO_FILE",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "UPLOAD_ERR_NO_TMP_DIR",
+			Value: values.NewInt(6),
+		},
+		{
+			Name:  "UPLOAD_ERR_CANT_WRITE",
+			Value: values.NewInt(7),
+		},
+		{
+			Name:  "UPLOAD_ERR_EXTENSION",
+			Value: values.NewInt(8),
+		},
 	}
 }
 
