@@ -328,6 +328,11 @@ func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []*opcodes
 
 func (vm *VirtualMachine) run(ctx *ExecutionContext) error {
 	for {
+		// Check for timeout at the start of each instruction loop
+		if err := ctx.CheckTimeout(); err != nil {
+			return err
+		}
+
 		frame := ctx.currentFrame()
 		if frame == nil {
 			ctx.Halted = true

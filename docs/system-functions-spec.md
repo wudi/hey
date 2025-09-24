@@ -8,7 +8,7 @@ PHP provides several functions for executing system commands and interacting wit
 
 ## Implementation Status
 
-### ✅ Completed Functions (13/13) 🎯
+### ✅ Completed Functions (14/14) 🎯
 
 | Function | Status | Description | Test Coverage |
 |----------|--------|-------------|---------------|
@@ -25,6 +25,7 @@ PHP provides several functions for executing system commands and interacting wit
 | `proc_get_status` | ✅ | Get information about a process | ✅ |
 | `proc_terminate` | ✅ | Kill a process opened by proc_open | ✅ |
 | `proc_nice` | ✅ | Change process priority | ✅ |
+| `set_time_limit` | ✅ | Set the maximum execution time | ✅ |
 
 **🎉 All system execution functions have been successfully implemented!**
 
@@ -208,6 +209,28 @@ Change the priority of the current process.
 - Permission handling
 - Return value validation
 
+### set_time_limit(int $seconds): bool
+
+Sets the maximum execution time for the current script. This function restarts the timeout counter from zero.
+
+**Implementation Notes:**
+- Sets timeout using Go's context.Context with deadline
+- 0 or negative values mean unlimited execution time (no timeout)
+- Automatically updates the `max_execution_time` ini setting
+- Timeout is checked at each instruction in the VM loop
+- Consistent with PHP 8.0+ behavior for negative values
+- Context can be cancelled/reset when limit is changed
+
+**Test Cases:**
+- Positive timeout values (30, 60, 3600 seconds)
+- Zero value for unlimited execution
+- Negative values for unlimited execution (PHP 8.0+ behavior)
+- String input conversion ("20" → 20)
+- Actual timeout behavior with VM execution
+- ini_get('max_execution_time') synchronization
+- Multiple set_time_limit calls (resets timer)
+- Invalid inputs (no arguments)
+
 ## Security Considerations
 
 All execution functions in this implementation:
@@ -238,13 +261,14 @@ All functions have comprehensive test coverage including:
 - `shell_exec()` and `exec()` capture output, requiring memory allocation
 - `system()` and `passthru()` stream output directly, using less memory
 - All functions block until command completion
-- No timeout mechanism implemented (relies on OS-level timeouts)
+- `set_time_limit()` provides script-level timeout mechanism using Go contexts
+- Timeout checking occurs at each VM instruction with minimal overhead
 
 ## Future Enhancements
 
 Potential improvements for future versions:
-1. Implement `proc_*` functions for advanced process management
-2. Add timeout support for long-running commands
-3. Implement Windows-specific command execution paths
-4. Add async execution capabilities
-5. Enhanced error reporting and logging
+1. ~~Add timeout support for long-running commands~~ ✅ **COMPLETED** with `set_time_limit()`
+2. Implement Windows-specific command execution paths
+3. Add async execution capabilities
+4. Enhanced error reporting and logging
+5. Per-function timeout limits for individual system calls

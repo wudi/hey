@@ -79,3 +79,7 @@ func (b *builtinContext) Halt(exitCode int, message string) error {
 
 	return nil
 }
+
+func (b *builtinContext) GetExecutionContext() registry.ExecutionContextInterface {
+	return b.ctx
+}

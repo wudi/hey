@@ -1,11 +1,13 @@
 package vm
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wudi/hey/opcodes"
 	"github.com/wudi/hey/registry"
@@ -45,24 +47,34 @@ type ExecutionContext struct {
 	currentClass *classRuntime
 
 	debugLog []string
+
+	// Execution timeout support with Go context
+	ctx            context.Context
+	cancel         context.CancelFunc
+	maxExecutionTime time.Duration
+	timeoutMu        sync.RWMutex
 }
 
 // NewExecutionContext constructs a fresh execution context with sane defaults.
 func NewExecutionContext() *ExecutionContext {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &ExecutionContext{
-		Stack:          make([]*values.Value, 0, 16),
-		OutputWriter:   os.Stdout,
-		GlobalVars:     &sync.Map{},
-		IncludedFiles:  &sync.Map{},
-		Variables:      &sync.Map{},
-		Temporaries:    &sync.Map{},
-		ClassTable:     &sync.Map{},
-		CallStack:      make([]*CallFrame, 0, 8),
-		UserFunctions:  make(map[string]*registry.Function),
-		UserClasses:    make(map[string]*registry.Class),
-		UserInterfaces: make(map[string]*registry.Interface),
-		UserTraits:     make(map[string]*registry.Trait),
-		debugLog:       make([]string, 0, 64),
+		Stack:            make([]*values.Value, 0, 16),
+		OutputWriter:     os.Stdout,
+		GlobalVars:       &sync.Map{},
+		IncludedFiles:    &sync.Map{},
+		Variables:        &sync.Map{},
+		Temporaries:      &sync.Map{},
+		ClassTable:       &sync.Map{},
+		CallStack:        make([]*CallFrame, 0, 8),
+		UserFunctions:    make(map[string]*registry.Function),
+		UserClasses:      make(map[string]*registry.Class),
+		UserInterfaces:   make(map[string]*registry.Interface),
+		UserTraits:       make(map[string]*registry.Trait),
+		debugLog:         make([]string, 0, 64),
+		ctx:              ctx,
+		cancel:           cancel,
+		maxExecutionTime: 0, // 0 means unlimited (default PHP behavior)
 	}
 }
 
@@ -926,4 +938,82 @@ func (ctx *ExecutionContext) recordAssignment(frame *CallFrame, slot uint32, val
 		return
 	}
 	ctx.appendDebugRecord(fmt.Sprintf("assign %s = %s", name, value.String()))
+}
+
+// SetTimeLimit sets the maximum execution time for the script.
+// If seconds is 0, the timeout is unlimited.
+// If seconds is negative, it's treated as unlimited in PHP 8.0+
+func (ctx *ExecutionContext) SetTimeLimit(seconds int) bool {
+	ctx.timeoutMu.Lock()
+	defer ctx.timeoutMu.Unlock()
+
+	// Cancel the existing context
+	if ctx.cancel != nil {
+		ctx.cancel()
+	}
+
+	// Set the new max execution time
+	if seconds <= 0 {
+		// Unlimited execution time
+		ctx.maxExecutionTime = 0
+		ctx.ctx, ctx.cancel = context.WithCancel(context.Background())
+	} else {
+		// Set timeout
+		ctx.maxExecutionTime = time.Duration(seconds) * time.Second
+		ctx.ctx, ctx.cancel = context.WithTimeout(context.Background(), ctx.maxExecutionTime)
+	}
+
+	return true
+}
+
+// GetMaxExecutionTime returns the current max execution time in seconds.
+// Returns 0 if unlimited.
+func (ctx *ExecutionContext) GetMaxExecutionTime() int {
+	ctx.timeoutMu.RLock()
+	defer ctx.timeoutMu.RUnlock()
+
+	if ctx.maxExecutionTime == 0 {
+		return 0
+	}
+	return int(ctx.maxExecutionTime.Seconds())
+}
+
+// GetMaxExecutionTimeAsDuration returns the current max execution time as a Duration.
+// Returns 0 if unlimited.
+func (ctx *ExecutionContext) GetMaxExecutionTimeAsDuration() time.Duration {
+	ctx.timeoutMu.RLock()
+	defer ctx.timeoutMu.RUnlock()
+
+	return ctx.maxExecutionTime
+}
+
+// CheckTimeout checks if the execution has timed out.
+// Returns an error if timeout occurred.
+func (ctx *ExecutionContext) CheckTimeout() error {
+	ctx.timeoutMu.RLock()
+	defer ctx.timeoutMu.RUnlock()
+
+	if ctx.ctx == nil {
+		return nil
+	}
+
+	select {
+	case <-ctx.ctx.Done():
+		if ctx.ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("Fatal error: Maximum execution time of %d seconds exceeded", int(ctx.maxExecutionTime.Seconds()))
+		}
+		return ctx.ctx.Err()
+	default:
+		return nil
+	}
+}
+
+// Cancel cancels the execution context
+func (ctx *ExecutionContext) Cancel() {
+	ctx.timeoutMu.Lock()
+	defer ctx.timeoutMu.Unlock()
+
+	if ctx.cancel != nil {
+		ctx.cancel()
+	}
 }

@@ -327,3 +327,17 @@ func parseQuantity(shorthand string) (*values.Value, error) {
 
 	return values.NewInt(int64(num)), nil
 }
+
+// UpdateIniMaxExecutionTime updates the max_execution_time ini setting
+// This function is used by set_time_limit to keep the ini setting in sync
+func UpdateIniMaxExecutionTime(seconds int) {
+	storage := getIniStorage()
+	storage.mu.Lock()
+	defer storage.mu.Unlock()
+
+	if setting, exists := storage.settings["max_execution_time"]; exists {
+		newValue := strconv.Itoa(seconds)
+		setting.GlobalValue = newValue
+		setting.LocalValue = newValue
+	}
+}

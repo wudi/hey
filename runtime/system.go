@@ -848,5 +848,37 @@ func GetSystemFunctions() []*registry.Function {
 				return values.NewBool(true), nil
 			},
 		},
+		{
+			Name: "set_time_limit",
+			Parameters: []*registry.Parameter{
+				{Name: "seconds", Type: "int"},
+			},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 {
+					return values.NewBool(false), nil
+				}
+
+				seconds := int(args[0].ToInt())
+
+				// Get the execution context from the builtin context
+				if execCtx := ctx.GetExecutionContext(); execCtx != nil {
+					// SetTimeLimit returns true on success, consistent with PHP behavior
+					success := execCtx.SetTimeLimit(seconds)
+
+					if success {
+						// Also update the ini setting to keep it in sync
+						UpdateIniMaxExecutionTime(seconds)
+					}
+
+					return values.NewBool(success), nil
+				}
+
+				return values.NewBool(false), nil
+			},
+		},
 	}
 }

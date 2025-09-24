@@ -34,6 +34,13 @@ type BuiltinCallContext interface {
 	LookupUserClass(name string) (*Class, bool)
 	// Halt stops execution with the given exit code and optional message.
 	Halt(exitCode int, message string) error
+	// GetExecutionContext returns the execution context for timeout management
+	GetExecutionContext() ExecutionContextInterface
+}
+
+// ExecutionContextInterface provides minimal interface for timeout management
+type ExecutionContextInterface interface {
+	SetTimeLimit(seconds int) bool
 }
 
 // Function describes a PHP function that can either be user-defined (bytecode)
