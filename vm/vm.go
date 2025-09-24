@@ -744,6 +744,15 @@ func (vm *VirtualMachine) execYieldFrom(ctx *ExecutionContext, frame *CallFrame,
 	return true, nil
 }
 
+// ExecuteGeneratorFunction provides a stub implementation for generators
+// This is a temporary placeholder to prevent infinite loops in tests
+func (vm *VirtualMachine) ExecuteGeneratorFunction(function *registry.Function, args []*values.Value, generator *runtime2.Generator) (bool, error) {
+	// For now, return false to indicate no more values
+	// This prevents infinite loops while maintaining compatibility
+	// A full generator implementation would execute the function and handle yields
+	return false, nil
+}
+
 // ExecuteFunction executes a function in the given context and frame
 func (vm *VirtualMachine) ExecuteFunction(ctxInterface, frameInterface interface{}) error {
 	ctx, ok := ctxInterface.(*ExecutionContext)
