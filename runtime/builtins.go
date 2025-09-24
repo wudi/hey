@@ -39,6 +39,7 @@ func GetAllBuiltinFunctions() []*registry.Function {
 	functions = append(functions, GetConcurrencyFunctions()...)
 	functions = append(functions, GetIniFunctions()...)
 	functions = append(functions, GetCtypeFunctions()...)
+	functions = append(functions, GetErrorFunctions()...)
 
 	return functions
 }
@@ -125,6 +126,71 @@ func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
 		{
 			Name:  "SORT_FLAG_CASE",
 			Value: values.NewInt(8),
+		},
+		// Error handling constants
+		{
+			Name:  "E_ERROR",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "E_WARNING",
+			Value: values.NewInt(2),
+		},
+		{
+			Name:  "E_PARSE",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "E_NOTICE",
+			Value: values.NewInt(8),
+		},
+		{
+			Name:  "E_CORE_ERROR",
+			Value: values.NewInt(16),
+		},
+		{
+			Name:  "E_CORE_WARNING",
+			Value: values.NewInt(32),
+		},
+		{
+			Name:  "E_COMPILE_ERROR",
+			Value: values.NewInt(64),
+		},
+		{
+			Name:  "E_COMPILE_WARNING",
+			Value: values.NewInt(128),
+		},
+		{
+			Name:  "E_USER_ERROR",
+			Value: values.NewInt(256),
+		},
+		{
+			Name:  "E_USER_WARNING",
+			Value: values.NewInt(512),
+		},
+		{
+			Name:  "E_USER_NOTICE",
+			Value: values.NewInt(1024),
+		},
+		{
+			Name:  "E_STRICT",
+			Value: values.NewInt(2048),
+		},
+		{
+			Name:  "E_RECOVERABLE_ERROR",
+			Value: values.NewInt(4096),
+		},
+		{
+			Name:  "E_DEPRECATED",
+			Value: values.NewInt(8192),
+		},
+		{
+			Name:  "E_USER_DEPRECATED",
+			Value: values.NewInt(16384),
+		},
+		{
+			Name:  "E_ALL",
+			Value: values.NewInt(30719),
 		},
 	}
 }
