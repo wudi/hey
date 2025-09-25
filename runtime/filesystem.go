@@ -2080,9 +2080,8 @@ func GetFilesystemFunctions() []*registry.Function {
 						statArray.ArraySet(values.NewString("rdev"), values.NewInt(int64(unixStat.Rdev)))
 						statArray.ArraySet(values.NewInt(6), values.NewInt(int64(unixStat.Rdev)))
 
-						// Access and change times
-						atime := int64(unixStat.Atim.Sec)
-						ctime := int64(unixStat.Ctim.Sec)
+						// Access and change times (platform-specific)
+						atime, ctime := getStatTimes(unixStat)
 
 						statArray.ArraySet(values.NewString("atime"), values.NewInt(atime))
 						statArray.ArraySet(values.NewInt(8), values.NewInt(atime))
