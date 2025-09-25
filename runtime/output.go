@@ -307,6 +307,41 @@ func GetOutputFunctions() []*registry.Function {
 			},
 		},
 
+		// print_r - Prints human-readable information about a variable
+		{
+			Name: "print_r",
+			Parameters: []*registry.Parameter{
+				{Name: "value", Type: "mixed"},
+				{Name: "return", Type: "bool", HasDefault: true, DefaultValue: values.NewBool(false)},
+			},
+			ReturnType: "mixed",
+			MinArgs:    1,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 1 {
+					return values.NewNull(), nil
+				}
+
+				returnOutput := false
+				if len(args) > 1 {
+					returnOutput = args[1].ToBool()
+				}
+
+				output := args[0].PrintR()
+
+				if returnOutput {
+					return values.NewString(output), nil
+				}
+
+				// Output directly
+				if ctx != nil {
+					_ = ctx.WriteOutput(values.NewString(output))
+				}
+				return values.NewBool(true), nil
+			},
+		},
+
 		// output_add_rewrite_var - Add URL rewriter values (stub implementation)
 		{
 			Name: "output_add_rewrite_var",

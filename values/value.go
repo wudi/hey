@@ -980,6 +980,14 @@ func (v *Value) VarDump() string {
 	return b.String()
 }
 
+// PrintR renders the value following PHP's print_r formatting rules.
+func (v *Value) PrintR() string {
+	var b strings.Builder
+	visited := make(map[*Array]bool)
+	v.appendPrintR(&b, 0, visited, false)
+	return b.String()
+}
+
 func (v *Value) appendVarDump(b *strings.Builder, indent int, visited map[*Array]bool) {
 	ind := strings.Repeat(" ", indent)
 	switch v.Type {
@@ -1064,6 +1072,159 @@ func (v *Value) appendObjectVarDump(b *strings.Builder, indent int, visited map[
 		}
 	}
 	b.WriteString(ind + "}\n")
+}
+
+func (v *Value) appendPrintR(b *strings.Builder, indent int, visited map[*Array]bool, isArrayValue bool) {
+	switch v.Type {
+	case TypeNull:
+		// PHP print_r outputs nothing for NULL
+		b.WriteString("")
+	case TypeBool:
+		if v.Data.(bool) {
+			b.WriteString("1")
+		} else {
+			b.WriteString("")
+		}
+	case TypeInt:
+		b.WriteString(fmt.Sprintf("%d", v.Data.(int64)))
+	case TypeFloat:
+		b.WriteString(strconv.FormatFloat(v.Data.(float64), 'g', -1, 64))
+	case TypeString:
+		b.WriteString(v.Data.(string))
+	case TypeArray:
+		v.appendArrayPrintR(b, indent, visited)
+	case TypeObject:
+		v.appendObjectPrintR(b, indent, visited)
+	case TypeReference:
+		v.Deref().appendPrintR(b, indent, visited, isArrayValue)
+	case TypeResource:
+		// PHP outputs "Resource id #N" for resources
+		b.WriteString("Resource id #5")
+	case TypeCallable:
+		b.WriteString("Closure Object\n(\n)\n")
+	default:
+		b.WriteString(v.Type.String())
+	}
+}
+
+func (v *Value) appendArrayPrintR(b *strings.Builder, indent int, visited map[*Array]bool) {
+	arr := v.Data.(*Array)
+
+	// Check for recursion first, but don't print the header
+	if visited[arr] {
+		// For recursion, print special format
+		b.WriteString("Array\n")
+		b.WriteString(" *RECURSION*")
+		return
+	}
+
+	b.WriteString("Array\n")
+
+	ind := strings.Repeat(" ", indent*4)
+	b.WriteString(ind + "(\n")
+
+	visited[arr] = true
+	defer delete(visited, arr)
+
+	// Sort keys to ensure consistent output
+	keys := make([]interface{}, 0, len(arr.Elements))
+	for k := range arr.Elements {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return compareArrayKeys(keys[i], keys[j])
+	})
+
+	nextInd := strings.Repeat(" ", (indent+1)*4)
+	for _, key := range keys {
+		val := arr.Elements[key]
+
+		// Format the key
+		keyStr := formatPrintRKey(key)
+		b.WriteString(fmt.Sprintf("%s[%s] => ", nextInd, keyStr))
+
+		if val == nil {
+			b.WriteString("\n")
+			continue
+		}
+
+		// For arrays and objects, we need special formatting
+		if val.Type == TypeArray || val.Type == TypeObject {
+			val.appendPrintR(b, indent+2, visited, true)
+			// Add blank line after nested arrays/objects
+			b.WriteString("\n")
+		} else {
+			val.appendPrintR(b, 0, visited, true)
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString(ind + ")\n")
+}
+
+func (v *Value) appendObjectPrintR(b *strings.Builder, indent int, visited map[*Array]bool) {
+	obj := v.Data.(*Object)
+
+	b.WriteString(fmt.Sprintf("%s Object\n", obj.ClassName))
+
+	ind := strings.Repeat(" ", indent*4)
+	b.WriteString(ind + "(\n")
+
+	// Sort property keys
+	propKeys := make([]string, 0, len(obj.Properties))
+	for name := range obj.Properties {
+		propKeys = append(propKeys, name)
+	}
+	sort.Strings(propKeys)
+
+	nextInd := strings.Repeat(" ", (indent+1)*4)
+	for _, name := range propKeys {
+		val := obj.Properties[name]
+
+		// Format property name with visibility modifiers if needed
+		// For now, we assume all properties are public in print_r output
+		b.WriteString(fmt.Sprintf("%s[%s] => ", nextInd, name))
+
+		if val == nil {
+			b.WriteString("\n")
+		} else if val.Type == TypeArray || val.Type == TypeObject {
+			val.appendPrintR(b, indent+2, visited, true)
+		} else {
+			val.appendPrintR(b, 0, visited, true)
+			b.WriteString("\n")
+		}
+	}
+
+	b.WriteString(ind + ")\n")
+}
+
+func formatPrintRKey(key interface{}) string {
+	switch k := key.(type) {
+	case string:
+		return k
+	case int:
+		return fmt.Sprintf("%d", k)
+	case int8:
+		return fmt.Sprintf("%d", k)
+	case int16:
+		return fmt.Sprintf("%d", k)
+	case int32:
+		return fmt.Sprintf("%d", k)
+	case int64:
+		return fmt.Sprintf("%d", k)
+	case uint:
+		return fmt.Sprintf("%d", k)
+	case uint8:
+		return fmt.Sprintf("%d", k)
+	case uint16:
+		return fmt.Sprintf("%d", k)
+	case uint32:
+		return fmt.Sprintf("%d", k)
+	case uint64:
+		return fmt.Sprintf("%d", k)
+	default:
+		return fmt.Sprintf("%v", key)
+	}
 }
 
 func compareArrayKeys(a, b interface{}) bool {
