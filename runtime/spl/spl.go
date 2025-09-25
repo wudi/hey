@@ -28,6 +28,22 @@ func GetSplClasses() []*registry.ClassDescriptor {
 		GetMultipleIteratorClass(),
 		GetCachingIteratorClass(),
 		GetRegexIteratorClass(),
+		GetSplHeapClass(),
+		GetSplMaxHeapClass(),
+		GetSplMinHeapClass(),
+		GetSplPriorityQueueClass(),
+		GetDirectoryIteratorClass(),
+		GetFilesystemIteratorClass(),
+		GetSplFileObjectClass(),
+		GetSplTempFileObjectClass(),
+		GetGlobIteratorClass(),
+		GetRecursiveDirectoryIteratorClass(),
+		GetRecursiveFilterIteratorClass(),
+		GetParentIteratorClass(),
+		GetRecursiveCachingIteratorClass(),
+		GetRecursiveCallbackFilterIteratorClass(),
+		GetRecursiveRegexIteratorClass(),
+		GetRecursiveTreeIteratorClass(),
 	}
 }
 
@@ -41,6 +57,8 @@ func GetSplInterfaces() []*registry.Interface {
 		getSeekableIteratorInterface(),
 		getRecursiveIteratorInterface(),
 		getOuterIteratorInterface(),
+		getSplObserverInterface(),
+		getSplSubjectInterface(),
 	}
 }
 
@@ -184,5 +202,59 @@ func getOuterIteratorInterface() *registry.Interface {
 		Name:    "OuterIterator",
 		Methods: methods,
 		Extends: []string{"Iterator"},
+	}
+}
+
+// getSplObserverInterface returns the SplObserver interface
+func getSplObserverInterface() *registry.Interface {
+	methods := map[string]*registry.InterfaceMethod{
+		"update": {
+			Name:       "update",
+			Visibility: "public",
+			Parameters: []*registry.Parameter{
+				{Name: "subject", Type: "SplSubject"},
+			},
+			ReturnType: "void",
+		},
+	}
+
+	return &registry.Interface{
+		Name:    "SplObserver",
+		Methods: methods,
+		Extends: []string{},
+	}
+}
+
+// getSplSubjectInterface returns the SplSubject interface
+func getSplSubjectInterface() *registry.Interface {
+	methods := map[string]*registry.InterfaceMethod{
+		"attach": {
+			Name:       "attach",
+			Visibility: "public",
+			Parameters: []*registry.Parameter{
+				{Name: "observer", Type: "SplObserver"},
+			},
+			ReturnType: "void",
+		},
+		"detach": {
+			Name:       "detach",
+			Visibility: "public",
+			Parameters: []*registry.Parameter{
+				{Name: "observer", Type: "SplObserver"},
+			},
+			ReturnType: "void",
+		},
+		"notify": {
+			Name:       "notify",
+			Visibility: "public",
+			Parameters: []*registry.Parameter{},
+			ReturnType: "void",
+		},
+	}
+
+	return &registry.Interface{
+		Name:    "SplSubject",
+		Methods: methods,
+		Extends: []string{},
 	}
 }

@@ -22,6 +22,9 @@ func GetSplFunctions() []*registry.Function {
 	// Add class reflection functions
 	functions = append(functions, GetClassReflectionFunctions()...)
 
+	// Add autoload functions
+	functions = append(functions, GetSplAutoloadFunctions()...)
+
 	return functions
 }
 

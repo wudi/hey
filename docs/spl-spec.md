@@ -13,8 +13,8 @@ This document tracks the implementation of PHP's Standard PHP Library (SPL) in H
 - [x] **OuterIterator** - Extends Iterator, proxies to another iterator ✅
 - [x] **RecursiveIterator** - For recursive traversal ✅
 - [x] **SeekableIterator** - Allows seeking to specific positions ✅
-- [ ] **SplObserver** - Observer pattern interface
-- [ ] **SplSubject** - Subject pattern interface
+- [x] **SplObserver** - Observer pattern interface ✅
+- [x] **SplSubject** - Subject pattern interface ✅
 
 ### Phase 2: SPL Exceptions (Completed - using existing exception.go)
 - [x] **Exception** - Base exception class ✅
@@ -36,10 +36,10 @@ This document tracks the implementation of PHP's Standard PHP Library (SPL) in H
 - [x] **SplDoublyLinkedList** - Doubly linked list implementation ✅
 - [x] **SplStack** - Stack (LIFO) extends SplDoublyLinkedList ✅
 - [x] **SplQueue** - Queue (FIFO) extends SplDoublyLinkedList ✅
-- [ ] **SplHeap** - Abstract heap implementation
-- [ ] **SplMaxHeap** - Max heap extends SplHeap
-- [ ] **SplMinHeap** - Min heap extends SplHeap
-- [ ] **SplPriorityQueue** - Priority queue extends SplHeap
+- [x] **SplHeap** - Abstract heap implementation ✅
+- [x] **SplMaxHeap** - Max heap extends SplHeap ✅
+- [x] **SplMinHeap** - Min heap extends SplHeap ✅
+- [x] **SplPriorityQueue** - Priority queue extends SplHeap ✅
 - [x] **SplFixedArray** - Fixed size array with better memory usage ✅
 - [x] **ArrayObject** - Allows objects to work as arrays ✅
 - [x] **SplObjectStorage** - Map objects to data ✅
@@ -51,31 +51,31 @@ This document tracks the implementation of PHP's Standard PHP Library (SPL) in H
 - [x] **AppendIterator** - Iterate over multiple iterators sequentially ✅
 - [x] **CachingIterator** - Cache iteration results ✅
 - [x] **CallbackFilterIterator** - Filter using callback ✅
-- [ ] **DirectoryIterator** - Iterate over directories
+- [x] **DirectoryIterator** - Iterate over directories ✅
 - [x] **EmptyIterator** - Empty iterator (no elements) ✅
-- [ ] **FilesystemIterator** - Improved DirectoryIterator
+- [x] **FilesystemIterator** - Improved DirectoryIterator ✅
 - [x] **FilterIterator** - Abstract filtering iterator ✅
-- [ ] **GlobIterator** - Iterate over glob patterns
+- [x] **GlobIterator** - Iterate over glob patterns ✅
 - [x] **InfiniteIterator** - Infinitely iterate ✅
 - [x] **IteratorIterator** - Convert Traversable to Iterator ✅
 - [x] **LimitIterator** - Limit iteration count ✅
 - [x] **MultipleIterator** - Iterate over multiple iterators simultaneously ✅
 - [x] **NoRewindIterator** - Iterator that can't be rewound ✅
-- [ ] **ParentIterator** - Filter out non-parent elements
+- [x] **ParentIterator** - Filter out non-parent elements ✅
 - [x] **RecursiveArrayIterator** - Recursive array iteration ✅
-- [ ] **RecursiveCachingIterator** - Recursive caching iterator
-- [ ] **RecursiveCallbackFilterIterator** - Recursive callback filter
-- [ ] **RecursiveDirectoryIterator** - Recursive directory iteration
-- [ ] **RecursiveFilterIterator** - Recursive abstract filter
-- [ ] **RecursiveIteratorIterator** - Iterate RecursiveIterator
-- [ ] **RecursiveRegexIterator** - Recursive regex filter
-- [ ] **RecursiveTreeIterator** - Tree representation
-- [ ] **RegexIterator** - Filter using regex
+- [x] **RecursiveCachingIterator** - Recursive caching iterator ✅
+- [x] **RecursiveCallbackFilterIterator** - Recursive callback filter ✅
+- [x] **RecursiveDirectoryIterator** - Recursive directory iteration ✅
+- [x] **RecursiveFilterIterator** - Recursive abstract filter ✅
+- [x] **RecursiveIteratorIterator** - Iterate RecursiveIterator ✅
+- [x] **RecursiveRegexIterator** - Recursive regex filter ✅
+- [x] **RecursiveTreeIterator** - Tree representation ✅
+- [x] **RegexIterator** - Filter using regex ✅
 
 ### Phase 6: File Handling ✅
 - [x] **SplFileInfo** - File information class ✅
-- [ ] **SplFileObject** - Object oriented file handling
-- [ ] **SplTempFileObject** - Temporary file object
+- [x] **SplFileObject** - Object oriented file handling ✅
+- [x] **SplTempFileObject** - Temporary file object ✅
 
 ### Phase 5: SPL Functions ✅
 - [x] **iterator_apply()** - Apply function to every element ✅
@@ -89,12 +89,12 @@ This document tracks the implementation of PHP's Standard PHP Library (SPL) in H
 - [x] **class_implements()** - Return implemented interfaces ✅
 - [x] **class_parents()** - Return parent classes ✅
 - [x] **class_uses()** - Return used traits ✅
-- [ ] **spl_autoload()** - Default autoload implementation
-- [ ] **spl_autoload_call()** - Try all autoload functions
-- [ ] **spl_autoload_extensions()** - Get/set autoload extensions
-- [ ] **spl_autoload_functions()** - Get registered autoloaders
-- [ ] **spl_autoload_register()** - Register autoload function
-- [ ] **spl_autoload_unregister()** - Unregister autoload function
+- [x] **spl_autoload()** - Default autoload implementation ✅
+- [x] **spl_autoload_call()** - Try all autoload functions ✅
+- [x] **spl_autoload_extensions()** - Get/set autoload extensions ✅
+- [x] **spl_autoload_functions()** - Get registered autoloaders ✅
+- [x] **spl_autoload_register()** - Register autoload function ✅
+- [x] **spl_autoload_unregister()** - Unregister autoload function ✅
 
 ## Implementation Priority
 
@@ -135,6 +135,13 @@ Each component will have:
 - **SplQueue**: FIFO queue behavior with enqueue/dequeue methods
 - **SplFixedArray**: Memory-efficient fixed-size arrays with resizing
 - **SplObjectStorage**: Object-to-data mapping with full iterator support
+- **SplHeap Family**: Complete heap data structures with proper heapify operations
+  - **SplHeap**: Abstract base heap class with iterator support
+  - **SplMaxHeap**: Maximum heap with largest element at top
+  - **SplMinHeap**: Minimum heap with smallest element at top
+  - **SplPriorityQueue**: Priority-based queue with configurable extract flags
+- **DirectoryIterator**: Complete file system directory iteration with all SplFileInfo methods
+- **FilesystemIterator**: Enhanced DirectoryIterator with configurable flags for current/key modes
 - **EmptyIterator**: Empty iterator with proper exception throwing
 - **SplFileInfo**: Complete file system information and operations
 - **IteratorIterator**: Convert Traversable to Iterator with delegation
@@ -143,20 +150,27 @@ Each component will have:
 - **FilterIterator**: Abstract base class for filtering iterators
 - **CallbackFilterIterator**: Callback-based filtering with mock callback system
 - **RecursiveArrayIterator**: Recursive iteration with hasChildren/getChildren methods
+- **RecursiveIteratorIterator**: Deep traversal of recursive iterators with depth control
 - **NoRewindIterator**: Non-rewindable iterator with state tracking
 - **InfiniteIterator**: Infinite cycling through elements with automatic rewinding
 - **MultipleIterator**: Parallel iteration over multiple iterators simultaneously
 - **CachingIterator**: Caching iteration results with CALL_TOSTRING and FULL_CACHE modes
-- **Core Interfaces**: ArrayAccess, Countable, IteratorAggregate, OuterIterator, SeekableIterator, RecursiveIterator
+- **RegexIterator**: Regular expression filtering with pattern matching
+- **GlobIterator**: Pattern-based file matching with glob() functionality
+- **RecursiveDirectoryIterator**: Recursive directory traversal with hasChildren/getChildren support
+- **SplFileObject**: Complete object-oriented file handling with iterator interface, CSV support, and file operations
+- **SplTempFileObject**: Secure temporary file creation and management extending SplFileObject
+- **Core Interfaces**: ArrayAccess, Countable, IteratorAggregate, OuterIterator, SeekableIterator, RecursiveIterator, SplObserver, SplSubject
 - **SPL Functions**: spl_object_id, spl_object_hash, spl_classes, iterator functions
 - **Class Reflection**: class_implements, class_parents, class_uses functions
 
 ### Tests Passing:
-- **130+ unit tests** pass for all implemented classes (including 6 new advanced iterators)
+- **200+ unit tests** pass for all implemented classes (including file objects and recursive iterators)
 - Comprehensive integration tests pass
 - Performance benchmarks show 1.3-1.5x overhead vs native (excellent!)
 - Compatible with PHP behavior for core functionality
 - Comprehensive validation against native PHP behavior
+- TDD approach with PHP validation scripts for all new components
 
 ### Location:
 - All SPL classes implemented in `/runtime/spl/` package
