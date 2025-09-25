@@ -2,6 +2,7 @@ package spl
 
 import (
 	"fmt"
+	"os"
 	"sort"
 
 	"github.com/wudi/hey/registry"
@@ -192,6 +193,35 @@ func GetRecursiveIteratorIteratorClass() *registry.ClassDescriptor {
 							}
 						}
 					}
+				} else if iterObj.ClassName == "RecursiveDirectoryIterator" {
+					if iteratorData, exists := iterObj.Properties["_iteratorData"]; exists && iteratorData.Type == values.TypeResource {
+						data := iteratorData.Data.(*RecursiveDirectoryIteratorData)
+
+						if data.currentIdx >= 0 && data.currentIdx < len(data.entries) {
+							currentEntry := data.entries[data.currentIdx]
+							currentPath := data.path + "/" + currentEntry.Name()
+
+							// Check flag to determine return type
+							flags := data.flags
+
+							// CURRENT_AS_PATHNAME flag (from FilesystemIterator)
+							if flags&32 != 0 { // CURRENT_AS_PATHNAME = 32
+								return values.NewString(currentPath), nil
+							}
+
+							// Default: return SplFileInfo object
+							fileInfoObj := &values.Object{
+								ClassName:  "SplFileInfo",
+								Properties: make(map[string]*values.Value),
+							}
+							fileInfoObj.Properties["__filepath"] = values.NewString(currentPath)
+
+							return &values.Value{
+								Type: values.TypeObject,
+								Data: fileInfoObj,
+							}, nil
+						}
+					}
 				}
 			}
 
@@ -237,6 +267,24 @@ func GetRecursiveIteratorIteratorClass() *registry.ClassDescriptor {
 									return key, nil
 								}
 							}
+						}
+					}
+				} else if iterObj.ClassName == "RecursiveDirectoryIterator" {
+					if iteratorData, exists := iterObj.Properties["_iteratorData"]; exists && iteratorData.Type == values.TypeResource {
+						data := iteratorData.Data.(*RecursiveDirectoryIteratorData)
+
+						if data.currentIdx >= 0 && data.currentIdx < len(data.entries) {
+							currentEntry := data.entries[data.currentIdx]
+							flags := data.flags
+
+							// KEY_AS_FILENAME flag (from FilesystemIterator)
+							if flags&16 != 0 { // KEY_AS_FILENAME = 16
+								return values.NewString(currentEntry.Name()), nil
+							}
+
+							// Default: return full path
+							currentPath := data.path + "/" + currentEntry.Name()
+							return values.NewString(currentPath), nil
 						}
 					}
 				}
@@ -513,6 +561,23 @@ func callDirectIteratorNext(iter *values.Value) bool {
 			iterObj.Properties["__position"] = values.NewInt(newPos)
 			return true
 		}
+	} else if iterObj.ClassName == "RecursiveDirectoryIterator" {
+		if iteratorData, exists := iterObj.Properties["_iteratorData"]; exists && iteratorData.Type == values.TypeResource {
+			data := iteratorData.Data.(*RecursiveDirectoryIteratorData)
+			data.currentIdx++
+
+			// If SKIP_DOTS is set, skip dot entries automatically
+			if data.flags&4096 != 0 { // SKIP_DOTS = 4096
+				for data.currentIdx < len(data.entries) {
+					currentEntry := data.entries[data.currentIdx]
+					if currentEntry.Name() != "." && currentEntry.Name() != ".." {
+						break
+					}
+					data.currentIdx++
+				}
+			}
+			return true
+		}
 	}
 	return false
 }
@@ -529,6 +594,25 @@ func callDirectIteratorValid(iter *values.Value) bool {
 			if keys, exists := iterObj.Properties["__keys"]; exists {
 				position := int(pos.ToInt())
 				return position >= 0 && position < keys.ArrayCount()
+			}
+		}
+	} else if iterObj.ClassName == "RecursiveDirectoryIterator" {
+		if iteratorData, exists := iterObj.Properties["_iteratorData"]; exists && iteratorData.Type == values.TypeResource {
+			data := iteratorData.Data.(*RecursiveDirectoryIteratorData)
+
+			// Skip invalid positions and handle SKIP_DOTS flag
+			for data.currentIdx >= 0 && data.currentIdx < len(data.entries) {
+				currentEntry := data.entries[data.currentIdx]
+
+				// Check SKIP_DOTS flag
+				if data.flags&4096 != 0 { // SKIP_DOTS = 4096
+					if currentEntry.Name() == "." || currentEntry.Name() == ".." {
+						data.currentIdx++
+						continue
+					}
+				}
+
+				return true
 			}
 		}
 	}
@@ -558,6 +642,28 @@ func callDirectIteratorHasChildren(iter *values.Value) bool {
 					}
 				}
 			}
+		}
+	} else if iterObj.ClassName == "RecursiveDirectoryIterator" {
+		if iteratorData, exists := iterObj.Properties["_iteratorData"]; exists && iteratorData.Type == values.TypeResource {
+			data := iteratorData.Data.(*RecursiveDirectoryIteratorData)
+
+			if data.currentIdx < 0 || data.currentIdx >= len(data.entries) {
+				return false
+			}
+
+			currentEntry := data.entries[data.currentIdx]
+
+			// Only directories can have children, and skip '.' and '..' unless specifically requested
+			if !currentEntry.IsDir() {
+				return false
+			}
+
+			// Special handling for '.' and '..' - they never have children
+			if currentEntry.Name() == "." || currentEntry.Name() == ".." {
+				return false
+			}
+
+			return true
 		}
 	}
 	return false
@@ -626,6 +732,40 @@ func callDirectIteratorGetChildren(iter *values.Value) *values.Value {
 				}
 			}
 		}
+	} else if iterObj.ClassName == "RecursiveDirectoryIterator" {
+		if iteratorData, exists := iterObj.Properties["_iteratorData"]; exists && iteratorData.Type == values.TypeResource {
+			data := iteratorData.Data.(*RecursiveDirectoryIteratorData)
+
+			if data.currentIdx < 0 || data.currentIdx >= len(data.entries) {
+				return nil
+			}
+
+			currentEntry := data.entries[data.currentIdx]
+
+			if !currentEntry.IsDir() {
+				return nil
+			}
+
+			// Build path to child directory
+			childPath := data.path + "/" + currentEntry.Name()
+
+			// Create new RecursiveDirectoryIterator for the child directory
+			childObj := &values.Object{
+				ClassName:  "RecursiveDirectoryIterator",
+				Properties: make(map[string]*values.Value),
+			}
+			childThis := &values.Value{
+				Type: values.TypeObject,
+				Data: childObj,
+			}
+
+			// Initialize child iterator using the same constructor logic
+			if err := initRecursiveDirectoryIterator(childThis, childPath, data.flags); err != nil {
+				return nil
+			}
+
+			return childThis
+		}
 	}
 	return nil
 }
@@ -640,6 +780,23 @@ func callDirectIteratorRewind(iter *values.Value) bool {
 	if iterObj.ClassName == "RecursiveArrayIterator" || iterObj.ClassName == "ArrayIterator" {
 		iterObj.Properties["__position"] = values.NewInt(0)
 		return true
+	} else if iterObj.ClassName == "RecursiveDirectoryIterator" {
+		if iteratorData, exists := iterObj.Properties["_iteratorData"]; exists && iteratorData.Type == values.TypeResource {
+			data := iteratorData.Data.(*RecursiveDirectoryIteratorData)
+			data.currentIdx = 0
+
+			// If SKIP_DOTS is set, skip initial dot entries
+			if data.flags&4096 != 0 { // SKIP_DOTS = 4096
+				for data.currentIdx < len(data.entries) {
+					currentEntry := data.entries[data.currentIdx]
+					if currentEntry.Name() != "." && currentEntry.Name() != ".." {
+						break
+					}
+					data.currentIdx++
+				}
+			}
+			return true
+		}
 	}
 	return false
 }
@@ -839,4 +996,66 @@ func exceedsMaxDepth(obj *values.Object) bool {
 	}
 
 	return currentDepth.ToInt() >= maxDepth.ToInt()
+}
+
+// initRecursiveDirectoryIterator initializes a RecursiveDirectoryIterator with the given path and flags
+// This is a helper function to avoid calling constructor with registry context
+func initRecursiveDirectoryIterator(thisObj *values.Value, path string, flags int64) error {
+	if path == "" {
+		return fmt.Errorf("RecursiveDirectoryIterator::__construct(): Path cannot be empty")
+	}
+
+	// Check if path exists and is a directory
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("RecursiveDirectoryIterator::__construct(%s): Failed to open directory: No such file or directory", path)
+		}
+		return fmt.Errorf("RecursiveDirectoryIterator::__construct(%s): Failed to open directory: %v", path, err)
+	}
+
+	if !info.IsDir() {
+		return fmt.Errorf("RecursiveDirectoryIterator::__construct(%s): Failed to open directory: Not a directory", path)
+	}
+
+	// Read directory entries
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("RecursiveDirectoryIterator::__construct(%s): Failed to open directory: %v", path, err)
+	}
+	defer file.Close()
+
+	entries, err := file.Readdir(-1)
+	if err != nil {
+		return fmt.Errorf("RecursiveDirectoryIterator::__construct(%s): Failed to read directory: %v", path, err)
+	}
+
+	// Create iterator data compatible with FilesystemIterator
+	var allEntries []os.FileInfo
+
+	// Add . and .. entries if SKIP_DOTS is not set
+	if (flags & 4096) == 0 { // SKIP_DOTS = 4096
+		dotEntry := &fakeFileInfo{name: ".", isDir: true}
+		dotDotEntry := &fakeFileInfo{name: "..", isDir: true}
+		allEntries = make([]os.FileInfo, 0, len(entries)+2)
+		allEntries = append(allEntries, dotEntry, dotDotEntry)
+		allEntries = append(allEntries, entries...)
+	} else {
+		allEntries = entries
+	}
+
+	iteratorData := &RecursiveDirectoryIteratorData{
+		path:       path,
+		entries:    allEntries,
+		currentIdx: 0,
+		flags:      flags,
+	}
+
+	objData := thisObj.Data.(*values.Object)
+	objData.Properties["_iteratorData"] = &values.Value{
+		Type: values.TypeResource,
+		Data: iteratorData,
+	}
+
+	return nil
 }
