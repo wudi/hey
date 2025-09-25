@@ -13,12 +13,31 @@ import (
 	"github.com/wudi/hey/compiler/lexer"
 	"github.com/wudi/hey/compiler/parser"
 	"github.com/wudi/hey/runtime"
+	"github.com/wudi/hey/values"
 	"github.com/wudi/hey/version"
 	"github.com/wudi/hey/vm"
 	"github.com/wudi/hey/vmfactory"
 )
 
 func main() {
+	// Check if the first argument is a PHP file
+	// If it is, bypass CLI framework and directly execute the file with all arguments
+	if len(os.Args) > 1 {
+		filename := os.Args[1]
+		// Check if it's not a flag and the file exists
+		if !strings.HasPrefix(filename, "-") {
+			if _, err := os.Stat(filename); err == nil {
+				// File exists, execute it directly with all arguments
+				scriptArgs := append([]string{filename}, os.Args[2:]...)
+				if err := parseAndExecuteFileWithArgs(filename, scriptArgs); err != nil {
+					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					os.Exit(1)
+				}
+				return
+			}
+		}
+	}
+
 	app := &cli.Command{
 		Name:  "hey",
 		Usage: "A PHP interpreter written in Go",
@@ -83,9 +102,11 @@ func main() {
 				return runInteractiveShell()
 			}
 
-			// if flowed file input is provided, use it
-			if len(os.Args) > 1 {
-				return parseAndExecuteFile(os.Args[1])
+			// This path is no longer reached for PHP files as they're handled before CLI parsing
+			// This remains for backward compatibility with non-file arguments
+			if len(os.Args) > 1 && !strings.HasPrefix(os.Args[1], "-") {
+				// If we get here, the file doesn't exist
+				return fmt.Errorf("file not found: %s", os.Args[1])
 			}
 
 			// read from stdin if no file or code is provided
@@ -113,7 +134,19 @@ func parseAndExecuteFile(filename string) error {
 	return parseAndExecuteCodeWithFile(string(code), false, filename)
 }
 
+func parseAndExecuteFileWithArgs(filename string, args []string) error {
+	code, err := os.ReadFile(filename)
+	if err != nil {
+		return err
+	}
+	return parseAndExecuteCodeWithFileAndArgs(string(code), false, filename, args)
+}
+
 func parseAndExecuteCodeWithFile(code string, inScript bool, filename string) error {
+	return parseAndExecuteCodeWithFileAndArgs(code, inScript, filename, []string{filename})
+}
+
+func parseAndExecuteCodeWithFileAndArgs(code string, inScript bool, filename string, args []string) error {
 	var l *lexer.Lexer
 	if inScript {
 		l = lexer.NewInScripting(code)
@@ -159,6 +192,18 @@ func parseAndExecuteCodeWithFile(code string, inScript bool, filename string) er
 	variables := runtime.GlobalVMIntegration.GetAllVariables()
 	for name, value := range variables {
 		vmCtx.GlobalVars.Store(name, value)
+	}
+
+	// Populate $argc and $argv
+	if len(args) > 0 {
+		argc := values.NewInt(int64(len(args)))
+		vmCtx.GlobalVars.Store("$argc", argc)
+
+		argv := values.NewArray()
+		for i, arg := range args {
+			argv.ArraySet(values.NewInt(int64(i)), values.NewString(arg))
+		}
+		vmCtx.GlobalVars.Store("$argv", argv)
 	}
 
 	// Create VM with pre-configured compiler callback
