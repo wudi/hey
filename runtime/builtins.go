@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/runtime/spl"
 	"github.com/wudi/hey/values"
 )
 
@@ -75,6 +76,9 @@ func GetAllBuiltinClasses() []*registry.ClassDescriptor {
 	// Add classes from concurrency module
 	classes = append(classes, GetConcurrencyClasses()...)
 
+	// Add classes from SPL module
+	classes = append(classes, spl.GetSplClasses()...)
+
 	return classes
 }
 
@@ -84,6 +88,9 @@ func GetAllBuiltinInterfaces() []*registry.Interface {
 
 	// Add interfaces from iterator module
 	interfaces = append(interfaces, GetInterfaces()...)
+
+	// Add interfaces from SPL module
+	interfaces = append(interfaces, spl.GetSplInterfaces()...)
 
 	return interfaces
 }

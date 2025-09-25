@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/wudi/hey/registry"
+	"github.com/wudi/hey/runtime/spl"
 	"github.com/wudi/hey/values"
 )
 
@@ -132,6 +133,13 @@ func registerBuiltinSymbols() error {
 
 		if err := registry.GlobalRegistry.RegisterFunction(fn); err != nil {
 			return fmt.Errorf("register builtin %s: %w", fn.Name, err)
+		}
+	}
+
+	// Register SPL functions
+	for _, fn := range spl.GetSplFunctions() {
+		if err := registry.GlobalRegistry.RegisterFunction(fn); err != nil {
+			return fmt.Errorf("register SPL function %s: %w", fn.Name, err)
 		}
 	}
 

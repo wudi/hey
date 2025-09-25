@@ -28,7 +28,7 @@ This document tracks the implementation status of PHP PCRE (Perl Compatible Regu
 |----------|--------|-------------|-------------------|---------------|
 | `preg_replace()` | ✅ IMPLEMENTED | Replace matches with replacement | ~90% (RE2 limitations) | Basic replacement, multiple patterns |
 | `preg_filter()` | ✅ IMPLEMENTED | Like preg_replace but filters arrays | ~90% (RE2 limitations) | Array filtering, key preservation |
-| `preg_replace_callback()` | 📝 PLANNED | Replace with callback function | Callback support needs implementation |
+| `preg_replace_callback()` | ✅ IMPLEMENTED | Replace with callback function | ~95% (Full callback support, smart builtin handling) | Complete user/builtin function support, capture groups, array handling, limit parameter |
 | `preg_replace_callback_array()` | 📝 PLANNED | Replace with multiple callbacks | Advanced callback support needed |
 
 ### String Utilities

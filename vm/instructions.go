@@ -18,14 +18,15 @@ import (
 )
 
 type foreachIterator struct {
-	keys         []*values.Value
-	values       []*values.Value
-	index        int
-	generator    *values.Value // For Generator objects
-	isFirst      bool         // For generators, track if this is the first iteration
-	byReference  bool         // Whether this is a foreach by reference
-	sourceArray  *values.Array // Reference to original array for reference foreach
-	orderedKeys  []interface{} // Original keys for reference foreach
+	keys           []*values.Value
+	values         []*values.Value
+	index          int
+	generator      *values.Value // For Generator objects
+	iteratorObject *values.Value // For Iterator interface objects (ArrayIterator, etc.)
+	isFirst        bool         // For generators, track if this is the first iteration
+	byReference    bool         // Whether this is a foreach by reference
+	sourceArray    *values.Array // Reference to original array for reference foreach
+	orderedKeys    []interface{} // Original keys for reference foreach
 }
 
 func decodeOperand(inst *opcodes.Instruction, idx int) (opcodes.OpType, uint32) {
@@ -2153,8 +2154,8 @@ func (vm *VirtualMachine) execFeReset(ctx *ExecutionContext, frame *CallFrame, i
 			// Store the generator object for use in FE_FETCH
 			iterator.generator = iterable
 		} else {
-			// Handle other object types that might be iterable
-			// TODO: Add support for other Iterator interface implementations
+			// Handle Iterator interface implementations (ArrayIterator, RecursiveIteratorIterator, etc.)
+			iterator.iteratorObject = iterable
 		}
 	}
 
@@ -2205,6 +2206,46 @@ func (vm *VirtualMachine) execFeFetch(ctx *ExecutionContext, frame *CallFrame, i
 					} else {
 						nextValue = values.NewNull()
 						nextKey = values.NewNull()
+					}
+				}
+			}
+		}
+	} else if iterator != nil && iterator.iteratorObject != nil {
+		// Handle Iterator interface objects (ArrayIterator, RecursiveIteratorIterator, etc.)
+		obj := iterator.iteratorObject.Data.(*values.Object)
+		cls := ctx.ensureClass(obj.ClassName)
+
+		// On first call, rewind the iterator
+		if iterator.isFirst {
+			iterator.isFirst = false
+			// Call rewind() method
+			if rewindMethod := resolveClassMethod(ctx, cls, "rewind"); rewindMethod != nil {
+				rewindMethod.Builtin(nil, []*values.Value{iterator.iteratorObject})
+			}
+		} else {
+			// Call next() method to advance iterator
+			if nextMethod := resolveClassMethod(ctx, cls, "next"); nextMethod != nil {
+				nextMethod.Builtin(nil, []*values.Value{iterator.iteratorObject})
+			}
+		}
+
+		// Check if iterator is valid
+		if validMethod := resolveClassMethod(ctx, cls, "valid"); validMethod != nil {
+			validResult, err := validMethod.Builtin(nil, []*values.Value{iterator.iteratorObject})
+			if err == nil && validResult.ToBool() {
+				// Get current value
+				if currentMethod := resolveClassMethod(ctx, cls, "current"); currentMethod != nil {
+					currentResult, err := currentMethod.Builtin(nil, []*values.Value{iterator.iteratorObject})
+					if err == nil {
+						nextValue = currentResult
+					}
+				}
+
+				// Get current key
+				if keyMethod := resolveClassMethod(ctx, cls, "key"); keyMethod != nil {
+					keyResult, err := keyMethod.Builtin(nil, []*values.Value{iterator.iteratorObject})
+					if err == nil {
+						nextKey = keyResult
 					}
 				}
 			}

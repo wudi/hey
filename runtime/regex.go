@@ -553,5 +553,189 @@ func GetRegexFunctions() []*registry.Function {
 				return values.NewNull(), nil
 			},
 		},
+		{
+			Name: "preg_replace_callback",
+			Parameters: []*registry.Parameter{
+				{Name: "pattern", Type: "string|array"},
+				{Name: "callback", Type: "callable"},
+				{Name: "subject", Type: "string|array"},
+				{Name: "limit", Type: "int", HasDefault: true, DefaultValue: values.NewInt(-1)},
+				{Name: "count", Type: "int", IsReference: true, HasDefault: true, DefaultValue: values.NewNull()},
+			},
+			ReturnType: "string|array|null",
+			MinArgs:    3,
+			MaxArgs:    5,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 3 {
+					return values.NewNull(), nil
+				}
+
+				clearRegexError() // Clear any previous errors
+
+				pattern := args[0].ToString()
+				callback := args[1]
+				subject := args[2]
+				limit := int(-1)
+				if len(args) > 3 && !args[3].IsNull() {
+					limit = int(args[3].ToInt())
+				}
+
+				// Compile the regex pattern
+				regex, err := compilePhpRegex(pattern)
+				if err != nil {
+					setRegexError(PREG_INTERNAL_ERROR, fmt.Sprintf("Invalid regex pattern: %s", err.Error()))
+					return values.NewNull(), nil
+				}
+
+				// Handle string subject
+				if subject.Type == values.TypeString {
+					subjectStr := subject.ToString()
+					replacementCount := 0
+
+					// Find all matches with capture groups
+					allMatches := regex.FindAllStringSubmatch(subjectStr, limit)
+					if len(allMatches) == 0 {
+						return values.NewString(subjectStr), nil // No matches, return original
+					}
+
+					// Process each match and build result string manually
+					result := subjectStr
+					offset := 0
+
+					for _, matchData := range allMatches {
+						if len(matchData) == 0 {
+							continue
+						}
+
+						// Check limit
+						if limit >= 0 && replacementCount >= limit {
+							break
+						}
+						replacementCount++
+
+						// Create matches array (similar to preg_match format)
+						matches := values.NewArray()
+						matchesArr := matches.Data.(*values.Array)
+
+						// Add all capture groups (including full match at index 0)
+						for i, submatch := range matchData {
+							matchesArr.Elements[int64(i)] = values.NewString(submatch)
+						}
+						matchesArr.NextIndex = int64(len(matchData))
+
+						// Call the callback with matches array
+						// For builtin string functions, pass just the matched string instead of the full array
+						var callArgs []*values.Value
+						if callback.Type == values.TypeString {
+							funcName := callback.ToString()
+							// Check if it's a common string builtin that expects a single string
+							stringBuiltins := []string{"strtoupper", "strtolower", "ucfirst", "lcfirst", "trim", "ltrim", "rtrim"}
+							isStringBuiltin := false
+							for _, builtin := range stringBuiltins {
+								if funcName == builtin {
+									isStringBuiltin = true
+									break
+								}
+							}
+							if isStringBuiltin {
+								// Pass just the matched string (matches[0])
+								callArgs = []*values.Value{values.NewString(matchData[0])}
+							} else {
+								// Pass the full matches array for user-defined functions
+								callArgs = []*values.Value{matches}
+							}
+						} else {
+							// For closures and other callbacks, pass the matches array
+							callArgs = []*values.Value{matches}
+						}
+
+						callbackResult, err := callbackInvoker(ctx, callback, callArgs)
+						if err != nil {
+							setRegexError(PREG_INTERNAL_ERROR, fmt.Sprintf("Callback error: %s", err.Error()))
+							continue // Skip this match on error
+						}
+
+						var replacement string
+						if callbackResult != nil {
+							replacement = callbackResult.ToString()
+						} else {
+							replacement = matchData[0] // Use original match if callback returns null
+						}
+
+						// Replace the first occurrence of the full match in the result
+						fullMatch := matchData[0]
+						if idx := strings.Index(result[offset:], fullMatch); idx != -1 {
+							actualIdx := offset + idx
+							result = result[:actualIdx] + replacement + result[actualIdx+len(fullMatch):]
+							offset = actualIdx + len(replacement)
+						}
+					}
+
+					// Set count reference if provided
+					// TODO: Implement proper reference parameter handling
+					_ = replacementCount // Avoid unused variable warning for now
+
+					return values.NewString(result), nil
+				}
+
+				// Handle array subject
+				if subject.Type == values.TypeArray {
+					inputArr := subject.Data.(*values.Array)
+					result := values.NewArray()
+					resultArr := result.Data.(*values.Array)
+					totalReplacements := 0
+
+					for key, val := range inputArr.Elements {
+						if val == nil {
+							continue
+						}
+
+						valStr := val.ToString()
+						elementReplacements := 0
+
+						// Process each array element
+						elementResult := regex.ReplaceAllStringFunc(valStr, func(match string) string {
+							// Check global limit
+							if limit >= 0 && totalReplacements >= limit {
+								return match
+							}
+							elementReplacements++
+							totalReplacements++
+
+							// Create matches array
+							matches := values.NewArray()
+							matchesArr := matches.Data.(*values.Array)
+							matchesArr.Elements[int64(0)] = values.NewString(match)
+							matchesArr.NextIndex = 1
+
+							// Call the callback
+							callArgs := []*values.Value{matches}
+							result, err := callbackInvoker(ctx, callback, callArgs)
+							if err != nil {
+								setRegexError(PREG_INTERNAL_ERROR, fmt.Sprintf("Callback error: %s", err.Error()))
+								return match
+							}
+
+							if result == nil {
+								return match
+							}
+							return result.ToString()
+						})
+
+						resultArr.Elements[key] = values.NewString(elementResult)
+					}
+
+					// Set count reference if provided
+					// TODO: Implement proper reference parameter handling
+					_ = totalReplacements // Avoid unused variable warning for now
+
+					return result, nil
+				}
+
+				// Unsupported type
+				return values.NewNull(), nil
+			},
+		},
 	}
 }
