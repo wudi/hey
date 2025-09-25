@@ -4043,3 +4043,119 @@ func (vm *VirtualMachine) execEndSilence(ctx *ExecutionContext, frame *CallFrame
 	return true, nil
 }
 
+// execFetchListR implements the FETCH_LIST_R opcode for list() destructuring assignments
+func (vm *VirtualMachine) execFetchListR(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Op1 contains the array to destructure
+	opType1, op1 := decodeOperand(inst, 1)
+	arrayValue, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Op2 contains the index to fetch
+	opType2, op2 := decodeOperand(inst, 2)
+	indexValue, err := vm.readOperand(ctx, frame, opType2, op2)
+	if err != nil {
+		return false, err
+	}
+
+	var result *values.Value
+
+	// Handle array destructuring
+	if arrayValue.IsArray() {
+		index := int(indexValue.ToInt())
+
+		// Get array data
+		arrayData := arrayValue.Data.(*values.Array)
+
+		// Find the value at the given index
+		// Convert index to appropriate key format
+		var key interface{}
+		key = int64(index)
+
+		if val, exists := arrayData.Elements[key]; exists {
+			result = val
+		} else {
+			result = values.NewNull()
+		}
+	} else {
+		// If not an array, return null
+		result = values.NewNull()
+	}
+
+	// Store result in the result operand
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, result); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// execBindStatic implements the BIND_STATIC opcode for static variables in functions
+func (vm *VirtualMachine) execBindStatic(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
+	// Op1 contains the variable name/index
+	opType1, op1 := decodeOperand(inst, 1)
+	varName, err := vm.readOperand(ctx, frame, opType1, op1)
+	if err != nil {
+		return false, err
+	}
+
+	// Op2 contains the initial value (may be IS_UNUSED if no default)
+	opType2, op2 := decodeOperand(inst, 2)
+	var initialValue *values.Value
+	if opType2 == opcodes.IS_UNUSED {
+		// No default value provided, use null
+		initialValue = values.NewNull()
+	} else {
+		var err error
+		initialValue, err = vm.readOperand(ctx, frame, opType2, op2)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	// Get the variable name as string
+	staticVarName := varName.ToString()
+
+	// Create a unique key for this static variable (function + variable name)
+	// We use the function name from the current frame if available
+	functionName := "global" // Default for global scope
+	if frame.Function != nil {
+		functionName = frame.Function.Name
+	}
+
+	staticKey := functionName + "::" + staticVarName
+
+	// Check if this static variable already exists
+	if vm.staticVariables == nil {
+		vm.staticVariables = make(map[string]*values.Value)
+	}
+
+	var staticValue *values.Value
+	if existing, exists := vm.staticVariables[staticKey]; exists {
+		// Use existing value
+		staticValue = existing
+	} else {
+		// Initialize with the provided initial value
+		staticValue = initialValue
+		vm.staticVariables[staticKey] = staticValue
+	}
+
+	// Store the static variable value in the result slot
+	resType, resSlot := decodeResult(inst)
+	if err := vm.writeOperand(ctx, frame, resType, resSlot, staticValue); err != nil {
+		return false, err
+	}
+
+	// Track this static variable mapping so we can sync it back on function return
+	if frame.StaticVariables == nil {
+		frame.StaticVariables = make(map[uint32]string)
+	}
+	if resType == opcodes.IS_CV {
+		frame.StaticVariables[resSlot] = staticKey
+	}
+
+	return true, nil
+}
+

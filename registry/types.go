@@ -405,6 +405,21 @@ func (r *Registry) GetConstant(name string) (*ConstantDescriptor, bool) {
 	return c, ok
 }
 
+// GetAllConstants retrieves all registered constants.
+func (r *Registry) GetAllConstants() []*ConstantDescriptor {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]*ConstantDescriptor, 0, len(r.constants))
+	for _, constant := range r.constants {
+		result = append(result, constant)
+	}
+	return result
+}
+
 // RegisterInterface stores an interface definition.
 func (r *Registry) RegisterInterface(iface *Interface) error {
 	if iface == nil {

@@ -5994,15 +5994,15 @@ func (c *Compiler) compileStaticStatement(stmt *ast.StaticStatement) error {
 
 			// Emit BIND_STATIC with default value
 			c.emit(opcodes.OP_BIND_STATIC,
-				opcodes.IS_CV, varSlot, // Variable to bind
-				opcodes.IS_CONST, c.addConstant(values.NewString(varName)), // Variable name
-				opcodes.IS_TMP_VAR, defaultSlot) // Default value
+				opcodes.IS_CONST, c.addConstant(values.NewString(varName)), // Variable name (op1)
+				opcodes.IS_TMP_VAR, defaultSlot, // Default value (op2)
+				opcodes.IS_CV, varSlot) // Variable to bind (result)
 		} else {
 			// Emit BIND_STATIC without default value (will use null)
 			c.emit(opcodes.OP_BIND_STATIC,
-				opcodes.IS_CV, varSlot, // Variable to bind
-				opcodes.IS_CONST, c.addConstant(values.NewString(varName)), // Variable name
-				opcodes.IS_UNUSED, 0) // No default value
+				opcodes.IS_CONST, c.addConstant(values.NewString(varName)), // Variable name (op1)
+				opcodes.IS_UNUSED, 0, // No default value (op2)
+				opcodes.IS_CV, varSlot) // Variable to bind (result)
 		}
 	}
 

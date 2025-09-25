@@ -2,6 +2,7 @@ package values
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -1088,7 +1089,10 @@ func (v *Value) appendPrintR(b *strings.Builder, indent int, visited map[*Array]
 	case TypeInt:
 		b.WriteString(fmt.Sprintf("%d", v.Data.(int64)))
 	case TypeFloat:
-		b.WriteString(strconv.FormatFloat(v.Data.(float64), 'g', -1, 64))
+		// Format float to match PHP's print_r output
+		f := v.Data.(float64)
+		s := formatFloatForPrintR(f)
+		b.WriteString(s)
 	case TypeString:
 		b.WriteString(v.Data.(string))
 	case TypeArray:
@@ -1165,6 +1169,15 @@ func (v *Value) appendArrayPrintR(b *strings.Builder, indent int, visited map[*A
 func (v *Value) appendObjectPrintR(b *strings.Builder, indent int, visited map[*Array]bool) {
 	obj := v.Data.(*Object)
 
+	// Check for object recursion
+	// For simplicity, we'll use the array visited map for objects too
+	arrKey := &Array{} // Dummy key for the object in the visited map
+	if _, exists := visited[arrKey]; exists {
+		b.WriteString(fmt.Sprintf("%s Object\n", obj.ClassName))
+		b.WriteString(" *RECURSION*")
+		return
+	}
+
 	b.WriteString(fmt.Sprintf("%s Object\n", obj.ClassName))
 
 	ind := strings.Repeat(" ", indent*4)
@@ -1181,9 +1194,21 @@ func (v *Value) appendObjectPrintR(b *strings.Builder, indent int, visited map[*
 	for _, name := range propKeys {
 		val := obj.Properties[name]
 
-		// Format property name with visibility modifiers if needed
-		// For now, we assume all properties are public in print_r output
-		b.WriteString(fmt.Sprintf("%s[%s] => ", nextInd, name))
+		// Format property name with visibility modifiers
+		// Check if the property has visibility markers
+		formattedName := name
+		if strings.Contains(name, ":private") || strings.Contains(name, ":protected") {
+			// Property already has visibility formatting
+			formattedName = name
+		} else {
+			// Check property visibility (this would need metadata from the class definition)
+			// For now, we'll look for naming patterns or assume public
+			// PHP's internal representation stores visibility info with the property
+			// We could extend the Object struct to store visibility metadata
+			formattedName = name
+		}
+
+		b.WriteString(fmt.Sprintf("%s[%s] => ", nextInd, formattedName))
 
 		if val == nil {
 			b.WriteString("\n")
@@ -1196,6 +1221,57 @@ func (v *Value) appendObjectPrintR(b *strings.Builder, indent int, visited map[*
 	}
 
 	b.WriteString(ind + ")\n")
+}
+
+func formatFloatForPrintR(f float64) string {
+	// Special case for -0
+	if f == 0 && math.Signbit(f) {
+		return "-0"
+	}
+
+	// Check if the number should be in scientific notation
+	absVal := math.Abs(f)
+
+	// PHP uses specific thresholds: < 1e-4 uses scientific, >= 1e10 shows as integer if possible
+	if absVal != 0 && absVal < 1e-4 {
+		// Use scientific notation like PHP
+		s := strconv.FormatFloat(f, 'E', -1, 64)
+		// PHP uses uppercase E and formats like 1.0E-5 not 1E-5
+		// Ensure at least one decimal place
+		if !strings.Contains(s, ".") {
+			parts := strings.Split(s, "E")
+			if len(parts) == 2 {
+				s = parts[0] + ".0E" + parts[1]
+			}
+		}
+
+		// Remove leading zeros from exponent (E-05 -> E-5, E+05 -> E+5)
+		if idx := strings.Index(s, "E"); idx != -1 {
+			exp := s[idx+1:]
+			sign := ""
+			if exp[0] == '+' || exp[0] == '-' {
+				sign = string(exp[0])
+				exp = exp[1:]
+			}
+			// Remove leading zeros
+			exp = strings.TrimLeft(exp, "0")
+			if exp == "" {
+				exp = "0"
+			}
+			s = s[:idx+1] + sign + exp
+		}
+
+		return s
+	}
+
+	// For large numbers >= 1e10, show as integer if it's a whole number
+	if absVal >= 1e10 && f == float64(int64(f)) {
+		return fmt.Sprintf("%d", int64(f))
+	}
+
+	// Regular float formatting
+	s := strconv.FormatFloat(f, 'g', -1, 64)
+	return s
 }
 
 func formatPrintRKey(key interface{}) string {

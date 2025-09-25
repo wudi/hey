@@ -464,3 +464,107 @@ func TestSystemFunctions(t *testing.T) {
 		}
 	})
 }
+
+func TestPhpVersion(t *testing.T) {
+	functions := GetSystemFunctions()
+	functionMap := make(map[string]*registry.Function)
+	for _, fn := range functions {
+		functionMap[fn.Name] = fn
+	}
+
+	phpversionFunc := functionMap["phpversion"]
+	if phpversionFunc == nil {
+		t.Fatal("phpversion function not found")
+	}
+
+	ctx := &mockBuiltinContext{}
+
+	tests := []struct {
+		name     string
+		args     []*values.Value
+		expected interface{}
+	}{
+		{
+			name:     "no arguments",
+			args:     []*values.Value{},
+			expected: "8.0.30",
+		},
+		{
+			name:     "core extension",
+			args:     []*values.Value{values.NewString("core")},
+			expected: "8.0.30",
+		},
+		{
+			name:     "standard extension",
+			args:     []*values.Value{values.NewString("standard")},
+			expected: "8.0.30",
+		},
+		{
+			name:     "nonexistent extension",
+			args:     []*values.Value{values.NewString("nonexistent")},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := phpversionFunc.Builtin(ctx, tt.args)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			switch expected := tt.expected.(type) {
+			case string:
+				if result.Type != values.TypeString || result.ToString() != expected {
+					t.Errorf("Expected string %q, got %v", expected, result)
+				}
+			case bool:
+				if result.Type != values.TypeBool || result.ToBool() != expected {
+					t.Errorf("Expected bool %v, got %v", expected, result)
+				}
+			}
+		})
+	}
+}
+
+func TestGetLoadedExtensions(t *testing.T) {
+	functions := GetSystemFunctions()
+	functionMap := make(map[string]*registry.Function)
+	for _, fn := range functions {
+		functionMap[fn.Name] = fn
+	}
+
+	extFunc := functionMap["get_loaded_extensions"]
+	if extFunc == nil {
+		t.Fatal("get_loaded_extensions function not found")
+	}
+
+	ctx := &mockBuiltinContext{}
+
+	result, err := extFunc.Builtin(ctx, []*values.Value{})
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if result.Type != values.TypeArray {
+		t.Fatalf("Expected array, got %v", result.Type)
+	}
+
+	arr := result.Data.(*values.Array)
+	if len(arr.Elements) == 0 {
+		t.Fatal("Expected non-empty array of extensions")
+	}
+
+	// Check that "Core" extension is included
+	found := false
+	for _, val := range arr.Elements {
+		if val != nil && val.Type == values.TypeString && val.ToString() == "Core" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Error("Expected 'Core' extension to be in the list")
+	}
+}

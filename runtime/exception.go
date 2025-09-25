@@ -12,6 +12,29 @@ import (
 func GetClasses() []*registry.ClassDescriptor {
 	return []*registry.ClassDescriptor{
 		getExceptionClass(),
+		getErrorExceptionClass(),
+		getLogicExceptionClass(),
+		getRuntimeExceptionClass(),
+		getInvalidArgumentExceptionClass(),
+		getBadMethodCallExceptionClass(),
+		getBadFunctionCallExceptionClass(),
+		getDomainExceptionClass(),
+		getLengthExceptionClass(),
+		getOutOfRangeExceptionClass(),
+		getOutOfBoundsExceptionClass(),
+		getOverflowExceptionClass(),
+		getRangeExceptionClass(),
+		getUnderflowExceptionClass(),
+		getUnexpectedValueExceptionClass(),
+		getErrorClass(),
+		getTypeErrorClass(),
+		getParseErrorClass(),
+		getArithmeticErrorClass(),
+		getAssertionErrorClass(),
+		getDivisionByZeroErrorClass(),
+		getValueErrorClass(),
+		getArgumentCountErrorClass(),
+		getUnhandledMatchErrorClass(),
 		getWaitGroupClass(),
 	}
 }
@@ -392,4 +415,120 @@ func getExceptionClass() *registry.ClassDescriptor {
 		Methods:    methods,
 		Constants:  make(map[string]*registry.ConstantDescriptor),
 	}
+}
+
+// Helper function to create simple exception classes that inherit from Exception
+func createSimpleExceptionClass(name, parent string) *registry.ClassDescriptor {
+	return &registry.ClassDescriptor{
+		Name:       name,
+		Parent:     parent,
+		Properties: make(map[string]*registry.PropertyDescriptor),
+		Methods:    make(map[string]*registry.MethodDescriptor),
+		Constants:  make(map[string]*registry.ConstantDescriptor),
+	}
+}
+
+// Logic exceptions
+func getLogicExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("LogicException", "Exception")
+}
+
+func getRuntimeExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("RuntimeException", "Exception")
+}
+
+// LogicException subclasses
+func getInvalidArgumentExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("InvalidArgumentException", "LogicException")
+}
+
+func getBadMethodCallExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("BadMethodCallException", "LogicException")
+}
+
+func getBadFunctionCallExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("BadFunctionCallException", "LogicException")
+}
+
+func getDomainExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("DomainException", "LogicException")
+}
+
+func getOutOfRangeExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("OutOfRangeException", "LogicException")
+}
+
+// RuntimeException subclasses
+func getOutOfBoundsExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("OutOfBoundsException", "RuntimeException")
+}
+
+func getOverflowExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("OverflowException", "RuntimeException")
+}
+
+func getRangeExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("RangeException", "RuntimeException")
+}
+
+func getUnderflowExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("UnderflowException", "RuntimeException")
+}
+
+func getUnexpectedValueExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("UnexpectedValueException", "RuntimeException")
+}
+
+// Error classes (PHP 7+)
+func getTypeErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("TypeError", "Error")
+}
+
+func getArgumentCountErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("ArgumentCountError", "TypeError")
+}
+
+// ErrorException class (extends Exception)
+func getErrorExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("ErrorException", "Exception")
+}
+
+// Base Error class (PHP 7+)
+func getErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("Error", "Exception")
+}
+
+// ParseError class (PHP 7+)
+func getParseErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("ParseError", "Error")
+}
+
+// ArithmeticError class (PHP 7+)
+func getArithmeticErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("ArithmeticError", "Error")
+}
+
+// DivisionByZeroError class (PHP 7+)
+func getDivisionByZeroErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("DivisionByZeroError", "ArithmeticError")
+}
+
+// LengthException class (extends LogicException)
+func getLengthExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("LengthException", "LogicException")
+}
+
+// AssertionError class (PHP 7+)
+func getAssertionErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("AssertionError", "Error")
+}
+
+// ValueError class (PHP 8+)
+func getValueErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("ValueError", "Error")
+}
+
+// UnhandledMatchError class (PHP 8+)
+func getUnhandledMatchErrorClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("UnhandledMatchError", "Error")
 }

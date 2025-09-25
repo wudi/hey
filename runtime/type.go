@@ -188,5 +188,80 @@ func GetTypeFunctions() []*registry.Function {
 				return values.NewBool(args[0].Type == values.TypeResource), nil
 			},
 		},
+		{
+			Name:       "is_scalar",
+			Parameters: []*registry.Parameter{{Name: "value", Type: "mixed"}},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 || args[0] == nil {
+					return values.NewBool(false), nil
+				}
+				// Scalars are: string, int, float, bool (not null, array, object, resource)
+				return values.NewBool(
+					args[0].IsString() ||
+					args[0].IsInt() ||
+					args[0].IsFloat() ||
+					args[0].IsBool(),
+				), nil
+			},
+		},
+		{
+			Name: "settype",
+			Parameters: []*registry.Parameter{
+				{Name: "var", Type: "mixed"},
+				{Name: "type", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin: true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 {
+					return values.NewBool(false), nil
+				}
+
+				variable := args[0]
+				typeName := args[1].ToString()
+
+				// In a real implementation, settype() would modify the variable in place
+				// This simplified version creates a new value with the converted type
+				switch typeName {
+				case "boolean", "bool":
+					boolVal := variable.ToBool()
+					variable.Type = values.TypeBool
+					variable.Data = boolVal
+				case "integer", "int":
+					intVal := variable.ToInt()
+					variable.Type = values.TypeInt
+					variable.Data = intVal
+				case "float", "double":
+					floatVal := variable.ToFloat()
+					variable.Type = values.TypeFloat
+					variable.Data = floatVal
+				case "string":
+					strVal := variable.ToString()
+					variable.Type = values.TypeString
+					variable.Data = strVal
+				case "array":
+					if variable.Type != values.TypeArray {
+						// Convert non-array to array with single element
+						newArray := values.NewArray()
+						newArray.ArraySet(values.NewInt(0), variable)
+						variable.Type = values.TypeArray
+						variable.Data = newArray.Data
+					}
+				case "null":
+					variable.Type = values.TypeNull
+					variable.Data = nil
+				default:
+					return values.NewBool(false), nil
+				}
+
+				return values.NewBool(true), nil
+			},
+		},
 	}
 }

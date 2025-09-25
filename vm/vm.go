@@ -50,6 +50,9 @@ type VirtualMachine struct {
 
 	mu          sync.RWMutex
 	lastContext *ExecutionContext
+
+	// Static variables storage for function static variables
+	staticVariables map[string]*values.Value
 }
 
 // GoroutineExecutor implements the runtime.GoroutineExecutor interface for executing functions in goroutines
@@ -566,12 +569,30 @@ func (vm *VirtualMachine) executeInstruction(ctx *ExecutionContext, frame *CallF
 		return vm.execBeginSilence(ctx, frame, inst)
 	case opcodes.OP_END_SILENCE:
 		return vm.execEndSilence(ctx, frame, inst)
+	case opcodes.OP_FETCH_LIST_R:
+		return vm.execFetchListR(ctx, frame, inst)
+	case opcodes.OP_BIND_STATIC:
+		return vm.execBindStatic(ctx, frame, inst)
 	default:
 		return false, fmt.Errorf("opcode %s not implemented", inst.Opcode)
 	}
 }
 
 func (vm *VirtualMachine) handleReturn(ctx *ExecutionContext, value *values.Value) error {
+	// Before popping the frame, sync static variables back to storage
+	currentFrame := ctx.currentFrame()
+	if currentFrame != nil && currentFrame.StaticVariables != nil {
+		for slot, staticKey := range currentFrame.StaticVariables {
+			if localValue := currentFrame.getLocal(slot); localValue != nil {
+				// Update the static storage with the current local value
+				if vm.staticVariables == nil {
+					vm.staticVariables = make(map[string]*values.Value)
+				}
+				vm.staticVariables[staticKey] = localValue
+			}
+		}
+	}
+
 	completed := ctx.popFrame()
 	if completed == nil {
 		ctx.Halted = true

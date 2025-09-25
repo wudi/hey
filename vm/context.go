@@ -236,6 +236,9 @@ type CallFrame struct {
 	exHandlers       []*exceptionHandler
 	pendingException *values.Value
 
+	// Static variable tracking: maps local variable slot to static key
+	StaticVariables map[uint32]string
+
 	pendingCalls []*PendingCall
 
 	ReturnTarget operandTarget

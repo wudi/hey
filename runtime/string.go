@@ -28,6 +28,48 @@ import (
 // GetStringFunctions returns all string-related PHP functions
 func GetStringFunctions() []*registry.Function {
 	return []*registry.Function{
+		// chr - Return a specific character
+		{
+			Name: "chr",
+			Parameters: []*registry.Parameter{
+				{Name: "codepoint", Type: "int"},
+			},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				ascii := args[0].ToInt()
+
+				// PHP's chr() takes the least significant byte
+				ascii = ascii & 0xFF
+
+				// Create a raw byte string, not UTF-8 encoded rune
+				return values.NewString(string([]byte{byte(ascii)})), nil
+			},
+		},
+
+		// ord - Convert the first byte of a string to a value between 0 and 255
+		{
+			Name: "ord",
+			Parameters: []*registry.Parameter{
+				{Name: "character", Type: "string"},
+			},
+			ReturnType: "int",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				str := args[0].ToString()
+
+				if len(str) == 0 {
+					return values.NewInt(0), nil
+				}
+
+				// Return the first byte as integer
+				return values.NewInt(int64(str[0])), nil
+			},
+		},
 		{
 			Name:       "strlen",
 			Parameters: []*registry.Parameter{{Name: "str", Type: "string"}},
@@ -348,6 +390,37 @@ func GetStringFunctions() []*registry.Function {
 			},
 		},
 		{
+			Name: "join",
+			Parameters: []*registry.Parameter{
+				{Name: "separator", Type: "string"},
+				{Name: "array", Type: "array"},
+			},
+			ReturnType: "string",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// join() is an alias for implode() in PHP
+				if len(args) < 2 || args[1] == nil || !args[1].IsArray() {
+					return values.NewString(""), nil
+				}
+
+				separator := args[0].ToString()
+				arr := args[1].Data.(*values.Array)
+
+				// Convert array elements to strings and join
+				var parts []string
+				for _, value := range arr.Elements {
+					if value != nil {
+						parts = append(parts, value.ToString())
+					}
+				}
+
+				result := strings.Join(parts, separator)
+				return values.NewString(result), nil
+			},
+		},
+		{
 			Name: "sprintf",
 			Parameters: []*registry.Parameter{
 				{Name: "format", Type: "string"},
@@ -383,6 +456,86 @@ func GetStringFunctions() []*registry.Function {
 				// Use Go's fmt.Sprintf which supports similar format specifiers
 				result := fmt.Sprintf(format, goArgs...)
 				return values.NewString(result), nil
+			},
+		},
+		{
+			Name: "vsprintf",
+			Parameters: []*registry.Parameter{
+				{Name: "format", Type: "string"},
+				{Name: "args", Type: "array"},
+			},
+			ReturnType: "string",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 || args[0] == nil || args[1] == nil || !args[1].IsArray() {
+					return values.NewString(""), nil
+				}
+
+				format := args[0].ToString()
+				arr := args[1].Data.(*values.Array)
+
+				// Convert array elements to Go interface{} for fmt.Sprintf in index order
+				var goArgs []interface{}
+				for i := int64(0); i < int64(len(arr.Elements)); i++ {
+					if value, exists := arr.Elements[i]; exists {
+						if value == nil {
+							goArgs = append(goArgs, nil)
+						} else if value.IsInt() {
+							goArgs = append(goArgs, value.ToInt())
+						} else if value.IsFloat() {
+							goArgs = append(goArgs, value.ToFloat())
+						} else if value.IsBool() {
+							goArgs = append(goArgs, value.ToBool())
+						} else {
+							goArgs = append(goArgs, value.ToString())
+						}
+					}
+				}
+
+				result := fmt.Sprintf(format, goArgs...)
+				return values.NewString(result), nil
+			},
+		},
+		{
+			Name: "vprintf",
+			Parameters: []*registry.Parameter{
+				{Name: "format", Type: "string"},
+				{Name: "args", Type: "array"},
+			},
+			ReturnType: "int",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 || args[0] == nil || args[1] == nil || !args[1].IsArray() {
+					return values.NewInt(0), nil
+				}
+
+				format := args[0].ToString()
+				arr := args[1].Data.(*values.Array)
+
+				// Convert array elements to Go interface{} for fmt.Printf in index order
+				var goArgs []interface{}
+				for i := int64(0); i < int64(len(arr.Elements)); i++ {
+					if value, exists := arr.Elements[i]; exists {
+						if value == nil {
+							goArgs = append(goArgs, nil)
+						} else if value.IsInt() {
+							goArgs = append(goArgs, value.ToInt())
+						} else if value.IsFloat() {
+							goArgs = append(goArgs, value.ToFloat())
+						} else if value.IsBool() {
+							goArgs = append(goArgs, value.ToBool())
+						} else {
+							goArgs = append(goArgs, value.ToString())
+						}
+					}
+				}
+
+				n, _ := fmt.Printf(format, goArgs...)
+				return values.NewInt(int64(n)), nil
 			},
 		},
 		{
@@ -2933,6 +3086,72 @@ func GetStringFunctions() []*registry.Function {
 				return values.NewString(string(result)), nil
 			},
 		},
+		{
+			Name: "strip_tags",
+			Parameters: []*registry.Parameter{
+				{Name: "str", Type: "string"},
+				{Name: "allowable_tags", Type: "string", HasDefault: true, DefaultValue: values.NewString("")},
+			},
+			ReturnType: "string",
+			MinArgs:    1,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 || args[0] == nil {
+					return values.NewString(""), nil
+				}
+
+				str := args[0].ToString()
+				// For now, ignore allowable_tags parameter (would need more complex parsing)
+				// TODO: Implement allowable_tags functionality in the future
+
+				// Simple implementation: remove all HTML tags
+				result := stripHTMLTags(str)
+				return values.NewString(result), nil
+			},
+		},
+		{
+			Name: "split",
+			Parameters: []*registry.Parameter{
+				{Name: "pattern", Type: "string"},
+				{Name: "string", Type: "string"},
+				{Name: "limit", Type: "int", HasDefault: true, DefaultValue: values.NewInt(-1)},
+			},
+			ReturnType: "array|false",
+			MinArgs:    2,
+			MaxArgs:    3,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 {
+					return values.NewBool(false), nil
+				}
+
+				// split() is deprecated in PHP 5.3+ and removed in PHP 7+
+				// This is a simple implementation using regular string split
+				pattern := args[0].ToString()
+				str := args[1].ToString()
+				limit := -1
+				if len(args) > 2 {
+					limit = int(args[2].ToInt())
+				}
+
+				// For simplicity, treat pattern as literal string (not regex)
+				var parts []string
+				if limit == -1 {
+					parts = strings.Split(str, pattern)
+				} else {
+					parts = strings.SplitN(str, pattern, limit)
+				}
+
+				// Convert to PHP array
+				result := values.NewArray()
+				for i, part := range parts {
+					result.ArraySet(values.NewInt(int64(i)), values.NewString(part))
+				}
+
+				return result, nil
+			},
+		},
 	}
 }
 
@@ -4296,4 +4515,26 @@ func addThousandsSeparators(s string) string {
 	}
 
 	return result
+}
+
+// stripHTMLTags removes HTML/XML tags from a string
+func stripHTMLTags(str string) string {
+	if str == "" {
+		return str
+	}
+
+	var result strings.Builder
+	inTag := false
+
+	for _, char := range str {
+		if char == '<' {
+			inTag = true
+		} else if char == '>' {
+			inTag = false
+		} else if !inTag {
+			result.WriteRune(char)
+		}
+	}
+
+	return result.String()
 }

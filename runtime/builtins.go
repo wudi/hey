@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"math"
+
 	"github.com/wudi/hey/registry"
 	"github.com/wudi/hey/values"
 )
@@ -432,6 +434,50 @@ func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
 		{
 			Name:  "EXTR_REFS",
 			Value: values.NewInt(256),
+		},
+
+		// PHP core constants
+		{
+			Name:  "PHP_EOL",
+			Value: values.NewString("\n"),
+		},
+		{
+			Name:  "PHP_VERSION",
+			Value: values.NewString("8.0.30"),
+		},
+		{
+			Name:  "PHP_OS",
+			Value: values.NewString("Linux"),
+		},
+		{
+			Name:  "PHP_OS_FAMILY",
+			Value: values.NewString("Linux"),
+		},
+		{
+			Name:  "PHP_SAPI",
+			Value: values.NewString("cli"),
+		},
+		{
+			Name:  "PHP_BINARY",
+			Value: values.NewString("/usr/local/bin/hey"),
+		},
+		{
+			Name:  "DIRECTORY_SEPARATOR",
+			Value: values.NewString("/"),
+		},
+		{
+			Name:  "PATH_SEPARATOR",
+			Value: values.NewString(":"),
+		},
+
+		// Mathematical constants
+		{
+			Name:  "M_PI",
+			Value: values.NewFloat(math.Pi),
+		},
+		{
+			Name:  "M_E",
+			Value: values.NewFloat(math.E),
 		},
 	}
 }

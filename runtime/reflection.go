@@ -180,6 +180,138 @@ func GetReflectionFunctions() []*registry.Function {
 				return values.NewNull(), nil
 			},
 		},
+
+		// property_exists - Check if object has property
+		{
+			Name: "property_exists",
+			Parameters: []*registry.Parameter{
+				{Name: "class", Type: "mixed"},
+				{Name: "property", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin: true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 {
+					return values.NewBool(false), nil
+				}
+
+				propertyName := args[1].ToString()
+
+				// Handle object input
+				if args[0].IsObject() {
+					obj := args[0]
+
+					// Check if object has the property
+					if obj.Data.(*values.Object) != nil {
+						objData := obj.Data.(*values.Object)
+						_, exists := objData.Properties[propertyName]
+						return values.NewBool(exists), nil
+					}
+				}
+
+				// Handle class string input (simplified - just return false for now)
+				// In full implementation, would check class definition
+				return values.NewBool(false), nil
+			},
+		},
+
+		// is_a - Check object type
+		{
+			Name: "is_a",
+			Parameters: []*registry.Parameter{
+				{Name: "object", Type: "mixed"},
+				{Name: "class_name", Type: "string"},
+				{Name: "allow_string", Type: "bool", HasDefault: true, DefaultValue: values.NewBool(false)},
+			},
+			ReturnType: "bool",
+			MinArgs:    2,
+			MaxArgs:    3,
+			IsBuiltin: true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 {
+					return values.NewBool(false), nil
+				}
+
+				targetClassName := args[1].ToString()
+				allowString := false
+				if len(args) >= 3 {
+					allowString = args[2].ToBool()
+				}
+
+				// Handle string class name input
+				if args[0].IsString() {
+					if allowString {
+						className := args[0].ToString()
+						return values.NewBool(className == targetClassName), nil
+					}
+					return values.NewBool(false), nil
+				}
+
+				// Handle object input
+				if args[0].IsObject() {
+					obj := args[0]
+					if objData := obj.Data.(*values.Object); objData != nil {
+						return values.NewBool(objData.ClassName == targetClassName), nil
+					}
+				}
+
+				return values.NewBool(false), nil
+			},
+		},
+		{
+			Name: "get_class_methods",
+			Parameters: []*registry.Parameter{
+				{Name: "class_name_or_object", Type: "mixed"},
+			},
+			ReturnType: "array|false",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin: true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 || args[0] == nil {
+					return values.NewBool(false), nil
+				}
+
+				var className string
+
+				// If argument is an object, get its class name
+				if args[0].IsObject() {
+					obj := args[0].Data.(*values.Object)
+					className = obj.ClassName
+				} else {
+					// Otherwise treat as class name string
+					className = args[0].ToString()
+				}
+
+				if className == "" {
+					return values.NewBool(false), nil
+				}
+
+				// Look up the class in registry
+				reg := ctx.SymbolRegistry()
+				if reg == nil {
+					return values.NewBool(false), nil
+				}
+
+				classDesc, err := reg.GetClass(className)
+				if err != nil || classDesc == nil {
+					return values.NewBool(false), nil
+				}
+
+				// Collect all method names
+				methods := values.NewArray()
+				index := int64(0)
+
+				for methodName := range classDesc.Methods {
+					methods.ArraySet(values.NewInt(index), values.NewString(methodName))
+					index++
+				}
+
+				return methods, nil
+			},
+		},
 	}
 }
 

@@ -42,6 +42,60 @@ var (
 // GetSystemFunctions returns system-related PHP functions
 func GetSystemFunctions() []*registry.Function {
 	return []*registry.Function{
+		// phpversion - Get PHP version
+		{
+			Name: "phpversion",
+			Parameters: []*registry.Parameter{
+				{Name: "extension", Type: "string", HasDefault: true, DefaultValue: values.NewNull()},
+			},
+			ReturnType: "string|false",
+			MinArgs:    0,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// Return a compatible version string (PHP 8.0+ compatible)
+				version := "8.0.30"
+
+				if len(args) > 0 && !args[0].IsNull() {
+					extension := args[0].ToString()
+					// For core extensions, return the PHP version
+					switch strings.ToLower(extension) {
+					case "core", "standard", "spl", "reflection", "date", "pcre":
+						return values.NewString(version), nil
+					default:
+						// Unknown extension
+						return values.NewBool(false), nil
+					}
+				}
+
+				return values.NewString(version), nil
+			},
+		},
+
+		// get_loaded_extensions - Get loaded extensions
+		{
+			Name: "get_loaded_extensions",
+			Parameters: []*registry.Parameter{
+				{Name: "zend_extensions", Type: "bool", HasDefault: true, DefaultValue: values.NewBool(false)},
+			},
+			ReturnType: "array",
+			MinArgs:    0,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// Return a list of core PHP extensions that we simulate
+				extensions := []string{
+					"Core", "date", "filter", "hash", "json", "pcre", "Reflection", "SPL", "standard",
+				}
+
+				result := values.NewArray()
+				for i, ext := range extensions {
+					result.ArraySet(values.NewInt(int64(i)), values.NewString(ext))
+				}
+
+				return result, nil
+			},
+		},
 		{
 			Name: "getenv",
 			Parameters: []*registry.Parameter{

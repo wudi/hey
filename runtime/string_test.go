@@ -5012,3 +5012,72 @@ func TestStringFunctions(t *testing.T) {
 		}
 	})
 }
+func TestChrOrdFunctions(t *testing.T) {
+	functions := GetStringFunctions()
+	functionMap := make(map[string]*registry.Function)
+	for _, fn := range functions {
+		functionMap[fn.Name] = fn
+	}
+
+	chrFunc := functionMap["chr"]
+	ordFunc := functionMap["ord"]
+
+	if chrFunc == nil {
+		t.Fatal("chr function not found")
+	}
+	if ordFunc == nil {
+		t.Fatal("ord function not found")
+	}
+
+	ctx := &mockBuiltinContext{}
+
+	t.Run("chr tests", func(t *testing.T) {
+		tests := []struct {
+			input    int64
+			expected string
+		}{
+			{65, "A"},
+			{97, "a"},
+			{0, string([]byte{0})},
+			{255, string([]byte{255})},
+			{256, string([]byte{0})}, // 256 & 0xFF = 0
+			{321, string(rune(65))}, // 321 & 0xFF = 65
+		}
+
+		for _, test := range tests {
+			result, err := chrFunc.Builtin(ctx, []*values.Value{values.NewInt(test.input)})
+			if err != nil {
+				t.Errorf("chr(%d): unexpected error: %v", test.input, err)
+				continue
+			}
+
+			if result.ToString() != test.expected {
+				t.Errorf("chr(%d) = %q, want %q", test.input, result.ToString(), test.expected)
+			}
+		}
+	})
+
+	t.Run("ord tests", func(t *testing.T) {
+		tests := []struct {
+			input    string
+			expected int64
+		}{
+			{"A", 65},
+			{"a", 97},
+			{"ABC", 65}, // Only first character
+			{"", 0},     // Empty string
+		}
+
+		for _, test := range tests {
+			result, err := ordFunc.Builtin(ctx, []*values.Value{values.NewString(test.input)})
+			if err != nil {
+				t.Errorf("ord(%q): unexpected error: %v", test.input, err)
+				continue
+			}
+
+			if result.ToInt() != test.expected {
+				t.Errorf("ord(%q) = %d, want %d", test.input, result.ToInt(), test.expected)
+			}
+		}
+	})
+}
