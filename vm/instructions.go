@@ -3162,6 +3162,13 @@ func (vm *VirtualMachine) validateParameterType(param *registry.Parameter, value
 func (vm *VirtualMachine) isTypeMatch(expectedType string, value *values.Value) bool {
 	valueType := value.Type.String()
 
+	// Handle nullable types (e.g., ?string)
+	if strings.HasPrefix(expectedType, "?") {
+		underlyingType := strings.TrimPrefix(expectedType, "?")
+		// Nullable types accept null or the underlying type
+		return valueType == "null" || vm.isTypeMatch(underlyingType, value)
+	}
+
 	switch expectedType {
 	case "int":
 		return valueType == "int"
