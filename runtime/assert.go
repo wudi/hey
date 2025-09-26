@@ -102,7 +102,12 @@ func GetAssertFunctions() []*registry.Function {
 					description = args[1].ToString()
 				}
 
-				return values.NewBool(false), fmt.Errorf("AssertionError: %s", description)
+				exception := CreateException(ctx, "AssertionError", description)
+				if exception == nil {
+					return nil, fmt.Errorf("AssertionError class not found")
+				}
+
+				return nil, ctx.ThrowException(exception)
 			},
 		},
 	}

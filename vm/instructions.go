@@ -11,6 +11,7 @@ import (
 
 	"github.com/wudi/hey/compiler/lexer"
 	"github.com/wudi/hey/compiler/parser"
+	heyerrors "github.com/wudi/hey/errors"
 	"github.com/wudi/hey/opcodes"
 	"github.com/wudi/hey/registry"
 	runtime2 "github.com/wudi/hey/runtime"
@@ -3215,7 +3216,7 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 		if fn == nil || fn.Builtin == nil {
 			return false, fmt.Errorf("callable %s not resolved", pending.ClosureName)
 		}
-		ctxBuiltin := &builtinContext{vm: vm, ctx: ctx}
+		ctxBuiltin := &builtinContext{vm: vm, ctx: ctx, frame: frame}
 
 		// Resolve named arguments to correct positions
 		resolvedArgs, err := vm.resolveNamedArguments(fn, pending.Args, pending.ArgNames)
@@ -3230,6 +3231,12 @@ func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, i
 		}
 		ret, err := fn.Builtin(ctxBuiltin, args)
 		if err != nil {
+			if errors.Is(err, heyerrors.ErrExceptionThrown) {
+				if frame.pendingException != nil {
+					return false, nil
+				}
+				return false, fmt.Errorf("exception thrown but not set")
+			}
 			return false, err
 		}
 

@@ -6,13 +6,15 @@ import (
 
 	"github.com/wudi/hey/registry"
 	"github.com/wudi/hey/values"
+	heyerrors "github.com/wudi/hey/errors"
 )
 
 // builtinContext adapts ExecutionContext operations to the registry's builtin
 // call interface without creating package cycles.
 type builtinContext struct {
-	vm  *VirtualMachine
-	ctx *ExecutionContext
+	vm    *VirtualMachine
+	ctx   *ExecutionContext
+	frame *CallFrame
 }
 
 func (b *builtinContext) WriteOutput(val *values.Value) error {
@@ -274,4 +276,17 @@ func (b *builtinContext) GetCurrentFunctionArgs() ([]*values.Value, error) {
 	}
 
 	return args, nil
+}
+
+func (b *builtinContext) ThrowException(exception *values.Value) error {
+	if b.vm == nil || b.ctx == nil || b.frame == nil {
+		return fmt.Errorf("invalid builtin context")
+	}
+
+	_, err := b.vm.raiseException(b.ctx, b.frame, exception)
+	if err != nil {
+		return err
+	}
+
+	return heyerrors.ErrExceptionThrown
 }

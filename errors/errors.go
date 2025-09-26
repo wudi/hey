@@ -1,11 +1,14 @@
 package errors
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/wudi/hey/compiler/lexer"
 )
+
+var ErrExceptionThrown = errors.New("__EXCEPTION_THROWN__")
 
 // ErrorType 错误类型
 type ErrorType int

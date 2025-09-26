@@ -51,6 +51,9 @@ type BuiltinCallContext interface {
 	GetCurrentFunctionArg(index int) (*values.Value, error)
 	// GetCurrentFunctionArgs returns all arguments passed to the current user function
 	GetCurrentFunctionArgs() ([]*values.Value, error)
+	// ThrowException throws a PHP exception object that can be caught by try-catch blocks.
+	// Returns ErrExceptionThrown sentinel error to indicate exception was thrown.
+	ThrowException(exception *values.Value) error
 }
 
 // ExecutionContextInterface provides minimal interface for timeout management
