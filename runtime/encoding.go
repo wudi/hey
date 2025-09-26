@@ -154,27 +154,40 @@ func GetEncodingFunctions() []*registry.Function {
 			Name: "json_decode",
 			Parameters: []*registry.Parameter{
 				{Name: "json", Type: "string"},
-				{Name: "associative", Type: "bool"},
+				{Name: "associative", Type: "bool", HasDefault: true, DefaultValue: values.NewBool(false)},
+				{Name: "depth", Type: "int", HasDefault: true, DefaultValue: values.NewInt(512)},
+				{Name: "flags", Type: "int", HasDefault: true, DefaultValue: values.NewInt(0)},
 			},
 			ReturnType: "mixed",
 			MinArgs:    1,
 			MaxArgs:    4,
 			IsBuiltin:  true,
-			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) == 0 || args[0] == nil {
 					return values.NewNull(), nil
 				}
 
 				jsonStr := args[0].ToString()
 
-				// Parse JSON into generic interface
+				flags := int64(0)
+				if len(args) >= 4 {
+					flags = args[3].ToInt()
+				}
+
 				var result interface{}
 				err := json.Unmarshal([]byte(jsonStr), &result)
 				if err != nil {
-					return values.NewNull(), nil // PHP returns null on error
+					const JSON_THROW_ON_ERROR = 4194304
+					if (flags & JSON_THROW_ON_ERROR) != 0 {
+						exception := CreateException(ctx, "JsonException", err.Error())
+						if exception == nil {
+							return nil, fmt.Errorf("JsonException class not found")
+						}
+						return nil, ctx.ThrowException(exception)
+					}
+					return values.NewNull(), nil
 				}
 
-				// Convert Go value back to PHP value
 				return goValueToPhpValue(result), nil
 			},
 		},

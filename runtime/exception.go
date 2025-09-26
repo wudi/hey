@@ -26,6 +26,7 @@ func GetClasses() []*registry.ClassDescriptor {
 		getRangeExceptionClass(),
 		getUnderflowExceptionClass(),
 		getUnexpectedValueExceptionClass(),
+		getJsonExceptionClass(),
 		getErrorClass(),
 		getTypeErrorClass(),
 		getParseErrorClass(),
@@ -531,4 +532,9 @@ func getValueErrorClass() *registry.ClassDescriptor {
 // UnhandledMatchError class (PHP 8+)
 func getUnhandledMatchErrorClass() *registry.ClassDescriptor {
 	return createSimpleExceptionClass("UnhandledMatchError", "Error")
+}
+
+// JsonException class (PHP 7.3+)
+func getJsonExceptionClass() *registry.ClassDescriptor {
+	return createSimpleExceptionClass("JsonException", "Exception")
 }

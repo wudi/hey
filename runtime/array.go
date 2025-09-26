@@ -340,14 +340,18 @@ func GetArrayFunctions() []*registry.Function {
 			MinArgs:    2,
 			MaxArgs:    3,
 			IsBuiltin: true,
-			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) < 2 || args[0] == nil || !args[0].IsArray() {
 					return values.NewArray(), nil
 				}
 				arr := args[0].Data.(*values.Array)
 				chunkSize := int(args[1].ToInt())
 				if chunkSize <= 0 {
-					return values.NewArray(), nil
+					exception := CreateException(ctx, "ValueError", "array_chunk(): Argument #2 ($length) must be greater than 0")
+					if exception == nil {
+						return nil, fmt.Errorf("ValueError class not found")
+					}
+					return nil, ctx.ThrowException(exception)
 				}
 				preserveKeys := false
 				if len(args) > 2 && args[2] != nil {

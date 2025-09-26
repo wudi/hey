@@ -492,6 +492,12 @@ func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
 			Value: values.NewInt(3),
 		},
 
+		// JSON constants
+		{
+			Name:  "JSON_THROW_ON_ERROR",
+			Value: values.NewInt(4194304),
+		},
+
 		// Mathematical constants
 		{
 			Name:  "M_PI",
