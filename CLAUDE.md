@@ -83,6 +83,9 @@ make deps              # Download and tidy dependencies
 
 ## Important Implementation Notes
 
+### Critical Bug Fixes
+- **require_once function registration** (commit a956aa0): Functions/classes defined in included files must be merged from includeCtx back to parent ctx. Without this, all definitions in included files are lost after execution.
+
 ### Bytecode Architecture
 - Instructions and operands are stored separately for memory efficiency
 - Forward jumps are resolved in a two-pass compilation
@@ -107,6 +110,14 @@ make deps              # Download and tidy dependencies
 - Helper function `CreateException(ctx, className, message)` in `/runtime/exception_helpers.go` simplifies exception object creation
 - Current exception-throwing builtins: `assert()`, `json_decode()` with JSON_THROW_ON_ERROR, `array_chunk()` with invalid size
 - See `/docs/exception-system-design.md` for complete architecture documentation
+
+### Include/Require System Architecture
+- **CompilerCallback mechanism** in `/vmfactory/factory.go:52` handles `include/require/include_once/require_once`
+- Included files execute in **new ExecutionContext** to isolate compilation but share runtime state
+- **Critical**: After execution, must merge `UserFunctions` and `UserClasses` back to parent context (fixed in commit a956aa0)
+- Variables, Stack, IncludedFiles are shared between parent and include contexts
+- Once-semantics tracked via `ctx.IncludedFiles` map with absolute file paths
+- Circular dependency protection: files marked included before execution starts
 
 ### Function Parameter Default Values
 - Default parameter values are evaluated at compile time using `evaluateConstantExpression`
