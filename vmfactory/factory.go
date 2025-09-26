@@ -75,6 +75,24 @@ func (f *VMFactory) createCompilerCallback(vmachine *vm.VirtualMachine) vm.Compi
 		ctx.Stack = includeCtx.Stack
 		ctx.IncludedFiles = includeCtx.IncludedFiles
 
+		if includeCtx.UserFunctions != nil {
+			if ctx.UserFunctions == nil {
+				ctx.UserFunctions = make(map[string]*registry.Function)
+			}
+			for name, fn := range includeCtx.UserFunctions {
+				ctx.UserFunctions[name] = fn
+			}
+		}
+
+		if includeCtx.UserClasses != nil {
+			if ctx.UserClasses == nil {
+				ctx.UserClasses = make(map[string]*registry.Class)
+			}
+			for name, class := range includeCtx.UserClasses {
+				ctx.UserClasses[name] = class
+			}
+		}
+
 		if includeCtx.Halted && len(includeCtx.Stack) > 0 {
 			returnValue := includeCtx.Stack[len(includeCtx.Stack)-1]
 			if returnValue.IsNull() {
