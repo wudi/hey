@@ -8749,3 +8749,85 @@ echo "empty: " . var_export(extension_loaded(''), true) . "\n";
 	require.NoError(t, err)
 	assert.Equal(t, "json: true\nJSON: true\nmbstring: true\nstandard: true\nnonexistent: false\nempty: false\n", output)
 }
+
+func TestAssertFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		code     string
+		expected string
+	}{
+		{
+			name: "ASSERT constants",
+			code: `<?php
+			var_dump(ASSERT_ACTIVE);
+			var_dump(ASSERT_WARNING);
+			var_dump(ASSERT_BAIL);`,
+			expected: "int(1)\nint(4)\nint(3)\n",
+		},
+		{
+			name: "assert_options get default",
+			code: `<?php
+			var_dump(assert_options(ASSERT_ACTIVE));
+			var_dump(assert_options(ASSERT_BAIL));`,
+			expected: "int(1)\nint(0)\n",
+		},
+		{
+			name: "assert_options set and get",
+			code: `<?php
+			$old = assert_options(ASSERT_ACTIVE, 0);
+			var_dump($old);
+			var_dump(assert_options(ASSERT_ACTIVE));
+			assert_options(ASSERT_ACTIVE, 1);`,
+			expected: "int(1)\nint(0)\n",
+		},
+		{
+			name: "assert when disabled returns true",
+			code: `<?php
+			assert_options(ASSERT_ACTIVE, 0);
+			var_dump(assert(false));
+			var_dump(assert(true));`,
+			expected: "bool(true)\nbool(true)\n",
+		},
+		{
+			name: "assert when enabled success",
+			code: `<?php
+			assert_options(ASSERT_ACTIVE, 1);
+			var_dump(assert(true));
+			var_dump(assert(1 === 1));
+			var_dump(assert(2 + 2 === 4));`,
+			expected: "bool(true)\nbool(true)\nbool(true)\n",
+		},
+		{
+			name: "assert expression evaluation",
+			code: `<?php
+			$x = 10;
+			var_dump(assert($x > 5));
+			var_dump(assert($x < 100));`,
+			expected: "bool(true)\nbool(true)\n",
+		},
+		{
+			name: "assert disabled doesn't throw",
+			code: `<?php
+			assert_options(ASSERT_ACTIVE, 0);
+			assert(false);
+			echo "Still running\n";`,
+			expected: "Still running\n",
+		},
+		{
+			name: "assert string code as truthy",
+			code: `<?php
+			var_dump(assert('true'));
+			var_dump(assert('1 === 1'));
+			var_dump(assert('false'));`,
+			expected: "bool(true)\nbool(true)\nbool(true)\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := compileAndExecute(t, tt.code)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, output)
+		})
+	}
+}

@@ -45,6 +45,7 @@ func GetAllBuiltinFunctions() []*registry.Function {
 	functions = append(functions, GetErrorFunctions()...)
 	functions = append(functions, GetFunctionFunctions()...)
 	functions = append(functions, GetWindowsFunctions()...)
+	functions = append(functions, GetAssertFunctions()...)
 
 	return functions
 }
@@ -475,6 +476,20 @@ func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
 		{
 			Name:  "PATH_SEPARATOR",
 			Value: values.NewString(":"),
+		},
+
+		// Assert constants
+		{
+			Name:  "ASSERT_ACTIVE",
+			Value: values.NewInt(1),
+		},
+		{
+			Name:  "ASSERT_WARNING",
+			Value: values.NewInt(4),
+		},
+		{
+			Name:  "ASSERT_BAIL",
+			Value: values.NewInt(3),
 		},
 
 		// Mathematical constants
