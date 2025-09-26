@@ -5081,3 +5081,154 @@ func TestChrOrdFunctions(t *testing.T) {
 		}
 	})
 }
+
+func TestVersionCompare(t *testing.T) {
+	functions := GetStringFunctions()
+	functionMap := make(map[string]*registry.Function)
+	for _, fn := range functions {
+		functionMap[fn.Name] = fn
+	}
+
+	versionCompareFunc := functionMap["version_compare"]
+	if versionCompareFunc == nil {
+		t.Fatal("version_compare function not found")
+	}
+
+	ctx := &mockBuiltinContext{}
+
+	t.Run("basic comparison without operator", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			v1       string
+			v2       string
+			expected int64
+		}{
+			{"v1 less than v2", "1.0", "1.1", -1},
+			{"v1 greater than v2", "1.1", "1.0", 1},
+			{"v1 equal to v2", "1.0", "1.0", 0},
+			{"longer version greater", "1.0.0", "1.0", 1},
+			{"trailing zeros matter", "1.0", "1.0.0", -1},
+			{"minor version diff", "1.0.0", "1.0.1", -1},
+			{"multiple components", "1.2.3", "1.2.4", -1},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := versionCompareFunc.Builtin(ctx, []*values.Value{
+					values.NewString(tt.v1),
+					values.NewString(tt.v2),
+				})
+				if err != nil {
+					t.Fatalf("version_compare error: %v", err)
+				}
+				if result.ToInt() != tt.expected {
+					t.Errorf("version_compare(%q, %q) = %d, want %d", tt.v1, tt.v2, result.ToInt(), tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("comparison with operators", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			v1       string
+			v2       string
+			operator string
+			expected bool
+		}{
+			{"< operator", "1.0", "1.1", "<", true},
+			{"lt operator", "1.0", "1.1", "lt", true},
+			{"> operator", "1.1", "1.0", ">", true},
+			{"gt operator", "1.1", "1.0", "gt", true},
+			{"= operator", "1.0", "1.0", "=", true},
+			{"== operator", "1.0", "1.0", "==", true},
+			{"eq operator", "1.0", "1.0", "eq", true},
+			{"!= operator", "1.0", "1.1", "!=", true},
+			{"<> operator", "1.0", "1.1", "<>", true},
+			{"ne operator", "1.0", "1.1", "ne", true},
+			{"<= operator", "1.0", "1.1", "<=", true},
+			{"le operator", "1.0", "1.1", "le", true},
+			{">= operator", "1.1", "1.0", ">=", true},
+			{"ge operator", "1.1", "1.0", "ge", true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := versionCompareFunc.Builtin(ctx, []*values.Value{
+					values.NewString(tt.v1),
+					values.NewString(tt.v2),
+					values.NewString(tt.operator),
+				})
+				if err != nil {
+					t.Fatalf("version_compare error: %v", err)
+				}
+				if result.ToBool() != tt.expected {
+					t.Errorf("version_compare(%q, %q, %q) = %v, want %v", tt.v1, tt.v2, tt.operator, result.ToBool(), tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("special version labels", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			v1       string
+			v2       string
+			expected int64
+		}{
+			{"release vs alpha", "1.0.0", "1.0.0alpha", 1},
+			{"alpha vs beta", "1.0.0alpha", "1.0.0beta", -1},
+			{"beta vs rc", "1.0.0beta", "1.0.0rc", -1},
+			{"rc vs release", "1.0.0rc", "1.0.0", -1},
+			{"release vs pl", "1.0.0", "1.0.0pl", -1},
+			{"dev vs alpha", "1.0.0dev", "1.0.0alpha", -1},
+			{"dev vs release", "1.0.0dev", "1.0.0", -1},
+			{"dev with hyphen", "1.0.0-dev", "1.0.0-alpha", -1},
+			{"alpha with number", "1.0.0alpha1", "1.0.0alpha2", -1},
+			{"rc case insensitive", "1.0.0RC1", "1.0.0rc2", -1},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := versionCompareFunc.Builtin(ctx, []*values.Value{
+					values.NewString(tt.v1),
+					values.NewString(tt.v2),
+				})
+				if err != nil {
+					t.Fatalf("version_compare error: %v", err)
+				}
+				if result.ToInt() != tt.expected {
+					t.Errorf("version_compare(%q, %q) = %d, want %d", tt.v1, tt.v2, result.ToInt(), tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("edge cases", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			v1       string
+			v2       string
+			expected int64
+		}{
+			{"empty vs version", "", "1.0", -1},
+			{"version vs empty", "1.0", "", 1},
+			{"both empty", "", "", 0},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result, err := versionCompareFunc.Builtin(ctx, []*values.Value{
+					values.NewString(tt.v1),
+					values.NewString(tt.v2),
+				})
+				if err != nil {
+					t.Fatalf("version_compare error: %v", err)
+				}
+				if result.ToInt() != tt.expected {
+					t.Errorf("version_compare(%q, %q) = %d, want %d", tt.v1, tt.v2, result.ToInt(), tt.expected)
+				}
+			})
+		}
+	})
+}

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/wudi/hey/registry"
@@ -263,6 +264,7 @@ func (m *mockBuiltinCallContext) GetOutputBufferStack() registry.OutputBufferSta
 func (m *mockBuiltinCallContext) GetCurrentFunctionArgCount() (int, error) { return 0, nil }
 func (m *mockBuiltinCallContext) GetCurrentFunctionArg(index int) (*values.Value, error) { return nil, nil }
 func (m *mockBuiltinCallContext) GetCurrentFunctionArgs() ([]*values.Value, error) { return nil, nil }
+func (m *mockBuiltinCallContext) ThrowException(exception *values.Value) error { return fmt.Errorf("exception thrown in test mock: %v", exception) }
 
 func TestIsCallable(t *testing.T) {
 	functions := GetVariableFunctions()

@@ -48,6 +48,10 @@ func (m *mockBuiltinContext) CallUserFunction(function *registry.Function, args 
 	return nil, fmt.Errorf("user function calls not supported in test mock")
 }
 
+func (m *mockBuiltinContext) ThrowException(exception *values.Value) error {
+	return fmt.Errorf("exception thrown in test mock: %v", exception)
+}
+
 func (m *mockBuiltinContext) SimpleCallUserFunction(function *registry.Function, args []*values.Value) (*values.Value, error) {
 	return nil, fmt.Errorf("user function calls not supported in test mock")
 }

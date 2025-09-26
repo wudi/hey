@@ -8831,3 +8831,64 @@ func TestAssertFunctions(t *testing.T) {
 		})
 	}
 }
+
+// Test version_compare function with PHP code execution
+func TestVersionCompare(t *testing.T) {
+	tests := []struct {
+		code     string
+		expected string
+	}{
+		{
+			code:     "<?php echo version_compare('1.0', '1.1');",
+			expected: "-1",
+		},
+		{
+			code:     "<?php echo version_compare('1.1', '1.0');",
+			expected: "1",
+		},
+		{
+			code:     "<?php echo version_compare('1.0', '1.0');",
+			expected: "0",
+		},
+		{
+			code:     "<?php echo version_compare('1.0.0', '1.0');",
+			expected: "1",
+		},
+		{
+			code:     "<?php echo version_compare('1.0', '1.0.0');",
+			expected: "-1",
+		},
+		{
+			code:     "<?php var_dump(version_compare('1.0', '1.1', '<'));",
+			expected: "bool(true)\n",
+		},
+		{
+			code:     "<?php var_dump(version_compare('1.1', '1.0', '>'));",
+			expected: "bool(true)\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run("", func(t *testing.T) {
+			p := parser.New(lexer.New(tt.code))
+			prog := p.ParseProgram()
+			require.NotNil(t, prog, "Failed to parse")
+
+			comp := NewCompiler()
+			err := comp.Compile(prog)
+			require.NoError(t, err, "Failed to compile")
+
+			vmCtx := vm.NewExecutionContext()
+			var buf bytes.Buffer
+			vmCtx.SetOutputWriter(&buf)
+
+			vm := vm.NewVirtualMachine()
+			err = vm.Execute(vmCtx, comp.GetBytecode(), comp.GetConstants(), comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
+			require.NoError(t, err, "Failed to execute")
+
+			output := buf.String()
+			assert.Equal(t, tt.expected, output, "Output mismatch")
+		})
+	}
+}
+

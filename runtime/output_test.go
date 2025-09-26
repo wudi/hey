@@ -74,6 +74,10 @@ func (m *mockOutputContext) GetCurrentFunctionArgs() ([]*values.Value, error) {
 	return nil, fmt.Errorf("cannot be called from the global scope")
 }
 
+func (m *mockOutputContext) ThrowException(exception *values.Value) error {
+	return fmt.Errorf("exception thrown in test mock: %v", exception)
+}
+
 func TestPrintR(t *testing.T) {
 	printRFunc := findFunction("print_r", GetOutputFunctions())
 	if printRFunc == nil {

@@ -1,6 +1,7 @@
 package spl
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/wudi/hey/registry"
@@ -30,6 +31,7 @@ func (m *mockContext) GetOutputBufferStack() registry.OutputBufferStackInterface
 func (m *mockContext) GetCurrentFunctionArgCount() (int, error)                 { return 0, nil }
 func (m *mockContext) GetCurrentFunctionArg(index int) (*values.Value, error)   { return nil, nil }
 func (m *mockContext) GetCurrentFunctionArgs() ([]*values.Value, error)         { return nil, nil }
+func (m *mockContext) ThrowException(exception *values.Value) error { return fmt.Errorf("exception thrown in test mock: %v", exception) }
 
 func TestArrayIterator(t *testing.T) {
 	// Initialize registry

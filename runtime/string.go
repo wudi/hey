@@ -3152,6 +3152,52 @@ func GetStringFunctions() []*registry.Function {
 				return result, nil
 			},
 		},
+		{
+			Name: "version_compare",
+			Parameters: []*registry.Parameter{
+				{Name: "version1", Type: "string"},
+				{Name: "version2", Type: "string"},
+				{Name: "operator", Type: "string", HasDefault: true, DefaultValue: values.NewString("")},
+			},
+			ReturnType: "mixed",
+			MinArgs:    2,
+			MaxArgs:    3,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				v1 := args[0].ToString()
+				v2 := args[1].ToString()
+				var operator string
+				if len(args) > 2 {
+					operator = args[2].ToString()
+				}
+
+				result := compareVersions(v1, v2)
+
+				if operator == "" {
+					return values.NewInt(int64(result)), nil
+				}
+
+				var boolResult bool
+				switch operator {
+				case "<", "lt":
+					boolResult = result == -1
+				case "<=", "le":
+					boolResult = result <= 0
+				case ">", "gt":
+					boolResult = result == 1
+				case ">=", "ge":
+					boolResult = result >= 0
+				case "==", "=", "eq":
+					boolResult = result == 0
+				case "!=", "<>", "ne":
+					boolResult = result != 0
+				default:
+					return values.NewBool(false), nil
+				}
+
+				return values.NewBool(boolResult), nil
+			},
+		},
 	}
 }
 
@@ -4537,4 +4583,148 @@ func stripHTMLTags(str string) string {
 	}
 
 	return result.String()
+}
+type versionComponent struct {
+	number int
+	label  string
+	labelNum int
+}
+
+func compareVersions(v1, v2 string) int {
+	parts1 := parseVersion(v1)
+	parts2 := parseVersion(v2)
+
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		var p1, p2 versionComponent
+
+		if i < len(parts1) {
+			p1 = parts1[i]
+		}
+		if i < len(parts2) {
+			p2 = parts2[i]
+		}
+
+		if cmp := compareComponent(p1, p2); cmp != 0 {
+			return cmp
+		}
+	}
+
+	// If all compared components are equal, the longer version is considered greater
+	if len(parts1) > len(parts2) {
+		return 1
+	} else if len(parts1) < len(parts2) {
+		return -1
+	}
+
+	return 0
+}
+
+func parseVersion(version string) []versionComponent {
+	if version == "" {
+		return []versionComponent{}
+	}
+
+	version = strings.ToLower(version)
+	version = strings.ReplaceAll(version, "_", ".")
+	version = strings.ReplaceAll(version, "-", ".")
+
+	re := regexp.MustCompile(`(\d+|[a-z]+)`)
+	matches := re.FindAllString(version, -1)
+
+	var components []versionComponent
+	for _, match := range matches {
+		if num, err := strconv.Atoi(match); err == nil {
+			components = append(components, versionComponent{number: num})
+		} else {
+			labelNum := 0
+			if len(match) > 0 {
+				re := regexp.MustCompile(`([a-z]+)(\d*)`)
+				submatches := re.FindStringSubmatch(match)
+				if len(submatches) > 2 && submatches[2] != "" {
+					labelNum, _ = strconv.Atoi(submatches[2])
+				}
+			}
+			components = append(components, versionComponent{
+				number:   0,
+				label:    match,
+				labelNum: labelNum,
+			})
+		}
+	}
+
+	return components
+}
+
+func getLabelPriority(label string) int {
+	label = strings.ToLower(label)
+	label = regexp.MustCompile(`\d+`).ReplaceAllString(label, "")
+
+	switch label {
+	case "dev":
+		return 0
+	case "alpha", "a":
+		return 1
+	case "beta", "b":
+		return 2
+	case "rc":
+		return 3
+	case "":
+		return 4
+	case "pl", "p":
+		return 5
+	default:
+		return 4
+	}
+}
+
+func compareComponent(c1, c2 versionComponent) int {
+	if c1.label == "" && c2.label == "" {
+		if c1.number < c2.number {
+			return -1
+		}
+		if c1.number > c2.number {
+			return 1
+		}
+		return 0
+	}
+
+	if c1.label == "" && c2.label != "" {
+		p2 := getLabelPriority(c2.label)
+		if p2 < 4 {
+			return 1
+		}
+		return -1
+	}
+
+	if c1.label != "" && c2.label == "" {
+		p1 := getLabelPriority(c1.label)
+		if p1 < 4 {
+			return -1
+		}
+		return 1
+	}
+
+	p1 := getLabelPriority(c1.label)
+	p2 := getLabelPriority(c2.label)
+
+	if p1 < p2 {
+		return -1
+	}
+	if p1 > p2 {
+		return 1
+	}
+
+	if c1.labelNum < c2.labelNum {
+		return -1
+	}
+	if c1.labelNum > c2.labelNum {
+		return 1
+	}
+
+	return 0
 }
