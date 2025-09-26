@@ -3671,6 +3671,11 @@ func (vm *VirtualMachine) execInclude(ctx *ExecutionContext, frame *CallFrame, i
 		return true, nil
 	}
 
+	// Mark file as included before execution to prevent infinite recursion
+	if once {
+		ctx.MarkFileIncluded(path)
+	}
+
 	lex := lexer.New(string(source))
 	prs := parser.New(lex)
 	program := prs.ParseProgram()
@@ -3684,10 +3689,6 @@ func (vm *VirtualMachine) execInclude(ctx *ExecutionContext, frame *CallFrame, i
 	}
 	if resultVal == nil {
 		resultVal = values.NewInt(1)
-	}
-
-	if once {
-		ctx.MarkFileIncluded(path)
 	}
 
 	resType, resSlot := decodeResult(inst)

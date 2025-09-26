@@ -331,7 +331,6 @@ func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []*opcodes
 
 func (vm *VirtualMachine) run(ctx *ExecutionContext) error {
 	for {
-		// Check for timeout at the start of each instruction loop
 		if err := ctx.CheckTimeout(); err != nil {
 			return err
 		}
@@ -343,7 +342,6 @@ func (vm *VirtualMachine) run(ctx *ExecutionContext) error {
 		}
 
 		if frame.IP < 0 || frame.IP >= len(frame.Instructions) {
-			// Implicit return null when reaching the end of the instruction stream.
 			if err := vm.handleReturn(ctx, values.NewNull()); err != nil {
 				return err
 			}
