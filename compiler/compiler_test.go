@@ -8734,3 +8734,18 @@ echo "original=$original, ref1=$ref1, ref2=$ref2\n";
 		})
 	}
 }
+
+func TestExtensionLoaded(t *testing.T) {
+	code := `<?php
+echo "json: " . var_export(extension_loaded('json'), true) . "\n";
+echo "JSON: " . var_export(extension_loaded('JSON'), true) . "\n";
+echo "mbstring: " . var_export(extension_loaded('mbstring'), true) . "\n";
+echo "standard: " . var_export(extension_loaded('standard'), true) . "\n";
+echo "nonexistent: " . var_export(extension_loaded('nonexistent'), true) . "\n";
+echo "empty: " . var_export(extension_loaded(''), true) . "\n";
+`
+
+	output, err := compileAndExecute(t, code)
+	require.NoError(t, err)
+	assert.Equal(t, "json: true\nJSON: true\nmbstring: true\nstandard: true\nnonexistent: false\nempty: false\n", output)
+}

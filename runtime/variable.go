@@ -9,6 +9,16 @@ import (
 	"github.com/wudi/hey/values"
 )
 
+var supportedExtensions = map[string]bool{
+	"standard": true,
+	"core":     true,
+	"date":     true,
+	"pcre":     true,
+	"json":     true,
+	"mbstring": true,
+	"ctype":    true,
+}
+
 // GetVariableFunctions returns variable-related PHP functions
 func GetVariableFunctions() []*registry.Function {
 	return []*registry.Function{
@@ -387,6 +397,29 @@ func GetVariableFunctions() []*registry.Function {
 				default:
 					return values.NewBool(false), nil
 				}
+			},
+		},
+		{
+			Name: "extension_loaded",
+			Parameters: []*registry.Parameter{
+				{Name: "extension", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 {
+					return values.NewBool(false), nil
+				}
+
+				extName := args[0].ToString()
+				if extName == "" {
+					return values.NewBool(false), nil
+				}
+
+				extNameLower := strings.ToLower(extName)
+				return values.NewBool(supportedExtensions[extNameLower]), nil
 			},
 		},
 	}

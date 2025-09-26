@@ -313,3 +313,51 @@ func TestIsCallable(t *testing.T) {
 		})
 	}
 }
+
+func TestExtensionLoaded(t *testing.T) {
+	functions := GetVariableFunctions()
+
+	var extLoadedFunc *registry.Function
+	for _, f := range functions {
+		if f.Name == "extension_loaded" {
+			extLoadedFunc = f
+			break
+		}
+	}
+
+	if extLoadedFunc == nil {
+		t.Fatal("extension_loaded function not found")
+	}
+
+	ctx := &mockBuiltinCallContext{}
+
+	tests := []struct {
+		name string
+		args []*values.Value
+		want bool
+	}{
+		{"json", []*values.Value{values.NewString("json")}, true},
+		{"JSON uppercase", []*values.Value{values.NewString("JSON")}, true},
+		{"Json mixed", []*values.Value{values.NewString("Json")}, true},
+		{"mbstring", []*values.Value{values.NewString("mbstring")}, true},
+		{"standard", []*values.Value{values.NewString("standard")}, true},
+		{"core", []*values.Value{values.NewString("core")}, true},
+		{"date", []*values.Value{values.NewString("date")}, true},
+		{"pcre", []*values.Value{values.NewString("pcre")}, true},
+		{"ctype", []*values.Value{values.NewString("ctype")}, true},
+		{"nonexistent", []*values.Value{values.NewString("nonexistent")}, false},
+		{"empty string", []*values.Value{values.NewString("")}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := extLoadedFunc.Builtin(ctx, tt.args)
+			if err != nil {
+				t.Fatalf("extension_loaded failed: %v", err)
+			}
+			if result.ToBool() != tt.want {
+				t.Errorf("extension_loaded(%q) = %v, want %v", tt.args[0].ToString(), result.ToBool(), tt.want)
+			}
+		})
+	}
+}
