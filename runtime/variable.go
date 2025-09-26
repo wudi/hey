@@ -318,6 +318,77 @@ func GetVariableFunctions() []*registry.Function {
 				return value, nil
 			},
 		},
+		{
+			Name: "is_callable",
+			Parameters: []*registry.Parameter{
+				{Name: "value", Type: "mixed"},
+			},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 {
+					return values.NewBool(false), nil
+				}
+
+				value := args[0]
+				if value == nil || value.IsNull() {
+					return values.NewBool(false), nil
+				}
+
+				switch value.Type {
+				case values.TypeString:
+					funcName := value.ToString()
+					if funcName == "" {
+						return values.NewBool(false), nil
+					}
+
+					if reg := ctx.SymbolRegistry(); reg != nil {
+						if _, exists := reg.GetFunction(funcName); exists {
+							return values.NewBool(true), nil
+						}
+					}
+
+					if _, exists := ctx.LookupUserFunction(funcName); exists {
+						return values.NewBool(true), nil
+					}
+
+					return values.NewBool(false), nil
+
+				case values.TypeArray:
+					arr := value.Data.(*values.Array)
+					if len(arr.Elements) != 2 {
+						return values.NewBool(false), nil
+					}
+
+					classNameVal := value.ArrayGet(values.NewInt(0))
+					methodNameVal := value.ArrayGet(values.NewInt(1))
+
+					if classNameVal.IsNull() || methodNameVal.IsNull() {
+						return values.NewBool(false), nil
+					}
+
+					if classNameVal.Type != values.TypeString || methodNameVal.Type != values.TypeString {
+						return values.NewBool(false), nil
+					}
+
+					className := classNameVal.ToString()
+					methodName := methodNameVal.ToString()
+
+					if classMap, exists := ctx.LookupUserClass(className); exists {
+						if _, methodExists := classMap.Methods[methodName]; methodExists {
+							return values.NewBool(true), nil
+						}
+					}
+
+					return values.NewBool(false), nil
+
+				default:
+					return values.NewBool(false), nil
+				}
+			},
+		},
 	}
 }
 

@@ -263,3 +263,53 @@ func (m *mockBuiltinCallContext) GetOutputBufferStack() registry.OutputBufferSta
 func (m *mockBuiltinCallContext) GetCurrentFunctionArgCount() (int, error) { return 0, nil }
 func (m *mockBuiltinCallContext) GetCurrentFunctionArg(index int) (*values.Value, error) { return nil, nil }
 func (m *mockBuiltinCallContext) GetCurrentFunctionArgs() ([]*values.Value, error) { return nil, nil }
+
+func TestIsCallable(t *testing.T) {
+	functions := GetVariableFunctions()
+
+	var isCallableFunc *registry.Function
+	for _, f := range functions {
+		if f.Name == "is_callable" {
+			isCallableFunc = f
+			break
+		}
+	}
+
+	if isCallableFunc == nil {
+		t.Fatal("is_callable function not found")
+	}
+
+	registry.Initialize()
+	ctx := &mockBuiltinCallContext{registry: registry.GlobalRegistry}
+
+	strlenFunc := &registry.Function{
+		Name:       "strlen",
+		ReturnType: "int",
+		IsBuiltin:  true,
+	}
+	ctx.registry.RegisterFunction(strlenFunc)
+
+	tests := []struct {
+		name string
+		args []*values.Value
+		want bool
+	}{
+		{"function name", []*values.Value{values.NewString("strlen")}, true},
+		{"non-existent function", []*values.Value{values.NewString("nonexistent")}, false},
+		{"empty string", []*values.Value{values.NewString("")}, false},
+		{"integer", []*values.Value{values.NewInt(123)}, false},
+		{"null", []*values.Value{values.NewNull()}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := isCallableFunc.Builtin(ctx, tt.args)
+			if err != nil {
+				t.Fatalf("is_callable failed: %v", err)
+			}
+			if result.ToBool() != tt.want {
+				t.Errorf("is_callable() = %v, want %v", result.ToBool(), tt.want)
+			}
+		})
+	}
+}
