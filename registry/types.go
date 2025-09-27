@@ -16,6 +16,24 @@ type BuiltinImplementation func(ctx BuiltinCallContext, args []*values.Value) (*
 
 // BuiltinCallContext exposes the minimal VM services that builtin implementations
 // need without creating a dependency cycle back to the vm package.
+type HTTPContext interface {
+	AddHeader(name, value string, replace bool) error
+	SetResponseCode(code int) error
+	GetResponseCode() int
+	GetHeaders() []HTTPHeader
+	GetHeadersList() []string
+	MarkHeadersSent(location string)
+	AreHeadersSent() (bool, string)
+	SetRequestHeaders(headers map[string]string)
+	GetRequestHeaders() map[string]string
+	FormatHeadersForFastCGI() string
+}
+
+type HTTPHeader struct {
+	Name  string
+	Value string
+}
+
 type BuiltinCallContext interface {
 	// WriteOutput should render the provided value to the active output stream.
 	WriteOutput(val *values.Value) error
@@ -39,6 +57,10 @@ type BuiltinCallContext interface {
 	// LookupUserClass returns a user-defined class registered inside the active
 	// execution context, if available.
 	LookupUserClass(name string) (*Class, bool)
+	// HTTP context methods for web functions
+	GetHTTPContext() HTTPContext
+	ResetHTTPContext()
+	RemoveHTTPHeader(name string)
 	// Halt stops execution with the given exit code and optional message.
 	Halt(exitCode int, message string) error
 	// GetExecutionContext returns the execution context for timeout management

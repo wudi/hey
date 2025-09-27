@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Hey-Codex is a PHP interpreter written in Go that translates PHP code into bytecode and executes it on a virtual machine. The project aims for PHP 8.0+ compatibility and includes support for static analysis and code transformation.
+Hey-Codex is a PHP interpreter written in Go that translates PHP code into bytecode and executes it on a virtual machine. The project aims for PHP 8.0+ compatibility and includes support for static analysis, code transformation, and FastCGI Process Manager (FPM) for web server integration.
 
 ## Architecture
 
@@ -194,3 +194,14 @@ make deps              # Download and tidy dependencies
 - **json_decode()**: Throws JsonException when JSON_THROW_ON_ERROR flag is set and JSON is invalid
 - **array_chunk()**: Throws ValueError when size parameter <= 0
 - Architecture supports extending to other builtins via `BuiltinCallContext.ThrowException()` API
+
+### PHP-FPM: FastCGI Process Manager
+- **Full FastCGI protocol implementation** in `/pkg/fastcgi` (record parsing, parameter handling, streaming)
+- **Process management modes**: static, dynamic, ondemand
+- **Master-worker architecture** with graceful shutdown and signal handling (SIGTERM, SIGUSR1, SIGUSR2)
+- **CGI variable mapping** to PHP superglobals ($_GET, $_POST, $_SERVER, $_COOKIE, $_REQUEST)
+- **Opcache support** for bytecode caching with file validation
+- **Health monitoring** with JSON/text status endpoints
+- **Entry point**: `./build/hey-fpm --listen 127.0.0.1:9000`
+- **Nginx integration**: Compatible with standard FastCGI configurations
+- See `/docs/php-fpm-spec.md` for complete architecture documentation

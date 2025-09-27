@@ -1,0 +1,28 @@
+2025/09/27 03:20:13 Starting Hey-FPM master process
+2025/09/27 03:20:13 Listening on 127.0.0.1:9000
+2025/09/27 03:20:13 Starting worker pool 'www' with dynamic process management
+2025/09/27 03:20:13 Spawned worker 0 (total: 1)
+2025/09/27 03:20:13 Spawned worker 1 (total: 2)
+2025/09/27 03:20:13 Spawned worker 2 (total: 3)
+2025/09/27 03:20:13 Spawned worker 3 (total: 4)
+2025/09/27 03:20:13 Spawned worker 4 (total: 5)
+2025/09/27 03:20:13 Worker 0 started
+2025/09/27 03:20:13 Worker 3 started
+2025/09/27 03:20:13 Worker 1 started
+2025/09/27 03:20:13 Worker 2 started
+2025/09/27 03:20:13 Worker 4 started
+2025/09/27 03:20:13 Hey-FPM started successfully
+2025/09/27 03:20:13 Listening on: 127.0.0.1:9000
+2025/09/27 03:20:13 Process management: dynamic
+2025/09/27 03:20:13 Max children: 50
+2025/09/27 03:20:55 Received signal terminated, shutting down gracefully
+2025/09/27 03:20:55 Graceful shutdown initiated
+2025/09/27 03:20:55 Stopping worker pool 'www'
+2025/09/27 03:20:55 Worker 4 stopping
+2025/09/27 03:20:55 Worker 0 stopping
+2025/09/27 03:20:55 Worker 1 stopping
+2025/09/27 03:20:55 Worker 2 stopping
+2025/09/27 03:20:55 Worker 3 stopping
+2025/09/27 03:20:55 Received terminated, initiating graceful shutdown
+2025/09/27 03:20:55 Master process shutdown complete
+2025/09/27 03:20:55 Hey-FPM shutdown complete

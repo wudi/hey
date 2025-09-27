@@ -23,6 +23,7 @@ type OutputBufferStack struct {
 	buffers     []*OutputBuffer
 	baseWriter  io.Writer      // Original output writer (stdout)
 	implicitFlush bool
+	execCtx     *ExecutionContext // Reference to track headers_sent
 }
 
 // NewOutputBufferStack creates a new output buffer stack
@@ -277,6 +278,11 @@ func (obs *OutputBufferStack) SetImplicitFlush(on bool) {
 func (obs *OutputBufferStack) Write(p []byte) (n int, err error) {
 	obs.mu.Lock()
 	defer obs.mu.Unlock()
+
+	// Mark headers as sent if this is the first non-buffered output
+	if obs.execCtx != nil && obs.execCtx.HTTPContext != nil && len(obs.buffers) == 0 && len(p) > 0 {
+		obs.execCtx.HTTPContext.MarkHeadersSent("output:1") // Track location later if needed
+	}
 
 	// If we have active buffers, write to the topmost buffer
 	if len(obs.buffers) > 0 {

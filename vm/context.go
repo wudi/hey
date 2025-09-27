@@ -44,6 +44,8 @@ type ExecutionContext struct {
 
 	CallStack []*CallFrame
 
+	HTTPContext *HTTPContext
+
 	Constants    []*values.Value
 	currentClass *classRuntime
 
@@ -86,6 +88,10 @@ func NewExecutionContext() *ExecutionContext {
 	ec.OutputBufferStack = NewOutputBufferStack(baseWriter)
 	// Set the output writer to use the buffer stack
 	ec.OutputWriter = ec.OutputBufferStack
+	// Initialize HTTP context
+	ec.HTTPContext = NewHTTPContext()
+	// Set execution context reference for headers_sent tracking
+	ec.OutputBufferStack.execCtx = ec
 	return ec
 }
 
@@ -1035,5 +1041,30 @@ func (ctx *ExecutionContext) Cancel() {
 
 	if ctx.cancel != nil {
 		ctx.cancel()
+	}
+}
+
+func (ctx *ExecutionContext) GetHTTPContext() registry.HTTPContext {
+	if ctx.HTTPContext == nil {
+		return nil
+	}
+	return ctx.HTTPContext
+}
+
+func (ctx *ExecutionContext) ResetHTTPContext() {
+	ctx.HTTPContext = NewHTTPContext()
+}
+
+func (ctx *ExecutionContext) RemoveHTTPHeader(name string) {
+	if ctx.HTTPContext == nil {
+		return
+	}
+	nameLower := strings.ToLower(name)
+	headers := ctx.HTTPContext.GetHeaders()
+	ctx.HTTPContext = NewHTTPContext()
+	for _, h := range headers {
+		if strings.ToLower(h.Name) != nameLower {
+			ctx.HTTPContext.AddHeader(h.Name, h.Value, false)
+		}
 	}
 }

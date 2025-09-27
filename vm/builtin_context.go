@@ -290,3 +290,22 @@ func (b *builtinContext) ThrowException(exception *values.Value) error {
 
 	return heyerrors.ErrExceptionThrown
 }
+
+func (b *builtinContext) GetHTTPContext() registry.HTTPContext {
+	if b.ctx == nil {
+		return nil
+	}
+	return b.ctx.GetHTTPContext()
+}
+
+func (b *builtinContext) ResetHTTPContext() {
+	if b.ctx != nil {
+		b.ctx.ResetHTTPContext()
+	}
+}
+
+func (b *builtinContext) RemoveHTTPHeader(name string) {
+	if b.ctx != nil {
+		b.ctx.RemoveHTTPHeader(name)
+	}
+}
