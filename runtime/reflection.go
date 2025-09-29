@@ -261,6 +261,46 @@ func GetReflectionFunctions() []*registry.Function {
 			},
 		},
 		{
+			Name: "interface_exists",
+			Parameters: []*registry.Parameter{
+				{Name: "interface_name", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    2,
+			IsBuiltin: true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 || args[0] == nil {
+					return values.NewBool(false), nil
+				}
+				name := args[0].ToString()
+				if name == "" {
+					return values.NewBool(false), nil
+				}
+
+				// Check if interface exists in registry
+				if reg := ctx.SymbolRegistry(); reg != nil {
+					if _, ok := reg.GetInterface(name); ok {
+						return values.NewBool(true), nil
+					}
+				}
+
+				// Check common PHP interfaces that are built-in
+				builtinInterfaces := []string{
+					"Iterator", "IteratorAggregate", "ArrayAccess", "Countable",
+					"Serializable", "Traversable", "OuterIterator", "RecursiveIterator",
+					"SeekableIterator", "SplObserver", "SplSubject",
+				}
+				for _, iface := range builtinInterfaces {
+					if strings.EqualFold(name, iface) {
+						return values.NewBool(true), nil
+					}
+				}
+
+				return values.NewBool(false), nil
+			},
+		},
+		{
 			Name: "get_class_methods",
 			Parameters: []*registry.Parameter{
 				{Name: "class_name_or_object", Type: "mixed"},
