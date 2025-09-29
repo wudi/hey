@@ -156,7 +156,7 @@ func getSplAutoloadFunctionsFunction() *registry.Function {
 			defer autoloadMutex.RUnlock()
 
 			if len(autoloadFunctions) == 0 {
-				return values.NewBool(false), nil
+				return values.NewNull(), nil
 			}
 
 			// Create array of registered functions

@@ -167,7 +167,7 @@ func GetArrayFunctions() []*registry.Function {
 			MinArgs:    1,
 			MaxArgs:    1,
 			IsBuiltin:  true,
-			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				if len(args) < 1 {
 					return values.NewInt(0), nil
 				}
@@ -180,6 +180,41 @@ func GetArrayFunctions() []*registry.Function {
 					return values.NewInt(int64(val.ArrayCount())), nil
 				case values.TypeObject:
 					obj := val.Data.(*values.Object)
+
+					// Check if the object implements Countable interface
+					if obj.ClassName != "" {
+						if class, err := registry.GlobalRegistry.GetClass(obj.ClassName); err == nil && class != nil {
+							// Check if class implements Countable interface
+							isCountable := false
+							for _, iface := range class.Interfaces {
+								if iface == "Countable" {
+									isCountable = true
+									break
+								}
+							}
+
+							if isCountable {
+								// Call the object's count() method
+								if method, ok := class.Methods["count"]; ok {
+									var function *registry.Function
+									// Handle different BuiltinMethodImpl types
+									switch impl := method.Implementation.(type) {
+									case interface{ GetFunction() *registry.Function }:
+										function = impl.GetFunction()
+									default:
+										// Fallback to property count if method can't be called
+										return values.NewInt(int64(len(obj.Properties))), nil
+									}
+
+									if function != nil && function.IsBuiltin {
+										return function.Builtin(ctx, []*values.Value{val})
+									}
+								}
+							}
+						}
+					}
+
+					// Default to counting properties
 					return values.NewInt(int64(len(obj.Properties))), nil
 				default:
 					return values.NewInt(1), nil

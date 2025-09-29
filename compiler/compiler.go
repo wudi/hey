@@ -314,6 +314,11 @@ func (c *Compiler) compileNode(node ast.Node) error {
 // Expression compilation methods
 
 func (c *Compiler) compileBinaryOp(expr *ast.BinaryExpression) error {
+	// Handle short-circuit evaluation for && and || operators
+	if expr.Operator == "&&" || expr.Operator == "||" {
+		return c.compileShortCircuitOp(expr)
+	}
+
 	// Compile left operand
 	err := c.compileNode(expr.Left)
 	if err != nil {
@@ -333,6 +338,76 @@ func (c *Compiler) compileBinaryOp(expr *ast.BinaryExpression) error {
 	opcode := c.getOpcodeForBinaryOperator(expr.Operator)
 	c.emit(opcode, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_TMP_VAR, result)
 
+	return nil
+}
+
+func (c *Compiler) compileShortCircuitOp(expr *ast.BinaryExpression) error {
+	// The key insight: we must ensure the final result is ALWAYS at nextTemp after this function
+	// So we pre-allocate the result slot and make sure both paths fill it
+
+	// Compile left operand
+	err := c.compileNode(expr.Left)
+	if err != nil {
+		return err
+	}
+	leftResult := c.nextTemp - 1
+
+	// Pre-allocate the final result slot - this becomes nextTemp-1 for the caller
+	finalResult := c.allocateTemp()
+
+	// Generate labels
+	evalRightLabel := c.generateLabel()
+	endLabel := c.generateLabel()
+
+	if expr.Operator == "&&" {
+		// For &&: result = left && right
+		// If left is false, result is false (left value)
+		// If left is true, result is right value
+
+		// Jump to evaluate right if left is true
+		c.emitJumpNZ(opcodes.IS_TMP_VAR, leftResult, evalRightLabel)
+
+		// Left is false: copy left to final result
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+
+		// Evaluate right side
+		c.placeLabel(evalRightLabel)
+		err = c.compileNode(expr.Right)
+		if err != nil {
+			return err
+		}
+		rightResult := c.nextTemp - 1
+
+		// Copy right to final result
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+
+	} else { // ||
+		// For ||: result = left || right
+		// If left is true, result is true (left value)
+		// If left is false, result is right value
+
+		// Jump to evaluate right if left is false
+		c.emitJumpZ(opcodes.IS_TMP_VAR, leftResult, evalRightLabel)
+
+		// Left is true: copy left to final result
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
+
+		// Evaluate right side
+		c.placeLabel(evalRightLabel)
+		err = c.compileNode(expr.Right)
+		if err != nil {
+			return err
+		}
+		rightResult := c.nextTemp - 1
+
+		// Copy right to final result
+		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+	}
+
+	c.placeLabel(endLabel)
+	// Now finalResult (at nextTemp-1) contains the correct value
 	return nil
 }
 
@@ -2351,12 +2426,11 @@ func (c *Compiler) compileNew(expr *ast.NewExpression) error {
 	result := c.allocateTemp()
 	c.emit(opcodes.OP_NEW, opcodes.IS_CONST, classConstant, 0, 0, opcodes.IS_TMP_VAR, result)
 
-	// TODO: Only call constructor if it exists
-	// For now, skip constructor calling for simple case to test object creation
-	// methodName := c.addConstant(values.NewString("__construct"))
-	// c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, methodName, 0, 0)
-	// constructorResult := c.allocateTemp()
-	// c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, constructorResult, 0, 0, 0, 0)
+	// Always call constructor, even for parameterless instantiation
+	methodName := c.addConstant(values.NewString("__construct"))
+	c.emit(opcodes.OP_INIT_METHOD_CALL, opcodes.IS_TMP_VAR, result, opcodes.IS_CONST, methodName, 0, 0)
+	constructorResult := c.allocateTemp()
+	c.emit(opcodes.OP_DO_FCALL, opcodes.IS_TMP_VAR, constructorResult, 0, 0, 0, 0)
 
 	return nil
 }

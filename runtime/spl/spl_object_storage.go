@@ -42,7 +42,7 @@ func GetSplObjectStorageClass() *registry.ClassDescriptor {
 			}
 			obj.Properties["__position"] = values.NewInt(0)
 
-			return thisObj, nil
+			return values.NewNull(), nil
 		},
 		Parameters: []*registry.Parameter{},
 	}
@@ -69,20 +69,10 @@ func GetSplObjectStorageClass() *registry.ClassDescriptor {
 				data = args[2]
 			}
 
-			obj := thisObj.Data.(*values.Object)
-			if obj.Properties == nil {
-				obj.Properties = make(map[string]*values.Value)
-			}
-
-			// Get storage
-			storageVal, ok := obj.Properties["__storage"]
-			if !ok || storageVal == nil {
-				return values.NewNull(), fmt.Errorf("storage not initialized")
-			}
-
-			storage, ok := storageVal.Data.([]*ObjectStorageEntry)
-			if !ok {
-				return values.NewNull(), fmt.Errorf("invalid storage type")
+			// Get or create storage lazily
+			storage, err := getSplObjectStorageData(thisObj)
+			if err != nil {
+				return values.NewNull(), err
 			}
 
 			// Check if object already exists
@@ -102,6 +92,7 @@ func GetSplObjectStorageClass() *registry.ClassDescriptor {
 			storage = append(storage, entry)
 
 			// Update storage
+			obj := thisObj.Data.(*values.Object)
 			obj.Properties["__storage"] = &values.Value{
 				Type: values.TypeArray,
 				Data: storage,
@@ -529,4 +520,35 @@ func GetSplObjectStorageClass() *registry.ClassDescriptor {
 		Methods:    methods,
 		Constants:  make(map[string]*registry.ConstantDescriptor),
 	}
+}
+
+// getSplObjectStorageData lazily initializes and returns the storage from an SplObjectStorage object
+func getSplObjectStorageData(obj *values.Value) ([]*ObjectStorageEntry, error) {
+	if obj.Type != values.TypeObject {
+		return nil, fmt.Errorf("expected object, got %s", obj.Type)
+	}
+
+	objData := obj.Data.(*values.Object)
+	if objData.Properties == nil {
+		objData.Properties = make(map[string]*values.Value)
+	}
+
+	storageVal, exists := objData.Properties["__storage"]
+	if !exists || storageVal == nil {
+		// Create new storage
+		storage := []*ObjectStorageEntry{}
+		objData.Properties["__storage"] = &values.Value{
+			Type: values.TypeArray,
+			Data: storage,
+		}
+		objData.Properties["__position"] = values.NewInt(0)
+		return storage, nil
+	}
+
+	storage, ok := storageVal.Data.([]*ObjectStorageEntry)
+	if !ok {
+		return nil, fmt.Errorf("invalid storage type")
+	}
+
+	return storage, nil
 }

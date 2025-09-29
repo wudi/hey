@@ -53,7 +53,7 @@ func GetSplFixedArrayClass() *registry.ClassDescriptor {
 			}
 			obj.Properties["__data"] = dataVal
 
-			return thisObj, nil
+			return values.NewNull(), nil
 		},
 		Parameters: []*registry.Parameter{
 			{Name: "size", Type: "int", HasDefault: false},

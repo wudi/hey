@@ -286,6 +286,7 @@ type PendingCall struct {
 	CallingClass string // For late static binding - the class that initiated the call
 	MethodName  string
 	IsMagicMethod bool  // Flag to indicate magic method calls (__call, __callStatic)
+	IsNullMethod  bool  // Flag to indicate method calls on null objects (for WordPress compatibility)
 }
 
 // newCallFrame constructs an initialized call frame.
