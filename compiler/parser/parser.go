@@ -3062,7 +3062,16 @@ func parseFloatLiteral(p *Parser) ast.Expression {
 // parseStringLiteral 解析字符串字面量
 func parseStringLiteral(p *Parser) ast.Expression {
 	// 移除引号获取实际值
-	value := strings.Trim(p.currentToken.Value, `"'`)
+	// 不能使用 strings.Trim，因为它会移除开头和结尾的所有匹配字符
+	// 例如 "x'" 会被错误地trim成 "x"，而不是 "x'"
+	value := p.currentToken.Value
+	if len(value) >= 2 {
+		// 检查并移除匹配的引号对
+		if (value[0] == '"' && value[len(value)-1] == '"') ||
+			(value[0] == '\'' && value[len(value)-1] == '\'') {
+			value = value[1 : len(value)-1]
+		}
+	}
 	return ast.NewStringLiteral(p.currentToken.Position, value, p.currentToken.Value)
 }
 
