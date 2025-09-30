@@ -966,6 +966,18 @@ func (l *Lexer) nextTokenInScripting() Token {
 			// PHP 结束标签
 			l.readChar()
 			l.readChar()
+
+			// PHP behavior: ?> eats the immediately following newline if present
+			// This applies to both \n and \r\n line endings
+			if l.ch == '\r' {
+				l.readChar() // skip \r
+				if l.ch == '\n' {
+					l.readChar() // skip \n in \r\n
+				}
+			} else if l.ch == '\n' {
+				l.readChar() // skip \n
+			}
+
 			l.state = ST_INITIAL
 			return Token{Type: T_CLOSE_TAG, Value: "?>", Position: pos}
 		}
