@@ -221,6 +221,10 @@ func parseAndExecuteCodeWithFileAndArgs(code string, inScript bool, filename str
 
 	// Check if exit() or die() was called
 	if vmCtx.Halted {
+		// Print error before exiting if there is one
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(vmCtx.ExitCode)
 	}
 
@@ -286,6 +290,10 @@ func parseAndExecuteCode(code string, inScript bool) error {
 
 	// Check if exit() or die() was called
 	if vmCtx.Halted {
+		// Print error before exiting if there is one
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
 		os.Exit(vmCtx.ExitCode)
 	}
 
