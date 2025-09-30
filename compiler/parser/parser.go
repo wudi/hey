@@ -2910,6 +2910,26 @@ func parseBlockStatements(p *Parser) []ast.Statement {
 	p.nextToken() // 跳过 {
 
 	for !p.currentTokenIs(lexer.TOKEN_RBRACE) && !p.isAtEnd() {
+		// Handle T_CLOSE_TAG: just skip it and continue parsing
+		if p.currentToken.Type == lexer.T_CLOSE_TAG {
+			p.nextToken()
+			continue
+		}
+
+		// Handle T_INLINE_HTML as a statement (like echo)
+		if p.currentToken.Type == lexer.T_INLINE_HTML {
+			// Create a statement from the inline HTML content
+			htmlExpr := parseInlineHTML(p)
+			if htmlExpr != nil {
+				// Wrap inline HTML as an echo statement to automatically output it
+				echoStmt := ast.NewEchoStatement(htmlExpr.(*ast.StringLiteral).Position)
+				echoStmt.Arguments = ast.NewArgumentList(htmlExpr.(*ast.StringLiteral).Position, []ast.Expression{htmlExpr})
+				statements = append(statements, echoStmt)
+			}
+			p.nextToken()
+			continue
+		}
+
 		stmt := parseStatement(p)
 		if stmt != nil {
 			statements = append(statements, stmt)
