@@ -548,3 +548,126 @@ func TestPregQuote(t *testing.T) {
 		})
 	}
 }
+
+func TestPregReplace(t *testing.T) {
+	functions := GetRegexFunctions()
+
+	var pregReplaceFunc *registry.Function
+	for _, f := range functions {
+		if f.Name == "preg_replace" {
+			pregReplaceFunc = f
+			break
+		}
+	}
+
+	if pregReplaceFunc == nil {
+		t.Fatal("preg_replace function not found")
+	}
+
+	tests := []struct {
+		name        string
+		pattern     string
+		replacement string
+		subject     string
+		expected    string
+	}{
+		{
+			name:        "Simple string replacement",
+			pattern:     "/hello/",
+			replacement: "hi",
+			subject:     "hello world",
+			expected:    "hi world",
+		},
+		{
+			name:        "Number replacement",
+			pattern:     "/[0-9]+/",
+			replacement: "X",
+			subject:     "abc123def456ghi",
+			expected:    "abcXdefXghi",
+		},
+		{
+			name:        "Capture group replacement",
+			pattern:     "/a(.)c/",
+			replacement: "X$1Y",
+			subject:     "abc def",
+			expected:    "XbY def",
+		},
+		{
+			name:        "Case insensitive replacement",
+			pattern:     "/hello/i",
+			replacement: "hi",
+			subject:     "Hello World",
+			expected:    "hi World",
+		},
+		{
+			name:        "Multiple replacements",
+			pattern:     "/a/",
+			replacement: "e",
+			subject:     "banana",
+			expected:    "benene",
+		},
+		{
+			name:        "No match",
+			pattern:     "/xyz/",
+			replacement: "replaced",
+			subject:     "hello world",
+			expected:    "hello world",
+		},
+		{
+			name:        "Empty replacement",
+			pattern:     "/test/",
+			replacement: "",
+			subject:     "test string test",
+			expected:    " string ",
+		},
+		{
+			name:        "Word boundary",
+			pattern:     "/\\bcat\\b/",
+			replacement: "dog",
+			subject:     "cat catch cat",
+			expected:    "dog catch dog",
+		},
+		{
+			name:        "Dot matches any character",
+			pattern:     "/c.t/",
+			replacement: "dog",
+			subject:     "cat cut cot",
+			expected:    "dog dog dog",
+		},
+		{
+			name:        "Start and end anchors",
+			pattern:     "/^hello/",
+			replacement: "hi",
+			subject:     "hello world hello",
+			expected:    "hi world hello",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := []*values.Value{
+				values.NewString(tt.pattern),
+				values.NewString(tt.replacement),
+				values.NewString(tt.subject),
+			}
+
+			result, err := pregReplaceFunc.Builtin(nil, args)
+			if err != nil {
+				t.Fatalf("preg_replace failed: %v", err)
+			}
+
+			if result == nil {
+				t.Fatal("preg_replace returned nil")
+			}
+
+			if result.Type != values.TypeString {
+				t.Fatalf("Expected string result, got %v", result.Type)
+			}
+
+			actualOutput := result.ToString()
+			if actualOutput != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, actualOutput)
+			}
+		})
+	}
+}

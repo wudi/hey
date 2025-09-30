@@ -33,6 +33,25 @@ func (m *mockContext) GetCurrentFunctionArg(index int) (*values.Value, error)   
 func (m *mockContext) GetCurrentFunctionArgs() ([]*values.Value, error)         { return nil, nil }
 func (m *mockContext) ThrowException(exception *values.Value) error { return fmt.Errorf("exception thrown in test mock: %v", exception) }
 
+// HTTP methods - missing from original mock
+func (m *mockContext) GetHTTPContext() registry.HTTPContext { return &mockHTTPContext{} }
+func (m *mockContext) ResetHTTPContext() {}
+func (m *mockContext) RemoveHTTPHeader(name string) {}
+
+// mockHTTPContext is a simple mock for HTTPContext interface
+type mockHTTPContext struct{}
+
+func (m *mockHTTPContext) AddHeader(name, value string, replace bool) error { return nil }
+func (m *mockHTTPContext) SetResponseCode(code int) error { return nil }
+func (m *mockHTTPContext) GetResponseCode() int { return 200 }
+func (m *mockHTTPContext) GetHeaders() []registry.HTTPHeader { return nil }
+func (m *mockHTTPContext) GetHeadersList() []string { return nil }
+func (m *mockHTTPContext) MarkHeadersSent(location string) {}
+func (m *mockHTTPContext) AreHeadersSent() (bool, string) { return false, "" }
+func (m *mockHTTPContext) SetRequestHeaders(headers map[string]string) {}
+func (m *mockHTTPContext) GetRequestHeaders() map[string]string { return nil }
+func (m *mockHTTPContext) FormatHeadersForFastCGI() string { return "" }
+
 func TestArrayIterator(t *testing.T) {
 	// Initialize registry
 	registry.Initialize()

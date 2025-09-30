@@ -84,6 +84,61 @@ func (m *mockBuiltinContext) GetCurrentFunctionArgs() ([]*values.Value, error) {
 	return nil, fmt.Errorf("cannot be called from the global scope")
 }
 
+func (m *mockBuiltinContext) GetHTTPContext() registry.HTTPContext {
+	return &mockHTTPContext{}
+}
+
+func (m *mockBuiltinContext) ResetHTTPContext() {
+	// No-op for test mock
+}
+
+func (m *mockBuiltinContext) RemoveHTTPHeader(name string) {
+	// No-op for test mock
+}
+
+// mockHTTPContext is a simple mock for HTTPContext interface
+type mockHTTPContext struct{}
+
+func (m *mockHTTPContext) AddHeader(name, value string, replace bool) error {
+	return nil
+}
+
+func (m *mockHTTPContext) SetResponseCode(code int) error {
+	return nil
+}
+
+func (m *mockHTTPContext) GetResponseCode() int {
+	return 200
+}
+
+func (m *mockHTTPContext) GetHeaders() []registry.HTTPHeader {
+	return nil
+}
+
+func (m *mockHTTPContext) GetHeadersList() []string {
+	return nil
+}
+
+func (m *mockHTTPContext) MarkHeadersSent(location string) {
+	// No-op for test mock
+}
+
+func (m *mockHTTPContext) AreHeadersSent() (bool, string) {
+	return false, ""
+}
+
+func (m *mockHTTPContext) SetRequestHeaders(headers map[string]string) {
+	// No-op for test mock
+}
+
+func (m *mockHTTPContext) GetRequestHeaders() map[string]string {
+	return nil
+}
+
+func (m *mockHTTPContext) FormatHeadersForFastCGI() string {
+	return ""
+}
+
 // TestArrayFunctions tests all array functions using TDD approach
 func TestArrayFunctions(t *testing.T) {
 	functions := GetArrayFunctions()

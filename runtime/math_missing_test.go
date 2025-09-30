@@ -240,3 +240,6 @@ func (m *mockMathBuiltinCallContext) GetCurrentFunctionArgCount() (int, error) {
 func (m *mockMathBuiltinCallContext) GetCurrentFunctionArg(index int) (*values.Value, error) { return nil, nil }
 func (m *mockMathBuiltinCallContext) GetCurrentFunctionArgs() ([]*values.Value, error) { return nil, nil }
 func (m *mockMathBuiltinCallContext) ThrowException(exception *values.Value) error { return fmt.Errorf("exception thrown in test mock: %v", exception) }
+func (m *mockMathBuiltinCallContext) GetHTTPContext() registry.HTTPContext { return &mockHTTPContext{} }
+func (m *mockMathBuiltinCallContext) ResetHTTPContext() {}
+func (m *mockMathBuiltinCallContext) RemoveHTTPHeader(name string) {}

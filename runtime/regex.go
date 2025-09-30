@@ -1,10 +1,12 @@
 package runtime
 
 import (
+	"container/list"
 	"fmt"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/wudi/hey/registry"
 	"github.com/wudi/hey/values"
@@ -27,6 +29,216 @@ var (
 	lastRegexError  int    = PREG_NO_ERROR
 	lastErrorMsg    string = ""
 )
+
+// Regex cache configuration
+const (
+	DefaultCacheMaxSize = 1000   // Maximum number of cached patterns
+	DefaultCacheTTL     = 5 * time.Minute // Cache entry time-to-live
+)
+
+// cachedRegex represents a cached compiled regex with metadata
+type cachedRegex struct {
+	regex       *regexp.Regexp
+	compiledAt  time.Time
+	accessCount int64
+	lastAccess  time.Time
+}
+
+// regexCache implements an LRU cache with TTL for compiled regex patterns
+type regexCache struct {
+	mutex    sync.RWMutex
+	cache    map[string]*list.Element
+	lruList  *list.List
+	maxSize  int
+	ttl      time.Duration
+
+	// Statistics
+	hits     int64
+	misses   int64
+	evictions int64
+}
+
+// cacheEntry represents an entry in the LRU list
+type cacheEntry struct {
+	pattern string
+	cached  *cachedRegex
+}
+
+// Global regex cache instance
+var (
+	globalRegexCache *regexCache
+	cacheOnce       sync.Once
+)
+
+// getRegexCache returns the singleton regex cache instance
+func getRegexCache() *regexCache {
+	cacheOnce.Do(func() {
+		globalRegexCache = &regexCache{
+			cache:   make(map[string]*list.Element),
+			lruList: list.New(),
+			maxSize: DefaultCacheMaxSize,
+			ttl:     DefaultCacheTTL,
+		}
+	})
+	return globalRegexCache
+}
+
+// get retrieves a compiled regex from the cache
+func (c *regexCache) get(pattern string) (*regexp.Regexp, bool) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	element, exists := c.cache[pattern]
+	if !exists {
+		c.misses++
+		return nil, false
+	}
+
+	entry := element.Value.(*cacheEntry)
+	cached := entry.cached
+
+	// Check if entry has expired
+	if time.Since(cached.compiledAt) > c.ttl {
+		c.removeElement(element)
+		c.evictions++
+		c.misses++
+		return nil, false
+	}
+
+	// Update access statistics and move to front (most recently used)
+	cached.accessCount++
+	cached.lastAccess = time.Now()
+	c.lruList.MoveToFront(element)
+	c.hits++
+
+	return cached.regex, true
+}
+
+// put stores a compiled regex in the cache
+func (c *regexCache) put(pattern string, regex *regexp.Regexp) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Check if pattern already exists (update case)
+	if element, exists := c.cache[pattern]; exists {
+		entry := element.Value.(*cacheEntry)
+		entry.cached.regex = regex
+		entry.cached.compiledAt = time.Now()
+		entry.cached.accessCount = 1
+		entry.cached.lastAccess = time.Now()
+		c.lruList.MoveToFront(element)
+		return
+	}
+
+	// Create new cache entry
+	cached := &cachedRegex{
+		regex:       regex,
+		compiledAt:  time.Now(),
+		accessCount: 1,
+		lastAccess:  time.Now(),
+	}
+
+	entry := &cacheEntry{
+		pattern: pattern,
+		cached:  cached,
+	}
+
+	element := c.lruList.PushFront(entry)
+	c.cache[pattern] = element
+
+	// Evict oldest entries if cache exceeds max size
+	for c.lruList.Len() > c.maxSize {
+		oldest := c.lruList.Back()
+		if oldest != nil {
+			c.removeElement(oldest)
+			c.evictions++
+		}
+	}
+}
+
+// removeElement removes an element from both the cache map and LRU list
+func (c *regexCache) removeElement(element *list.Element) {
+	entry := element.Value.(*cacheEntry)
+	delete(c.cache, entry.pattern)
+	c.lruList.Remove(element)
+}
+
+// clear removes all entries from the cache
+func (c *regexCache) clear() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.cache = make(map[string]*list.Element)
+	c.lruList = list.New()
+	c.hits = 0
+	c.misses = 0
+	c.evictions = 0
+}
+
+// stats returns cache statistics
+func (c *regexCache) stats() map[string]interface{} {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	total := c.hits + c.misses
+	hitRate := float64(0)
+	if total > 0 {
+		hitRate = float64(c.hits) / float64(total)
+	}
+
+	return map[string]interface{}{
+		"size":        c.lruList.Len(),
+		"maxSize":     c.maxSize,
+		"hits":        c.hits,
+		"misses":      c.misses,
+		"evictions":   c.evictions,
+		"hitRate":     hitRate,
+		"ttl":         c.ttl,
+	}
+}
+
+// configure allows runtime configuration of cache parameters
+func (c *regexCache) configure(maxSize int, ttl time.Duration) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	c.maxSize = maxSize
+	c.ttl = ttl
+
+	// Evict excess entries if new max size is smaller
+	for c.lruList.Len() > c.maxSize {
+		oldest := c.lruList.Back()
+		if oldest != nil {
+			c.removeElement(oldest)
+			c.evictions++
+		}
+	}
+}
+
+// cleanupExpired removes expired entries from the cache
+func (c *regexCache) cleanupExpired() int {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	removed := 0
+	now := time.Now()
+
+	// Walk from back to front (oldest to newest)
+	for element := c.lruList.Back(); element != nil; {
+		entry := element.Value.(*cacheEntry)
+		if now.Sub(entry.cached.compiledAt) > c.ttl {
+			next := element.Prev()
+			c.removeElement(element)
+			removed++
+			element = next
+		} else {
+			// Since entries are ordered by recency, we can break early
+			break
+		}
+	}
+
+	return removed
+}
 
 // setRegexError sets the last regex error
 func setRegexError(errorCode int, message string) {
@@ -99,10 +311,17 @@ func convertPhpFlags(pattern string, flags string) (string, error) {
 	return goPattern.String(), nil
 }
 
-// compilePhpRegex compiles a PHP-style regex pattern
+// compilePhpRegex compiles a PHP-style regex pattern with caching
 func compilePhpRegex(pattern string) (*regexp.Regexp, error) {
 	clearRegexError()
 
+	// Try to get from cache first
+	cache := getRegexCache()
+	if cachedRegex, found := cache.get(pattern); found {
+		return cachedRegex, nil
+	}
+
+	// Cache miss - compile the pattern
 	actualPattern, flags, err := parsePhpPattern(pattern)
 	if err != nil {
 		setRegexError(PREG_INTERNAL_ERROR, err.Error())
@@ -120,6 +339,9 @@ func compilePhpRegex(pattern string) (*regexp.Regexp, error) {
 		setRegexError(PREG_INTERNAL_ERROR, err.Error())
 		return nil, err
 	}
+
+	// Store in cache for future use
+	cache.put(pattern, regex)
 
 	return regex, nil
 }
@@ -351,10 +573,16 @@ func GetRegexFunctions() []*registry.Function {
 
 				regex, err := compilePhpRegex(pattern)
 				if err != nil {
+					setRegexError(PREG_INTERNAL_ERROR, fmt.Sprintf("Invalid regex pattern: %s", pattern))
 					return values.NewNull(), nil
 				}
 
-				result := regex.ReplaceAllString(subject, replacement)
+				// Convert PHP-style backreferences to Go-style
+				// Convert $1, $2, etc. to ${1}, ${2}, etc. for Go regex
+				goReplacement := convertPhpBackreferences(replacement)
+
+				result := regex.ReplaceAllString(subject, goReplacement)
+				clearRegexError()
 				return values.NewString(result), nil
 			},
 		},
@@ -735,6 +963,114 @@ func GetRegexFunctions() []*registry.Function {
 
 				// Unsupported type
 				return values.NewNull(), nil
+			},
+		},
+	}
+}
+
+// convertPhpBackreferences converts PHP-style backreferences ($1, $2, etc.) to Go-style (${1}, ${2}, etc.)
+func convertPhpBackreferences(replacement string) string {
+	// Use a simple regex to find and replace $1, $2, etc. with ${1}, ${2}, etc.
+	// This handles the most common PHP backreference syntax
+	result := replacement
+
+	// Convert $1-9 to ${1}-${9} (most common case)
+	for i := 1; i <= 9; i++ {
+		oldPattern := fmt.Sprintf("$%d", i)
+		newPattern := fmt.Sprintf("${%d}", i)
+		result = strings.ReplaceAll(result, oldPattern, newPattern)
+	}
+
+	// Also handle $0 (full match)
+	result = strings.ReplaceAll(result, "$0", "${0}")
+
+	return result
+}
+
+// GetRegexCacheFunctions returns regex cache management PHP functions
+func GetRegexCacheFunctions() []*registry.Function {
+	return []*registry.Function{
+		{
+			Name:       "preg_cache_stats",
+			Parameters: []*registry.Parameter{},
+			ReturnType: "array",
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				cache := getRegexCache()
+				stats := cache.stats()
+
+				// Convert stats to PHP array
+				result := values.NewArray()
+				resultArr := result.Data.(*values.Array)
+
+				for key, value := range stats {
+					var val *values.Value
+					switch v := value.(type) {
+					case int:
+						val = values.NewInt(int64(v))
+					case int64:
+						val = values.NewInt(v)
+					case float64:
+						val = values.NewFloat(v)
+					case time.Duration:
+						val = values.NewString(v.String())
+					default:
+						val = values.NewString(fmt.Sprintf("%v", v))
+					}
+					resultArr.Elements[key] = val
+				}
+
+				return result, nil
+			},
+		},
+		{
+			Name:       "preg_cache_clear",
+			Parameters: []*registry.Parameter{},
+			ReturnType: "bool",
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				cache := getRegexCache()
+				cache.clear()
+				return values.NewBool(true), nil
+			},
+		},
+		{
+			Name: "preg_cache_configure",
+			Parameters: []*registry.Parameter{
+				{Name: "max_size", Type: "int", HasDefault: true, DefaultValue: values.NewInt(DefaultCacheMaxSize)},
+				{Name: "ttl_seconds", Type: "int", HasDefault: true, DefaultValue: values.NewInt(int64(DefaultCacheTTL.Seconds()))},
+			},
+			ReturnType: "bool",
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				maxSize := DefaultCacheMaxSize
+				ttlSeconds := int64(DefaultCacheTTL.Seconds())
+
+				if len(args) > 0 {
+					maxSize = int(args[0].ToInt())
+				}
+				if len(args) > 1 {
+					ttlSeconds = args[1].ToInt()
+				}
+
+				// Validate parameters
+				if maxSize <= 0 {
+					return values.NewBool(false), fmt.Errorf("max_size must be greater than 0")
+				}
+				if ttlSeconds <= 0 {
+					return values.NewBool(false), fmt.Errorf("ttl_seconds must be greater than 0")
+				}
+
+				cache := getRegexCache()
+				cache.configure(maxSize, time.Duration(ttlSeconds)*time.Second)
+				return values.NewBool(true), nil
+			},
+		},
+		{
+			Name:       "preg_cache_cleanup",
+			Parameters: []*registry.Parameter{},
+			ReturnType: "int",
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				cache := getRegexCache()
+				removed := cache.cleanupExpired()
+				return values.NewInt(int64(removed)), nil
 			},
 		},
 	}

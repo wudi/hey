@@ -265,6 +265,9 @@ func (m *mockBuiltinCallContext) GetCurrentFunctionArgCount() (int, error) { ret
 func (m *mockBuiltinCallContext) GetCurrentFunctionArg(index int) (*values.Value, error) { return nil, nil }
 func (m *mockBuiltinCallContext) GetCurrentFunctionArgs() ([]*values.Value, error) { return nil, nil }
 func (m *mockBuiltinCallContext) ThrowException(exception *values.Value) error { return fmt.Errorf("exception thrown in test mock: %v", exception) }
+func (m *mockBuiltinCallContext) GetHTTPContext() registry.HTTPContext { return &mockHTTPContext{} }
+func (m *mockBuiltinCallContext) ResetHTTPContext() {}
+func (m *mockBuiltinCallContext) RemoveHTTPHeader(name string) {}
 
 func TestIsCallable(t *testing.T) {
 	functions := GetVariableFunctions()

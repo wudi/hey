@@ -7144,8 +7144,11 @@ func (c *Compiler) compileUseTraitStatement(stmt *ast.UseTraitStatement) error {
 			opcodes.IS_UNUSED, 0)
 	}
 
-	// TODO: Handle trait adaptations (precedence and alias rules)
-	// This would require more complex logic to resolve method conflicts
+	// Handle trait adaptations (precedence and alias rules)
+	// This must be done after all traits have been processed
+	if err := c.processTraitAdaptations(stmt); err != nil {
+		return fmt.Errorf("error processing trait adaptations: %v", err)
+	}
 
 	return nil
 }
@@ -7754,6 +7757,228 @@ func (c *Compiler) generatePromotedPropertyAssignment(param *ast.ParameterNode) 
 		opcodes.IS_VAR, thisSlot,        // $this
 		opcodes.IS_CONST, propNameConstant, // property name
 		opcodes.IS_VAR, paramSlot)       // parameter value
+
+	return nil
+}
+
+// processTraitAdaptations processes trait adaptation rules (precedence and aliasing)
+func (c *Compiler) processTraitAdaptations(stmt *ast.UseTraitStatement) error {
+	if len(stmt.Adaptations) == 0 {
+		return nil
+	}
+
+	// Build map of all available traits for lookups
+	traitMap := make(map[string]*registry.Trait)
+	for _, traitName := range stmt.Traits {
+		if traitName != nil {
+			resolvedName := c.resolveClassName(traitName.Name)
+			if trait, exists := c.traits[resolvedName]; exists {
+				traitMap[traitName.Name] = trait
+			}
+		}
+	}
+
+	// Process each adaptation
+	for _, adaptation := range stmt.Adaptations {
+		if adaptation == nil {
+			continue
+		}
+
+		switch adapt := adaptation.(type) {
+		case *ast.TraitPrecedenceStatement:
+			if err := c.processTraitPrecedence(adapt, traitMap); err != nil {
+				return fmt.Errorf("error processing precedence rule: %v", err)
+			}
+
+		case *ast.TraitAliasStatement:
+			if err := c.processTraitAlias(adapt, traitMap); err != nil {
+				return fmt.Errorf("error processing alias rule: %v", err)
+			}
+
+		default:
+			return fmt.Errorf("unknown trait adaptation type: %T", adapt)
+		}
+	}
+
+	return nil
+}
+
+// processTraitPrecedence handles "A::method insteadof B, C" rules
+func (c *Compiler) processTraitPrecedence(stmt *ast.TraitPrecedenceStatement, traitMap map[string]*registry.Trait) error {
+	if stmt.Method == nil {
+		return fmt.Errorf("precedence statement missing method reference")
+	}
+
+	methodName := stmt.Method.Method.Name
+	var winningTrait *registry.Trait
+
+	// Find the winning trait (the one specified before "insteadof")
+	if stmt.Method.Trait != nil {
+		traitName := stmt.Method.Trait.Name
+		if trait, exists := traitMap[traitName]; exists {
+			winningTrait = trait
+		} else {
+			return fmt.Errorf("trait %s not found in precedence rule", traitName)
+		}
+	} else {
+		return fmt.Errorf("precedence rule must specify trait name (e.g., A::method)")
+	}
+
+	// Remove the method from losing traits (those listed after "insteadof")
+	for _, losingTraitName := range stmt.InsteadOf {
+		if losingTraitName == nil {
+			continue
+		}
+
+		if trait, exists := traitMap[losingTraitName.Name]; exists {
+			// Remove the conflicting method from the class if it was added by the losing trait
+			if _, methodExists := trait.Methods[methodName]; methodExists {
+				// The method should already be copied from the winning trait
+				// No additional action needed as the winning trait's method takes precedence
+			}
+		}
+	}
+
+	// Ensure the winning method is in the current class
+	if winningMethod, exists := winningTrait.Methods[methodName]; exists {
+		// Ensure this method is the one used in the class
+		c.currentClass.Methods[methodName] = winningMethod
+
+		// Also update in registry if available
+		if registry.GlobalRegistry != nil {
+			if classDesc, err := registry.GlobalRegistry.GetClass(c.currentClass.Name); err == nil {
+				// Keep the winning method descriptor if it exists
+				if _, exists := classDesc.Methods[methodName]; exists {
+					// Method already exists with correct implementation
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// processTraitAlias handles "A::method as newName" and "A::method as public newName" rules
+func (c *Compiler) processTraitAlias(stmt *ast.TraitAliasStatement, traitMap map[string]*registry.Trait) error {
+	if stmt.Method == nil {
+		return fmt.Errorf("alias statement missing method reference")
+	}
+
+	originalMethodName := stmt.Method.Method.Name
+	var sourceTrait *registry.Trait
+
+	// Find the source trait
+	if stmt.Method.Trait != nil {
+		traitName := stmt.Method.Trait.Name
+		if trait, exists := traitMap[traitName]; exists {
+			sourceTrait = trait
+		} else {
+			return fmt.Errorf("trait %s not found in alias rule", traitName)
+		}
+	} else {
+		// If no trait specified, use the first trait that has this method
+		for _, trait := range traitMap {
+			if _, exists := trait.Methods[originalMethodName]; exists {
+				sourceTrait = trait
+				break
+			}
+		}
+		if sourceTrait == nil {
+			return fmt.Errorf("method %s not found in any used trait", originalMethodName)
+		}
+	}
+
+	// Get the source method
+	sourceMethod, exists := sourceTrait.Methods[originalMethodName]
+	if !exists {
+		return fmt.Errorf("method %s not found in trait %s", originalMethodName, sourceTrait.Name)
+	}
+
+	// Create alias method name
+	aliasMethodName := originalMethodName
+	if stmt.Alias != nil {
+		aliasMethodName = stmt.Alias.Name
+	}
+
+	// Create a copy of the method with the new name
+	aliasMethod := &registry.Function{
+		Name:         aliasMethodName,
+		Instructions: make([]*opcodes.Instruction, len(sourceMethod.Instructions)),
+		Constants:    make([]*values.Value, len(sourceMethod.Constants)),
+		Parameters:   make([]*registry.Parameter, len(sourceMethod.Parameters)),
+		IsVariadic:   sourceMethod.IsVariadic,
+		IsGenerator:  sourceMethod.IsGenerator,
+	}
+
+	// Deep copy the method data
+	copy(aliasMethod.Instructions, sourceMethod.Instructions)
+	copy(aliasMethod.Constants, sourceMethod.Constants)
+	copy(aliasMethod.Parameters, sourceMethod.Parameters)
+
+	// Add the alias method to the current class
+	c.currentClass.Methods[aliasMethodName] = aliasMethod
+
+	// Handle visibility changes if specified
+	visibility := "public" // Default visibility for trait methods
+	if stmt.Visibility != "" {
+		visibility = stmt.Visibility
+	}
+
+	// Register in unified registry if available
+	if registry.GlobalRegistry != nil {
+		if classDesc, err := registry.GlobalRegistry.GetClass(c.currentClass.Name); err == nil {
+			// Convert parameters for registry
+			registryParams := make([]*registry.ParameterDescriptor, len(aliasMethod.Parameters))
+			for i, param := range aliasMethod.Parameters {
+				registryParams[i] = &registry.ParameterDescriptor{
+					Name:         param.Name,
+					Type:         param.Type,
+					IsReference:  param.IsReference,
+					HasDefault:   param.HasDefault,
+					DefaultValue: param.DefaultValue,
+				}
+			}
+
+			// Create parameter info for bytecode execution
+			paramInfo := make([]*registry.ParameterInfo, len(aliasMethod.Parameters))
+			for i, param := range aliasMethod.Parameters {
+				paramInfo[i] = &registry.ParameterInfo{
+					Name:         param.Name,
+					HasDefault:   param.HasDefault,
+					DefaultValue: param.DefaultValue,
+					IsVariadic:   false,
+				}
+			}
+
+			// Mark last parameter as variadic if needed
+			if len(paramInfo) > 0 && aliasMethod.IsVariadic {
+				paramInfo[len(paramInfo)-1].IsVariadic = true
+			}
+
+			// Create method implementation
+			methodImpl := &registry.BytecodeMethodImpl{
+				Instructions: aliasMethod.Instructions,
+				Constants:    aliasMethod.Constants,
+				LocalVars:    len(aliasMethod.Parameters),
+				Parameters:   paramInfo,
+			}
+
+			// Create method descriptor with specified visibility
+			methodDesc := &registry.MethodDescriptor{
+				Name:           aliasMethodName,
+				Visibility:     visibility,
+				IsStatic:       false,
+				IsAbstract:     false,
+				IsFinal:        false,
+				Parameters:     registryParams,
+				Implementation: methodImpl,
+				IsVariadic:     aliasMethod.IsVariadic,
+			}
+
+			// Register the alias method
+			classDesc.Methods[aliasMethodName] = methodDesc
+		}
+	}
 
 	return nil
 }

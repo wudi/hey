@@ -78,6 +78,14 @@ func (m *mockOutputContext) ThrowException(exception *values.Value) error {
 	return fmt.Errorf("exception thrown in test mock: %v", exception)
 }
 
+func (m *mockOutputContext) GetHTTPContext() registry.HTTPContext {
+	return &mockHTTPContext{}
+}
+
+func (m *mockOutputContext) ResetHTTPContext() {}
+
+func (m *mockOutputContext) RemoveHTTPHeader(name string) {}
+
 func TestPrintR(t *testing.T) {
 	printRFunc := findFunction("print_r", GetOutputFunctions())
 	if printRFunc == nil {

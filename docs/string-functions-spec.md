@@ -61,7 +61,7 @@ This document tracks the implementation status of PHP string functions in the He
 |----------|--------|-------------|------------|
 | `str_replace()` | ✅ IMPLEMENTED | Replace occurrences | Array search/replace |
 | `str_ireplace()` | ✅ IMPLEMENTED | Case-insensitive replace | Case variations, array support |
-| `preg_replace()` | 📝 PLANNED | Regex replace | Basic patterns |
+| `preg_replace()` | ✅ IMPLEMENTED | Regex replace | Basic patterns, capture groups, backreferences |
 | `strtr()` | ✅ IMPLEMENTED | Translate characters | Character mapping |
 
 ### String Repetition and Reversal

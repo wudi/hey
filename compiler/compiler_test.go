@@ -7004,7 +7004,7 @@ func TestGoidFunctionConsistency(t *testing.T) {
 // TestGeneratorImplementation tests comprehensive generator functionality including loops
 // TODO: Generator implementation is incomplete and needs proper yield/resume logic
 func TestGeneratorImplementation(t *testing.T) {
-	t.Skip("Generator implementation is incomplete - requires proper yield execution state management")
+	t.Skip("Generator implementation requires VM architecture changes for proper yield/resume - see runtime/generator.go for details")
 	tests := []struct {
 		name           string
 		phpCode        string
