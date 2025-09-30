@@ -61,6 +61,15 @@ func (vm *VirtualMachine) readOperand(ctx *ExecutionContext, frame *CallFrame, o
 		val = frame.getTemp(operand)
 	case opcodes.IS_VAR, opcodes.IS_CV:
 		val = frame.getLocal(operand)
+		// If not found in frame locals, try to get from ctx.Variables
+		// This handles variables defined in included files
+		if val == nil {
+			if varName, ok := frame.SlotNames[operand]; ok {
+				if ctxVal, found := ctx.GetVariable(varName); found {
+					val = ctxVal
+				}
+			}
+		}
 	default:
 		return nil, fmt.Errorf("unsupported operand type %d", opType)
 	}
@@ -2681,6 +2690,15 @@ func (vm *VirtualMachine) execIssetIsEmptyVar(ctx *ExecutionContext, frame *Call
 	switch opType1 {
 	case opcodes.IS_VAR, opcodes.IS_CV:
 		val, exists := frame.getLocalWithStatus(op1)
+		// If not found in frame locals, try ctx.Variables (for included file variables)
+		if !exists || val == nil {
+			if varName, ok := frame.SlotNames[op1]; ok {
+				if ctxVal, found := ctx.GetVariable(varName); found {
+					val = ctxVal
+					exists = true
+				}
+			}
+		}
 		if !exists || val == nil {
 			result = false
 			break
