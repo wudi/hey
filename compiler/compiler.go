@@ -314,8 +314,9 @@ func (c *Compiler) compileNode(node ast.Node) error {
 // Expression compilation methods
 
 func (c *Compiler) compileBinaryOp(expr *ast.BinaryExpression) error {
-	// Handle short-circuit evaluation for && and || operators
-	if expr.Operator == "&&" || expr.Operator == "||" {
+	// Handle short-circuit evaluation for &&, ||, and, or operators
+	// All of these perform short-circuit evaluation and return bool type
+	if expr.Operator == "&&" || expr.Operator == "||" || expr.Operator == "and" || expr.Operator == "or" {
 		return c.compileShortCircuitOp(expr)
 	}
 
@@ -342,8 +343,9 @@ func (c *Compiler) compileBinaryOp(expr *ast.BinaryExpression) error {
 }
 
 func (c *Compiler) compileShortCircuitOp(expr *ast.BinaryExpression) error {
-	// The key insight: we must ensure the final result is ALWAYS at nextTemp after this function
-	// So we pre-allocate the result slot and make sure both paths fill it
+	// PHP's && and || operators MUST return boolean type (true/false)
+	// This is different from JavaScript which returns the actual operand value
+	// Example: 1 && 2 returns bool(true) in PHP, not int(2)
 
 	// Compile left operand
 	err := c.compileNode(expr.Left)
@@ -359,16 +361,16 @@ func (c *Compiler) compileShortCircuitOp(expr *ast.BinaryExpression) error {
 	evalRightLabel := c.generateLabel()
 	endLabel := c.generateLabel()
 
-	if expr.Operator == "&&" {
-		// For &&: result = left && right
-		// If left is false, result is false (left value)
-		// If left is true, result is right value
+	if expr.Operator == "&&" || expr.Operator == "and" {
+		// For && and 'and': result = bool(left && right)
+		// If left is false, result is bool(false)
+		// If left is true, result is bool(right)
 
 		// Jump to evaluate right if left is true
 		c.emitJumpNZ(opcodes.IS_TMP_VAR, leftResult, evalRightLabel)
 
-		// Left is false: copy left to final result
-		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+		// Left is false: convert left to bool and store in final result
+		c.emit(opcodes.OP_CAST_BOOL, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
 		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
 
 		// Evaluate right side
@@ -379,19 +381,19 @@ func (c *Compiler) compileShortCircuitOp(expr *ast.BinaryExpression) error {
 		}
 		rightResult := c.nextTemp - 1
 
-		// Copy right to final result
-		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+		// Convert right to bool and store in final result
+		c.emit(opcodes.OP_CAST_BOOL, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
 
-	} else { // ||
-		// For ||: result = left || right
-		// If left is true, result is true (left value)
-		// If left is false, result is right value
+	} else { // || or 'or'
+		// For || and 'or': result = bool(left || right)
+		// If left is true, result is bool(true)
+		// If left is false, result is bool(right)
 
 		// Jump to evaluate right if left is false
 		c.emitJumpZ(opcodes.IS_TMP_VAR, leftResult, evalRightLabel)
 
-		// Left is true: copy left to final result
-		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+		// Left is true: convert left to bool and store in final result
+		c.emit(opcodes.OP_CAST_BOOL, opcodes.IS_TMP_VAR, leftResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
 		c.emitJump(opcodes.OP_JMP, opcodes.IS_CONST, 0, endLabel)
 
 		// Evaluate right side
@@ -402,12 +404,14 @@ func (c *Compiler) compileShortCircuitOp(expr *ast.BinaryExpression) error {
 		}
 		rightResult := c.nextTemp - 1
 
-		// Copy right to final result
-		c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
+		// Convert right to bool and store in final result
+		c.emit(opcodes.OP_CAST_BOOL, opcodes.IS_TMP_VAR, rightResult, opcodes.IS_UNUSED, 0, opcodes.IS_TMP_VAR, finalResult)
 	}
 
 	c.placeLabel(endLabel)
-	// Now finalResult (at nextTemp-1) contains the correct value
+	// Ensure the caller sees finalResult as the last temp (nextTemp-1)
+	// During compilation of left/right operands, nextTemp may have advanced
+	c.nextTemp = finalResult + 1
 	return nil
 }
 

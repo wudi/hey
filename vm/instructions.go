@@ -1889,23 +1889,9 @@ func (vm *VirtualMachine) execConditionalJump(ctx *ExecutionContext, frame *Call
 		return false, err
 	}
 
-	// PHP-style truthiness check
-	jump := false
-	switch cond.Type {
-	case values.TypeNull:
-		jump = false
-	case values.TypeBool:
-		jump = cond.Data.(bool)
-	case values.TypeInt:
-		jump = cond.Data.(int64) != 0
-	case values.TypeFloat:
-		jump = cond.Data.(float64) != 0.0
-	case values.TypeString:
-		str := cond.Data.(string)
-		jump = str != "" && str != "0"
-	default:
-		jump = true // Objects, arrays, etc. are truthy
-	}
+	// PHP-style truthiness check using the unified ToBool() method
+	// This correctly handles all types including empty arrays
+	jump := cond.ToBool()
 
 	if inst.Opcode == opcodes.OP_JMPZ {
 		jump = !jump
