@@ -1109,6 +1109,24 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 			break
 		}
 
+		// Handle T_CLOSE_TAG: just skip it and continue parsing
+		if p.currentToken.Type == lexer.T_CLOSE_TAG {
+			continue
+		}
+
+		// Handle T_INLINE_HTML as a statement (like echo)
+		if p.currentToken.Type == lexer.T_INLINE_HTML {
+			// Create a statement from the inline HTML content
+			htmlExpr := parseInlineHTML(p)
+			if htmlExpr != nil {
+				// Wrap inline HTML as an echo statement to automatically output it
+				echoStmt := ast.NewEchoStatement(htmlExpr.(*ast.StringLiteral).Position)
+				echoStmt.Arguments = ast.NewArgumentList(htmlExpr.(*ast.StringLiteral).Position, []ast.Expression{htmlExpr})
+				altIfStmt.Then = append(altIfStmt.Then, echoStmt)
+			}
+			continue
+		}
+
 		if stmt := parseStatement(p); stmt != nil {
 			altIfStmt.Then = append(altIfStmt.Then, stmt)
 		}
@@ -1142,6 +1160,23 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 				return nil
 			}
 			p.nextToken()
+
+			// Handle T_CLOSE_TAG: just skip it and continue parsing
+			if p.currentToken.Type == lexer.T_CLOSE_TAG {
+				continue
+			}
+
+			// Handle T_INLINE_HTML as a statement (like echo)
+			if p.currentToken.Type == lexer.T_INLINE_HTML {
+				htmlExpr := parseInlineHTML(p)
+				if htmlExpr != nil {
+					echoStmt := ast.NewEchoStatement(htmlExpr.(*ast.StringLiteral).Position)
+					echoStmt.Arguments = ast.NewArgumentList(htmlExpr.(*ast.StringLiteral).Position, []ast.Expression{htmlExpr})
+					elseifClause.Body = append(elseifClause.Body, echoStmt)
+				}
+				continue
+			}
+
 			if stmt := parseStatement(p); stmt != nil {
 				elseifClause.Body = append(elseifClause.Body, stmt)
 			}
@@ -1165,6 +1200,23 @@ func parseAlternativeIfStatement(p *Parser, pos lexer.Position, condition ast.Ex
 				return nil
 			}
 			p.nextToken()
+
+			// Handle T_CLOSE_TAG: just skip it and continue parsing
+			if p.currentToken.Type == lexer.T_CLOSE_TAG {
+				continue
+			}
+
+			// Handle T_INLINE_HTML as a statement (like echo)
+			if p.currentToken.Type == lexer.T_INLINE_HTML {
+				htmlExpr := parseInlineHTML(p)
+				if htmlExpr != nil {
+					echoStmt := ast.NewEchoStatement(htmlExpr.(*ast.StringLiteral).Position)
+					echoStmt.Arguments = ast.NewArgumentList(htmlExpr.(*ast.StringLiteral).Position, []ast.Expression{htmlExpr})
+					altIfStmt.Else = append(altIfStmt.Else, echoStmt)
+				}
+				continue
+			}
+
 			if stmt := parseStatement(p); stmt != nil {
 				altIfStmt.Else = append(altIfStmt.Else, stmt)
 			}
