@@ -179,7 +179,186 @@ func GetHTTPFunctions() []*registry.Function {
 				return arr, nil
 			},
 		},
+		{
+			Name: "parse_str",
+			Parameters: []*registry.Parameter{
+				{Name: "string", Type: "string"},
+				{Name: "result", Type: "", IsReference: true},
+			},
+			ReturnType: "void",
+			MinArgs:    2,
+			MaxArgs:    2,
+			IsBuiltin:  true,
+			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) < 2 {
+					return nil, fmt.Errorf("parse_str() expects exactly 2 parameters, %d given", len(args))
+				}
+
+				str := args[0].ToString()
+
+				// Parse the query string using Go's url.ParseQuery
+				// This handles URL decoding and multiple values automatically
+				parsed, err := url.ParseQuery(str)
+				if err != nil {
+					// On parse error, just return without setting anything
+					return values.NewNull(), nil
+				}
+
+				result := values.NewArray()
+
+				// Process each key-value pair
+				for key, vals := range parsed {
+					// Handle PHP array syntax: foo[] or foo[bar]
+					if strings.Contains(key, "[") {
+						// This is an array-style key
+						parseArrayKey(result, key, vals)
+					} else {
+						// Simple key
+						if len(vals) == 1 {
+							result.ArraySet(values.NewString(key), values.NewString(vals[0]))
+						} else if len(vals) > 1 {
+							// Multiple values for same key (rare)
+							arr := values.NewArray()
+							for _, v := range vals {
+								arr.ArraySet(nil, values.NewString(v))
+							}
+							result.ArraySet(values.NewString(key), arr)
+						}
+					}
+				}
+
+				// Set the reference parameter (second parameter)
+				if args[1].IsReference() {
+					ref := args[1].Data.(*values.Reference)
+					*ref.Target = *result
+				}
+
+				return values.NewNull(), nil
+			},
+		},
 	}
+}
+
+// parseArrayKey handles PHP array syntax in query strings like foo[] or foo[bar] or foo[bar][baz]
+func parseArrayKey(result *values.Value, key string, vals []string) {
+	// Find the first '[' to split base key from array keys
+	openBracket := strings.Index(key, "[")
+	if openBracket == -1 {
+		// No brackets, shouldn't happen but handle it
+		if len(vals) > 0 {
+			result.ArraySet(values.NewString(key), values.NewString(vals[0]))
+		}
+		return
+	}
+
+	baseKey := key[:openBracket]
+	arrayPart := key[openBracket:]
+
+	// Get or create the base array
+	baseVal := result.ArrayGet(values.NewString(baseKey))
+	if baseVal == nil || baseVal.Type != values.TypeArray {
+		baseVal = values.NewArray()
+		result.ArraySet(values.NewString(baseKey), baseVal)
+	}
+
+	// Parse array indices: [] or [key] or [key1][key2]...
+	indices := parseArrayIndices(arrayPart)
+
+	// Set the value(s) at the array path
+	if len(indices) == 0 {
+		// Just foo[], append all values
+		for _, v := range vals {
+			baseVal.ArraySet(nil, values.NewString(v))
+		}
+	} else if len(indices) == 1 && indices[0] == "" {
+		// foo[], append all values
+		for _, v := range vals {
+			baseVal.ArraySet(nil, values.NewString(v))
+		}
+	} else {
+		// foo[key] or foo[key1][key2]...
+		setNestedArrayValue(baseVal, indices, vals)
+	}
+}
+
+// parseArrayIndices extracts array indices from [key1][key2]... format
+func parseArrayIndices(arrayPart string) []string {
+	var indices []string
+	current := ""
+	inBracket := false
+
+	for _, ch := range arrayPart {
+		if ch == '[' {
+			inBracket = true
+			current = ""
+		} else if ch == ']' {
+			if inBracket {
+				indices = append(indices, current)
+				current = ""
+			}
+			inBracket = false
+		} else if inBracket {
+			current += string(ch)
+		}
+	}
+
+	return indices
+}
+
+// setNestedArrayValue sets a value in a nested array structure
+func setNestedArrayValue(arr *values.Value, indices []string, vals []string) {
+	if len(indices) == 0 {
+		// No more indices, set the values
+		if len(vals) == 1 {
+			// Should not happen at this level
+			return
+		}
+		return
+	}
+
+	if len(indices) == 1 {
+		// Last index, set the value(s)
+		key := indices[0]
+		if key == "" {
+			// Empty index means append
+			for _, v := range vals {
+				arr.ArraySet(nil, values.NewString(v))
+			}
+		} else {
+			// Specific index
+			if len(vals) == 1 {
+				arr.ArraySet(values.NewString(key), values.NewString(vals[0]))
+			} else {
+				// Multiple values, create array
+				valArr := values.NewArray()
+				for _, v := range vals {
+					valArr.ArraySet(nil, values.NewString(v))
+				}
+				arr.ArraySet(values.NewString(key), valArr)
+			}
+		}
+		return
+	}
+
+	// More indices to traverse
+	key := indices[0]
+	var nextArr *values.Value
+
+	if key == "" {
+		// foo[][bar] - create a new array element
+		nextArr = values.NewArray()
+		arr.ArraySet(nil, nextArr)
+	} else {
+		// foo[key][bar] - get or create array at key
+		nextArr = arr.ArrayGet(values.NewString(key))
+		if nextArr == nil || nextArr.Type != values.TypeArray {
+			nextArr = values.NewArray()
+			arr.ArraySet(values.NewString(key), nextArr)
+		}
+	}
+
+	// Recurse
+	setNestedArrayValue(nextArr, indices[1:], vals)
 }
 
 func setcookieImpl(ctx registry.BuiltinCallContext, args []*values.Value, raw bool) (*values.Value, error) {
