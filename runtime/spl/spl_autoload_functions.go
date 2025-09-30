@@ -155,11 +155,7 @@ func getSplAutoloadFunctionsFunction() *registry.Function {
 			autoloadMutex.RLock()
 			defer autoloadMutex.RUnlock()
 
-			if len(autoloadFunctions) == 0 {
-				return values.NewNull(), nil
-			}
-
-			// Create array of registered functions
+			// Always return an array, even if empty (PHP standard behavior)
 			result := values.NewArray()
 			for i, autoloadFunc := range autoloadFunctions {
 				result.ArraySet(values.NewInt(int64(i)), autoloadFunc)

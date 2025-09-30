@@ -61,14 +61,17 @@ func TestSplAutoloadFunctions(t *testing.T) {
 	t.Run("SplAutoloadFunctions", func(t *testing.T) {
 		function := getSplAutoloadFunctionsFunction()
 
-		// Test with no registered functions
+		// Test with no registered functions - should return empty array
 		result, err := function.Builtin(ctx, []*values.Value{})
 		if err != nil {
 			t.Fatalf("spl_autoload_functions() failed: %v", err)
 		}
 
-		if result.Type != values.TypeBool || result.ToBool() != false {
-			t.Errorf("Expected false when no functions registered, got %v", result)
+		if !result.IsArray() {
+			t.Errorf("Expected array when no functions registered, got %v", result)
+		}
+		if result.ArrayCount() != 0 {
+			t.Errorf("Expected empty array, got length %d", result.ArrayCount())
 		}
 
 		// Register a function and test again
