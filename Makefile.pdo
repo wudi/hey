@@ -1,0 +1,52 @@
+# PDO Development Makefile
+
+.PHONY: pdo-start pdo-stop pdo-restart pdo-logs pdo-test pdo-clean
+
+# Start all database services
+pdo-start:
+	docker-compose -f docker-compose.pdo.yml up -d
+	@echo "Waiting for databases to be ready..."
+	@sleep 10
+	@echo "✓ MySQL available at localhost:3306"
+	@echo "✓ PostgreSQL available at localhost:5432"
+	@echo "✓ phpMyAdmin available at http://localhost:8080"
+	@echo "✓ pgAdmin available at http://localhost:8081"
+
+# Stop all database services
+pdo-stop:
+	docker-compose -f docker-compose.pdo.yml down
+
+# Restart all services
+pdo-restart: pdo-stop pdo-start
+
+# View logs
+pdo-logs:
+	docker-compose -f docker-compose.pdo.yml logs -f
+
+# Run PDO tests
+pdo-test:
+	go test -v ./pkg/pdo/... ./runtime/pdo_test.go
+
+# Clean up volumes
+pdo-clean:
+	docker-compose -f docker-compose.pdo.yml down -v
+	rm -rf tests/pdo/coverage
+
+# Quick test with MySQL
+pdo-test-mysql:
+	go test -v ./pkg/pdo -run TestMySQLDriver
+
+# Quick test with PostgreSQL
+pdo-test-postgres:
+	go test -v ./pkg/pdo -run TestPostgreSQLDriver
+
+# Quick test with SQLite
+pdo-test-sqlite:
+	go test -v ./pkg/pdo -run TestSQLiteDriver
+
+# Database CLI access
+pdo-mysql-cli:
+	docker exec -it hey-codex-mysql mysql -u testuser -ptestpass testdb
+
+pdo-postgres-cli:
+	docker exec -it hey-codex-postgres psql -U testuser -d testdb

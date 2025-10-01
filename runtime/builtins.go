@@ -88,6 +88,9 @@ func GetAllBuiltinClasses() []*registry.ClassDescriptor {
 	// Add MySQLi classes
 	classes = append(classes, GetMySQLiClasses()...)
 
+	// Add PDO classes
+	classes = append(classes, GetPDOClassDescriptors()...)
+
 	return classes
 }
 
