@@ -8358,7 +8358,7 @@ func TestMixedHTMLPHP(t *testing.T) {
 Between blocks
 <?php echo "Second"; ?>
 After PHP`,
-			expectedOutput: "Before PHP\nFirst\nBetween blocks\nSecond\nAfter PHP",
+			expectedOutput: "Before PHP\nFirstBetween blocks\nSecondAfter PHP",
 		},
 		{
 			name: "Complex HTML structure",
@@ -8371,7 +8371,7 @@ After PHP`,
     <p>End of page</p>
 </body>
 </html>`,
-			expectedOutput: "<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body>\n    <h1>Welcome</h1>\n    Hello, World!\n    <p>End of page</p>\n</body>\n</html>",
+			expectedOutput: "<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body>\n    <h1>Welcome</h1>\n    Hello, World!    <p>End of page</p>\n</body>\n</html>",
 		},
 		{
 			name:           "Only HTML content",
@@ -8392,7 +8392,7 @@ After PHP`,
     }
     ?>
 </div>`,
-			expectedOutput: "<div>\n    <p>Item 1</p><p>Item 2</p><p>Item 3</p>\n</div>",
+			expectedOutput: "<div>\n    <p>Item 1</p><p>Item 2</p><p>Item 3</p></div>",
 		},
 	}
 

@@ -62,12 +62,15 @@ func (vm *VirtualMachine) readOperand(ctx *ExecutionContext, frame *CallFrame, o
 	case opcodes.IS_VAR, opcodes.IS_CV:
 		// For top-level code (including includes), prefer ctx.Variables over frame.Locals
 		// This ensures variables defined in included files are accessible to the caller
-		if varName, ok := frame.SlotNames[operand]; ok {
-			if ctxVal, found := ctx.GetVariable(varName); found {
-				val = ctxVal
+		// But for function code, only use frame.Locals to maintain proper scope isolation
+		if frame.FunctionName == "{main}" {
+			if varName, ok := frame.SlotNames[operand]; ok {
+				if ctxVal, found := ctx.GetVariable(varName); found {
+					val = ctxVal
+				}
 			}
 		}
-		// Fall back to frame.Locals if not found in ctx.Variables
+		// Fall back to or directly use frame.Locals for functions
 		if val == nil {
 			val = frame.getLocal(operand)
 		}
@@ -90,7 +93,6 @@ func (vm *VirtualMachine) writeOperand(ctx *ExecutionContext, frame *CallFrame, 
 		return nil
 	case opcodes.IS_TMP_VAR:
 		frame.setTemp(operand, value)
-		ctx.setTemporary(operand, value)
 		return nil
 	case opcodes.IS_VAR, opcodes.IS_CV:
 		// Check if the current value is a reference
@@ -114,10 +116,10 @@ func (vm *VirtualMachine) writeOperand(ctx *ExecutionContext, frame *CallFrame, 
 			if _, watched := vm.watchVars[name]; watched {
 				vm.recordDebug(ctx, fmt.Sprintf("watch %s = %s", name, value.String()))
 			}
-			ctx.setVariable(name, value)
-			// For top-level code (main and included files), also bind to GlobalVars
-			// This makes variables accessible via 'global' declaration in functions
+			// Only set ctx.Variables for top-level code (main and included files)
+			// This prevents function-local variables from polluting the global scope
 			if frame.FunctionName == "{main}" {
+				ctx.setVariable(name, value)
 				ctx.bindGlobalValue(name, value)
 			}
 		}
@@ -2019,10 +2021,11 @@ func (vm *VirtualMachine) execBindVarName(ctx *ExecutionContext, frame *CallFram
 		exists = true
 		frame.setLocal(op1, val)
 	}
+	// Only set ctx.Variables for top-level code
 	if frame.Function == nil {
 		ctx.bindGlobalValue(name, frame.getLocal(op1))
+		ctx.setVariable(name, frame.getLocal(op1))
 	}
-	ctx.setVariable(name, frame.getLocal(op1))
 	return true, nil
 }
 

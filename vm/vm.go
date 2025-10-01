@@ -613,6 +613,14 @@ func (vm *VirtualMachine) handleReturn(ctx *ExecutionContext, value *values.Valu
 		return nil
 	}
 
+	// Special handling for include/require: when returning from one {main} frame to another {main} frame,
+	// push the return value onto the stack instead of writing to ReturnTarget (which doesn't exist for includes)
+	if completed.FunctionName == "{main}" && caller.FunctionName == "{main}" {
+		ctx.Stack = append(ctx.Stack, value)
+		ctx.Halted = true // Signal that include file has completed
+		return nil
+	}
+
 	target := caller.ReturnTarget
 	if target.valid {
 		if err := vm.writeOperand(ctx, caller, target.opType, target.slot, value); err != nil {

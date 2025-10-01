@@ -67,15 +67,20 @@ func (f *VMFactory) createCompilerCallback(vmachine *vm.VirtualMachine) vm.Compi
 			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
 		}
 
+		// After include execution, check the stack for return value
+		// The handleReturn function pushes return values onto the stack when returning from include files
 		if ctx.Halted && len(ctx.Stack) > 0 {
 			returnValue := ctx.Stack[len(ctx.Stack)-1]
+			ctx.Stack = ctx.Stack[:len(ctx.Stack)-1]
+			ctx.Halted = false // Reset Halted state so main script can continue
 			if returnValue.IsNull() {
 				return values.NewInt(1), nil
 			}
-			ctx.Stack = ctx.Stack[:len(ctx.Stack)-1]
 			return returnValue, nil
 		}
 
+		// No return statement in included file, return 1 by default
+		ctx.Halted = false // Reset Halted state
 		return values.NewInt(1), nil
 	}
 }
