@@ -103,14 +103,32 @@ func (c *PgSQLConn) Exec(query string) (Result, error) {
 		return nil, NewPDOError("HY000", 8, "Database not connected")
 	}
 
+	// Check if this is an INSERT statement that could benefit from RETURNING
+	upperQuery := strings.ToUpper(strings.TrimSpace(query))
+	if strings.HasPrefix(upperQuery, "INSERT") && !strings.Contains(upperQuery, "RETURNING") {
+		// Try to add RETURNING id to capture last insert ID
+		// This is a best-effort approach
+		queryWithReturning := query + " RETURNING id"
+
+		var lastID int64
+		err := c.db.QueryRow(queryWithReturning).Scan(&lastID)
+		if err == nil {
+			// Successfully captured the ID
+			c.lastInsertId = lastID
+			// Return a fake result that reports 1 row affected
+			return &PgSQLResult{rowsAffected: 1, lastInsertId: lastID}, nil
+		}
+		// If RETURNING failed (e.g., no 'id' column), fall back to regular Exec
+	}
+
 	result, err := c.db.Exec(query)
 	if err != nil {
 		return nil, NewPDOError("42601", 1, fmt.Sprintf("Exec error: %v", err))
 	}
 
-	// PostgreSQL doesn't support LastInsertId directly
-	// Would need RETURNING clause for this
-	return result, nil
+	// Try to get rows affected
+	rowsAffected, _ := result.RowsAffected()
+	return &PgSQLResult{rowsAffected: rowsAffected, lastInsertId: 0}, nil
 }
 
 // Begin starts a transaction
@@ -448,6 +466,22 @@ func (t *PgSQLTx) Exec(query string) (Result, error) {
 	}
 
 	return result, nil
+}
+
+// PgSQLResult implements the Result interface for PostgreSQL
+type PgSQLResult struct {
+	rowsAffected int64
+	lastInsertId int64
+}
+
+// LastInsertId returns the last inserted ID
+func (r *PgSQLResult) LastInsertId() (int64, error) {
+	return r.lastInsertId, nil
+}
+
+// RowsAffected returns the number of rows affected
+func (r *PgSQLResult) RowsAffected() (int64, error) {
+	return r.rowsAffected, nil
 }
 
 // Register PostgreSQL driver on package initialization
