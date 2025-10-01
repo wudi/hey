@@ -25,6 +25,14 @@ import (
 	"github.com/wudi/hey/values"
 )
 
+// convertPHPFormatToGo converts PHP sprintf format strings to Go fmt format
+// PHP uses %1$s, %2$d, etc. while Go uses %[1]s, %[2]d
+func convertPHPFormatToGo(format string) string {
+	// Use regex to replace %digit$ with %[digit]
+	re := regexp.MustCompile(`%(\d+)\$`)
+	return re.ReplaceAllString(format, "%[$1]")
+}
+
 // GetStringFunctions returns all string-related PHP functions
 func GetStringFunctions() []*registry.Function {
 	return []*registry.Function{
@@ -436,6 +444,11 @@ func GetStringFunctions() []*registry.Function {
 				}
 
 				format := args[0].ToString()
+
+				// Convert PHP positional parameters %1$s to Go format %[1]s
+				// PHP uses %1$s, %2$s, etc. while Go uses %[1]s, %[2]s
+				format = convertPHPFormatToGo(format)
+
 				var goArgs []interface{}
 
 				// Convert PHP values to Go interface{} for fmt.Sprintf

@@ -17,6 +17,7 @@ var supportedExtensions = map[string]bool{
 	"json":     true,
 	"mbstring": true,
 	"ctype":    true,
+	"hash":     true, // We support hash functions (md5, sha1, sha256, etc.)
 }
 
 // GetVariableFunctions returns variable-related PHP functions
