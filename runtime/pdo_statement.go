@@ -23,12 +23,52 @@ func pdoStmtExecute(ctx registry.BuiltinCallContext, args []*values.Value) (*val
 		params := args[1].Data.(*values.Array)
 		if hasStmt && stmtVal.Type == values.TypeResource {
 			stmt := stmtVal.Data.(pdo.Stmt)
+
+			// Check if we have a parameter map (for named parameters)
+			paramMapVal, hasParamMap := obj.Properties["__pdo_param_map"]
+			var paramMap map[string]int
+
+			if hasParamMap && paramMapVal.Type == values.TypeArray {
+				// Extract parameter map
+				paramMap = make(map[string]int)
+				paramMapArr := paramMapVal.Data.(*values.Array)
+				for keyIface, val := range paramMapArr.Elements {
+					if keyStr, ok := keyIface.(string); ok {
+						paramPos := int(val.Data.(int64))
+						paramMap[keyStr] = paramPos
+					}
+				}
+			}
+
+			// Bind parameters
+			// If params.Elements keys are strings (named parameters), use paramMap
+			// Otherwise, use positional binding
 			idx := 1
-			for _, val := range params.Elements {
-				stmt.BindValue(idx, val, int(pdo.ParamStr))
-				idx++
+			for keyIface, val := range params.Elements {
+				switch k := keyIface.(type) {
+				case string:
+					// Named parameter
+					if paramMap != nil {
+						if pos, ok := paramMap[k]; ok {
+							stmt.BindValue(pos, val, int(pdo.ParamStr))
+						}
+					}
+				case int64:
+					// Positional parameter (numeric key)
+					stmt.BindValue(int(k)+1, val, int(pdo.ParamStr))
+				default:
+					// Fallback: treat as positional
+					stmt.BindValue(idx, val, int(pdo.ParamStr))
+					idx++
+				}
 			}
 		}
+	}
+
+	// Initialize error state if not present
+	if _, ok := obj.Properties["__pdo_stmt_error_code"]; !ok {
+		obj.Properties["__pdo_stmt_error_code"] = values.NewString("00000")
+		obj.Properties["__pdo_stmt_error_info"] = values.NewNull()
 	}
 
 	// Execute statement
@@ -38,8 +78,22 @@ func pdoStmtExecute(ctx registry.BuiltinCallContext, args []*values.Value) (*val
 		// Prepared statement execution
 		rows, err := stmt.Query()
 		if err != nil {
+			// Set error state
+			sqlState := extractSQLState(err)
+			obj.Properties["__pdo_stmt_error_code"] = values.NewString(sqlState)
+
+			errorInfo := values.NewArray()
+			errorInfo.ArraySet(values.NewInt(0), values.NewString(sqlState))
+			errorInfo.ArraySet(values.NewInt(1), values.NewInt(1))
+			errorInfo.ArraySet(values.NewInt(2), values.NewString(err.Error()))
+			obj.Properties["__pdo_stmt_error_info"] = errorInfo
+
 			return values.NewBool(false), nil
 		}
+
+		// Clear error state on success
+		obj.Properties["__pdo_stmt_error_code"] = values.NewString("00000")
+		obj.Properties["__pdo_stmt_error_info"] = values.NewNull()
 
 		obj.Properties["__pdo_rows"] = values.NewResource(rows)
 		return values.NewBool(true), nil
@@ -96,6 +150,13 @@ func pdoStmtFetch(ctx registry.BuiltinCallContext, args []*values.Value) (*value
 		}
 		return mergeAssocAndNumeric(assoc, numeric), nil
 
+	case pdo.FetchObj:
+		row, err := rows.FetchAssoc()
+		if err != nil || row == nil {
+			return values.NewBool(false), nil
+		}
+		return convertMapToObject(row), nil
+
 	default:
 		return values.NewBool(false), fmt.Errorf("unsupported fetch mode: %d", mode)
 	}
@@ -149,6 +210,13 @@ func pdoStmtFetchAll(ctx registry.BuiltinCallContext, args []*values.Value) (*va
 				return result, nil
 			}
 			row = mergeAssocAndNumeric(assoc, numeric)
+
+		case pdo.FetchObj:
+			rowMap, fetchErr := rows.FetchAssoc()
+			if fetchErr != nil || rowMap == nil {
+				return result, nil
+			}
+			row = convertMapToObject(rowMap)
 
 		default:
 			return result, fmt.Errorf("unsupported fetch mode: %d", mode)
@@ -307,13 +375,34 @@ func pdoStmtColumnCount(ctx registry.BuiltinCallContext, args []*values.Value) (
 // pdoStmtErrorCode implements $stmt->errorCode()
 // args[0] = $this
 func pdoStmtErrorCode(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-	return values.NewNull(), nil
+	thisObj := args[0]
+	obj := thisObj.Data.(*values.Object)
+
+	errorCode, ok := obj.Properties["__pdo_stmt_error_code"]
+	if !ok || errorCode.Type != values.TypeString {
+		return values.NewNull(), nil
+	}
+
+	return errorCode, nil
 }
 
 // pdoStmtErrorInfo implements $stmt->errorInfo()
 // args[0] = $this
 func pdoStmtErrorInfo(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-	return values.NewArray(), nil
+	thisObj := args[0]
+	obj := thisObj.Data.(*values.Object)
+
+	errorInfo, ok := obj.Properties["__pdo_stmt_error_info"]
+	if !ok || errorInfo.Type == values.TypeNull {
+		// Return default error info array
+		arr := values.NewArray()
+		arr.ArraySet(values.NewInt(0), values.NewString("00000"))
+		arr.ArraySet(values.NewInt(1), values.NewNull())
+		arr.ArraySet(values.NewInt(2), values.NewNull())
+		return arr, nil
+	}
+
+	return errorInfo, nil
 }
 
 // Helper functions for data conversion
@@ -324,6 +413,24 @@ func convertMapToArray(m map[string]*values.Value) *values.Value {
 		arr.ArraySet(values.NewString(key), val)
 	}
 	return arr
+}
+
+func convertMapToObject(m map[string]*values.Value) *values.Value {
+	// Create a stdClass object
+	obj := values.NewObject("stdClass")
+	objData := obj.Data.(*values.Object)
+
+	// Initialize properties if needed
+	if objData.Properties == nil {
+		objData.Properties = make(map[string]*values.Value)
+	}
+
+	// Set properties from map
+	for key, val := range m {
+		objData.Properties[key] = val
+	}
+
+	return obj
 }
 
 func convertSliceToArray(s []*values.Value) *values.Value {

@@ -2,11 +2,60 @@ package runtime
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/wudi/hey/pkg/pdo"
 	"github.com/wudi/hey/registry"
 	"github.com/wudi/hey/values"
 )
+
+// setPDOError sets the error state for a PDO object
+func setPDOError(obj *values.Object, sqlState string, driverCode int, message string) {
+	obj.Properties["__pdo_error_code"] = values.NewString(sqlState)
+
+	errorInfo := values.NewArray()
+	errorInfo.ArraySet(values.NewInt(0), values.NewString(sqlState))
+	errorInfo.ArraySet(values.NewInt(1), values.NewInt(int64(driverCode)))
+	errorInfo.ArraySet(values.NewInt(2), values.NewString(message))
+
+	obj.Properties["__pdo_error_info"] = errorInfo
+}
+
+// clearPDOError clears the error state for a PDO object
+func clearPDOError(obj *values.Object) {
+	obj.Properties["__pdo_error_code"] = values.NewString("00000")
+	obj.Properties["__pdo_error_info"] = values.NewNull()
+}
+
+// extractSQLState extracts SQLSTATE from error message
+func extractSQLState(err error) string {
+	if err == nil {
+		return "00000"
+	}
+
+	errMsg := err.Error()
+
+	// Try to extract SQLSTATE from common patterns
+	// MySQL: "Error 1146: Table 'test.foo' doesn't exist"
+	// PostgreSQL: "pq: error code 42P01: relation does not exist"
+	// SQLite: "SQL logic error: no such table: foo (1)"
+
+	if strings.Contains(errMsg, "no such table") || strings.Contains(errMsg, "doesn't exist") {
+		return "42S02" // Base table or view not found
+	}
+	if strings.Contains(errMsg, "syntax error") {
+		return "42000" // Syntax error
+	}
+	if strings.Contains(errMsg, "Access denied") || strings.Contains(errMsg, "authentication failed") {
+		return "28000" // Invalid authorization
+	}
+	if strings.Contains(errMsg, "duplicate") || strings.Contains(errMsg, "unique constraint") {
+		return "23000" // Integrity constraint violation
+	}
+
+	// Default to general error
+	return "HY000"
+}
 
 // pdoConstruct implements new PDO($dsn, $username, $password, $options)
 // args[0] = $this, args[1] = dsn, args[2] = username, args[3] = password, args[4] = options
@@ -77,8 +126,67 @@ func pdoConstruct(ctx registry.BuiltinCallContext, args []*values.Value) (*value
 	obj.Properties["__pdo_driver"] = values.NewString(dsnInfo.Driver)
 	obj.Properties["__pdo_in_tx"] = values.NewBool(false)
 	obj.Properties["__pdo_tx"] = values.NewNull()
+	obj.Properties["__pdo_error_code"] = values.NewString("00000") // Success SQLSTATE
+	obj.Properties["__pdo_error_info"] = values.NewNull()
 
 	return values.NewNull(), nil
+}
+
+// convertNamedToPositionalParams converts named parameters (:name) to positional (?)
+// Returns the converted query and a map of parameter names to positions
+func convertNamedToPositionalParams(query string) (string, map[string]int) {
+	paramMap := make(map[string]int)
+	result := strings.Builder{}
+	paramIndex := 1
+	i := 0
+
+	for i < len(query) {
+		// Skip strings to avoid replacing : inside quotes
+		if query[i] == '\'' || query[i] == '"' {
+			quote := query[i]
+			result.WriteByte(query[i])
+			i++
+			for i < len(query) {
+				result.WriteByte(query[i])
+				if query[i] == quote && (i == 0 || query[i-1] != '\\') {
+					i++
+					break
+				}
+				i++
+			}
+			continue
+		}
+
+		// Check for named parameter
+		if query[i] == ':' && i+1 < len(query) {
+			// Extract parameter name
+			start := i + 1
+			end := start
+			for end < len(query) && (isAlphaNumeric(query[end]) || query[end] == '_') {
+				end++
+			}
+
+			if end > start {
+				paramName := query[start:end]
+				if _, exists := paramMap[paramName]; !exists {
+					paramMap[paramName] = paramIndex
+					paramIndex++
+				}
+				result.WriteByte('?')
+				i = end
+				continue
+			}
+		}
+
+		result.WriteByte(query[i])
+		i++
+	}
+
+	return result.String(), paramMap
+}
+
+func isAlphaNumeric(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // pdoPrepare implements $pdo->prepare($query)
@@ -89,7 +197,10 @@ func pdoPrepare(ctx registry.BuiltinCallContext, args []*values.Value) (*values.
 	}
 
 	thisObj := args[0]
-	query := args[1].Data.(string)
+	originalQuery := args[1].Data.(string)
+
+	// Convert named parameters to positional if needed
+	query, paramMap := convertNamedToPositionalParams(originalQuery)
 
 	// Get connection from object properties
 	obj := thisObj.Data.(*values.Object)
@@ -108,9 +219,18 @@ func pdoPrepare(ctx registry.BuiltinCallContext, args []*values.Value) (*values.
 	// Create PDOStatement object
 	stmtObj := values.NewObject("PDOStatement")
 	stmtObjData := stmtObj.Data.(*values.Object)
-	stmtObjData.Properties["queryString"] = values.NewString(query)
+	stmtObjData.Properties["queryString"] = values.NewString(originalQuery)
 	stmtObjData.Properties["__pdo_stmt"] = values.NewResource(stmt)
 	stmtObjData.Properties["__pdo_rows"] = values.NewNull()
+
+	// Store parameter map for named parameter binding
+	if len(paramMap) > 0 {
+		paramMapValue := values.NewArray()
+		for name, pos := range paramMap {
+			paramMapValue.ArraySet(values.NewString(name), values.NewInt(int64(pos)))
+		}
+		stmtObjData.Properties["__pdo_param_map"] = paramMapValue
+	}
 
 	return stmtObj, nil
 }
@@ -153,12 +273,19 @@ func pdoQuery(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Va
 	}
 
 	if err != nil {
+		// Set error state
+		sqlState := extractSQLState(err)
+		setPDOError(obj, sqlState, 1, err.Error())
 		return values.NewBool(false), nil
 	}
 
 	if rows == nil {
+		setPDOError(obj, "HY000", 1, "query failed to return rows")
 		return values.NewBool(false), fmt.Errorf("query failed to return rows")
 	}
+
+	// Clear error state on success
+	clearPDOError(obj)
 
 	// Create PDOStatement object with active result set
 	stmtObj := values.NewObject("PDOStatement")
@@ -207,12 +334,19 @@ func pdoExec(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Val
 	}
 
 	if err != nil {
+		// Set error state
+		sqlState := extractSQLState(err)
+		setPDOError(obj, sqlState, 1, err.Error())
 		return values.NewBool(false), nil
 	}
 
 	if result == nil {
+		setPDOError(obj, "HY000", 1, "exec failed to return result")
 		return values.NewBool(false), fmt.Errorf("exec failed to return result")
 	}
+
+	// Clear error state on success
+	clearPDOError(obj)
 
 	affected, _ := result.RowsAffected()
 	return values.NewInt(affected), nil
@@ -352,10 +486,35 @@ func pdoSetAttribute(ctx registry.BuiltinCallContext, args []*values.Value) (*va
 	return values.NewBool(true), nil
 }
 
+// pdoErrorCode implements $pdo->errorCode()
+// args[0] = $this
 func pdoErrorCode(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-	return values.NewNull(), nil
+	thisObj := args[0]
+	obj := thisObj.Data.(*values.Object)
+
+	errorCode, ok := obj.Properties["__pdo_error_code"]
+	if !ok || errorCode.Type != values.TypeString {
+		return values.NewNull(), nil
+	}
+
+	return errorCode, nil
 }
 
+// pdoErrorInfo implements $pdo->errorInfo()
+// args[0] = $this
 func pdoErrorInfo(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-	return values.NewArray(), nil
+	thisObj := args[0]
+	obj := thisObj.Data.(*values.Object)
+
+	errorInfo, ok := obj.Properties["__pdo_error_info"]
+	if !ok || errorInfo.Type == values.TypeNull {
+		// Return default error info array [SQLSTATE, driver_code, message]
+		arr := values.NewArray()
+		arr.ArraySet(values.NewInt(0), values.NewString("00000"))
+		arr.ArraySet(values.NewInt(1), values.NewNull())
+		arr.ArraySet(values.NewInt(2), values.NewNull())
+		return arr, nil
+	}
+
+	return errorInfo, nil
 }
