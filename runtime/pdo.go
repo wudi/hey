@@ -129,6 +129,18 @@ func pdoConstruct(ctx registry.BuiltinCallContext, args []*values.Value) (*value
 	obj.Properties["__pdo_error_code"] = values.NewString("00000") // Success SQLSTATE
 	obj.Properties["__pdo_error_info"] = values.NewNull()
 
+	// Initialize attributes with defaults
+	attributes := values.NewArray()
+	// PDO::ATTR_ERRMODE = 3, default is ERRMODE_SILENT = 0
+	attributes.ArraySet(values.NewInt(3), values.NewInt(0))
+	// PDO::ATTR_DEFAULT_FETCH_MODE = 19, default is FETCH_BOTH = 4
+	attributes.ArraySet(values.NewInt(19), values.NewInt(4))
+	// PDO::ATTR_CASE = 8, default is CASE_NATURAL = 0
+	attributes.ArraySet(values.NewInt(8), values.NewInt(0))
+	// PDO::ATTR_AUTOCOMMIT = 0, default is true (1)
+	attributes.ArraySet(values.NewInt(0), values.NewInt(1))
+	obj.Properties["__pdo_attributes"] = attributes
+
 	return values.NewNull(), nil
 }
 
@@ -478,11 +490,95 @@ func pdoInTransaction(ctx registry.BuiltinCallContext, args []*values.Value) (*v
 }
 
 // Placeholder implementations for remaining methods
+// pdoGetAttribute implements $pdo->getAttribute($attribute)
+// args[0] = $this, args[1] = attribute
 func pdoGetAttribute(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+	if len(args) < 2 {
+		return values.NewNull(), fmt.Errorf("PDO::getAttribute() expects 1 parameter")
+	}
+
+	thisObj := args[0]
+	attribute := args[1].Data.(int64)
+
+	obj := thisObj.Data.(*values.Object)
+	attributesVal, ok := obj.Properties["__pdo_attributes"]
+	if !ok || attributesVal.Type != values.TypeArray {
+		return values.NewNull(), nil
+	}
+
+	attributes := attributesVal.Data.(*values.Array)
+
+	// Look up the attribute value
+	if val, exists := attributes.Elements[attribute]; exists {
+		return val, nil
+	}
+
+	// Special attributes that return driver-specific info
+	switch attribute {
+	case 4: // PDO::ATTR_SERVER_VERSION
+		// Return a placeholder version string
+		return values.NewString("1.0.0"), nil
+	case 5: // PDO::ATTR_CLIENT_VERSION
+		return values.NewString("hey-codex-1.0"), nil
+	case 6: // PDO::ATTR_SERVER_INFO
+		driverVal := obj.Properties["__pdo_driver"]
+		if driverVal != nil && driverVal.Type == values.TypeString {
+			return values.NewString(driverVal.Data.(string) + " driver"), nil
+		}
+		return values.NewString("PDO driver"), nil
+	}
+
 	return values.NewNull(), nil
 }
 
+// pdoSetAttribute implements $pdo->setAttribute($attribute, $value)
+// args[0] = $this, args[1] = attribute, args[2] = value
 func pdoSetAttribute(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+	if len(args) < 3 {
+		return values.NewBool(false), fmt.Errorf("PDO::setAttribute() expects 2 parameters")
+	}
+
+	thisObj := args[0]
+	attribute := args[1].Data.(int64)
+	value := args[2]
+
+	obj := thisObj.Data.(*values.Object)
+	attributesVal, ok := obj.Properties["__pdo_attributes"]
+	if !ok {
+		// Initialize if not present
+		attributesVal = values.NewArray()
+		obj.Properties["__pdo_attributes"] = attributesVal
+	}
+
+	if attributesVal.Type != values.TypeArray {
+		return values.NewBool(false), nil
+	}
+
+	// Validate certain attributes
+	switch attribute {
+	case 3: // PDO::ATTR_ERRMODE
+		// Must be 0 (SILENT), 1 (WARNING), or 2 (EXCEPTION)
+		if value.Type == values.TypeInt {
+			intVal := value.Data.(int64)
+			if intVal < 0 || intVal > 2 {
+				// Invalid value, return false
+				return values.NewBool(false), nil
+			}
+		}
+	case 19: // PDO::ATTR_DEFAULT_FETCH_MODE
+		// Must be valid fetch mode
+		if value.Type == values.TypeInt {
+			intVal := value.Data.(int64)
+			if intVal < 1 || intVal > 12 {
+				// Invalid value, return false
+				return values.NewBool(false), nil
+			}
+		}
+	}
+
+	// Set the attribute
+	attributesVal.ArraySet(values.NewInt(attribute), value)
+
 	return values.NewBool(true), nil
 }
 
