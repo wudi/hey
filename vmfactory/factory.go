@@ -59,47 +59,20 @@ func (f *VMFactory) createCompilerCallback(vmachine *vm.VirtualMachine) vm.Compi
 			return nil, fmt.Errorf("compilation error in %s: %v", filePath, err)
 		}
 
-		includeCtx := vm.NewExecutionContext()
-		includeCtx.Variables = ctx.Variables
-		includeCtx.Stack = ctx.Stack
-		includeCtx.IncludedFiles = ctx.IncludedFiles
-		includeCtx.OutputWriter = ctx.OutputWriter
-
-		err := vmachine.Execute(includeCtx, comp.GetBytecode(), comp.GetConstants(),
+		// Execute the included file directly in the same context
+		// This ensures variables defined in the include are accessible to the caller
+		err := vmachine.Execute(ctx, comp.GetBytecode(), comp.GetConstants(),
 			comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
 		if err != nil {
 			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
 		}
 
-		ctx.Variables = includeCtx.Variables
-		ctx.Stack = includeCtx.Stack
-		ctx.IncludedFiles = includeCtx.IncludedFiles
-
-		if includeCtx.UserFunctions != nil {
-			if ctx.UserFunctions == nil {
-				ctx.UserFunctions = make(map[string]*registry.Function)
-			}
-			for name, fn := range includeCtx.UserFunctions {
-				ctx.UserFunctions[name] = fn
-			}
-		}
-
-		if includeCtx.UserClasses != nil {
-			if ctx.UserClasses == nil {
-				ctx.UserClasses = make(map[string]*registry.Class)
-			}
-			for name, class := range includeCtx.UserClasses {
-				ctx.UserClasses[name] = class
-			}
-		}
-
-		if includeCtx.Halted && len(includeCtx.Stack) > 0 {
-			returnValue := includeCtx.Stack[len(includeCtx.Stack)-1]
+		if ctx.Halted && len(ctx.Stack) > 0 {
+			returnValue := ctx.Stack[len(ctx.Stack)-1]
 			if returnValue.IsNull() {
 				return values.NewInt(1), nil
 			}
-			includeCtx.Stack = includeCtx.Stack[:len(includeCtx.Stack)-1]
-			ctx.Stack = includeCtx.Stack
+			ctx.Stack = ctx.Stack[:len(ctx.Stack)-1]
 			return returnValue, nil
 		}
 

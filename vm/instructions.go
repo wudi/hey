@@ -60,15 +60,16 @@ func (vm *VirtualMachine) readOperand(ctx *ExecutionContext, frame *CallFrame, o
 	case opcodes.IS_TMP_VAR:
 		val = frame.getTemp(operand)
 	case opcodes.IS_VAR, opcodes.IS_CV:
-		val = frame.getLocal(operand)
-		// If not found in frame locals, try to get from ctx.Variables
-		// This handles variables defined in included files
-		if val == nil {
-			if varName, ok := frame.SlotNames[operand]; ok {
-				if ctxVal, found := ctx.GetVariable(varName); found {
-					val = ctxVal
-				}
+		// For top-level code (including includes), prefer ctx.Variables over frame.Locals
+		// This ensures variables defined in included files are accessible to the caller
+		if varName, ok := frame.SlotNames[operand]; ok {
+			if ctxVal, found := ctx.GetVariable(varName); found {
+				val = ctxVal
 			}
+		}
+		// Fall back to frame.Locals if not found in ctx.Variables
+		if val == nil {
+			val = frame.getLocal(operand)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported operand type %d", opType)
@@ -114,6 +115,11 @@ func (vm *VirtualMachine) writeOperand(ctx *ExecutionContext, frame *CallFrame, 
 				vm.recordDebug(ctx, fmt.Sprintf("watch %s = %s", name, value.String()))
 			}
 			ctx.setVariable(name, value)
+			// For top-level code (main and included files), also bind to GlobalVars
+			// This makes variables accessible via 'global' declaration in functions
+			if frame.FunctionName == "{main}" {
+				ctx.bindGlobalValue(name, value)
+			}
 		}
 		return nil
 	case opcodes.IS_CONST:
