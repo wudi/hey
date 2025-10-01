@@ -3,6 +3,7 @@ package runtime
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -107,6 +108,39 @@ func RealMySQLiQuery(conn *MySQLiConnection, query string) (*MySQLiResult, error
 		conn.ErrorNo = 2006
 		conn.Error = "MySQL server has gone away"
 		return nil, fmt.Errorf("no active connection")
+	}
+
+	// Detect query type
+	trimmedQuery := strings.TrimSpace(strings.ToUpper(query))
+	isSelect := strings.HasPrefix(trimmedQuery, "SELECT") ||
+		strings.HasPrefix(trimmedQuery, "SHOW") ||
+		strings.HasPrefix(trimmedQuery, "DESCRIBE") ||
+		strings.HasPrefix(trimmedQuery, "DESC")
+
+	// For non-SELECT queries (INSERT, UPDATE, DELETE, etc.)
+	if !isSelect {
+		result, err := db.Exec(query)
+		if err != nil {
+			conn.ErrorNo = 1064
+			conn.Error = fmt.Sprintf("Query error: %v", err)
+			return nil, err
+		}
+
+		// Get affected rows
+		affected, _ := result.RowsAffected()
+		conn.AffectedRows = affected
+
+		// Get last insert ID
+		lastID, _ := result.LastInsertId()
+		conn.InsertID = lastID
+
+		// Clear error state
+		conn.ErrorNo = 0
+		conn.Error = ""
+		conn.FieldCount = 0
+
+		// Return nil to indicate non-SELECT query success
+		return nil, nil
 	}
 
 	// Execute query

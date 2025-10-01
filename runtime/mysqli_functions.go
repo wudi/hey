@@ -592,8 +592,50 @@ func GetMySQLiFunctions() []*registry.Function {
 			MaxArgs:    3,
 			IsBuiltin:  true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				// Stub: Return null
-				return values.NewNull(), nil
+				if len(args) == 0 || args[0] == nil {
+					return values.NewNull(), nil
+				}
+
+				// Extract MySQLiResult from resource or object
+				var result *MySQLiResult
+				if args[0].Type == values.TypeResource {
+					r, ok := args[0].Data.(*MySQLiResult)
+					if !ok {
+						return values.NewNull(), nil
+					}
+					result = r
+				} else {
+					r, ok := extractMySQLiResult(args[0])
+					if !ok {
+						return values.NewNull(), nil
+					}
+					result = r
+				}
+
+				// Check if there are more rows
+				if result.CurrentRow >= len(result.Rows) {
+					return values.NewNull(), nil
+				}
+
+				// Get current row
+				row := result.Rows[result.CurrentRow]
+				result.CurrentRow++
+
+				// Create stdClass object with row data as properties
+				obj := &values.Object{
+					ClassName:  "stdClass",
+					Properties: make(map[string]*values.Value),
+				}
+
+				// Copy row data to object properties
+				for key, val := range row {
+					obj.Properties[key] = val
+				}
+
+				return &values.Value{
+					Type: values.TypeObject,
+					Data: obj,
+				}, nil
 			},
 		},
 
@@ -1057,15 +1099,25 @@ func GetMySQLiFunctions() []*registry.Function {
 					return values.NewBool(false), nil
 				}
 
+				query := args[1].ToString()
+				paramCount := 0
+				for i := 0; i < len(query); i++ {
+					if query[i] == '?' {
+						paramCount++
+					}
+				}
+
 				stmt := &MySQLiStmt{
-					Connection: conn,
-					Query:      args[1].ToString(),
-					ParamCount: 0,
-					FieldCount: 0,
-					ErrorNo:    0,
-					Error:      "",
-					SQLState:   "00000",
-					Params:     make([]*values.Value, 0),
+					Connection:   conn,
+					Query:        query,
+					ParamCount:   paramCount,
+					FieldCount:   0,
+					AffectedRows: 0,
+					InsertID:     0,
+					ErrorNo:      0,
+					Error:        "",
+					SQLState:     "00000",
+					Params:       make([]*values.Value, paramCount),
 				}
 
 				return values.NewResource(stmt), nil
@@ -1085,11 +1137,11 @@ func GetMySQLiFunctions() []*registry.Function {
 			MaxArgs:    3,
 			IsBuiltin:  true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				if len(args) < 2 || args[0] == nil || args[0].Type != values.TypeResource {
+				if len(args) < 2 || args[0] == nil {
 					return values.NewBool(false), nil
 				}
 
-				conn, ok := args[0].Data.(*MySQLiConnection)
+				conn, ok := extractMySQLiConnection(args[0])
 				if !ok {
 					return values.NewBool(false), nil
 				}
@@ -1099,8 +1151,12 @@ func GetMySQLiFunctions() []*registry.Function {
 				// Execute real query
 				result, err := RealMySQLiQuery(conn, query)
 				if err != nil {
-					// For non-SELECT queries or errors, return true/false
 					return values.NewBool(false), nil
+				}
+
+				// For non-SELECT queries (INSERT, UPDATE, DELETE), result is nil
+				if result == nil {
+					return values.NewBool(true), nil
 				}
 
 				// Return result resource for SELECT queries

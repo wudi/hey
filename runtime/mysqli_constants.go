@@ -55,6 +55,7 @@ func GetMySQLiConstants() []*registry.Constant {
 		{Name: "MYSQLI_TYPE_DATETIME", Value: values.NewInt(12)},
 		{Name: "MYSQLI_TYPE_YEAR", Value: values.NewInt(13)},
 		{Name: "MYSQLI_TYPE_NEWDATE", Value: values.NewInt(14)},
+		{Name: "MYSQLI_TYPE_VARCHAR", Value: values.NewInt(15)},
 		{Name: "MYSQLI_TYPE_ENUM", Value: values.NewInt(247)},
 		{Name: "MYSQLI_TYPE_SET", Value: values.NewInt(248)},
 		{Name: "MYSQLI_TYPE_TINY_BLOB", Value: values.NewInt(249)},
