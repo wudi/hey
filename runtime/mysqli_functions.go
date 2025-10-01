@@ -188,7 +188,8 @@ func GetMySQLiFunctions() []*registry.Function {
 					return values.NewBool(false), nil
 				}
 				if conn, ok := args[0].Data.(*MySQLiConnection); ok {
-					conn.Connected = false
+					// Close real database connection
+					RealMySQLiClose(conn)
 					return values.NewBool(true), nil
 				}
 				return values.NewBool(true), nil
@@ -239,7 +240,7 @@ func GetMySQLiFunctions() []*registry.Function {
 					Database: "",
 					Port:     3306,
 					Socket:   "",
-					Connected: true,
+					Connected: false,
 					AffectedRows: 0,
 					InsertID:     0,
 					ErrorNo:      0,
@@ -266,6 +267,12 @@ func GetMySQLiFunctions() []*registry.Function {
 					conn.Socket = args[5].ToString()
 				}
 
+				// Establish real database connection
+				if err := RealMySQLiConnect(conn); err != nil {
+					// Return false on connection failure (PHP behavior)
+					return values.NewBool(false), nil
+				}
+
 				return values.NewResource(conn), nil
 			},
 		},
@@ -279,8 +286,7 @@ func GetMySQLiFunctions() []*registry.Function {
 			MaxArgs:    0,
 			IsBuiltin:  true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				// Stub: Return 0 (no error)
-				return values.NewInt(0), nil
+				return values.NewInt(int64(GetLastConnectErrno())), nil
 			},
 		},
 
@@ -293,8 +299,7 @@ func GetMySQLiFunctions() []*registry.Function {
 			MaxArgs:    0,
 			IsBuiltin:  true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				// Stub: Return empty string (no error)
-				return values.NewString(""), nil
+				return values.NewString(GetLastConnectError()), nil
 			},
 		},
 
@@ -419,8 +424,59 @@ func GetMySQLiFunctions() []*registry.Function {
 				if len(args) == 0 || args[0] == nil || args[0].Type != values.TypeResource {
 					return values.NewNull(), nil
 				}
-				// Stub: Return null (no more rows)
-				return values.NewNull(), nil
+
+				result, ok := args[0].Data.(*MySQLiResult)
+				if !ok {
+					return values.NewNull(), nil
+				}
+
+				if result.CurrentRow >= len(result.Rows) {
+					return values.NewNull(), nil
+				}
+
+				mode := int64(3) // MYSQLI_BOTH
+				if len(args) > 1 && args[1] != nil {
+					mode = args[1].ToInt()
+				}
+
+				row := result.Rows[result.CurrentRow]
+				result.CurrentRow++
+
+				// Mode 1: MYSQLI_ASSOC (associative array only)
+				// Mode 2: MYSQLI_NUM (numeric array only)
+				// Mode 3: MYSQLI_BOTH (both associative and numeric)
+				arr := values.NewArray()
+				arrData := arr.Data.(*values.Array)
+
+				if mode == 1 {
+					// Associative only
+					for key, val := range row {
+						arrData.Elements[key] = val
+					}
+					arrData.IsIndexed = false
+					return arr, nil
+				} else if mode == 2 {
+					// Numeric array
+					idx := int64(0)
+					for _, val := range row {
+						arrData.Elements[idx] = val
+						idx++
+					}
+					arrData.NextIndex = idx
+					arrData.IsIndexed = true
+					return arr, nil
+				} else {
+					// Both
+					idx := int64(0)
+					for key, val := range row {
+						arrData.Elements[key] = val
+						arrData.Elements[idx] = val
+						idx++
+					}
+					arrData.NextIndex = idx
+					arrData.IsIndexed = false
+					return arr, nil
+				}
 			},
 		},
 
@@ -442,7 +498,15 @@ func GetMySQLiFunctions() []*registry.Function {
 					if result.CurrentRow < len(result.Rows) {
 						row := result.Rows[result.CurrentRow]
 						result.CurrentRow++
-						return &values.Value{Type: values.TypeArray, Data: row}, nil
+
+						// Convert map[string]*values.Value to proper Array
+						arr := values.NewArray()
+						arrData := arr.Data.(*values.Array)
+						for key, val := range row {
+							arrData.Elements[key] = val
+						}
+						arrData.IsIndexed = false // associative array
+						return arr, nil
 					}
 				}
 				// No more rows
@@ -544,8 +608,34 @@ func GetMySQLiFunctions() []*registry.Function {
 			MaxArgs:    1,
 			IsBuiltin:  true,
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				// Stub: Return null (no more rows)
-				return values.NewNull(), nil
+				if len(args) == 0 || args[0] == nil || args[0].Type != values.TypeResource {
+					return values.NewNull(), nil
+				}
+
+				result, ok := args[0].Data.(*MySQLiResult)
+				if !ok {
+					return values.NewNull(), nil
+				}
+
+				if result.CurrentRow >= len(result.Rows) {
+					return values.NewNull(), nil
+				}
+
+				row := result.Rows[result.CurrentRow]
+				result.CurrentRow++
+
+				// Convert to numeric array
+				arr := values.NewArray()
+				arrData := arr.Data.(*values.Array)
+				idx := int64(0)
+				for _, val := range row {
+					arrData.Elements[idx] = val
+					idx++
+				}
+				arrData.NextIndex = idx
+				arrData.IsIndexed = true
+
+				return arr, nil
 			},
 		},
 
@@ -999,15 +1089,21 @@ func GetMySQLiFunctions() []*registry.Function {
 					return values.NewBool(false), nil
 				}
 
-				// Stub: Return empty result set
-				result := &MySQLiResult{
-					NumRows:    0,
-					FieldCount: 0,
-					CurrentRow: 0,
-					Rows:       make([]map[string]*values.Value, 0),
-					Fields:     make([]MySQLiField, 0),
+				conn, ok := args[0].Data.(*MySQLiConnection)
+				if !ok {
+					return values.NewBool(false), nil
 				}
 
+				query := args[1].ToString()
+
+				// Execute real query
+				result, err := RealMySQLiQuery(conn, query)
+				if err != nil {
+					// For non-SELECT queries or errors, return true/false
+					return values.NewBool(false), nil
+				}
+
+				// Return result resource for SELECT queries
 				return values.NewResource(result), nil
 			},
 		},

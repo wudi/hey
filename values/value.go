@@ -292,6 +292,8 @@ func (v *Value) ToBool() bool {
 		return len(arr.Elements) > 0
 	case TypeObject:
 		return true // Objects are always truthy
+	case TypeResource:
+		return true // Resources are always truthy (like objects)
 	case TypeReference:
 		return v.Deref().ToBool()
 	default:

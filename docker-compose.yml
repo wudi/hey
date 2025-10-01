@@ -42,6 +42,28 @@ services:
     networks:
       - hey-network
 
+  mysql:
+    image: mysql:8.0
+    container_name: hey-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - hey-network
+
 networks:
   hey-network:
     driver: bridge
@@ -49,3 +71,4 @@ networks:
 volumes:
   hey-fpm-logs:
   nginx-logs:
+  mysql-data:
