@@ -376,6 +376,13 @@ func (vm *VirtualMachine) decorateError(frame *CallFrame, inst *opcodes.Instruct
 	if err == nil {
 		return nil
 	}
+
+	// Format error message with source location like PHP does
+	if inst.Filename != "" && inst.Line > 0 {
+		return fmt.Errorf("vm error at ip=%d opcode=%s in %s on line %d: %w",
+			frame.IP, inst.Opcode, inst.Filename, inst.Line, err)
+	}
+
 	return fmt.Errorf("vm error at ip=%d opcode=%s: %w", frame.IP, inst.Opcode, err)
 }
 

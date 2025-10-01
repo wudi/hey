@@ -40,6 +40,7 @@ type Compiler struct {
 	currentFunction  *registry.Function // Current function being compiled
 	currentFile      string // Current file being compiled
 	currentNamespace string // Current namespace being compiled
+	currentPosition  lexer.Position // Current source position being compiled
 }
 
 // Scope represents a compilation scope (function, block, etc.)
@@ -118,6 +119,9 @@ func (c *Compiler) compileNode(node ast.Node) error {
 	if node == nil {
 		return nil
 	}
+
+	// Update current position for error reporting
+	c.currentPosition = node.GetPosition()
 
 	switch n := node.(type) {
 	// Expressions
@@ -1891,12 +1895,14 @@ func (c *Compiler) emit(opcode opcodes.Opcode, op1Type opcodes.OpType, op1 uint3
 	opType1, opType2 := opcodes.EncodeOpTypes(op1Type, op2Type, resultType)
 
 	instruction := &opcodes.Instruction{
-		Opcode:  opcode,
-		OpType1: opType1,
-		OpType2: opType2,
-		Op1:     op1,
-		Op2:     op2,
-		Result:  result,
+		Opcode:   opcode,
+		OpType1:  opType1,
+		OpType2:  opType2,
+		Op1:      op1,
+		Op2:      op2,
+		Result:   result,
+		Filename: c.currentFile,
+		Line:     c.currentPosition.Line,
 	}
 
 	c.instructions = append(c.instructions, instruction)
@@ -1913,6 +1919,8 @@ func (c *Compiler) emitReserved(opcode opcodes.Opcode, op1Type opcodes.OpType, o
 		Op1:      op1,
 		Op2:      op2,
 		Result:   result,
+		Filename: c.currentFile,
+		Line:     c.currentPosition.Line,
 	}
 
 	c.instructions = append(c.instructions, instruction)
@@ -1920,12 +1928,14 @@ func (c *Compiler) emitReserved(opcode opcodes.Opcode, op1Type opcodes.OpType, o
 
 func (c *Compiler) emitWithTypes(opcode opcodes.Opcode, opType1 byte, opType2 byte, op1 uint32, op2 uint32, result uint32) {
 	instruction := &opcodes.Instruction{
-		Opcode:  opcode,
-		OpType1: opType1,
-		OpType2: opType2,
-		Op1:     op1,
-		Op2:     op2,
-		Result:  result,
+		Opcode:   opcode,
+		OpType1:  opType1,
+		OpType2:  opType2,
+		Op1:      op1,
+		Op2:      op2,
+		Result:   result,
+		Filename: c.currentFile,
+		Line:     c.currentPosition.Line,
 	}
 
 	c.instructions = append(c.instructions, instruction)

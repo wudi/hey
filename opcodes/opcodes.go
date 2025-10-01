@@ -342,6 +342,10 @@ type Instruction struct {
 	Op1    uint32 // First operand
 	Op2    uint32 // Second operand
 	Result uint32 // Result location
+
+	// Source location for debugging and error reporting
+	Filename string // Source file name
+	Line     int    // Line number in source file
 }
 
 // Helper functions for operand type encoding/decoding
