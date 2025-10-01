@@ -154,14 +154,28 @@ func BuildPostgreSQLDSN(dsn *DSN, username, password string) string {
 		params = append(params, fmt.Sprintf("%s=%s", key, value))
 	}
 
+	// Default to sslmode=disable if not specified
+	sslModeSet := false
+	for _, param := range params {
+		if strings.HasPrefix(param, "sslmode=") {
+			sslModeSet = true
+			break
+		}
+	}
+	if !sslModeSet {
+		params = append(params, "sslmode=disable")
+	}
+
 	return strings.Join(params, " ")
 }
 
 // BuildSQLiteDSN builds a SQLite DSN string
 func BuildSQLiteDSN(dsn *DSN) string {
 	// SQLite uses file path directly
-	if dsn.Database == "" {
-		return ":memory:"
+	if dsn.Database == "" || dsn.Database == ":memory:" {
+		// Use shared cache mode for :memory: databases to allow connection pooling
+		// Without this, each connection gets its own separate in-memory database
+		return "file::memory:?mode=memory&cache=shared"
 	}
 	return dsn.Database
 }

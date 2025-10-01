@@ -172,18 +172,21 @@ const (
 )
 
 // FetchMode represents PDO fetch modes
+// Must match PHP PDO constants exactly
 type FetchMode int
 
 const (
-	FetchAssoc FetchMode = iota + 1
-	FetchNum
-	FetchBoth
-	FetchObj
-	FetchLazy
-	FetchClass
-	FetchInto
-	FetchColumn
-	FetchKeyPair
+	FetchLazy      FetchMode = 1
+	FetchAssoc     FetchMode = 2
+	FetchNum       FetchMode = 3
+	FetchBoth      FetchMode = 4
+	FetchObj       FetchMode = 5
+	FetchBound     FetchMode = 6
+	FetchColumn    FetchMode = 7
+	FetchClass     FetchMode = 8
+	FetchInto      FetchMode = 9
+	FetchFunc      FetchMode = 10
+	FetchKeyPair   FetchMode = 12
 )
 
 // ErrorMode represents PDO error modes

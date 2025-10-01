@@ -45,10 +45,25 @@ func pdoConstruct(ctx registry.BuiltinCallContext, args []*values.Value) (*value
 		return nil, fmt.Errorf("connection failed: %v", err)
 	}
 
-	// For MySQL, we need to call Connect with credentials
-	if mysqlConn, ok := conn.(*pdo.MySQLConn); ok {
-		if err := mysqlConn.Connect(username, password); err != nil {
-			return nil, fmt.Errorf("connection failed: %v", err)
+	// Driver-specific connection setup
+	switch dsnInfo.Driver {
+	case "mysql":
+		if mysqlConn, ok := conn.(*pdo.MySQLConn); ok {
+			if err := mysqlConn.Connect(username, password); err != nil {
+				return nil, fmt.Errorf("connection failed: %v", err)
+			}
+		}
+	case "sqlite":
+		if sqliteConn, ok := conn.(*pdo.SQLiteConn); ok {
+			if err := sqliteConn.Connect(); err != nil {
+				return nil, fmt.Errorf("connection failed: %v", err)
+			}
+		}
+	case "pgsql":
+		if pgsqlConn, ok := conn.(*pdo.PgSQLConn); ok {
+			if err := pgsqlConn.Connect(username, password); err != nil {
+				return nil, fmt.Errorf("connection failed: %v", err)
+			}
 		}
 	}
 
@@ -112,16 +127,37 @@ func pdoQuery(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Va
 
 	// Get connection
 	obj := thisObj.Data.(*values.Object)
-	connVal, ok := obj.Properties["__pdo_conn"]
-	if !ok {
-		return values.NewBool(false), fmt.Errorf("invalid PDO object")
+
+	var rows pdo.Rows
+	var err error
+
+	// Check if we're in a transaction
+	inTxVal, hasInTx := obj.Properties["__pdo_in_tx"]
+	inTx := hasInTx && inTxVal.Type == values.TypeBool && inTxVal.Data.(bool)
+
+	if inTx {
+		txVal := obj.Properties["__pdo_tx"]
+		if txVal.Type != values.TypeNull {
+			tx := txVal.Data.(pdo.Tx)
+			rows, err = tx.Query(query)
+		} else {
+			return values.NewBool(false), fmt.Errorf("invalid transaction state")
+		}
+	} else {
+		connVal, ok := obj.Properties["__pdo_conn"]
+		if !ok {
+			return values.NewBool(false), fmt.Errorf("invalid PDO object")
+		}
+		conn := connVal.Data.(pdo.Conn)
+		rows, err = conn.Query(query)
 	}
 
-	conn := connVal.Data.(pdo.Conn)
-
-	rows, err := conn.Query(query)
 	if err != nil {
 		return values.NewBool(false), nil
+	}
+
+	if rows == nil {
+		return values.NewBool(false), fmt.Errorf("query failed to return rows")
 	}
 
 	// Create PDOStatement object with active result set
@@ -145,16 +181,37 @@ func pdoExec(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Val
 
 	// Get connection
 	obj := thisObj.Data.(*values.Object)
-	connVal, ok := obj.Properties["__pdo_conn"]
-	if !ok {
-		return values.NewBool(false), fmt.Errorf("invalid PDO object")
+
+	var result pdo.Result
+	var err error
+
+	// Check if we're in a transaction
+	inTxVal, hasInTx := obj.Properties["__pdo_in_tx"]
+	inTx := hasInTx && inTxVal.Type == values.TypeBool && inTxVal.Data.(bool)
+
+	if inTx {
+		txVal := obj.Properties["__pdo_tx"]
+		if txVal.Type != values.TypeNull {
+			tx := txVal.Data.(pdo.Tx)
+			result, err = tx.Exec(query)
+		} else {
+			return values.NewBool(false), fmt.Errorf("invalid transaction state")
+		}
+	} else {
+		connVal, ok := obj.Properties["__pdo_conn"]
+		if !ok {
+			return values.NewBool(false), fmt.Errorf("invalid PDO object")
+		}
+		conn := connVal.Data.(pdo.Conn)
+		result, err = conn.Exec(query)
 	}
 
-	conn := connVal.Data.(pdo.Conn)
-
-	result, err := conn.Exec(query)
 	if err != nil {
 		return values.NewBool(false), nil
+	}
+
+	if result == nil {
+		return values.NewBool(false), fmt.Errorf("exec failed to return result")
 	}
 
 	affected, _ := result.RowsAffected()
