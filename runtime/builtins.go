@@ -85,6 +85,9 @@ func GetAllBuiltinClasses() []*registry.ClassDescriptor {
 	// Add classes from SPL module
 	classes = append(classes, spl.GetSplClasses()...)
 
+	// Add MySQLi classes
+	classes = append(classes, GetMySQLiClasses()...)
+
 	return classes
 }
 
@@ -103,7 +106,7 @@ func GetAllBuiltinInterfaces() []*registry.Interface {
 
 // GetAllBuiltinConstants returns all builtin constants
 func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
-	return []*registry.ConstantDescriptor{
+	constants := []*registry.ConstantDescriptor{
 		{
 			Name:  "CASE_LOWER",
 			Value: values.NewInt(0),
@@ -513,6 +516,16 @@ func GetAllBuiltinConstants() []*registry.ConstantDescriptor {
 			Value: values.NewFloat(math.E),
 		},
 	}
+
+	// Add MySQLi constants
+	for _, c := range GetMySQLiConstants() {
+		constants = append(constants, &registry.ConstantDescriptor{
+			Name:  c.Name,
+			Value: c.Value,
+		})
+	}
+
+	return constants
 }
 
 // Legacy variable for backwards compatibility
