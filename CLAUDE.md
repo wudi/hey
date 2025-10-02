@@ -84,7 +84,40 @@ make deps              # Download and tidy dependencies
 ## Important Implementation Notes
 
 ### Critical Bug Fixes
-- **require_once function registration** (commit a956aa0): Functions/classes defined in included files must be merged from includeCtx back to parent ctx. Without this, all definitions in included files are lost after execution.
+
+#### WordPress Heisenbug (commit e67da6a) - FETCH_CONSTANT Skipping & DO_FCALL Double Execution
+**Three interconnected bugs that prevented WordPress from running:**
+
+1. **Compiler Bug: FETCH_CONSTANT skipped by jumps**
+   - Compiler generates FETCH_CONSTANT to load function names into TMP_VAR
+   - Control flow jumps (from if-elseif-else optimization) skip these instructions
+   - VM reads uninitialized TMP_VAR, gets NULL instead of function name
+   - **Fix**: DEFENSIVE FIX in `execInitFCall` - when callee=NULL, search backwards up to 10 instructions to find matching FETCH_CONSTANT, recover function name from constant table
+   - **Location**: `vm/instructions.go:2796-2819`
+
+2. **VM Bug: DO_FCALL double execution in nested calls**
+   - When nested function calls die/exit, sets Halted=true
+   - Inner CallUserFunction loop exits early, but outer loop continues
+   - Same DO_FCALL executes twice: first pops pending, second finds pending=nil
+   - **Fix**: WORKAROUND in `execDoFCall` - when pending=nil, return true (NOP) instead of error
+   - **Location**: `vm/instructions.go:3372-3378`
+
+3. **VM Bug: CallUserFunction doesn't support nesting**
+   - Simple loop condition `currentFrame()==child` breaks when child calls other functions
+   - **Fix**: Use `childFrameActive()` to check if child is anywhere in CallStack
+   - Distinguish child completion (break) vs nested function completion (continue)
+   - **Location**: `vm/builtin_context.go:108-163`
+
+**Debugging Methodology:**
+- **Heisenbug characteristic**: Adding `echo 1;` made bug disappear
+- **Layer-by-layer investigation**: Symptoms → Errors → Call stack → Variables → Bytecode → Compiler output
+- **Key discovery tools**: Frame pointer tracking, pendingCalls count, IP sequence analysis
+- **Critical insight**: Compiler generates vs VM executes mismatch revealed by comparing debug outputs
+
+**See**: `/docs/debugging-wordpress-heisenbug.md` for complete 488-line debugging guide
+
+#### require_once function registration (commit a956aa0)
+- Functions/classes defined in included files must be merged from includeCtx back to parent ctx. Without this, all definitions in included files are lost after execution.
 
 ### Bytecode Architecture
 - Instructions and operands are stored separately for memory efficiency
@@ -101,6 +134,32 @@ make deps              # Download and tidy dependencies
 - Registry pattern used for global symbol management to avoid scattered globals
 - Compiler uses multiple passes for proper forward reference resolution
 - REPL maintains persistent VM context across commands - must reset `Halted` state between executions
+
+### Known Design Issues & Workarounds
+
+**1. Compiler Jump Optimization Can Skip Instructions**
+- **Issue**: Control flow jumps may skip FETCH_CONSTANT instructions that initialize TMP_VAR
+- **Impact**: INIT_FCALL reads NULL from uninitialized TMP_VAR
+- **Workaround**: DEFENSIVE FIX in execInitFCall searches backwards for skipped FETCH_CONSTANT
+- **Proper fix**: Compiler should ensure jumps don't skip necessary initialization, or use stack-based parameter passing
+
+**2. Nested CallUserFunction State Management**
+- **Issue**: When nested function calls die/exit, Halted=true causes complex loop interactions
+- **Impact**: DO_FCALL may execute twice - first pops pending, second finds nil
+- **Workaround**: DO_FCALL silently skips when pending=nil (treats as NOP)
+- **Proper fix**: Refactor CallUserFunction with isolated execution contexts or use separate VM instances
+
+**3. TMP_VAR vs Stack-Based Parameters**
+- **Issue**: TMP_VAR slots are fragile - can be uninitialized if instructions are skipped
+- **Current**: Function parameters passed via TMP_VAR references
+- **Better approach**: Stack-based parameter passing (like original PHP VM)
+- **Tradeoff**: Current approach works with DEFENSIVE FIX, but not architecturally clean
+
+**4. CallUserFunction Loop Complexity**
+- **Issue**: Single loop handles both child frame and nested frames execution
+- **Complexity**: Must distinguish child completion vs nested completion
+- **Current**: childFrameActive() checks if child anywhere in CallStack
+- **Better approach**: Separate execution contexts or explicit nesting tracking
 
 ### Exception System Architecture
 - **Builtin functions can throw catchable PHP exceptions** via `BuiltinCallContext.ThrowException()` API
@@ -154,9 +213,30 @@ make deps              # Download and tidy dependencies
 4. **Document**: Update string-functions-spec.md with implementation status
 
 ### Debugging VM Execution
-- Set `DEBUG_VM` environment variable for detailed execution traces
+
+**Environment Variables for Debug Output:**
+- `DEBUG_VM` - Detailed execution traces
+- `DEBUG_FUNCTIONS` - Function lookup and resolution
+- `DEBUG_BYTECODE` - Bytecode generation
+- `DEBUG_EXEC` - Instruction execution
+- `DEBUG_TMP` - TMP_VAR reads/writes
+- `DEBUG_FETCH_CONST` - FETCH_CONSTANT execution
+
+**Common Debugging Techniques:**
 - Use `vm.DumpStack()` to inspect stack state
-- CallFrame includes source position for error reporting
+- Track frame pointers to identify same frame across executions
+- Monitor `len(frame.pendingCalls)` to detect double execution
+- Compare compiler output vs VM execution (find skipped instructions)
+- Use IP sequence analysis: record execution order, find jumps
+
+**For Heisenbug-like issues:**
+1. **Non-invasive debugging**: Use stderr + environment variables (don't modify code flow)
+2. **State tracking**: Log frame=%p, IP=%d, key counters at critical points
+3. **Execution comparison**: Run with/without debug, compare IP sequences
+4. **Layer analysis**: Trace from symptoms → errors → variables → bytecode → compiler
+5. **Compiler-VM verification**: Ensure generated instructions actually execute
+
+**CallFrame includes source position for error reporting**
 
 ### Working with REPL
 - REPL implementation is in `/cmd/hey/main.go:runInteractiveShell()`
