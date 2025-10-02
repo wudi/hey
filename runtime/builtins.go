@@ -48,11 +48,9 @@ func GetAllBuiltinFunctions() []*registry.Function {
 	functions = append(functions, GetWindowsFunctions()...)
 	functions = append(functions, GetAssertFunctions()...)
 	functions = append(functions, GetHTTPFunctions()...)
-	functions = append(functions, GetI18nFunctions()...)
 	functions = append(functions, GetMySQLiFunctions()...)
 	functions = append(functions, GetMySQLiAdvancedFunctions()...)
 	functions = append(functions, GetMySQLiStmtFunctions()...)
-	functions = append(functions, GetWordPressFunctions()...)
 
 	return functions
 }
