@@ -152,60 +152,6 @@ func GetI18nFunctions() []*registry.Function {
 				return values.NewString(args[0].ToString()), nil
 			},
 		},
-		// wp_die() - Kill WordPress execution and display error message
-		{
-			Name: "wp_die",
-			Parameters: []*registry.Parameter{
-				{Name: "message", Type: "string", DefaultValue: values.NewString("")},
-				{Name: "title", Type: "string", DefaultValue: values.NewString("")},
-				{Name: "args", Type: "array", DefaultValue: values.NewArray()},
-			},
-			ReturnType: "void",
-			MinArgs:    0,
-			MaxArgs:    3,
-			IsBuiltin:  true,
-			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				message := ""
-				title := ""
-				exitCode := 500
-
-				if len(args) > 0 && args[0] != nil {
-					message = args[0].ToString()
-				}
-				if len(args) > 1 && args[1] != nil {
-					title = args[1].ToString()
-				}
-				if len(args) > 2 && args[2] != nil && args[2].Type == values.TypeArray {
-					// Check if args contains 'exit' key
-					if exitVal, ok := args[2].Data.(map[string]*values.Value)["exit"]; ok {
-						if exitVal.Type == values.TypeBool && !exitVal.Data.(bool) {
-							// exit => false means don't exit, just display
-							ctx.WriteOutput(values.NewString("<h1>" + escapeHTML(title) + "</h1>\n"))
-							ctx.WriteOutput(values.NewString(message + "\n"))
-							return values.NewNull(), nil
-						}
-					}
-					// Check for response code
-					if responseVal, ok := args[2].Data.(map[string]*values.Value)["response"]; ok {
-						if responseVal.Type == values.TypeInt {
-							exitCode = int(responseVal.Data.(int64))
-						}
-					}
-				}
-
-				// Output the error message
-				if title != "" {
-					ctx.WriteOutput(values.NewString("<h1>" + escapeHTML(title) + "</h1>\n"))
-				}
-				ctx.WriteOutput(values.NewString(message + "\n"))
-
-				// Exit with code (converted to 0 or 1 for shell)
-				if exitCode >= 400 {
-					return values.NewNull(), ctx.Halt(1, "wp_die called")
-				}
-				return values.NewNull(), ctx.Halt(0, "wp_die called")
-			},
-		},
 		// wp_fix_server_vars() - Standardize $_SERVER variables
 		{
 			Name: "wp_fix_server_vars",

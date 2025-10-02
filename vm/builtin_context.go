@@ -104,19 +104,36 @@ func (b *builtinContext) CallUserFunction(function *registry.Function, args []*v
 	// Push the frame onto the execution stack
 	b.ctx.pushFrame(child)
 
-	// Execute until the frame returns
+	// Execute until the child frame returns
+	// Helper to check if child frame is still in the call stack
+	childFrameActive := func() bool {
+		for _, f := range b.ctx.CallStack {
+			if f == child {
+				return true
+			}
+		}
+		return false
+	}
+
 	var userResult *values.Value = values.NewNull()
-	for !b.ctx.Halted && b.ctx.currentFrame() == child {
+	for !b.ctx.Halted && childFrameActive() {
 		frame := b.ctx.currentFrame()
 		if frame == nil {
 			break
 		}
 
 		if frame.IP >= len(frame.Instructions) {
-			// Reached end without explicit return - return null
-			b.ctx.popFrame()
-			userResult = values.NewNull()
-			break
+			// Reached end without explicit return
+			if frame == child {
+				// The target function finished
+				b.ctx.popFrame()
+				userResult = values.NewNull()
+				break
+			} else {
+				// A nested function finished, pop it and continue
+				b.ctx.popFrame()
+				continue
+			}
 		}
 
 		inst := frame.Instructions[frame.IP]
@@ -135,10 +152,14 @@ func (b *builtinContext) CallUserFunction(function *registry.Function, args []*v
 
 		if !continued {
 			// Execution should stop (e.g., return was called)
-			if len(b.ctx.Stack) > 0 {
+			if frame == child && len(b.ctx.Stack) > 0 {
 				userResult = b.ctx.Stack[len(b.ctx.Stack)-1]
 			}
-			break
+			// Check if child frame is no longer active (was popped by return)
+			if !childFrameActive() {
+				break
+			}
+			// Continue execution - the frame was already handled by executeInstruction
 		}
 	}
 

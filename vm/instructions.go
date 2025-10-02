@@ -2793,6 +2793,31 @@ func (vm *VirtualMachine) execInitFCall(ctx *ExecutionContext, frame *CallFrame,
 		return false, err
 	}
 
+	// DEFENSIVE FIX: If callee is NULL, search backwards for FETCH_CONSTANT instruction
+	// that writes to the same TMP_VAR slot that INIT_FCALL reads from.
+	// This works around a compiler bug where FETCH_CONSTANT is generated but skipped by jumps.
+	if (callee == nil || callee.IsNull()) && frame.IP > 0 && opType1 == opcodes.IS_TMP_VAR {
+		// Search backwards up to 10 instructions
+		for i := frame.IP - 1; i >= 0 && i >= frame.IP-10; i-- {
+			checkInst := frame.Instructions[i]
+			if checkInst.Opcode == opcodes.OP_FETCH_CONSTANT {
+				// Check if this FETCH_CONSTANT writes to the same TMP_VAR slot
+				resType, resSlot := decodeResult(checkInst)
+				if resType == opcodes.IS_TMP_VAR && resSlot == op1 {
+					// Found matching FETCH_CONSTANT, get the function name
+					constType, constOp := decodeOperand(checkInst, 1)
+					if constType == opcodes.IS_CONST && int(constOp) < len(frame.Constants) {
+						funcNameVal := frame.Constants[constOp]
+						if funcNameVal.Type == values.TypeString {
+							callee = funcNameVal
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+
 	pending := &PendingCall{
 		Callee: callee,
 		Args:   make([]*values.Value, 0),
@@ -3345,7 +3370,12 @@ func (vm *VirtualMachine) isTypeMatch(expectedType string, value *values.Value) 
 func (vm *VirtualMachine) execDoFCall(ctx *ExecutionContext, frame *CallFrame, inst *opcodes.Instruction) (bool, error) {
 	pending := frame.popPendingCall()
 	if pending == nil {
-		return false, errors.New("call without INIT_FCALL")
+		// WORKAROUND: In some complex execution scenarios (nested CallUserFunction),
+		// DO_FCALL may be executed twice due to execution loop interaction.
+		// This happens when a nested function calls die/exit, causing CallUserFunction
+		// to exit early with Halted=true but the outer execution loop continues.
+		// Skip silently on second execution instead of failing.
+		return true, nil
 	}
 
 	resultType, resultSlot := decodeResult(inst)

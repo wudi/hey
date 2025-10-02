@@ -285,8 +285,37 @@ func (vm *VirtualMachine) Execute(ctx *ExecutionContext, instructions []*opcodes
 	if ctx.UserFunctions == nil {
 		ctx.UserFunctions = make(map[string]*registry.Function)
 	}
+
+	// DEBUG: Log function registration
+	if os.Getenv("DEBUG_FUNCTIONS") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] Execute() merging %d functions from current file\n", len(functions))
+		foundTarget := false
+		for name := range functions {
+			if name == "_default_wp_die_handler" {
+				fmt.Fprintf(os.Stderr, "[DEBUG]   ✓✓✓ %s ✓✓✓\n", name)
+				foundTarget = true
+			} else if os.Getenv("DEBUG_ALL_FUNCTIONS") != "" {
+				fmt.Fprintf(os.Stderr, "[DEBUG]   - %s\n", name)
+			}
+		}
+		if !foundTarget && len(functions) > 0 {
+			fmt.Fprintf(os.Stderr, "[DEBUG]   (other %d functions, set DEBUG_ALL_FUNCTIONS=1 to see)\n", len(functions))
+		}
+		fmt.Fprintf(os.Stderr, "[DEBUG] ctx.UserFunctions had %d total functions before merge\n", len(ctx.UserFunctions))
+	}
+
 	for name, fn := range functions {
 		ctx.UserFunctions[strings.ToLower(name)] = fn
+	}
+
+	// DEBUG: Log after merge
+	if os.Getenv("DEBUG_FUNCTIONS") != "" {
+		fmt.Fprintf(os.Stderr, "[DEBUG] ctx.UserFunctions has %d functions after merge\n", len(ctx.UserFunctions))
+		if _, ok := ctx.UserFunctions["_default_wp_die_handler"]; ok {
+			fmt.Fprintf(os.Stderr, "[DEBUG] ✓ _default_wp_die_handler IS in ctx.UserFunctions\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "[DEBUG] ✗ _default_wp_die_handler NOT in ctx.UserFunctions\n")
+		}
 	}
 
 	if ctx.UserClasses == nil {

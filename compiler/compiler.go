@@ -3,6 +3,7 @@ package compiler
 import (
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -1167,6 +1168,7 @@ func (c *Compiler) compileVariableVariable(expr *ast.VariableVariableExpression)
 }
 
 func (c *Compiler) compileIdentifier(expr *ast.IdentifierNode) error {
+	// DEBUG: Log nocache_headers identifier compilation
 	// Handle special literal keywords first (case-insensitive as per PHP spec)
 	var constant uint32
 	lowerName := strings.ToLower(expr.Name)
@@ -1434,12 +1436,38 @@ func (c *Compiler) compileFunctionCall(expr *ast.CallExpression) error {
 	}
 
 	// Compile callee expression for regular function calls
+	prevTemp := c.nextTemp
 	err := c.compileNode(expr.Callee)
 	if err != nil {
 		return err
 	}
-	// Use the temp that was allocated by compileNode
-	calleeResult := c.nextTemp - 1
+
+
+	// Verify that compileNode allocated a temp variable
+	// If not (which shouldn't happen but can due to compiler bugs), allocate one explicitly
+	var calleeResult uint32
+	if c.nextTemp > prevTemp {
+		// Normal case: compileNode allocated a temp
+		calleeResult = c.nextTemp - 1
+	} else {
+		// Defensive: No temp was allocated - this indicates a compiler bug
+		// Generate explicit temp allocation to prevent crash
+		fmt.Fprintf(os.Stderr, "[COMPILER BUG] compileFunctionCall: compileNode did not allocate temp!\n")
+		fmt.Fprintf(os.Stderr, "  prevTemp=%d, nextTemp=%d\n", prevTemp, c.nextTemp)
+		if ident, ok := expr.Callee.(*ast.IdentifierNode); ok {
+			fmt.Fprintf(os.Stderr, "  callee identifier=%s\n", ident.Name)
+		}
+		calleeResult = c.allocateTemp()
+		// Emit a move to ensure the callee value is in the temp
+		// This is a workaround and shouldn't normally execute
+		if ident, ok := expr.Callee.(*ast.IdentifierNode); ok {
+			// For identifier callee, emit a constant load
+			nameConst := c.addConstant(values.NewString(ident.Name))
+			c.emit(opcodes.OP_QM_ASSIGN, opcodes.IS_CONST, nameConst, 0, 0, opcodes.IS_TMP_VAR, calleeResult)
+		}
+	}
+	// Use the temp that was allocated
+	// calleeResult is now guaranteed to be valid
 
 	// Get number of arguments
 	var numArgs uint32
@@ -3035,10 +3063,12 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	// Store current compiler state
 	oldInstructions := c.instructions
 	oldConstants := c.constants
+	oldNextTemp := c.nextTemp
 
 	// Reset for function compilation
 	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
+	c.nextTemp = 0
 
 	// Create function scope
 	c.pushScope(true)
@@ -3087,6 +3117,17 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	// Store compiled function
 	function.Instructions = c.instructions
 	function.Constants = c.constants
+
+	// DEBUG: Dump bytecode for _default_wp_die_handler and wp_die
+	if (funcName == "_default_wp_die_handler" || funcName == "wp_die") && os.Getenv("DEBUG_BYTECODE") != "" {
+		fmt.Fprintf(os.Stderr, "\n[BYTECODE DUMP] Function: %s\n", funcName)
+		fmt.Fprintf(os.Stderr, "Total instructions: %d\n", len(c.instructions))
+		for i, inst := range c.instructions {
+			opStr := fmt.Sprintf("%v", inst.Opcode)
+			fmt.Fprintf(os.Stderr, "  [%3d] %-25s (line %d)\n", i, opStr, inst.Line)
+		}
+		fmt.Fprintf(os.Stderr, "[END BYTECODE DUMP]\n\n")
+	}
 
 	// Store variable slot mapping for proper local variable allocation in goroutines
 	currentScope := c.currentScope()
@@ -3161,6 +3202,7 @@ func (c *Compiler) compileFunctionDeclaration(decl *ast.FunctionDeclaration) err
 	c.popScope()
 	c.instructions = oldInstructions
 	c.constants = oldConstants
+	c.nextTemp = oldNextTemp
 	c.currentFunction = nil
 
 	// Emit function declaration instruction
@@ -3225,10 +3267,12 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	oldInstructions := c.instructions
 	oldConstants := c.constants
 	oldCurrentFunction := c.currentFunction
+	oldNextTemp := c.nextTemp
 
 	// Reset for function compilation
 	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
+	c.nextTemp = 0
 
 	// Set current function for generator detection
 	c.currentFunction = function
@@ -3253,6 +3297,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 			c.popScope()
 			c.instructions = oldInstructions
 			c.constants = oldConstants
+			c.nextTemp = oldNextTemp
 			c.currentFunction = oldCurrentFunction
 			return fmt.Errorf("error compiling anonymous function: %v", err)
 		}
@@ -3284,6 +3329,7 @@ func (c *Compiler) compileAnonymousFunction(expr *ast.AnonymousFunctionExpressio
 	c.popScope()
 	c.instructions = oldInstructions
 	c.constants = oldConstants
+	c.nextTemp = oldNextTemp
 	c.currentFunction = oldCurrentFunction
 
 	// Create closure at runtime
@@ -7420,10 +7466,12 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 	oldInstructions := c.instructions
 	oldConstants := c.constants
 	oldCurrentClass := c.currentClass
+	oldNextTemp := c.nextTemp
 
 	// Reset for trait method compilation
 	c.instructions = make([]*opcodes.Instruction, 0)
 	c.constants = make([]*values.Value, 0)
+	c.nextTemp = 0
 	// Note: we don't set c.currentClass for traits as trait methods are different
 
 	// Create method scope
@@ -7453,6 +7501,7 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 			c.popScope()
 			c.instructions = oldInstructions
 			c.constants = oldConstants
+			c.nextTemp = oldNextTemp
 			c.currentClass = oldCurrentClass
 			return fmt.Errorf("error compiling trait method %s in trait %s: %v", methodName, trait.Name, err)
 		}
@@ -7484,6 +7533,7 @@ func (c *Compiler) compileTraitMethod(trait *registry.Trait, method *ast.Functio
 	c.popScope()
 	c.instructions = oldInstructions
 	c.constants = oldConstants
+	c.nextTemp = oldNextTemp
 	c.currentClass = oldCurrentClass
 
 	return nil

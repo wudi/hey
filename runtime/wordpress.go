@@ -70,25 +70,6 @@ func GetWordPressFunctions() []*registry.Function {
 				return values.NewBool(false), nil
 			},
 		},
-		// apply_filters() - WordPress hook system - call filters on a value
-		{
-			Name: "apply_filters",
-			Parameters: []*registry.Parameter{
-				{Name: "hook_name", Type: "string"},
-				{Name: "value", Type: "mixed"},
-			},
-			ReturnType: "mixed",
-			MinArgs:    2,
-			MaxArgs:    -1, // Variable arguments
-			IsBuiltin:  true,
-			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				if len(args) < 2 {
-					return values.NewNull(), nil
-				}
-				// Stub: Just return the value without any filtering
-				return args[1], nil
-			},
-		},
 		// wp_get_server_protocol() - Get HTTP protocol version
 		{
 			Name:       "wp_get_server_protocol",
@@ -100,36 +81,6 @@ func GetWordPressFunctions() []*registry.Function {
 			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
 				// Stub: Return HTTP/1.1
 				return values.NewString("HTTP/1.1"), nil
-			},
-		},
-		// call_user_func() - Call a user function with arguments
-		{
-			Name: "call_user_func",
-			Parameters: []*registry.Parameter{
-				{Name: "callback", Type: "callable"},
-			},
-			ReturnType: "mixed",
-			MinArgs:    1,
-			MaxArgs:    -1,
-			IsBuiltin:  true,
-			Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
-				if len(args) == 0 {
-					return values.NewNull(), nil
-				}
-
-				callback := args[0]
-				callArgs := args[1:]
-
-				// If it's a string, try to call it as a function name
-				if callback.Type == values.TypeString {
-					funcName := callback.ToString()
-					if userFunc, ok := ctx.LookupUserFunction(funcName); ok {
-						return ctx.CallUserFunction(userFunc, callArgs)
-					}
-				}
-
-				// Stub: Return null if we can't handle the callback
-				return values.NewNull(), nil
 			},
 		},
 		// did_action() - Check if an action has been executed
@@ -280,6 +231,77 @@ func GetWordPressFunctions() []*registry.Function {
 				// The actual parse_str would have already been called by PHP code
 				// We're just here to satisfy function_exists() check
 				return values.NewNull(), nil
+			},
+		},
+		// wp_cache_get() - Get cached value
+		{
+			Name: "wp_cache_get",
+			Parameters: []*registry.Parameter{
+				{Name: "key", Type: "string"},
+				{Name: "group", Type: "string"},
+				{Name: "force", Type: "bool"},
+				{Name: "found", Type: "bool", IsReference: true},
+			},
+			ReturnType: "mixed",
+			MinArgs:    1,
+			MaxArgs:    4,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// Stub: Return false (cache miss)
+				return values.NewBool(false), nil
+			},
+		},
+		// wp_cache_set() - Set cached value
+		{
+			Name: "wp_cache_set",
+			Parameters: []*registry.Parameter{
+				{Name: "key", Type: "string"},
+				{Name: "data", Type: "mixed"},
+				{Name: "group", Type: "string"},
+				{Name: "expire", Type: "int"},
+			},
+			ReturnType: "bool",
+			MinArgs:    2,
+			MaxArgs:    4,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// Stub: Return true (cache set successful)
+				return values.NewBool(true), nil
+			},
+		},
+		// wp_load_alloptions() - Load all options from database
+		{
+			Name:       "wp_load_alloptions",
+			Parameters: []*registry.Parameter{},
+			ReturnType: "array",
+			MinArgs:    0,
+			MaxArgs:    0,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				// Stub: Return empty array
+				return values.NewArray(), nil
+			},
+		},
+		// _is_utf8_charset() - Check if charset is UTF-8
+		{
+			Name: "_is_utf8_charset",
+			Parameters: []*registry.Parameter{
+				{Name: "charset_slug", Type: "string"},
+			},
+			ReturnType: "bool",
+			MinArgs:    1,
+			MaxArgs:    1,
+			IsBuiltin:  true,
+			Builtin: func(_ registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+				if len(args) == 0 || args[0].Type != values.TypeString {
+					return values.NewBool(false), nil
+				}
+				charset := args[0].ToString()
+				// Check for UTF-8 variants
+				return values.NewBool(
+					charset == "UTF-8" || charset == "utf-8" ||
+						charset == "UTF8" || charset == "utf8",
+				), nil
 			},
 		},
 	}
