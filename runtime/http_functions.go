@@ -236,6 +236,67 @@ func GetHTTPFunctions() []*registry.Function {
 				return values.NewNull(), nil
 			},
 		},
+	{
+		Name: "wp_parse_str",
+		Parameters: []*registry.Parameter{
+			{Name: "string", Type: "string"},
+			{Name: "result", Type: "", IsReference: true},
+		},
+		ReturnType: "void",
+		MinArgs:    2,
+		MaxArgs:    2,
+		IsBuiltin:  true,
+		Builtin: func(ctx registry.BuiltinCallContext, args []*values.Value) (*values.Value, error) {
+			// wp_parse_str is a WordPress wrapper around parse_str
+			// For now, we just call parse_str without applying the filter
+
+			if len(args) < 2 {
+				return nil, fmt.Errorf("wp_parse_str() expects exactly 2 parameters, %d given", len(args))
+			}
+
+			str := args[0].ToString()
+
+			// Parse the query string using Go's url.ParseQuery
+			parsed, err := url.ParseQuery(str)
+			if err != nil {
+				// On parse error, just return without setting anything
+				return values.NewNull(), nil
+			}
+
+			result := values.NewArray()
+
+			// Process each key-value pair
+			for key, vals := range parsed {
+				// Handle PHP array syntax: foo[] or foo[bar]
+				if strings.Contains(key, "[") {
+					// This is an array-style key
+					parseArrayKey(result, key, vals)
+				} else {
+					// Simple key
+					if len(vals) == 1 {
+						result.ArraySet(values.NewString(key), values.NewString(vals[0]))
+					} else if len(vals) > 1 {
+						// Multiple values for same key -> array
+						arr := values.NewArray()
+						for i, v := range vals {
+							arr.ArraySet(values.NewInt(int64(i)), values.NewString(v))
+						}
+						result.ArraySet(values.NewString(key), arr)
+					}
+				}
+			}
+
+			// Set the reference parameter (second parameter)
+			if args[1].IsReference() {
+				ref := args[1].Data.(*values.Reference)
+				*ref.Target = *result
+			}
+
+			// TODO: Apply 'wp_parse_str' filter if apply_filters is available
+
+			return values.NewNull(), nil
+		},
+	},
 	}
 }
 
