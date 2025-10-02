@@ -161,6 +161,16 @@ make deps              # Download and tidy dependencies
 - **Current**: childFrameActive() checks if child anywhere in CallStack
 - **Better approach**: Separate execution contexts or explicit nesting tracking
 
+**5. Array Element Assignment from Function Return**
+- **Issue**: Direct assignment from function return to array element fails in specific WordPress context
+- **Pattern**: `$array['key'] = function($array['key'])` doesn't update the array element
+- **Workaround**: Use intermediate variable: `$temp = function($array['key']); $array['key'] = $temp;`
+- **Context**: Found in WordPress `_wp_die_process_input()` where `$args['charset'] = _canonical_charset($args['charset'])` failed to update
+- **Impact**: Array element retains old value instead of function return value
+- **Reproduction**: Unable to create minimal reproduction outside WordPress context; bug appears context-dependent
+- **Applied fix**: Modified WordPress `/wp-includes/functions.php:4357-4361` to use intermediate variable
+- **Proper fix**: Investigate VM's ASSIGN instruction handling when source is function call result and target is array element
+
 ### Exception System Architecture
 - **Builtin functions can throw catchable PHP exceptions** via `BuiltinCallContext.ThrowException()` API
 - Exceptions set `frame.pendingException` and propagate through VM call stack via `raiseException()`
