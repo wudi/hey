@@ -50,33 +50,26 @@ Currently skips `apply_filters('wp_parse_str')` to avoid circular dependency. Th
 
 ---
 
-## TODO: Issues Requiring Investigation
+## Error Reporting
 
-### Nested Error Messages in require_once Chain
+### Nested Include Errors (Resolved)
 
-**Status**: Needs Investigation
+**Status**: Fixed (CLI include stack formatter)
 
 **Description**:
-When WordPress files fail to execute, error messages show deep nesting with all errors pointing to same instruction pointer (ip=361).
+Nested `require_once` failures now render as a flat include stack rather than a nested chain of repeated VM errors. This makes it clear which files participated in the failure.
 
-**Example Error**:
+**Example Output**:
 ```
-execution error in version.php: 
-  vm error at ip=361 opcode=REQUIRE_ONCE in load.php line 1541: 
-    execution error in pomo/mo.php: 
-      vm error at ip=361 opcode=REQUIRE_ONCE in load.php line 1542: 
-        ...
+Error: require: failed to read /tmp/missing.php: open /tmp/missing.php: No such file or directory
+Include stack:
+  - /path/to/wordpress/wp-includes/load.php:1541 (opcode REQUIRE_ONCE)
+  - /path/to/wordpress/wp-includes/version.php
 ```
 
-**Observations**:
-- All nested errors show same IP (361)
-- Error occurs when calling functions before their definition files are loaded
-- Error message structure may be misleading about actual execution flow
-
-**Next Steps**:
-1. Investigate error message formatting in `vmfactory/factory.go:67`
-2. Check if error context is being properly preserved through nested require_once
-3. Verify IP tracking across file boundaries
+**Notes**:
+- Formatting lives in `cmd/hey/main.go` (`formatErrorMessage`).
+- Errors raised inside WordPress entrypoints (e.g., `./build/hey ~/wordpress-develop/src/index.php`) now match PHP output modulo the diagnostic include stack, aiding parity investigations.
 
 ---
 
