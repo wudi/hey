@@ -632,6 +632,26 @@ func TestAdvancedComparisonOperators(t *testing.T) {
 	}
 }
 
+func TestAssignDimWithFunctionReturn(t *testing.T) {
+	code := `<?php
+function canonical($value) {
+	return strtoupper($value);
+}
+
+function process($args) {
+	$args['charset'] = canonical($args['charset']);
+	return array('msg', 'title', $args);
+}
+
+list($message, $title, $parsed) = process(array('charset' => 'utf-8'));
+echo $parsed['charset'];
+?>`
+
+	output, err := compileAndExecute(t, code)
+	require.NoError(t, err, "Execution failed for assign-dim regression")
+	require.Equal(t, "UTF-8", output, "Array element should reflect canonicalized charset")
+}
+
 func TestComparisonWithNull(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -8891,4 +8911,3 @@ func TestVersionCompare(t *testing.T) {
 		})
 	}
 }
-

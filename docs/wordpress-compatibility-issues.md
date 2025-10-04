@@ -6,7 +6,7 @@ This document tracks known compatibility issues between hey and WordPress.
 
 ### Charset Case Difference (RESOLVED)
 
-**Status**: Fixed
+**Status**: Verified
 
 **Description**:
 WordPress outputs `charset=UTF-8` (uppercase) while hey was outputting `charset=utf-8` (lowercase).
@@ -17,14 +17,13 @@ WordPress outputs `charset=UTF-8` (uppercase) while hey was outputting `charset=
 - However, in hey's execution, the assignment `$args['charset'] = _canonical_charset($args['charset'])` was not updating the array element correctly
 - This appears to be a context-specific bug in hey's array element assignment from function return values
 
-**Solution**:
-Changed the default value in WordPress `_wp_die_process_input()` from `'utf-8'` to `'UTF-8'` to bypass the canonical ization step.
+**Resolution**:
+- Hey now correctly applies `_canonical_charset()` when writing back to `$args['charset']`, matching PHP without modifying WordPress sources.
+- Regression test `compiler/compiler_test.go` (`TestAssignDimWithFunctionReturn`) locks in the `$array['key'] = function()` behavior.
 
-**File Modified**: `/home/ubuntu/wordpress-develop/src/wp-includes/functions.php:4305`
-
-**Impact**: WordPress index.php output now matches PHP exactly
-
-**Note**: This is a workaround. The underlying hey bug with array assignment from function returns needs further investigation.
+**Verification**:
+- `./build/hey ~/wordpress-develop/src/test_wpdie_charset.php`
+- `php ~/wordpress-develop/src/test_wpdie_charset.php`
 
 ---
 
