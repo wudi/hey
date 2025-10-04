@@ -56,7 +56,7 @@ func (f *VMFactory) createCompilerCallback(vmachine *vm.VirtualMachine) vm.Compi
 			comp.SetCurrentFile(filePath)
 		}
 		if err := comp.Compile(program); err != nil {
-			return nil, fmt.Errorf("compilation error in %s: %v", filePath, err)
+			return nil, fmt.Errorf("compilation error in %s: %w", filePath, err)
 		}
 
 		// Execute the included file directly in the same context
@@ -64,7 +64,7 @@ func (f *VMFactory) createCompilerCallback(vmachine *vm.VirtualMachine) vm.Compi
 		err := vmachine.Execute(ctx, comp.GetBytecode(), comp.GetConstants(),
 			comp.Functions(), comp.Classes(), comp.Interfaces(), comp.Traits())
 		if err != nil {
-			return nil, fmt.Errorf("execution error in %s: %v", filePath, err)
+			return nil, fmt.Errorf("execution error in %s: %w", filePath, err)
 		}
 
 		// After include execution, check the stack for return value

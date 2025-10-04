@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/chzyer/readline"
@@ -30,7 +33,7 @@ func main() {
 				// File exists, execute it directly with all arguments
 				scriptArgs := append([]string{filename}, os.Args[2:]...)
 				if err := parseAndExecuteFileWithArgs(filename, scriptArgs); err != nil {
-					fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+					reportError(err)
 					os.Exit(1)
 				}
 				return
@@ -121,7 +124,7 @@ func main() {
 
 	err := app.Run(context.Background(), os.Args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		reportError(err)
 		os.Exit(1)
 	}
 }
@@ -223,7 +226,7 @@ func parseAndExecuteCodeWithFileAndArgs(code string, inScript bool, filename str
 	if vmCtx.Halted {
 		// Print error before exiting if there is one
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			reportError(err)
 		}
 		os.Exit(vmCtx.ExitCode)
 	}
@@ -292,7 +295,7 @@ func parseAndExecuteCode(code string, inScript bool) error {
 	if vmCtx.Halted {
 		// Print error before exiting if there is one
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			reportError(err)
 		}
 		os.Exit(vmCtx.ExitCode)
 	}
@@ -304,6 +307,131 @@ func runWebServer(addr string) error {
 	// Placeholder for built-in web server functionality
 	fmt.Printf("Starting built-in web server at %s (not yet implemented)\n", addr)
 	return nil
+}
+
+type errorFrame struct {
+	File    string
+	Line    int
+	Opcode  string
+	Message string
+}
+
+var (
+	vmErrorPattern   = regexp.MustCompile(`^vm error at ip=([0-9]+) opcode=([A-Z_]+) in (.+?) on line ([0-9]+): (.+)$`)
+	execErrorPattern = regexp.MustCompile(`^execution error in (.+?): (.+)$`)
+)
+
+func reportError(err error) {
+	if err == nil {
+		return
+	}
+	fmt.Fprintln(os.Stderr, formatErrorMessage(err))
+}
+
+func formatErrorMessage(err error) string {
+	chain := collectErrorChain(err)
+	if len(chain) == 0 {
+		return fmt.Sprintf("Error: %v", err)
+	}
+
+	root := chain[len(chain)-1]
+	rootMessage := root.Error()
+
+	frames := collectFrames(chain[:len(chain)-1])
+	if len(frames) == 0 {
+		return fmt.Sprintf("Error: %s", rootMessage)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Error: %s", rootMessage)
+	b.WriteString("\nInclude stack:")
+	for _, fr := range frames {
+		if fr.File == "" {
+			continue
+		}
+		if fr.Line > 0 {
+			fmt.Fprintf(&b, "\n  - %s:%d", fr.File, fr.Line)
+		} else {
+			fmt.Fprintf(&b, "\n  - %s", fr.File)
+		}
+		if fr.Opcode != "" {
+			fmt.Fprintf(&b, " (opcode %s)", fr.Opcode)
+		}
+	}
+
+	return b.String()
+}
+
+func collectErrorChain(err error) []error {
+	var chain []error
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		chain = append(chain, e)
+	}
+	return chain
+}
+
+func collectFrames(errs []error) []errorFrame {
+	frames := make([]errorFrame, 0, len(errs))
+	seen := make(map[string]struct{})
+	for i := len(errs) - 1; i >= 0; i-- {
+		msg := errs[i].Error()
+		if fr, ok := parseVMError(msg); ok {
+			key := fmt.Sprintf("%s:%d:%s", fr.File, fr.Line, fr.Opcode)
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			frames = append(frames, fr)
+		}
+	}
+	if len(frames) > 0 {
+		return frames
+	}
+
+	seen = make(map[string]struct{})
+	for i := len(errs) - 1; i >= 0; i-- {
+		msg := errs[i].Error()
+		if fr, ok := parseExecutionError(msg); ok {
+			key := fr.File
+			if key == "" {
+				key = msg
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			frames = append(frames, fr)
+		}
+	}
+
+	return frames
+}
+
+func parseVMError(msg string) (errorFrame, bool) {
+	match := vmErrorPattern.FindStringSubmatch(msg)
+	if match == nil {
+		return errorFrame{}, false
+	}
+	line, err := strconv.Atoi(match[4])
+	if err != nil {
+		line = 0
+	}
+	return errorFrame{
+		File:   strings.TrimSpace(match[3]),
+		Line:   line,
+		Opcode: strings.TrimSpace(match[2]),
+	}, true
+}
+
+func parseExecutionError(msg string) (errorFrame, bool) {
+	match := execErrorPattern.FindStringSubmatch(msg)
+	if match == nil {
+		return errorFrame{}, false
+	}
+	return errorFrame{
+		File:    strings.TrimSpace(match[1]),
+		Message: strings.TrimSpace(match[2]),
+	}, true
 }
 
 // trackingWriter wraps io.Writer and tracks if output was written
