@@ -137,9 +137,8 @@ func (b *builtinContext) CallUserFunction(function *registry.Function, args []*v
 		}
 
 		inst := frame.Instructions[frame.IP]
-		frame.IP++
 
-		continued, err := b.vm.executeInstruction(b.ctx, frame, inst)
+		advance, err := b.vm.executeInstruction(b.ctx, frame, inst)
 		if err != nil {
 			b.ctx.popFrame() // Clean up the frame on error
 			// Restore original VM state completely
@@ -150,8 +149,16 @@ func (b *builtinContext) CallUserFunction(function *registry.Function, args []*v
 			return nil, err
 		}
 
-		if !continued {
-			// Execution should stop (e.g., return was called)
+		if b.ctx.Halted {
+			break
+		}
+
+		if advance {
+			frame.IP++
+		}
+
+		if !advance {
+			// Execution should stop (e.g., return was called or jump handled IP)
 			if frame == child && len(b.ctx.Stack) > 0 {
 				userResult = b.ctx.Stack[len(b.ctx.Stack)-1]
 			}
